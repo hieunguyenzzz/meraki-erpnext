@@ -1,0 +1,30 @@
+services:
+  backend:
+    networks:
+      default:
+        aliases:
+          - meraki-backend
+
+  websocket:
+    networks:
+      default:
+        aliases:
+          - meraki-websocket
+
+  frontend:
+    environment:
+      BACKEND: meraki-backend:8000
+      SOCKETIO: meraki-websocket:9000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meraki-frontend.rule=Host(`merakierp.loc`)"
+      - "traefik.http.routers.meraki-frontend.entrypoints=web"
+      - "traefik.http.services.meraki-frontend.loadbalancer.server.port=8080"
+    networks:
+      - default
+      - traefik
+
+networks:
+  traefik:
+    name: local-dev
+    external: true
