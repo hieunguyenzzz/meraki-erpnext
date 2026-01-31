@@ -33,11 +33,14 @@ export default function LoginPage() {
     login(
       { username, password },
       {
-        onError: () => {
-          setError("Invalid username or password");
+        onSuccess: (data) => {
+          if (!data.success) {
+            setError(data.error?.message || "Invalid username or password");
+          }
           setSubmitting(false);
         },
-        onSuccess: () => {
+        onError: () => {
+          setError("Something went wrong. Please try again.");
           setSubmitting(false);
         },
       }
