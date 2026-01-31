@@ -1,43 +1,83 @@
 # Meraki Wedding Planner - ERPNext Integration
 
-Migrate Meraki Wedding Planner data from NocoDB (PostgreSQL) to ERPNext for Finance, CRM, and HR management.
+ERPNext-based business management for Meraki Wedding Planner. Migrated from NocoDB (PostgreSQL) to ERPNext for Finance, CRM, and HR — with a custom React admin panel.
 
-## Quick Start
+## Architecture
+
+- **ERPNext** (v15 + HRMS) - Backend: API, data, workflows
+- **React Frontend** (`refinefrontend/`) - Custom admin panel built with Refine v5, Shadcn UI, TailwindCSS
+- **Docker Compose** - Local development via Traefik reverse proxy
+
+## Local Development
 
 ```bash
-# 1. Deploy ERPNext
-docker context use 100.65.0.28
-docker compose up -d
-docker compose --profile setup up create-site
+# Start all services (ERPNext + React frontend)
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 
-# 2. Configure ERPNext (via UI)
-# - Complete setup wizard
-# - Generate API keys
-# - Update .env with API keys
-
-# 3. Run migration
-pip install psycopg2-binary requests python-dotenv
-python migration/migrate.py
+# Rebuild React frontend after changes
+docker compose -f docker-compose.yml -f docker-compose.local.yml up react-frontend --build -d
 ```
+
+| Service | URL |
+|---------|-----|
+| React Frontend | http://frontend.merakierp.loc |
+| ERPNext | http://merakierp.loc |
+
+Requires the [local Traefik proxy](https://github.com/hieunguyenzzz/traefik-local) on the `local-dev` Docker network.
 
 ## Project Structure
 
 ```
 meraki-manager/
-├── docker-compose.yml    # ERPNext deployment
-├── .env                  # Environment config
-├── migration/
-│   ├── migrate.py        # Main entry point
-│   ├── config.py         # Configuration
-│   ├── erpnext_client.py # ERPNext API client
-│   ├── pg_client.py      # PostgreSQL client
-│   └── migrate_*.py      # Migration modules
-└── docs/
-    ├── migrate_guide.md  # Step-by-step guide
-    └── testing_guide.md  # Verification procedures
+├── docker-compose.yml          # ERPNext services
+├── docker-compose.local.yml    # Local dev overrides (Traefik, React frontend)
+├── refinefrontend/             # React admin panel
+│   ├── src/                    # App source (pages, components, providers)
+│   ├── e2e/                    # Playwright E2E tests (46 tests)
+│   ├── playwright.config.ts
+│   ├── Dockerfile              # Nginx-based production build
+│   └── nginx.conf              # API proxy to ERPNext
+├── migration/                  # PostgreSQL → ERPNext migration scripts
+│   ├── run.py                  # Main entry point
+│   ├── modules/                # Migration modules per doctype
+│   ├── setup/                  # ERPNext setup scripts
+│   └── verify/                 # Migration verification
+├── scripts/                    # One-off maintenance scripts
+├── docs/
+│   ├── erpnext_setup.md        # ERPNext configuration reference
+│   ├── frontend_stack.md       # React frontend conventions
+│   ├── frontend_testing.md     # E2E testing guide
+│   └── migrate_guide.md        # Migration instructions
+└── MIGRATION_STATUS.md         # Current migration progress
 ```
 
-## Data Mapping
+## React Frontend
+
+Custom admin panel at `refinefrontend/` — see [docs/frontend_stack.md](docs/frontend_stack.md) for conventions.
+
+**Stack:** React 19, Refine v5, React Router v7, Recharts, Shadcn UI, TailwindCSS
+
+**Modules:**
+- **CRM** - Customers, Weddings (Sales Orders), Leads, Opportunities
+- **HR** - Employees, Leave Management, Onboarding
+- **Finance** - Invoices, Expenses, Payments, Journal Entries, Revenue Overview
+
+## E2E Tests
+
+46 Playwright tests covering auth, dashboard, navigation, and all page modules.
+
+```bash
+cd refinefrontend
+npm run test:e2e              # headless
+npm run test:e2e:ui           # Playwright UI mode
+npm run test:e2e:headed       # watch in browser
+```
+
+Set `E2E_ADMIN_PASSWORD` env var if the admin password differs from the default.
+
+## Data Migration
+
+Migrates from PostgreSQL (NocoDB) to ERPNext:
 
 | Source (PostgreSQL) | ERPNext Doctype |
 |---------------------|-----------------|
@@ -46,23 +86,6 @@ meraki-manager/
 | weddings.client | Customer |
 | weddings | Sales Order + Project |
 | wedding_addon | Item |
-| task | Task |
 | cost | Journal Entry |
-| payroll | Salary Slip |
 
-## Key Features
-
-- **Weddings as Sales Orders + Projects**: Revenue tracking via Sales Order, task management via Project
-- **Staff Assignments**: Lead Planner, Support Planner, Assistants linked to Projects
-- **Commission Tracking**: Custom fields on Employee for commission percentages
-- **Full Audit Trail**: All migrated records include original Meraki IDs
-
-## Documentation
-
-- [Migration Guide](docs/migrate_guide.md) - Complete setup and migration instructions
-- [Testing Guide](docs/testing_guide.md) - Verification procedures
-
-## URLs
-
-- ERPNext: http://100.65.0.28:8082
-- Source DB: 14.225.210.164:5432 (meraki_nocodb)
+See [MIGRATION_STATUS.md](MIGRATION_STATUS.md) for current progress and [docs/migrate_guide.md](docs/migrate_guide.md) for instructions.
