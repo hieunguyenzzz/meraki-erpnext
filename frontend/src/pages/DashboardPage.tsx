@@ -1,0 +1,141 @@
+import { useMemo } from "react";
+import { useFrappeGetDocList } from "frappe-react-sdk";
+import { Users, Heart, UserCheck, FileText } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { MetricCard } from "@/components/MetricCard";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatVND } from "@/lib/format";
+
+export default function DashboardPage() {
+  const { data: customers } = useFrappeGetDocList("Customer", {
+    fields: ["name"],
+    limit_start: 0,
+    limit: 0,
+  });
+
+  const { data: orders } = useFrappeGetDocList("Sales Order", {
+    fields: ["name", "transaction_date"],
+    limit_start: 0,
+    limit: 0,
+  });
+
+  const { data: employees } = useFrappeGetDocList("Employee", {
+    filters: [["status", "=", "Active"]],
+    fields: ["name"],
+    limit_start: 0,
+    limit: 0,
+  });
+
+  const { data: invoices } = useFrappeGetDocList("Sales Invoice", {
+    filters: [["docstatus", "=", 1]],
+    fields: ["grand_total", "posting_date"],
+    limit_start: 0,
+    limit: 0,
+  });
+
+  const totalRevenue = useMemo(() => {
+    if (!invoices) return 0;
+    return invoices.reduce((sum, inv) => sum + (inv.grand_total ?? 0), 0);
+  }, [invoices]);
+
+  const monthlyRevenue = useMemo(() => {
+    if (!invoices) return [];
+    const map = new Map<string, number>();
+    for (const inv of invoices) {
+      const month = inv.posting_date?.substring(0, 7);
+      if (!month) continue;
+      map.set(month, (map.get(month) ?? 0) + (inv.grand_total ?? 0));
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, revenue]) => ({ month, revenue }));
+  }, [invoices]);
+
+  const weddingsByMonth = useMemo(() => {
+    if (!orders) return [];
+    const map = new Map<string, number>();
+    for (const o of orders) {
+      const month = o.transaction_date?.substring(0, 7);
+      if (!month) continue;
+      map.set(month, (map.get(month) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, count]) => ({ month, count }));
+  }, [orders]);
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">Dashboard</h1>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
+          title="Customers"
+          value={customers ? customers.length : "..."}
+          icon={Users}
+          description="Total customers"
+        />
+        <MetricCard
+          title="Weddings"
+          value={orders ? orders.length : "..."}
+          icon={Heart}
+          description="Total sales orders"
+        />
+        <MetricCard
+          title="Employees"
+          value={employees ? employees.length : "..."}
+          icon={UserCheck}
+          description="Active employees"
+        />
+        <MetricCard
+          title="Revenue"
+          value={invoices ? formatVND(totalRevenue) : "..."}
+          icon={FileText}
+          description="Total invoiced"
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Monthly Revenue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {monthlyRevenue.length === 0 ? (
+              <p className="text-muted-foreground">No data available</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={monthlyRevenue}>
+                  <XAxis dataKey="month" fontSize={12} />
+                  <YAxis fontSize={12} tickFormatter={(v: number) => `${(v / 1_000_000).toFixed(0)}M`} />
+                  <Tooltip formatter={(v: number) => formatVND(v)} />
+                  <Bar dataKey="revenue" fill="hsl(142, 76%, 36%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Weddings by Month</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {weddingsByMonth.length === 0 ? (
+              <p className="text-muted-foreground">No data available</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={weddingsByMonth}>
+                  <XAxis dataKey="month" fontSize={12} />
+                  <YAxis fontSize={12} allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="hsl(346, 77%, 50%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

@@ -20,9 +20,29 @@ services:
       - "traefik.http.routers.meraki-frontend.rule=Host(`merakierp.loc`)"
       - "traefik.http.routers.meraki-frontend.entrypoints=web"
       - "traefik.http.services.meraki-frontend.loadbalancer.server.port=8080"
+      - "traefik.docker.network=local-dev"
+    networks:
+      default:
+        aliases:
+          - erpnext-frontend
+      traefik:
+
+  react-frontend:
+    build:
+      context: ./refinefrontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meraki-react.rule=Host(`frontend.merakierp.loc`)"
+      - "traefik.http.routers.meraki-react.entrypoints=web"
+      - "traefik.http.services.meraki-react.loadbalancer.server.port=8090"
+      - "traefik.docker.network=local-dev"
     networks:
       - default
       - traefik
+    depends_on:
+      - frontend
 
 networks:
   traefik:

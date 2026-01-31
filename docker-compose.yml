@@ -1,5 +1,7 @@
 x-backend-defaults: &backend_defaults
-  image: frappe/erpnext:${ERPNEXT_VERSION:-v15}
+  build:
+    context: .
+    dockerfile: Dockerfile
   volumes:
     - meraki-sites:/home/frappe/frappe-bench/sites
     - meraki-logs:/home/frappe/frappe-bench/logs
@@ -9,7 +11,9 @@ x-backend-defaults: &backend_defaults
 
 services:
   configurator:
-    image: frappe/erpnext:${ERPNEXT_VERSION:-v15}
+    build:
+      context: .
+      dockerfile: Dockerfile
     volumes:
       - meraki-sites:/home/frappe/frappe-bench/sites
       - meraki-logs:/home/frappe/frappe-bench/logs
@@ -135,9 +139,27 @@ services:
           fi
         done;
         echo "sites/common_site_config.json found";
-        bench new-site --no-mariadb-socket --admin-password=${ADMIN_PASSWORD} --db-root-password=${DB_PASSWORD} --install-app erpnext --set-default ${SITE_NAME};
+        bench new-site --no-mariadb-socket --admin-password=${ADMIN_PASSWORD} --db-root-password=${DB_PASSWORD} --install-app erpnext --install-app hrms --set-default ${SITE_NAME};
     profiles:
       - setup
+
+  migration:
+    build:
+      context: ./migration
+      dockerfile: Dockerfile
+    environment:
+      ERPNEXT_URL: http://frontend:8080
+      ERPNEXT_API_KEY: ${ERPNEXT_API_KEY}
+      ERPNEXT_API_SECRET: ${ERPNEXT_API_SECRET}
+      MERAKI_PG_HOST: ${MERAKI_PG_HOST}
+      MERAKI_PG_PORT: ${MERAKI_PG_PORT}
+      MERAKI_PG_USER: ${MERAKI_PG_USER}
+      MERAKI_PG_PASSWORD: ${MERAKI_PG_PASSWORD}
+      MERAKI_PG_DATABASE: ${MERAKI_PG_DATABASE}
+    depends_on:
+      - frontend
+    profiles:
+      - migrate
 
 volumes:
   meraki-db-data:
