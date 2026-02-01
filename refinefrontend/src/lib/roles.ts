@@ -1,8 +1,21 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  Columns3,
+  UserCheck, Calendar, ClipboardList, Banknote,
+  FileText, Receipt, CreditCard, BookOpen, PieChart,
+} from "lucide-react";
+
+export interface ModuleChild {
+  label: string;
+  path: string;
+  icon?: LucideIcon;
+}
+
 export interface ModuleConfig {
   label: string;
   path: string;
   roles: string[];
-  children: { label: string; path: string }[];
+  children: ModuleChild[];
 }
 
 export const CRM_ROLES = ["System Manager", "Sales Manager", "Sales User"];
@@ -15,10 +28,7 @@ export const MODULES: ModuleConfig[] = [
     path: "/crm",
     roles: CRM_ROLES,
     children: [
-      { label: "Customers", path: "/crm/customers" },
-      { label: "Weddings", path: "/crm/weddings" },
-      { label: "Leads", path: "/crm/leads" },
-      { label: "Opportunities", path: "/crm/opportunities" },
+      { label: "Kanban", path: "/crm", icon: Columns3 },
     ],
   },
   {
@@ -26,9 +36,10 @@ export const MODULES: ModuleConfig[] = [
     path: "/hr",
     roles: HR_ROLES,
     children: [
-      { label: "Employees", path: "/hr/employees" },
-      { label: "Leave Management", path: "/hr/leaves" },
-      { label: "Onboarding", path: "/hr/onboarding" },
+      { label: "Employees", path: "/hr/employees", icon: UserCheck },
+      { label: "Leave Management", path: "/hr/leaves", icon: Calendar },
+      { label: "Payroll", path: "/hr/payroll", icon: Banknote },
+      { label: "Onboarding", path: "/hr/onboarding", icon: ClipboardList },
     ],
   },
   {
@@ -36,11 +47,11 @@ export const MODULES: ModuleConfig[] = [
     path: "/finance",
     roles: FINANCE_ROLES,
     children: [
-      { label: "Invoices", path: "/finance/invoices" },
-      { label: "Expenses", path: "/finance/expenses" },
-      { label: "Payments", path: "/finance/payments" },
-      { label: "Journal Entries", path: "/finance/journals" },
-      { label: "Overview", path: "/finance/overview" },
+      { label: "Invoices", path: "/finance/invoices", icon: FileText },
+      { label: "Expenses", path: "/finance/expenses", icon: Receipt },
+      { label: "Payments", path: "/finance/payments", icon: CreditCard },
+      { label: "Journal Entries", path: "/finance/journals", icon: BookOpen },
+      { label: "Overview", path: "/finance/overview", icon: PieChart },
     ],
   },
 ];

@@ -12,17 +12,13 @@ import { isEmployeeSelfServiceOnly } from "@/lib/roles";
 
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
-import CustomersPage from "@/pages/crm/CustomersPage";
-import CustomerDetailPage from "@/pages/crm/CustomerDetailPage";
-import WeddingsPage from "@/pages/crm/WeddingsPage";
-import WeddingDetailPage from "@/pages/crm/WeddingDetailPage";
-import LeadsPage from "@/pages/crm/LeadsPage";
 import LeadDetailPage from "@/pages/crm/LeadDetailPage";
-import OpportunitiesPage from "@/pages/crm/OpportunitiesPage";
 import OpportunityDetailPage from "@/pages/crm/OpportunityDetailPage";
+import KanbanPage from "@/pages/crm/KanbanPage";
 import EmployeesPage from "@/pages/hr/EmployeesPage";
 import EmployeeDetailPage from "@/pages/hr/EmployeeDetailPage";
 import LeavesPage from "@/pages/hr/LeavesPage";
+import PayrollPage from "@/pages/hr/PayrollPage";
 import OnboardingPage from "@/pages/hr/OnboardingPage";
 import OnboardingDetailPage from "@/pages/hr/OnboardingDetailPage";
 import InvoicesPage from "@/pages/finance/InvoicesPage";
@@ -78,13 +74,13 @@ export default function App() {
           accessControlProvider={accessControlProvider}
           routerProvider={routerProvider}
           resources={[
-            { name: "Customer", list: "/crm/customers", show: "/crm/customers/:id" },
-            { name: "Sales Order", list: "/crm/weddings", show: "/crm/weddings/:id" },
-            { name: "Lead", list: "/crm/leads", show: "/crm/leads/:id" },
-            { name: "Opportunity", list: "/crm/opportunities", show: "/crm/opportunities/:id" },
+            { name: "Lead", list: "/crm", show: "/crm/leads/:id" },
+            { name: "Opportunity", list: "/crm", show: "/crm/opportunities/:id" },
             { name: "Employee", list: "/hr/employees", show: "/hr/employees/:id" },
             { name: "Leave Application", list: "/hr/leaves" },
             { name: "Employee Onboarding", list: "/hr/onboarding", show: "/hr/onboarding/:id" },
+            { name: "Payroll Entry", list: "/hr/payroll" },
+            { name: "Salary Slip", list: "/hr/payroll" },
             { name: "Sales Invoice", list: "/finance/invoices", show: "/finance/invoices/:id" },
             { name: "Payment Entry", list: "/finance/payments", show: "/finance/payments/:id" },
             { name: "Purchase Invoice", list: "/finance/expenses", show: "/finance/expenses/:id" },
@@ -120,19 +116,15 @@ export default function App() {
               <Route index element={<RoleRedirect />} />
 
               {/* CRM */}
-              <Route path="/crm/customers" element={<CustomersPage />} />
-              <Route path="/crm/customers/:name" element={<CustomerDetailPage />} />
-              <Route path="/crm/weddings" element={<WeddingsPage />} />
-              <Route path="/crm/weddings/:name" element={<WeddingDetailPage />} />
-              <Route path="/crm/leads" element={<LeadsPage />} />
+              <Route path="/crm" element={<KanbanPage />} />
               <Route path="/crm/leads/:name" element={<LeadDetailPage />} />
-              <Route path="/crm/opportunities" element={<OpportunitiesPage />} />
               <Route path="/crm/opportunities/:name" element={<OpportunityDetailPage />} />
 
               {/* HR */}
               <Route path="/hr/employees" element={<EmployeesPage />} />
               <Route path="/hr/employees/:name" element={<EmployeeDetailPage />} />
               <Route path="/hr/leaves" element={<LeavesPage />} />
+              <Route path="/hr/payroll" element={<PayrollPage />} />
               <Route path="/hr/onboarding" element={<OnboardingPage />} />
               <Route path="/hr/onboarding/:name" element={<OnboardingDetailPage />} />
 

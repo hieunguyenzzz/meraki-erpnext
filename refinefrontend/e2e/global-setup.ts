@@ -12,7 +12,7 @@ setup("authenticate as admin", async ({ page }) => {
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible({
+  await expect(page.getByText("Welcome,")).toBeVisible({
     timeout: 30_000,
   });
 

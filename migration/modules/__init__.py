@@ -9,6 +9,7 @@ Each module handles one ERPNext domain:
 - sales: Selling (Sales Order, Sales Invoice)
 - projects: Projects (Project, Task)
 - accounting: Accounting (Journal Entry)
+- payroll: Payroll (Salary Component, Salary Structure, Salary Structure Assignment)
 """
 
 from . import employees
@@ -18,11 +19,13 @@ from . import items
 from . import sales
 from . import projects
 from . import accounting
+from . import payroll
 
 # Module execution order (dependencies respected)
 MODULES = [
     'items',       # Items needed for orders
     'employees',   # Staff for assignments
+    'payroll',     # Salary structures (needs employees)
     'suppliers',   # Venues for orders
     'customers',   # Customers for orders
     'sales',       # Sales orders + invoices
@@ -38,5 +41,6 @@ __all__ = [
     'sales',
     'projects',
     'accounting',
+    'payroll',
     'MODULES',
 ]
