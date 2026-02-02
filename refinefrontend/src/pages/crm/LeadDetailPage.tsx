@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useParams } from "react-router";
+import { useParams, Link } from "react-router";
 import { useOne, useList, useCreate, useCustomMutation, useInvalidate } from "@refinedev/core";
 import DOMPurify from "dompurify";
 import { formatDate, formatVND } from "@/lib/format";
@@ -201,6 +201,36 @@ export default function LeadDetailPage() {
     meta: { fields: ["name", "content", "comment_email", "creation"] },
   });
 
+  const weddingDate = lead?.custom_wedding_date;
+
+  // Conflicting leads with same wedding date
+  const { result: conflictingLeadsResult } = useList({
+    resource: "Lead",
+    pagination: { mode: "off" as const },
+    filters: [
+      { field: "custom_wedding_date", operator: "eq", value: weddingDate! },
+      { field: "name", operator: "ne", value: name! },
+    ],
+    meta: { fields: ["name", "lead_name", "status"] },
+    queryOptions: { enabled: !!weddingDate },
+  });
+
+  // Conflicting submitted Sales Orders (weddings) on same date
+  const { result: conflictingSalesOrdersResult } = useList({
+    resource: "Sales Order",
+    pagination: { mode: "off" as const },
+    filters: [
+      { field: "delivery_date", operator: "eq", value: weddingDate! },
+      { field: "docstatus", operator: "eq", value: 1 },
+    ],
+    meta: { fields: ["name", "customer_name", "status"] },
+    queryOptions: { enabled: !!weddingDate },
+  });
+
+  const conflictingLeads = (conflictingLeadsResult?.data ?? []) as Array<{ name: string; lead_name: string; status: string }>;
+  const conflictingSalesOrders = (conflictingSalesOrdersResult?.data ?? []) as Array<{ name: string; customer_name: string; status: string }>;
+  const hasDateConflicts = conflictingLeads.length > 0 || conflictingSalesOrders.length > 0;
+
   type ActivityItem = {
     type: "communication" | "comment";
     name: string;
@@ -303,6 +333,26 @@ export default function LeadDetailPage() {
           </Select>
         </div>
       </div>
+
+      {/* Date conflict warning */}
+      {hasDateConflicts && (
+        <div className="rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30 px-4 py-3 text-yellow-800 dark:text-yellow-400">
+          <p className="font-medium mb-1">Date Conflict: {formatDate(weddingDate!)} has other events</p>
+          <ul className="text-sm space-y-1 ml-4 list-disc">
+            {conflictingLeads.map((cl) => (
+              <li key={cl.name}>
+                Lead: <Link to={`/crm/leads/${cl.name}`} className="font-medium underline hover:no-underline">{cl.lead_name}</Link>{" "}
+                <span className="text-yellow-600 dark:text-yellow-500">({cl.status})</span>
+              </li>
+            ))}
+            {conflictingSalesOrders.map((so) => (
+              <li key={so.name}>
+                Wedding: {so.customer_name} <span className="text-yellow-600 dark:text-yellow-500">({so.name})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Two-column grid */}
       <div className="grid gap-4 md:grid-cols-2">
