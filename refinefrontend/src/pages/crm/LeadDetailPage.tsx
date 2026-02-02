@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams } from "react-router";
 import { useOne, useList, useCreate, useCustomMutation, useInvalidate } from "@refinedev/core";
 import DOMPurify from "dompurify";
 import { formatDate } from "@/lib/format";
@@ -9,10 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
+import { extractErrorMessage } from "@/lib/errors";
+import { DetailSkeleton } from "@/components/detail-skeleton";
 
 const LEAD_STATUSES = ["Lead", "Open", "Replied", "Opportunity", "Quotation", "Lost Quotation", "Interested", "Converted", "Do Not Contact"];
 
@@ -28,9 +26,6 @@ function statusVariant(status: string) {
 
 export default function LeadDetailPage() {
   const { name } = useParams<{ name: string }>();
-  const navigate = useNavigate();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [converting, setConverting] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -49,7 +44,7 @@ export default function LeadDetailPage() {
       { field: "reference_doctype", operator: "eq", value: "Lead" },
       { field: "reference_name", operator: "eq", value: name! },
     ],
-    meta: { fields: ["name", "subject", "content", "communication_medium", "sender", "recipients", "communication_date", "creation"] },
+    meta: { fields: ["name", "subject", "content", "communication_medium", "sender", "recipients", "communication_date", "creation", "sent_or_received"] },
   });
 
   const { result: commentsResult } = useList({
@@ -72,6 +67,7 @@ export default function LeadDetailPage() {
     creation: string;
     subject?: string;
     medium?: string;
+    direction?: "Sent" | "Received";
   };
 
   const activityItems = useMemo<ActivityItem[]>(() => {
@@ -81,6 +77,7 @@ export default function LeadDetailPage() {
         type: "communication", name: c.name, content: c.content ?? "",
         author: c.sender ?? "", creation: c.creation,
         subject: c.subject ?? undefined, medium: c.communication_medium ?? "Other",
+        direction: c.sent_or_received === "Sent" ? "Sent" : c.sent_or_received === "Received" ? "Received" : undefined,
       });
     }
     for (const c of (commentsResult?.data ?? []) as any[]) {
@@ -111,7 +108,7 @@ export default function LeadDetailPage() {
       invalidate({ resource: "Communication", invalidates: ["list"] });
     } catch (err) {
       console.error("Failed to add comment:", err);
-      alert("Failed to add comment. Please try again.");
+      alert(extractErrorMessage(err, "Failed to add comment. Please try again."));
     } finally {
       setSubmittingComment(false);
     }
@@ -129,65 +126,19 @@ export default function LeadDetailPage() {
       invalidate({ resource: "Lead", invalidates: ["detail"], id: name! });
     } catch (err) {
       console.error("Failed to update status:", err);
-      alert("Failed to update status. Please try again.");
+      alert(extractErrorMessage(err, "Failed to update status. Please try again."));
     } finally {
       setUpdatingStatus(false);
     }
   }
 
-  const isTerminalStatus = lead?.status === "Converted" || lead?.status === "Do Not Contact";
-
-  async function handleConvert() {
-    if (!lead) return;
-    setConverting(true);
-    try {
-      const result = await createDoc({
-        resource: "Opportunity",
-        values: {
-          opportunity_from: "Lead",
-          party_name: lead.name,
-          status: "Open",
-          source: lead.source,
-        },
-      });
-      setDialogOpen(false);
-      navigate(`/crm/opportunities/${(result?.data as any)?.name}`);
-    } catch (err) {
-      console.error("Failed to convert lead:", err);
-      alert("Failed to convert lead. Please try again.");
-    } finally {
-      setConverting(false);
-    }
-  }
-
   if (!lead) {
-    return <div className="text-muted-foreground">Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">{lead.lead_name}</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button disabled={isTerminalStatus}>Convert to Opportunity</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Convert Lead to Opportunity</DialogTitle>
-              <DialogDescription>
-                This will create a new Opportunity linked to this Lead ({lead.lead_name}).
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleConvert} disabled={converting}>
-                {converting ? "Converting..." : "Convert"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+      <h1 className="text-2xl font-bold tracking-tight">{lead.lead_name}</h1>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -276,24 +227,42 @@ export default function LeadDetailPage() {
               No activity yet. Add a comment to start the conversation.
             </p>
           ) : (
-            <div className="space-y-4">
-              {activityItems.map((item) => (
-                <div key={`${item.type}-${item.name}`} className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Badge variant={item.type === "communication" ? "info" : "secondary"}>
-                      {item.type === "communication" ? (item.medium ?? "Email") : "Comment"}
-                    </Badge>
-                    <span className="text-muted-foreground">{item.author}</span>
-                    <span className="text-muted-foreground ml-auto">{formatDate(item.creation)}</span>
+            <div className="space-y-3">
+              {activityItems.map((item) => {
+                const isSent = item.type === "communication" && item.direction === "Sent";
+                const isReceived = item.type === "communication" && item.direction === "Received";
+                const isComment = item.type === "comment";
+
+                const containerClass = isSent
+                  ? "bg-blue-50 dark:bg-blue-950/30 border-l-2 border-blue-400 rounded-r-md p-3"
+                  : isReceived
+                  ? "bg-green-50 dark:bg-green-950/30 border-l-2 border-green-400 rounded-r-md p-3"
+                  : "bg-muted/30 border-l-2 border-muted rounded-r-md p-3";
+
+                const directionLabel = isSent
+                  ? <span className="text-blue-600 dark:text-blue-400 font-medium">&rarr; Sent</span>
+                  : isReceived
+                  ? <span className="text-green-600 dark:text-green-400 font-medium">&larr; Received</span>
+                  : isComment
+                  ? <span className="text-muted-foreground font-medium">Comment</span>
+                  : <span className="text-muted-foreground font-medium">Communication</span>;
+
+                return (
+                  <div key={`${item.type}-${item.name}`} className={containerClass}>
+                    <div className="flex items-center gap-2 text-sm flex-wrap">
+                      {directionLabel}
+                      <span className="text-muted-foreground">&middot;</span>
+                      <span className="text-muted-foreground">{item.author}</span>
+                      <span className="text-muted-foreground ml-auto text-xs">{formatDate(item.creation)}</span>
+                    </div>
+                    {item.subject && <p className="text-sm font-medium mt-1">{item.subject}</p>}
+                    <div
+                      className="text-sm text-muted-foreground prose prose-sm max-w-none mt-1"
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
+                    />
                   </div>
-                  {item.subject && <p className="text-sm font-medium">{item.subject}</p>}
-                  <div
-                    className="text-sm text-muted-foreground prose prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
-                  />
-                  <Separator />
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

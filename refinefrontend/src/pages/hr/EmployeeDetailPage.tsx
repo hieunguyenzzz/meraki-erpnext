@@ -3,6 +3,7 @@ import { useOne } from "@refinedev/core";
 import { formatDate, formatVND } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DetailSkeleton } from "@/components/detail-skeleton";
 
 export default function EmployeeDetailPage() {
   const { name } = useParams<{ name: string }>();
@@ -10,13 +11,13 @@ export default function EmployeeDetailPage() {
   const { result: employee } = useOne({ resource: "Employee", id: name! });
 
   if (!employee) {
-    return <div className="text-muted-foreground">Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <h1 className="text-3xl font-bold">{employee.employee_name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{employee.employee_name}</h1>
         <Badge variant={employee.status === "Active" ? "success" : "secondary"}>
           {employee.status}
         </Badge>

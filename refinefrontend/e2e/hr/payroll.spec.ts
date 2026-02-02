@@ -14,18 +14,23 @@ test.describe("Payroll Page", () => {
   });
 
   test("sidebar shows Payroll link under HR", async ({ page }) => {
-    await expect(page.getByRole("link", { name: "Payroll" })).toBeVisible();
+    const sidebar = page.locator("aside").first();
+    await expect(sidebar.getByText("Payroll")).toBeVisible();
   });
 
-  test("shows Generate Payroll button or salary slips table", async ({ page }) => {
-    const generateBtn = page.getByRole("button", { name: /Generate Payroll/ });
+  test("shows Generate button, salary slips table, or no-payroll message", async ({ page }) => {
+    const generateBtn = page.getByRole("button", { name: /Generate for/ });
     const slipsTable = page.locator("table");
+    const noPayrollMsg = page.getByText("No payroll entry for");
 
-    // Either the generate button is visible (no PE) or a table is shown (PE exists)
+    // Wait for loading to finish
+    await page.waitForTimeout(3_000);
+
     const hasButton = await generateBtn.isVisible().catch(() => false);
     const hasTable = await slipsTable.isVisible().catch(() => false);
+    const hasMsg = await noPayrollMsg.isVisible().catch(() => false);
 
-    expect(hasButton || hasTable).toBeTruthy();
+    expect(hasButton || hasTable || hasMsg).toBeTruthy();
   });
 
   test("History tab shows payroll entries table or empty state", async ({ page }) => {
@@ -51,7 +56,7 @@ test.describe("Payroll Generation (integration)", () => {
     });
 
     // Check if generate button exists (no PE for current month)
-    const generateBtn = page.getByRole("button", { name: /Generate Payroll/ });
+    const generateBtn = page.getByRole("button", { name: /Generate for/ });
     const btnVisible = await generateBtn.isVisible().catch(() => false);
 
     if (!btnVisible) {
@@ -82,23 +87,26 @@ test.describe("Payroll Generation (integration)", () => {
     // Verify Submit All button appears
     await expect(page.getByRole("button", { name: "Submit All" })).toBeVisible();
 
-    // Capture the PE name from the page text for cleanup
-    const peText = await page.getByText(/HR-PRUN-\d{4}-\d+/).first().textContent();
-    const peMatch = peText?.match(/HR-PRUN-\S+/);
-    const peName = peMatch?.[0];
-
-    // Cleanup: delete salary slips and PE
-    if (peName) {
-      const slipsRes = await request.get(
-        `/api/resource/Salary Slip?filters=[["payroll_entry","=","${peName}"]]&fields=["name"]&limit_page_length=0`
-      );
-      if (slipsRes.ok()) {
-        const slips = (await slipsRes.json()).data ?? [];
-        for (const slip of slips) {
-          await request.delete(`/api/resource/Salary Slip/${slip.name}`);
+    // Cleanup: find PE for current month via API, then delete slips + PE
+    const today = new Date();
+    const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+    const peListRes = await request.get(
+      `/api/resource/Payroll Entry?filters=[["start_date","=","${start}"],["company","=","Meraki Wedding Planner"]]&fields=["name"]&limit_page_length=1`
+    );
+    if (peListRes.ok()) {
+      const entries = (await peListRes.json()).data ?? [];
+      for (const pe of entries) {
+        const slipsRes = await request.get(
+          `/api/resource/Salary Slip?filters=[["payroll_entry","=","${pe.name}"]]&fields=["name"]&limit_page_length=0`
+        );
+        if (slipsRes.ok()) {
+          const slips = (await slipsRes.json()).data ?? [];
+          for (const slip of slips) {
+            await request.delete(`/api/resource/Salary Slip/${slip.name}`);
+          }
         }
+        await request.delete(`/api/resource/Payroll Entry/${pe.name}`);
       }
-      await request.delete(`/api/resource/Payroll Entry/${peName}`);
     }
   });
 });

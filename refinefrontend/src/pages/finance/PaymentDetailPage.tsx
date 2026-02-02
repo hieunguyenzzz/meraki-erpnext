@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import FileAttachments from "@/components/FileAttachments";
+import { DetailSkeleton } from "@/components/detail-skeleton";
 
 function statusVariant(docstatus: number) {
   if (docstatus === 1) return "success" as const;
@@ -24,7 +25,7 @@ export default function PaymentDetailPage() {
   const { result: payment } = useOne({ resource: "Payment Entry", id: name! });
 
   if (!payment) {
-    return <div className="text-muted-foreground">Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   const refs = payment.references ?? [];
@@ -32,7 +33,7 @@ export default function PaymentDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <h1 className="text-3xl font-bold">{payment.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{payment.name}</h1>
         <Badge variant={payment.payment_type === "Receive" ? "success" : "warning"}>
           {payment.payment_type}
         </Badge>

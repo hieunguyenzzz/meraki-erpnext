@@ -1,16 +1,68 @@
 import { Link } from "react-router";
 import { useList } from "@refinedev/core";
+import type { ColumnDef } from "@tanstack/react-table";
 import { formatVND, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable, DataTableColumnHeader } from "@/components/data-table";
+
+interface Expense {
+  name: string;
+  supplier: string;
+  supplier_name: string;
+  posting_date: string;
+  grand_total: number;
+  outstanding_amount: number;
+  status: string;
+}
 
 function statusVariant(status: string) {
   if (status === "Paid") return "success" as const;
-  if (status === "Overdue") return "destructive" as const;
-  if (status === "Cancelled") return "destructive" as const;
+  if (status === "Overdue" || status === "Cancelled") return "destructive" as const;
   return "warning" as const;
 }
+
+const columns: ColumnDef<Expense, unknown>[] = [
+  {
+    accessorKey: "name",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+    cell: ({ row }) => (
+      <Link to={`/finance/expenses/${row.original.name}`} className="font-medium text-primary hover:underline">
+        {row.original.name}
+      </Link>
+    ),
+  },
+  {
+    accessorKey: "supplier_name",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Supplier" />,
+    cell: ({ row }) => row.original.supplier_name || row.original.supplier,
+    filterFn: "includesString",
+  },
+  {
+    accessorKey: "posting_date",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
+    cell: ({ row }) => formatDate(row.original.posting_date),
+  },
+  {
+    accessorKey: "grand_total",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Total" className="text-right" />,
+    cell: ({ row }) => <div className="text-right">{formatVND(row.original.grand_total)}</div>,
+  },
+  {
+    accessorKey: "outstanding_amount",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Outstanding" className="text-right" />,
+    cell: ({ row }) => <div className="text-right">{formatVND(row.original.outstanding_amount)}</div>,
+  },
+  {
+    accessorKey: "status",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+    cell: ({ row }) => (
+      <Badge variant={statusVariant(row.original.status)}>
+        {row.original.status}
+      </Badge>
+    ),
+    filterFn: "arrIncludesSome",
+  },
+];
 
 export default function ExpensesPage() {
   const { result, query } = useList({
@@ -25,58 +77,35 @@ export default function ExpensesPage() {
     },
   });
 
-  const expenses = result?.data ?? [];
+  const expenses = (result?.data ?? []) as Expense[];
   const isLoading = query.isLoading;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Expenses</h1>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
+        <p className="text-muted-foreground">Purchase invoices and supplier billing</p>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Purchase Invoices ({expenses.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-muted-foreground">Loading...</p>
-          ) : expenses.length === 0 ? (
-            <p className="text-muted-foreground">No purchase invoices found</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Outstanding</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {expenses.map((exp: any) => (
-                  <TableRow key={exp.name}>
-                    <TableCell>
-                      <Link to={`/finance/expenses/${exp.name}`} className="font-medium text-primary hover:underline">
-                        {exp.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{exp.supplier_name || exp.supplier}</TableCell>
-                    <TableCell>{formatDate(exp.posting_date)}</TableCell>
-                    <TableCell>{formatVND(exp.grand_total)}</TableCell>
-                    <TableCell>{formatVND(exp.outstanding_amount)}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(exp.status)}>
-                        {exp.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        columns={columns}
+        data={expenses}
+        isLoading={isLoading}
+        searchKey="supplier_name"
+        searchPlaceholder="Search by supplier..."
+        filterableColumns={[
+          {
+            id: "status",
+            title: "Status",
+            options: [
+              { label: "Paid", value: "Paid" },
+              { label: "Unpaid", value: "Unpaid" },
+              { label: "Overdue", value: "Overdue" },
+              { label: "Cancelled", value: "Cancelled" },
+            ],
+          },
+        ]}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import FileAttachments from "@/components/FileAttachments";
+import { DetailSkeleton } from "@/components/detail-skeleton";
 
 function statusVariant(status: string) {
   if (status === "Paid") return "success" as const;
@@ -19,7 +20,7 @@ export default function ExpenseDetailPage() {
   const { result: expense } = useOne({ resource: "Purchase Invoice", id: name! });
 
   if (!expense) {
-    return <div className="text-muted-foreground">Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   const items = expense.items ?? [];
@@ -27,7 +28,7 @@ export default function ExpenseDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <h1 className="text-3xl font-bold">{expense.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{expense.name}</h1>
         <Badge variant={statusVariant(expense.status)}>
           {expense.status}
         </Badge>

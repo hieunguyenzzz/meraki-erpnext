@@ -1,8 +1,16 @@
 import { Link } from "react-router";
 import { useList } from "@refinedev/core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, DataTableColumnHeader } from "@/components/data-table";
+
+interface Onboarding {
+  name: string;
+  employee_name: string;
+  boarding_status: string;
+  department: string;
+  designation: string;
+}
 
 function statusVariant(status: string) {
   switch (status) {
@@ -12,6 +20,39 @@ function statusVariant(status: string) {
   }
 }
 
+const columns: ColumnDef<Onboarding, unknown>[] = [
+  {
+    accessorKey: "employee_name",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
+    cell: ({ row }) => (
+      <Link to={`/hr/onboarding/${row.original.name}`} className="font-medium text-primary hover:underline">
+        {row.original.employee_name}
+      </Link>
+    ),
+    filterFn: "includesString",
+  },
+  {
+    accessorKey: "department",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Department" />,
+    cell: ({ row }) => row.original.department || "-",
+  },
+  {
+    accessorKey: "designation",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Designation" />,
+    cell: ({ row }) => row.original.designation || "-",
+  },
+  {
+    accessorKey: "boarding_status",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+    cell: ({ row }) => (
+      <Badge variant={statusVariant(row.original.boarding_status)}>
+        {row.original.boarding_status}
+      </Badge>
+    ),
+    filterFn: "arrIncludesSome",
+  },
+];
+
 export default function OnboardingPage() {
   const { result, query } = useList({
     resource: "Employee Onboarding",
@@ -20,52 +61,34 @@ export default function OnboardingPage() {
     meta: { fields: ["name", "employee_name", "boarding_status", "department", "designation"] },
   });
 
-  const onboardings = result?.data ?? [];
+  const onboardings = (result?.data ?? []) as Onboarding[];
   const isLoading = query.isLoading;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Onboarding</h1>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Onboarding</h1>
+        <p className="text-muted-foreground">Track employee onboarding progress</p>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Employee Onboarding ({onboardings.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-muted-foreground">Loading...</p>
-          ) : onboardings.length === 0 ? (
-            <p className="text-muted-foreground">No onboarding records found</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Designation</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {onboardings.map((ob: any) => (
-                  <TableRow key={ob.name}>
-                    <TableCell>
-                      <Link to={`/hr/onboarding/${ob.name}`} className="font-medium text-primary hover:underline">
-                        {ob.employee_name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{ob.department || "-"}</TableCell>
-                    <TableCell>{ob.designation || "-"}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(ob.boarding_status)}>{ob.boarding_status}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        columns={columns}
+        data={onboardings}
+        isLoading={isLoading}
+        searchKey="employee_name"
+        searchPlaceholder="Search by employee..."
+        filterableColumns={[
+          {
+            id: "boarding_status",
+            title: "Status",
+            options: [
+              { label: "Pending", value: "Pending" },
+              { label: "In Process", value: "In Process" },
+              { label: "Completed", value: "Completed" },
+            ],
+          },
+        ]}
+      />
     </div>
   );
 }

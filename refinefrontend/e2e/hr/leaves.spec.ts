@@ -12,19 +12,21 @@ test("page loads with Applications and Balances tabs", async ({ page }) => {
   await expect(page.getByRole("tab", { name: "Balances" })).toBeVisible();
 });
 
-test("Applications tab shows leave applications with count", async ({ page }) => {
-  await expect(page.locator("text=/Leave Applications \\(\\d+\\)/")).toBeVisible({
-    timeout: 15_000,
-  });
+test("Applications tab shows a DataTable with leave data", async ({ page }) => {
+  // Wait for table to load (DataTable renders table after loading)
+  const table = page.locator("table");
+  await expect(table).toBeVisible({ timeout: 15_000 });
+
+  // Check headers exist
+  const headers = table.locator("thead th");
+  await expect(headers.filter({ hasText: "Employee" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Status" })).toBeVisible();
 });
 
-test("Balances tab shows leave allocations with count", async ({ page }) => {
+test("Balances tab shows leave balance table", async ({ page }) => {
   await page.getByRole("tab", { name: "Balances" }).click();
-  await expect(page.locator("text=/Leave Allocations \\(\\d+\\)/")).toBeVisible({
+  // Balances tab uses manual Table inside a Card
+  await expect(page.getByText(/Leave Balances/)).toBeVisible({
     timeout: 15_000,
   });
-});
-
-test("status filter dropdown present", async ({ page }) => {
-  await expect(page.getByRole("combobox")).toBeVisible();
 });

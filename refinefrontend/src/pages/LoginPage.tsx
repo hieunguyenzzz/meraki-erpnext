@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ThemeSwitch } from "@/components/theme-switch";
 
 export default function LoginPage() {
   const { data: authData, isLoading } = useIsAuthenticated();
@@ -48,7 +49,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-muted/40">
+    <div className="relative flex h-screen items-center justify-center bg-muted/40">
+      <div className="absolute top-4 right-4">
+        <ThemeSwitch />
+      </div>
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Meraki Wedding Planner</CardTitle>

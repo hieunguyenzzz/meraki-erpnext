@@ -28,6 +28,7 @@ export function Sidebar({ className, children }: { className?: string; children:
   const { collapsed } = useSidebar();
   return (
     <aside
+      data-sidebar-collapsed={collapsed}
       className={cn(
         "flex h-screen flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-200",
         collapsed ? "w-16" : "w-64",
@@ -52,10 +53,8 @@ export function SidebarGroup({ className, children }: { className?: string; chil
 }
 
 export function SidebarGroupLabel({ className, children }: { className?: string; children: React.ReactNode }) {
-  const { collapsed } = useSidebar();
-  if (collapsed) return null;
   return (
-    <div className={cn("px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60", className)}>
+    <div className={cn("sidebar-expanded-only px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60", className)}>
       {children}
     </div>
   );

@@ -33,7 +33,7 @@ test("valid login redirects to Dashboard", async ({ page }) => {
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByLabel("Password").press("Enter");
 
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible({
+  await expect(page.getByText("Welcome,")).toBeVisible({
     timeout: 30_000,
   });
 });

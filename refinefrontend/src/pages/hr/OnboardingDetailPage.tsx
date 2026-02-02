@@ -5,6 +5,7 @@ import type { OnboardingActivity } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Circle } from "lucide-react";
+import { DetailSkeleton } from "@/components/detail-skeleton";
 
 function statusVariant(status: string) {
   switch (status) {
@@ -20,14 +21,17 @@ export default function OnboardingDetailPage() {
   const { result: onboarding } = useOne({ resource: "Employee Onboarding", id: name! });
 
   if (!onboarding) {
-    return <div className="text-muted-foreground">Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   const activities = (onboarding.activities ?? []) as OnboardingActivity[];
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">{onboarding.employee_name}</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">{onboarding.employee_name}</h1>
+        <Badge variant={statusVariant(onboarding.boarding_status)}>{onboarding.boarding_status}</Badge>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -42,10 +46,6 @@ export default function OnboardingDetailPage() {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Employee</span>
               <span>{onboarding.employee_name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Status</span>
-              <Badge variant={statusVariant(onboarding.boarding_status)}>{onboarding.boarding_status}</Badge>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Department</span>

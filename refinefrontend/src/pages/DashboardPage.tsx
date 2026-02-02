@@ -1,139 +1,60 @@
-import { useMemo } from "react";
-import { useList } from "@refinedev/core";
-import { Users, Heart, UserCheck, FileText } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { MetricCard } from "@/components/MetricCard";
+import { useList, useGetIdentity } from "@refinedev/core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatVND } from "@/lib/format";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
-  const { result: customersResult } = useList({
-    resource: "Customer",
+  const { data: identity } = useGetIdentity<{ email: string; name?: string }>();
+  const firstName = identity?.name?.split(" ")[0] ?? identity?.email?.split("@")[0] ?? "";
+
+  const { result: leadsResult, query: leadsQuery } = useList({
+    resource: "Lead",
     pagination: { mode: "off" },
+    filters: [{ field: "status", operator: "nin" as const, value: ["Converted", "Do Not Contact"] }],
     meta: { fields: ["name"] },
   });
 
-  const { result: ordersResult } = useList({
-    resource: "Sales Order",
-    pagination: { mode: "off" },
-    meta: { fields: ["name", "transaction_date"] },
-  });
-
-  const { result: employeesResult } = useList({
+  const { result: employeesResult, query: employeesQuery } = useList({
     resource: "Employee",
     pagination: { mode: "off" },
     filters: [{ field: "status", operator: "eq", value: "Active" }],
     meta: { fields: ["name"] },
   });
 
-  const { result: invoicesResult } = useList({
-    resource: "Sales Invoice",
-    pagination: { mode: "off" },
-    filters: [{ field: "docstatus", operator: "eq", value: 1 }],
-    meta: { fields: ["grand_total", "posting_date"] },
-  });
-
-  const customers = customersResult?.data ?? [];
-  const orders = ordersResult?.data ?? [];
-  const invoices = invoicesResult?.data ?? [];
-  const employees = employeesResult?.data ?? [];
-
-  const totalRevenue = useMemo(() => {
-    return invoices.reduce((sum: number, inv: any) => sum + (inv.grand_total ?? 0), 0);
-  }, [invoices]);
-
-  const monthlyRevenue = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const inv of invoices as any[]) {
-      const month = inv.posting_date?.substring(0, 7);
-      if (!month) continue;
-      map.set(month, (map.get(month) ?? 0) + (inv.grand_total ?? 0));
-    }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, revenue]) => ({ month, revenue }));
-  }, [invoices]);
-
-  const weddingsByMonth = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const o of orders as any[]) {
-      const month = o.transaction_date?.substring(0, 7);
-      if (!month) continue;
-      map.set(month, (map.get(month) ?? 0) + 1);
-    }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, count]) => ({ month, count }));
-  }, [orders]);
+  const activeLeadCount = leadsResult?.data?.length ?? 0;
+  const activeEmployeeCount = employeesResult?.data?.length ?? 0;
+  const isLoading = leadsQuery?.isLoading || employeesQuery?.isLoading;
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          title="Customers"
-          value={customersResult ? customers.length : "..."}
-          icon={Users}
-          description="Total customers"
-        />
-        <MetricCard
-          title="Weddings"
-          value={ordersResult ? orders.length : "..."}
-          icon={Heart}
-          description="Total sales orders"
-        />
-        <MetricCard
-          title="Employees"
-          value={employeesResult ? employees.length : "..."}
-          icon={UserCheck}
-          description="Active employees"
-        />
-        <MetricCard
-          title="Revenue"
-          value={invoicesResult ? formatVND(totalRevenue) : "..."}
-          icon={FileText}
-          description="Total invoiced"
-        />
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {firstName ? `Welcome, ${firstName}` : "Dashboard"}
+        </h1>
+        <p className="text-muted-foreground">Here's an overview of your business</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
-          <CardHeader>
-            <CardTitle>Monthly Revenue</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
           </CardHeader>
           <CardContent>
-            {monthlyRevenue.length === 0 ? (
-              <p className="text-muted-foreground">No data available</p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-[60px]" />
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthlyRevenue}>
-                  <XAxis dataKey="month" fontSize={12} />
-                  <YAxis fontSize={12} tickFormatter={(v: number) => `${(v / 1_000_000).toFixed(0)}M`} />
-                  <Tooltip formatter={(v: number) => formatVND(v)} />
-                  <Bar dataKey="revenue" fill="hsl(142, 76%, 36%)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="text-2xl font-bold">{activeLeadCount}</div>
             )}
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader>
-            <CardTitle>Weddings by Month</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Active Employees</CardTitle>
           </CardHeader>
           <CardContent>
-            {weddingsByMonth.length === 0 ? (
-              <p className="text-muted-foreground">No data available</p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-[60px]" />
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={weddingsByMonth}>
-                  <XAxis dataKey="month" fontSize={12} />
-                  <YAxis fontSize={12} allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="hsl(346, 77%, 50%)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="text-2xl font-bold">{activeEmployeeCount}</div>
             )}
           </CardContent>
         </Card>

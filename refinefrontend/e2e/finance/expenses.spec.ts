@@ -7,15 +7,18 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("page loads with Purchase Invoices count card", async ({ page }) => {
-  await expect(page.locator("text=/Purchase Invoices \\(\\d+\\)/")).toBeVisible({
-    timeout: 15_000,
-  });
+test("shows table or empty state", async ({ page }) => {
+  // DataTable renders a table once data loads (with "No results." if empty)
+  await expect(page.locator("table")).toBeVisible({ timeout: 15_000 });
 });
 
-test("shows table or empty state", async ({ page }) => {
-  // Either a table renders or "No purchase invoices found"
+test("table has correct column headers when data exists", async ({ page }) => {
   const table = page.locator("table");
-  const empty = page.getByText("No purchase invoices found");
-  await expect(table.or(empty)).toBeVisible({ timeout: 15_000 });
+  await expect(table).toBeVisible({ timeout: 15_000 });
+
+  const headers = table.locator("thead th");
+  await expect(headers.filter({ hasText: "Name" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Supplier" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Date" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Status" })).toBeVisible();
 });

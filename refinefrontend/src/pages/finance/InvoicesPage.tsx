@@ -1,9 +1,62 @@
 import { Link } from "react-router";
 import { useList } from "@refinedev/core";
+import type { ColumnDef } from "@tanstack/react-table";
 import { formatVND, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable, DataTableColumnHeader } from "@/components/data-table";
+
+interface Invoice {
+  name: string;
+  customer: string;
+  customer_name: string;
+  posting_date: string;
+  grand_total: number;
+  outstanding_amount: number;
+  status: string;
+}
+
+const columns: ColumnDef<Invoice, unknown>[] = [
+  {
+    accessorKey: "name",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Invoice" />,
+    cell: ({ row }) => (
+      <Link to={`/finance/invoices/${row.original.name}`} className="font-medium text-primary hover:underline">
+        {row.original.name}
+      </Link>
+    ),
+  },
+  {
+    accessorKey: "customer_name",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Customer" />,
+    cell: ({ row }) => row.original.customer_name,
+    filterFn: "includesString",
+  },
+  {
+    accessorKey: "posting_date",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
+    cell: ({ row }) => formatDate(row.original.posting_date),
+  },
+  {
+    accessorKey: "grand_total",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" className="text-right" />,
+    cell: ({ row }) => <div className="text-right">{formatVND(row.original.grand_total)}</div>,
+  },
+  {
+    accessorKey: "outstanding_amount",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Outstanding" className="text-right" />,
+    cell: ({ row }) => <div className="text-right">{formatVND(row.original.outstanding_amount)}</div>,
+  },
+  {
+    accessorKey: "status",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+    cell: ({ row }) => (
+      <Badge variant={row.original.status === "Paid" ? "success" : row.original.status === "Overdue" ? "destructive" : "warning"}>
+        {row.original.status}
+      </Badge>
+    ),
+    filterFn: "arrIncludesSome",
+  },
+];
 
 export default function InvoicesPage() {
   const { result, query } = useList({
@@ -13,60 +66,36 @@ export default function InvoicesPage() {
     meta: { fields: ["name", "customer", "customer_name", "posting_date", "grand_total", "outstanding_amount", "status"] },
   });
 
-  const invoices = result?.data ?? [];
+  const invoices = (result?.data ?? []) as Invoice[];
   const isLoading = query.isLoading;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Sales Invoices</h1>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Sales Invoices</h1>
+        <p className="text-muted-foreground">Track revenue and customer billing</p>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>All Invoices ({invoices.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-muted-foreground">Loading...</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Outstanding</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoices.map((inv: any) => (
-                  <TableRow key={inv.name}>
-                    <TableCell>
-                      <Link to={`/finance/invoices/${inv.name}`} className="font-medium text-primary hover:underline">
-                        {inv.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Link to={`/crm/customers/${inv.customer}`} className="hover:underline">
-                        {inv.customer_name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{formatDate(inv.posting_date)}</TableCell>
-                    <TableCell>{formatVND(inv.grand_total)}</TableCell>
-                    <TableCell>{formatVND(inv.outstanding_amount)}</TableCell>
-                    <TableCell>
-                      <Badge variant={inv.status === "Paid" ? "success" : inv.status === "Overdue" ? "destructive" : "warning"}>
-                        {inv.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        columns={columns}
+        data={invoices}
+        isLoading={isLoading}
+        searchKey="customer_name"
+        searchPlaceholder="Search by customer..."
+        filterableColumns={[
+          {
+            id: "status",
+            title: "Status",
+            options: [
+              { label: "Paid", value: "Paid" },
+              { label: "Unpaid", value: "Unpaid" },
+              { label: "Overdue", value: "Overdue" },
+              { label: "Cancelled", value: "Cancelled" },
+              { label: "Return", value: "Return" },
+            ],
+          },
+        ]}
+      />
     </div>
   );
 }

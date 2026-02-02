@@ -3,6 +3,7 @@ import { useOne } from "@refinedev/core";
 import { formatVND, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DetailSkeleton } from "@/components/detail-skeleton";
 
 export default function InvoiceDetailPage() {
   const { name } = useParams<{ name: string }>();
@@ -10,7 +11,7 @@ export default function InvoiceDetailPage() {
   const { result: invoice } = useOne({ resource: "Sales Invoice", id: name! });
 
   if (!invoice) {
-    return <div className="text-muted-foreground">Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   const items = invoice.items ?? [];
@@ -19,7 +20,7 @@ export default function InvoiceDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <h1 className="text-3xl font-bold">{invoice.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{invoice.name}</h1>
         <Badge variant={invoice.status === "Paid" ? "success" : "warning"}>
           {invoice.status}
         </Badge>

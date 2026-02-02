@@ -8,6 +8,7 @@ import { authProvider } from "@/providers/authProvider";
 import { accessControlProvider } from "@/providers/accessControlProvider";
 import { Layout } from "@/components/Layout";
 import { SelfServiceLayout } from "@/components/SelfServiceLayout";
+import { ThemeProvider } from "@/context/theme-context";
 import { isEmployeeSelfServiceOnly } from "@/lib/roles";
 
 import LoginPage from "@/pages/LoginPage";
@@ -89,7 +90,7 @@ export default function App() {
           options={{ syncWithLocation: true, disableTelemetry: true }}
         >
           <Routes>
-            <Route path="/login" element={<LoginPage />} />
+            <Route path="/login" element={<ThemeProvider><LoginPage /></ThemeProvider>} />
 
             {/* Self-service: employee profile (no sidebar) */}
             <Route

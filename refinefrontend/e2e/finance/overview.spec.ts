@@ -19,13 +19,13 @@ test("Revenue vs Expenses chart renders", async ({ page }) => {
   });
 });
 
-test("Monthly Breakdown table with correct headers", async ({ page }) => {
-  await expect(page.getByText("Monthly Breakdown")).toBeVisible({ timeout: 15_000 });
-
+test("monthly breakdown DataTable with correct headers", async ({ page }) => {
+  // Wait for data to load and DataTable to render
   const table = page.locator("table");
+  await expect(table).toBeVisible({ timeout: 15_000 });
   const headers = table.locator("thead th");
-  await expect(headers.nth(0)).toHaveText("Month");
-  await expect(headers.nth(1)).toHaveText("Revenue");
-  await expect(headers.nth(2)).toHaveText("Expenses");
-  await expect(headers.nth(3)).toHaveText("Net");
+  await expect(headers.filter({ hasText: "Month" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Revenue" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Expenses" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Net" })).toBeVisible();
 });

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { waitForTableLoad, getCountFromTitle, clickFirstTableLink } from "../helpers";
+import { waitForTableLoad, clickFirstTableLink } from "../helpers";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/hr/employees");
@@ -8,23 +8,27 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("list loads with count >= 10 and correct headers", async ({ page }) => {
+test("list loads with table and correct column headers", async ({ page }) => {
   const table = await waitForTableLoad(page);
 
-  const cardTitle = await page.locator("text=/All Employees \\(\\d+\\)/").textContent();
-  const count = getCountFromTitle(cardTitle ?? "");
-  expect(count).toBeGreaterThanOrEqual(10);
-
+  // DataTable headers (via DataTableColumnHeader buttons inside th)
   const headers = table.locator("thead th");
-  await expect(headers.nth(0)).toHaveText("Name");
-  await expect(headers.nth(1)).toHaveText("Designation");
-  await expect(headers.nth(2)).toHaveText("Department");
-  await expect(headers.nth(3)).toHaveText("Status");
+  await expect(headers.filter({ hasText: "Name" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Designation" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Department" })).toBeVisible();
+  await expect(headers.filter({ hasText: "Status" })).toBeVisible();
+});
+
+test("table has at least 10 rows", async ({ page }) => {
+  await waitForTableLoad(page);
+  const rows = page.locator("table tbody tr");
+  const count = await rows.count();
+  expect(count).toBeGreaterThanOrEqual(10);
 });
 
 test("Active status badges visible", async ({ page }) => {
   await waitForTableLoad(page);
-  await expect(page.locator("text=Active").first()).toBeVisible();
+  await expect(page.locator("table").getByText("Active").first()).toBeVisible();
 });
 
 test("click first row navigates to detail with Personal Info and Employment cards", async ({

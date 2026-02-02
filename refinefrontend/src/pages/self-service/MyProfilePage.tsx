@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const REQUIRED_FIELDS = [
   "cell_phone",
@@ -106,8 +108,32 @@ export default function MyProfilePage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-3xl mx-auto py-8">
-        <p className="text-muted-foreground">Loading your profile...</p>
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-[200px]" />
+          <Skeleton className="h-6 w-[60px] rounded-full" />
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="space-y-1">
+              <Skeleton className="h-4 w-[80px]" />
+              <Skeleton className="h-5 w-[120px]" />
+            </div>
+          ))}
+        </div>
+        <Card>
+          <CardHeader><Skeleton className="h-5 w-[160px]" /></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-[80px]" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -125,19 +151,19 @@ export default function MyProfilePage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {isProfileIncomplete && (
-        <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-yellow-800">
+        <div className="rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30 px-4 py-3 text-yellow-800 dark:text-yellow-400">
           Please complete your profile to get started. All required fields must be filled.
         </div>
       )}
 
       {saveSuccess && (
-        <div className="rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-green-800">
+        <div className="rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-3 text-green-800 dark:text-green-400">
           Profile saved successfully.
         </div>
       )}
 
       <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold">Welcome, {employee.employee_name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Welcome, {employee.employee_name}</h1>
         <Badge variant={employee.status === "Active" ? "default" : "secondary"}>
           {employee.status}
         </Badge>
@@ -197,17 +223,16 @@ export default function MyProfilePage() {
           <div className="grid gap-4 md:grid-cols-3">
             <div>
               <Label htmlFor="gender">Gender</Label>
-              <select
-                id="gender"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.gender}
-                onChange={(e) => setField("gender", e.target.value)}
-              >
-                <option value="">Select...</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
-              </select>
+              <Select value={form.gender} onValueChange={(v) => setField("gender", v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Male">Male</SelectItem>
+                  <SelectItem value="Female">Female</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="date_of_birth">Date of Birth</Label>

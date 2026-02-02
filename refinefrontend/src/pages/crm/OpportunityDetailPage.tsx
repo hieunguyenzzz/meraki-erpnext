@@ -3,6 +3,7 @@ import { useOne } from "@refinedev/core";
 import { formatVND, formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DetailSkeleton } from "@/components/detail-skeleton";
 
 export default function OpportunityDetailPage() {
   const { name } = useParams<{ name: string }>();
@@ -10,12 +11,15 @@ export default function OpportunityDetailPage() {
   const { result: opportunity } = useOne({ resource: "Opportunity", id: name! });
 
   if (!opportunity) {
-    return <div className="text-muted-foreground">Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">{opportunity.party_name}</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">{opportunity.party_name}</h1>
+        <Badge>{opportunity.status}</Badge>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -26,10 +30,6 @@ export default function OpportunityDetailPage() {
             <div className="flex justify-between">
               <span className="text-muted-foreground">ID</span>
               <span>{opportunity.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Status</span>
-              <Badge>{opportunity.status}</Badge>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Type</span>

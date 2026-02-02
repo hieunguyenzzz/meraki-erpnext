@@ -1,19 +1,12 @@
 import { type Page, type Locator, expect } from "@playwright/test";
 
 /**
- * Wait for "Loading..." text to disappear and return the table locator.
+ * Wait for the DataTable to finish loading (skeleton disappears, table appears).
  */
 export async function waitForTableLoad(page: Page): Promise<Locator> {
-  await expect(page.getByText("Loading...")).toBeHidden({ timeout: 15_000 });
-  return page.locator("table");
-}
-
-/**
- * Extract the count from a card title like "All Customers (132)".
- */
-export function getCountFromTitle(text: string): number {
-  const match = text.match(/\((\d+)\)/);
-  return match ? parseInt(match[1], 10) : 0;
+  const table = page.locator("table");
+  await expect(table).toBeVisible({ timeout: 15_000 });
+  return table;
 }
 
 /**
