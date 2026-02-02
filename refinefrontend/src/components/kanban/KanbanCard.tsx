@@ -10,17 +10,18 @@ interface KanbanCardProps {
   isDragOverlay?: boolean;
 }
 
-function ageClasses(hours: number): string {
+function waitingClasses(waitingFor: "client" | "staff", hours: number): string {
   if (hours >= 48) return "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30";
   if (hours >= 24) return "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30";
+  if (waitingFor === "client") return "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30";
   return "text-muted-foreground bg-muted/50";
 }
 
 function NewIndicator({ creation }: { creation: string }) {
   const hours = hoursElapsed(creation);
   return (
-    <div className={`mt-1 rounded-md px-2 py-1 text-xs font-medium ${ageClasses(hours)}`}>
-      Waiting {formatAge(creation)}
+    <div className={`mt-1 rounded-md px-2 py-1 text-xs font-medium ${waitingClasses("staff", hours)}`}>
+      Awaiting staff · {formatAge(creation)}
     </div>
   );
 }
@@ -30,18 +31,11 @@ function EngagedIndicator({ item }: { item: KanbanItem }) {
   const timestamp = activity?.date ?? item.creation;
   const hours = hoursElapsed(timestamp);
   const age = formatAge(timestamp);
-
-  let label: string;
-  if (!activity) {
-    label = `No activity - ${age}`;
-  } else if (activity.waitingFor === "client") {
-    label = `Awaiting client - ${age}`;
-  } else {
-    label = `Awaiting staff - ${age}`;
-  }
+  const waiting: "client" | "staff" = activity?.waitingFor === "client" ? "client" : "staff";
+  const label = waiting === "client" ? `Awaiting client · ${age}` : `Awaiting staff · ${age}`;
 
   return (
-    <div className={`mt-1 rounded-md px-2 py-1 text-xs font-medium ${ageClasses(hours)}`}>
+    <div className={`mt-1 rounded-md px-2 py-1 text-xs font-medium ${waitingClasses(waiting, hours)}`}>
       {label}
     </div>
   );
@@ -98,7 +92,7 @@ export function KanbanCard({ item, isDragOverlay }: KanbanCardProps) {
         <div className="text-[10px] opacity-60">{item.status}</div>
       </div>
       {column === "new" && <NewIndicator creation={item.creation} />}
-      {column === "engaged" && <EngagedIndicator item={item} />}
+      {(column === "engaged" || column === "qualified" || column === "quoted") && <EngagedIndicator item={item} />}
     </div>
   );
 }
