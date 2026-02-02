@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router";
-import { useOne, useList, useCreate, useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useOne, useList, useCreate, useDelete, useCustomMutation, useInvalidate, useNavigation } from "@refinedev/core";
 import DOMPurify from "dompurify";
 import { formatDate, formatVND } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Trash2 } from "lucide-react";
 import { extractErrorMessage } from "@/lib/errors";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 
@@ -162,8 +164,11 @@ export default function LeadDetailPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const invalidate = useInvalidate();
+  const { mutateAsync: deleteRecord } = useDelete();
+  const { list } = useNavigation();
   const { result: lead } = useOne({ resource: "Lead", id: name! });
 
   const { mutateAsync: createDoc } = useCreate();
@@ -304,6 +309,11 @@ export default function LeadDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    await deleteRecord({ resource: "Lead", id: name! });
+    list("Lead");
+  }
+
   function handleFieldSaved() {
     invalidate({ resource: "Lead", invalidates: ["detail"], id: name! });
   }
@@ -331,6 +341,25 @@ export default function LeadDetailPage() {
               ))}
             </SelectContent>
           </Select>
+          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <DialogTrigger asChild>
+              <Button variant="destructive" size="sm">
+                <Trash2 className="h-4 w-4 mr-1" /> Delete
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Lead</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete this lead? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+                <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
