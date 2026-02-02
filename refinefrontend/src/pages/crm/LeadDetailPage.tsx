@@ -1,18 +1,20 @@
-import { useState, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams } from "react-router";
 import { useOne, useList, useCreate, useCustomMutation, useInvalidate } from "@refinedev/core";
 import DOMPurify from "dompurify";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatVND } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { extractErrorMessage } from "@/lib/errors";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 
 const LEAD_STATUSES = ["Lead", "Open", "Replied", "Opportunity", "Quotation", "Lost Quotation", "Interested", "Converted", "Do Not Contact"];
+const RELATIONSHIP_OPTIONS = ["Bride/Groom", "Mother of Bride/Groom", "Friend of Bride/Groom", "Other"];
 
 function statusVariant(status: string) {
   switch (status) {
@@ -23,6 +25,137 @@ function statusVariant(status: string) {
     default: return "secondary" as const;
   }
 }
+
+// --- EditableField component ---
+
+type EditableFieldProps = {
+  label: string;
+  value: string | number | undefined | null;
+  displayValue?: string;
+  fieldName: string;
+  leadName: string;
+  type?: "text" | "date" | "number" | "select";
+  options?: string[];
+  onSaved: () => void;
+};
+
+function EditableField({ label, value, displayValue, fieldName, leadName, type = "text", options, onSaved }: EditableFieldProps) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(String(value ?? ""));
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { mutateAsync: customMutation } = useCustomMutation();
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  function startEdit() {
+    setEditValue(String(value ?? ""));
+    setEditing(true);
+  }
+
+  async function save() {
+    if (saving) return;
+    const newValue = type === "number" ? (editValue === "" ? 0 : Number(editValue)) : editValue;
+    if (String(newValue) === String(value ?? "")) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await customMutation({
+        url: "/api/method/frappe.client.set_value",
+        method: "post",
+        values: { doctype: "Lead", name: leadName, fieldname: fieldName, value: newValue },
+      });
+      onSaved();
+    } catch (err) {
+      console.error(`Failed to update ${fieldName}:`, err);
+      alert(extractErrorMessage(err, `Failed to update ${label}.`));
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  }
+
+  function cancel() {
+    setEditing(false);
+    setEditValue(String(value ?? ""));
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+    if (e.key === "Escape") { e.preventDefault(); cancel(); }
+  }
+
+  const isEmpty = value == null || value === "" || (type === "number" && value === 0);
+  const shown = displayValue ?? (isEmpty ? "-" : String(value));
+
+  if (editing && type === "select" && options) {
+    return (
+      <div className="flex justify-between items-center">
+        <span className="text-muted-foreground text-sm">{label}</span>
+        <Select value={editValue} onValueChange={(v) => { setEditValue(v); }}>
+          <SelectTrigger className="w-[180px] h-8" autoFocus onKeyDown={(e) => { if (e.key === "Escape") cancel(); }}>
+            <SelectValue placeholder="Select..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">—</SelectItem>
+            {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <div className="flex gap-1 ml-2">
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={save} disabled={saving}>Save</Button>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={cancel}>Cancel</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (editing) {
+    return (
+      <div className="flex justify-between items-center">
+        <span className="text-muted-foreground text-sm">{label}</span>
+        <Input
+          ref={inputRef}
+          type={type}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={save}
+          onKeyDown={handleKeyDown}
+          className="w-[180px] h-8 text-sm"
+          disabled={saving}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-between items-center group cursor-pointer" onClick={startEdit}>
+      <span className="text-muted-foreground text-sm">{label}</span>
+      <span className="text-sm group-hover:underline group-hover:decoration-dashed group-hover:underline-offset-4 group-hover:text-foreground transition-colors">
+        {shown}
+      </span>
+    </div>
+  );
+}
+
+// --- ReadOnlyField component ---
+
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-muted-foreground text-sm">{label}</span>
+      <span className="text-sm">{value || "-"}</span>
+    </div>
+  );
+}
+
+// --- Main page ---
 
 export default function LeadDetailPage() {
   const { name } = useParams<{ name: string }>();
@@ -36,6 +169,15 @@ export default function LeadDetailPage() {
   const { mutateAsync: createDoc } = useCreate();
   const { mutateAsync: customMutation } = useCustomMutation();
 
+  // Lead Sources for dropdown
+  const { result: sourcesResult } = useList({
+    resource: "Lead Source",
+    pagination: { mode: "off" as const },
+    meta: { fields: ["name"] },
+  });
+  const leadSources = (sourcesResult?.data ?? []).map((s: any) => s.name);
+
+  // Activity: Communications + Comments
   const { result: commsResult } = useList({
     resource: "Communication",
     pagination: { pageSize: 50 },
@@ -132,75 +274,91 @@ export default function LeadDetailPage() {
     }
   }
 
+  function handleFieldSaved() {
+    invalidate({ resource: "Lead", invalidates: ["detail"], id: name! });
+  }
+
   if (!lead) {
     return <DetailSkeleton />;
   }
 
+  const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.lead_name;
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">{lead.lead_name}</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">{lead.lead_name}</h1>
+        <div className="flex items-center gap-2">
+          <Badge variant={statusVariant(lead.status)}>{lead.status}</Badge>
+          <Select value={lead.status} onValueChange={handleStatusChange} disabled={updatingStatus}>
+            <SelectTrigger className="w-[160px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LEAD_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
+      {/* Two-column grid */}
       <div className="grid gap-4 md:grid-cols-2">
+        {/* Contact Information */}
         <Card>
           <CardHeader>
-            <CardTitle>Lead Info</CardTitle>
+            <CardTitle>Contact Information</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">ID</span>
-              <span>{lead.name}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Status</span>
-              <div className="flex items-center gap-2">
-                <Badge variant={statusVariant(lead.status)}>{lead.status}</Badge>
-                <Select value={lead.status} onValueChange={handleStatusChange} disabled={updatingStatus}>
-                  <SelectTrigger className="w-[160px] h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LEAD_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Email</span>
-              <span>{lead.email_id || "-"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Phone</span>
-              <span>{lead.phone || "-"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Source</span>
-              <span>{lead.source || "-"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Company</span>
-              <span>{lead.company_name || "-"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Created</span>
-              <span>{formatDate(lead.creation)}</span>
-            </div>
+          <CardContent className="space-y-3">
+            <ReadOnlyField label="Name" value={fullName} />
+            <ReadOnlyField label="Email" value={lead.email_id ?? ""} />
+            <ReadOnlyField label="Phone" value={lead.phone ?? ""} />
+            {lead.mobile_no && <ReadOnlyField label="Mobile" value={lead.mobile_no} />}
+            <ReadOnlyField label="Location" value={lead.city ?? ""} />
+            <EditableField
+              label="Source"
+              value={lead.source}
+              fieldName="source"
+              leadName={lead.name}
+              type="select"
+              options={leadSources}
+              onSaved={handleFieldSaved}
+            />
+            <ReadOnlyField label="Created" value={formatDate(lead.creation)} />
           </CardContent>
         </Card>
 
-        {lead.notes && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Notes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm whitespace-pre-wrap">{lead.notes}</p>
-            </CardContent>
-          </Card>
-        )}
+        {/* Wedding Details */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Wedding Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <ReadOnlyField label="Relationship" value={lead.custom_relationship ?? ""} />
+            <ReadOnlyField label="Couple Name" value={lead.custom_couple_name ?? ""} />
+            <ReadOnlyField label="Wedding Date" value={lead.custom_wedding_date ? formatDate(lead.custom_wedding_date) : ""} />
+            <ReadOnlyField label="Wedding Venue" value={lead.custom_wedding_venue ?? ""} />
+            <ReadOnlyField label="Guest Count" value={lead.custom_guest_count ? String(lead.custom_guest_count) : ""} />
+            <ReadOnlyField label="Estimated Budget" value={lead.custom_estimated_budget ? formatVND(lead.custom_estimated_budget) : ""} />
+          </CardContent>
+        </Card>
       </div>
 
+      {/* Notes */}
+      {typeof lead.notes === "string" && lead.notes.trim() && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Notes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm whitespace-pre-wrap">{lead.notes}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Activity */}
       <Card>
         <CardHeader>
           <CardTitle>Activity</CardTitle>
