@@ -22,6 +22,9 @@ import LeavesPage from "@/pages/hr/LeavesPage";
 import PayrollPage from "@/pages/hr/PayrollPage";
 import OnboardingPage from "@/pages/hr/OnboardingPage";
 import OnboardingDetailPage from "@/pages/hr/OnboardingDetailPage";
+import RecruitingScannerPage from "@/pages/hr/RecruitingScannerPage";
+import RecruitingPipelinePage from "@/pages/hr/RecruitingPipelinePage";
+import ApplicantDetailPage from "@/pages/hr/ApplicantDetailPage";
 import InvoicesPage from "@/pages/finance/InvoicesPage";
 import InvoiceDetailPage from "@/pages/finance/InvoiceDetailPage";
 import ExpensesPage from "@/pages/finance/ExpensesPage";
@@ -77,6 +80,8 @@ export default function App() {
           resources={[
             { name: "Lead", list: "/crm", show: "/crm/leads/:id" },
             { name: "Opportunity", list: "/crm", show: "/crm/opportunities/:id" },
+            { name: "Job Applicant", list: "/hr/recruiting", show: "/hr/recruiting/:id" },
+            { name: "Job Opening" },
             { name: "Employee", list: "/hr/employees", show: "/hr/employees/:id" },
             { name: "Leave Application", list: "/hr/leaves" },
             { name: "Employee Onboarding", list: "/hr/onboarding", show: "/hr/onboarding/:id" },
@@ -122,6 +127,9 @@ export default function App() {
               <Route path="/crm/opportunities/:name" element={<OpportunityDetailPage />} />
 
               {/* HR */}
+              <Route path="/hr/recruiting" element={<RecruitingScannerPage />} />
+              <Route path="/hr/recruiting/pipeline" element={<RecruitingPipelinePage />} />
+              <Route path="/hr/recruiting/:name" element={<ApplicantDetailPage />} />
               <Route path="/hr/employees" element={<EmployeesPage />} />
               <Route path="/hr/employees/:name" element={<EmployeeDetailPage />} />
               <Route path="/hr/leaves" element={<LeavesPage />} />

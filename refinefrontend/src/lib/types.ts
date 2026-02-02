@@ -80,12 +80,24 @@ export interface Project {
 export interface Lead {
   name: string;
   lead_name: string;
+  first_name?: string;
+  last_name?: string;
   email_id?: string;
   phone?: string;
+  mobile_no?: string;
   source?: string;
   status: string;
   company_name?: string;
+  city?: string;
+  country?: string;
   creation: string;
+  notes?: string;
+  custom_relationship?: string;
+  custom_couple_name?: string;
+  custom_wedding_date?: string;
+  custom_wedding_venue?: string;
+  custom_guest_count?: number;
+  custom_estimated_budget?: number;
 }
 
 export interface Opportunity {
@@ -189,6 +201,29 @@ export interface FileAttachment {
   file_size: number;
   is_private: number;
   creation: string;
+}
+
+export interface JobApplicant {
+  name: string;
+  applicant_name: string;
+  email_id?: string;
+  phone_number?: string;
+  job_title?: string;
+  source?: string;
+  rating?: number;
+  creation: string;
+  cover_letter?: string;
+  resume_attachment?: string;
+  custom_recruiting_stage?: string;
+  status: string;
+}
+
+export interface JobOpening {
+  name: string;
+  job_title: string;
+  status: string;
+  designation?: string;
+  department?: string;
 }
 
 export interface EmployeeProfile {

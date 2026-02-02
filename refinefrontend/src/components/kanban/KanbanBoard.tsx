@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -18,15 +18,45 @@ import {
   type ColumnKey,
 } from "@/lib/kanban";
 
+interface GenericColumnDef {
+  key: string;
+  label: string;
+  color: string;
+}
+
 interface KanbanBoardProps {
-  items: KanbanItem[];
-  onUpdateStatus: (item: KanbanItem, newStatus: string) => Promise<void>;
+  /** Items to display. Generic boards pass any shape with `id` + `status`. */
+  items: any[];
+  /** Column definitions. Defaults to CRM COLUMNS if not provided. */
+  columns?: GenericColumnDef[];
+  /** Map an item to its column key. Defaults to CRM getColumnForItem. */
+  getColumnForItem?: (item: any) => string;
+  /** Get the new status value when dropping into a column. Defaults to CRM getTargetStatus. */
+  getTargetStatus?: (columnKey: string, item: any) => string;
+  /** Custom card renderer. Defaults to CRM KanbanCard. */
+  renderCard?: (item: any, isDragOverlay?: boolean) => ReactNode;
+  onUpdateStatus: (item: any, newStatus: string) => Promise<void>;
   onConvertLead?: (item: KanbanItem, targetColumnKey: ColumnKey) => Promise<void>;
 }
 
-export function KanbanBoard({ items, onUpdateStatus, onConvertLead }: KanbanBoardProps) {
-  const [localItems, setLocalItems] = useState<KanbanItem[]>(items);
-  const [activeItem, setActiveItem] = useState<KanbanItem | null>(null);
+export function KanbanBoard({
+  items,
+  columns: columnsProp,
+  getColumnForItem: getColumnFn,
+  getTargetStatus: getTargetFn,
+  renderCard,
+  onUpdateStatus,
+  onConvertLead,
+}: KanbanBoardProps) {
+  const columns = columnsProp ?? COLUMNS;
+  const getColumn = getColumnFn ?? ((item: KanbanItem) => getColumnForItem(item));
+  const getTarget = getTargetFn ?? ((colKey: string, item: any) => {
+    const col = (COLUMNS as any[]).find((c) => c.key === colKey);
+    return col ? getTargetStatus(col, item.doctype) : "";
+  });
+
+  const [localItems, setLocalItems] = useState<any[]>(items);
+  const [activeItem, setActiveItem] = useState<any | null>(null);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,12 +72,12 @@ export function KanbanBoard({ items, onUpdateStatus, onConvertLead }: KanbanBoar
   );
 
   const columnItems = useCallback(
-    (key: ColumnKey) => localItems.filter((item) => getColumnForItem(item) === key),
-    [localItems]
+    (key: string) => localItems.filter((item) => getColumn(item) === key),
+    [localItems, getColumn]
   );
 
   function handleDragStart(event: DragStartEvent) {
-    const item = event.active.data.current as KanbanItem | undefined;
+    const item = event.active.data.current;
     setActiveItem(item ?? null);
     setError(null);
   }
@@ -58,27 +88,25 @@ export function KanbanBoard({ items, onUpdateStatus, onConvertLead }: KanbanBoar
     const { active, over } = event;
     if (!over) return;
 
-    const item = active.data.current as KanbanItem | undefined;
+    const item = active.data.current as any;
     if (!item) return;
 
-    const targetColumnKey = over.id as ColumnKey;
-    const currentColumn = getColumnForItem(item);
+    const targetColumnKey = over.id as string;
+    const currentColumn = getColumn(item);
     if (targetColumnKey === currentColumn) return;
 
-    const targetColumn = COLUMNS.find((c) => c.key === targetColumnKey);
-    if (!targetColumn) return;
+    const targetCol = columns.find((c) => c.key === targetColumnKey);
+    if (!targetCol) return;
 
-    const newStatus = getTargetStatus(targetColumn, item.doctype);
+    const newStatus = getTarget(targetColumnKey, item);
 
-    // Lead dropped on an Opportunity-only column → convert instead of status update
-    const isConversion = item.doctype === "Lead" && newStatus === "" && onConvertLead;
-    if (isConversion) {
+    // Lead conversion (CRM-specific): Lead dropped on Opportunity-only column
+    if (item.doctype === "Lead" && newStatus === "" && onConvertLead) {
       const snapshot = localItems;
-      // Optimistic: remove the Lead (it will reappear as an Opportunity after refetch)
       setLocalItems((prev) => prev.filter((i) => i.id !== item.id));
       setUpdating(true);
       try {
-        await onConvertLead(item, targetColumnKey);
+        await onConvertLead(item as KanbanItem, targetColumnKey as ColumnKey);
       } catch (err) {
         setLocalItems(snapshot);
         const msg = err instanceof Error ? err.message : `Failed to convert ${item.displayName}`;
@@ -89,7 +117,6 @@ export function KanbanBoard({ items, onUpdateStatus, onConvertLead }: KanbanBoar
       return;
     }
 
-    // Don't proceed if there's no valid target status
     if (!newStatus) return;
 
     // Optimistic update
@@ -102,14 +129,15 @@ export function KanbanBoard({ items, onUpdateStatus, onConvertLead }: KanbanBoar
     try {
       await onUpdateStatus({ ...item, status: newStatus }, newStatus);
     } catch (err) {
-      // Rollback
       setLocalItems(snapshot);
-      const msg = err instanceof Error ? err.message : `Failed to move ${item.displayName}`;
+      const msg = err instanceof Error ? err.message : `Failed to move ${item.displayName ?? "item"}`;
       setError(msg);
     } finally {
       setUpdating(false);
     }
   }
+
+  const defaultOverlay = activeItem ? <KanbanCard item={activeItem} isDragOverlay /> : null;
 
   return (
     <div className="space-y-3">
@@ -129,16 +157,26 @@ export function KanbanBoard({ items, onUpdateStatus, onConvertLead }: KanbanBoar
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className={`grid grid-cols-6 gap-3 transition-opacity ${updating ? "opacity-40 pointer-events-none" : ""}`}>
-          {COLUMNS.map((col) => (
-            <KanbanColumn key={col.key} column={col} items={columnItems(col.key)} />
+        <div
+          className={`grid gap-3 transition-opacity ${updating ? "opacity-40 pointer-events-none" : ""}`}
+          style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}
+        >
+          {columns.map((col) => (
+            <KanbanColumn
+              key={col.key}
+              column={col}
+              items={columnItems(col.key)}
+              renderCard={renderCard ? (item) => renderCard(item, false) : undefined}
+            />
           ))}
         </div>
         {updating && (
           <div className="text-center text-sm text-muted-foreground py-1">Updating...</div>
         )}
         <DragOverlay>
-          {activeItem ? <KanbanCard item={activeItem} isDragOverlay /> : null}
+          {activeItem
+            ? (renderCard ? renderCard(activeItem, true) : defaultOverlay)
+            : null}
         </DragOverlay>
       </DndContext>
     </div>
