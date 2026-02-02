@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -21,18 +21,21 @@ import {
 interface KanbanBoardProps {
   items: KanbanItem[];
   onUpdateStatus: (item: KanbanItem, newStatus: string) => Promise<void>;
+  onConvertLead?: (item: KanbanItem, targetColumnKey: ColumnKey) => Promise<void>;
 }
 
-export function KanbanBoard({ items, onUpdateStatus }: KanbanBoardProps) {
+export function KanbanBoard({ items, onUpdateStatus, onConvertLead }: KanbanBoardProps) {
   const [localItems, setLocalItems] = useState<KanbanItem[]>(items);
   const [activeItem, setActiveItem] = useState<KanbanItem | null>(null);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync when parent items change (e.g. after refetch)
-  if (items !== localItems && !activeItem) {
-    setLocalItems(items);
-  }
+  // Sync when parent items change (e.g. after refetch), but skip during active drag
+  useEffect(() => {
+    if (!activeItem) {
+      setLocalItems(items);
+    }
+  }, [items, activeItem]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -66,6 +69,28 @@ export function KanbanBoard({ items, onUpdateStatus }: KanbanBoardProps) {
     if (!targetColumn) return;
 
     const newStatus = getTargetStatus(targetColumn, item.doctype);
+
+    // Lead dropped on an Opportunity-only column → convert instead of status update
+    const isConversion = item.doctype === "Lead" && newStatus === "" && onConvertLead;
+    if (isConversion) {
+      const snapshot = localItems;
+      // Optimistic: remove the Lead (it will reappear as an Opportunity after refetch)
+      setLocalItems((prev) => prev.filter((i) => i.id !== item.id));
+      setUpdating(true);
+      try {
+        await onConvertLead(item, targetColumnKey);
+      } catch (err) {
+        setLocalItems(snapshot);
+        const msg = err instanceof Error ? err.message : `Failed to convert ${item.displayName}`;
+        setError(msg);
+      } finally {
+        setUpdating(false);
+      }
+      return;
+    }
+
+    // Don't proceed if there's no valid target status
+    if (!newStatus) return;
 
     // Optimistic update
     const snapshot = localItems;
@@ -104,7 +129,7 @@ export function KanbanBoard({ items, onUpdateStatus }: KanbanBoardProps) {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className={`grid grid-cols-4 gap-3 transition-opacity ${updating ? "opacity-40 pointer-events-none" : ""}`}>
+        <div className={`grid grid-cols-6 gap-3 transition-opacity ${updating ? "opacity-40 pointer-events-none" : ""}`}>
           {COLUMNS.map((col) => (
             <KanbanColumn key={col.key} column={col} items={columnItems(col.key)} />
           ))}
