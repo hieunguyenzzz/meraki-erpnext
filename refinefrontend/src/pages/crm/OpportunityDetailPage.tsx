@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router";
-import { useOne, useDelete, useNavigation } from "@refinedev/core";
+import { useParams } from "react-router";
+import { useOne, useDelete, useNavigation, useInvalidate } from "@refinedev/core";
 import { Trash2 } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
-import { ActivitySection } from "@/components/crm/ActivitySection";
+import { EditableField } from "@/components/crm/EditableField";
+import { ConversationSection } from "@/components/crm/ConversationSection";
+import { InternalNotesSection } from "@/components/crm/ActivitySection";
 
 function statusVariant(status: string) {
   switch (status) {
@@ -27,6 +29,11 @@ export default function OpportunityDetailPage() {
   const { result: opportunity } = useOne({ resource: "Opportunity", id: name! });
   const { mutateAsync: deleteRecord } = useDelete();
   const { list } = useNavigation();
+  const invalidate = useInvalidate();
+
+  function handleFieldSaved() {
+    invalidate({ resource: "Opportunity", invalidates: ["detail"], id: name! });
+  }
 
   // Fetch the linked Lead for wedding details + contact info
   const isFromLead = opportunity?.opportunity_from === "Lead" && !!opportunity?.party_name;
@@ -92,19 +99,6 @@ export default function OpportunityDetailPage() {
             <ReadOnlyField label="Email" value={opportunity.contact_email || lead?.email_id || ""} />
             <ReadOnlyField label="Phone" value={opportunity.contact_mobile || lead?.phone || ""} />
             {lead?.mobile_no && <ReadOnlyField label="Mobile" value={lead.mobile_no} />}
-            <ReadOnlyField label="Source" value={opportunity.source || ""} />
-            {isFromLead && (
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground text-sm">Source Lead</span>
-                <Link
-                  to={`/crm/leads/${opportunity.party_name}`}
-                  className="text-sm text-primary hover:underline"
-                >
-                  {opportunity.party_name}
-                </Link>
-              </div>
-            )}
-            <ReadOnlyField label="Created" value={formatDate(opportunity.creation)} />
           </CardContent>
         </Card>
 
@@ -117,8 +111,26 @@ export default function OpportunityDetailPage() {
             <ReadOnlyField label="ID" value={opportunity.name} />
             <ReadOnlyField label="Type" value={opportunity.opportunity_type || ""} />
             <ReadOnlyField label="From" value={opportunity.opportunity_from || ""} />
-            <ReadOnlyField label="Expected Closing" value={formatDate(opportunity.expected_closing)} />
-            <ReadOnlyField label="Amount" value={opportunity.opportunity_amount ? formatVND(opportunity.opportunity_amount) : ""} />
+            <EditableField
+              label="Expected Closing"
+              value={opportunity.expected_closing ?? ""}
+              displayValue={formatDate(opportunity.expected_closing)}
+              fieldName="expected_closing"
+              doctype="Opportunity"
+              docName={opportunity.name}
+              type="date"
+              onSaved={handleFieldSaved}
+            />
+            <EditableField
+              label="Amount"
+              value={opportunity.opportunity_amount ?? 0}
+              displayValue={opportunity.opportunity_amount ? formatVND(opportunity.opportunity_amount) : undefined}
+              fieldName="opportunity_amount"
+              doctype="Opportunity"
+              docName={opportunity.name}
+              type="number"
+              onSaved={handleFieldSaved}
+            />
           </CardContent>
         </Card>
       </div>
@@ -140,8 +152,11 @@ export default function OpportunityDetailPage() {
         </Card>
       )}
 
-      {/* Activity — merged from Opportunity + source Lead */}
-      <ActivitySection references={activityRefs} />
+      {/* Conversation — merged from Opportunity + source Lead */}
+      <ConversationSection references={activityRefs} />
+
+      {/* Internal Notes */}
+      <InternalNotesSection references={activityRefs} />
     </div>
   );
 }

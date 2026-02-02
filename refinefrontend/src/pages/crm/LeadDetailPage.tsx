@@ -11,7 +11,8 @@ import { extractErrorMessage } from "@/lib/errors";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { EditableField } from "@/components/crm/EditableField";
-import { ActivitySection } from "@/components/crm/ActivitySection";
+import { ConversationSection } from "@/components/crm/ConversationSection";
+import { InternalNotesSection } from "@/components/crm/ActivitySection";
 
 const TERMINAL_LEAD_STATUSES = new Set(["Converted", "Do Not Contact", "Opportunity"]);
 
@@ -242,8 +243,11 @@ export default function LeadDetailPage() {
         </Card>
       )}
 
-      {/* Activity */}
-      <ActivitySection references={[{ doctype: "Lead", docName: name! }]} />
+      {/* Conversation */}
+      <ConversationSection references={[{ doctype: "Lead", docName: name! }]} />
+
+      {/* Internal Notes */}
+      <InternalNotesSection references={[{ doctype: "Lead", docName: name! }]} />
     </div>
   );
 }

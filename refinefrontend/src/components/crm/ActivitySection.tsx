@@ -1,6 +1,9 @@
 import { useState, useMemo } from "react";
 import { useList, useCreate, useInvalidate } from "@refinedev/core";
 import DOMPurify from "dompurify";
+import * as Popover from "@radix-ui/react-popover";
+import { Check, Bell } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,41 +11,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { extractErrorMessage } from "@/lib/errors";
 
-interface ActivityRef {
+interface NoteRef {
   doctype: string;
   docName: string;
 }
 
-interface ActivitySectionProps {
-  references: ActivityRef[];
+interface InternalNotesSectionProps {
+  references: NoteRef[];
 }
 
-type ActivityItem = {
-  type: "communication" | "comment";
+type NoteItem = {
   name: string;
   content: string;
   author: string;
   creation: string;
-  subject?: string;
-  medium?: string;
-  direction?: "Sent" | "Received";
-  sourceDoctype?: string;
-  sourceDocName?: string;
 };
 
-function useActivityForRef(ref: ActivityRef) {
-  const { result: commsResult } = useList({
-    resource: "Communication",
-    pagination: { pageSize: 50 },
-    sorters: [{ field: "creation", order: "desc" }],
-    filters: [
-      { field: "reference_doctype", operator: "eq", value: ref.doctype },
-      { field: "reference_name", operator: "eq", value: ref.docName },
-    ],
-    meta: { fields: ["name", "subject", "content", "communication_medium", "sender", "recipients", "communication_date", "creation", "sent_or_received"] },
-  });
-
-  const { result: commentsResult } = useList({
+function useCommentsForRef(ref: NoteRef) {
+  return useList({
     resource: "Comment",
     pagination: { pageSize: 50 },
     sorters: [{ field: "creation", order: "desc" }],
@@ -53,120 +39,102 @@ function useActivityForRef(ref: ActivityRef) {
     ],
     meta: { fields: ["name", "content", "comment_email", "creation"] },
   });
-
-  return { commsResult, commentsResult };
 }
 
-function ActivityFeed({ references }: ActivitySectionProps) {
-  // Fetch activity for up to 2 references (primary + source lead)
+function NotesFeed({ references }: InternalNotesSectionProps) {
   const ref0 = references[0];
   const ref1 = references.length > 1 ? references[1] : null;
 
-  const { commsResult: comms0, commentsResult: comments0 } = useActivityForRef(ref0);
-  const { commsResult: comms1, commentsResult: comments1 } = useActivityForRef(
-    ref1 ?? { doctype: "__none__", docName: "__none__" }
+  const { result: result0 } = useCommentsForRef(ref0);
+  const { result: result1 } = useCommentsForRef(
+    ref1 ?? { doctype: "__none__", docName: "__none__" },
   );
 
-  const activityItems = useMemo<ActivityItem[]>(() => {
-    const items: ActivityItem[] = [];
+  const items = useMemo<NoteItem[]>(() => {
+    const all: NoteItem[] = [];
 
-    function addComms(result: any, ref: ActivityRef) {
+    function addFromResult(result: any) {
       for (const c of (result?.data ?? []) as any[]) {
-        items.push({
-          type: "communication", name: c.name, content: c.content ?? "",
-          author: c.sender ?? "", creation: c.creation,
-          subject: c.subject ?? undefined, medium: c.communication_medium ?? "Other",
-          direction: c.sent_or_received === "Sent" ? "Sent" : c.sent_or_received === "Received" ? "Received" : undefined,
-          sourceDoctype: ref.doctype, sourceDocName: ref.docName,
+        all.push({
+          name: c.name,
+          content: c.content ?? "",
+          author: c.comment_email ?? "",
+          creation: c.creation,
         });
       }
     }
 
-    function addComments(result: any, ref: ActivityRef) {
-      for (const c of (result?.data ?? []) as any[]) {
-        items.push({
-          type: "comment", name: c.name, content: c.content ?? "",
-          author: c.comment_email ?? "", creation: c.creation,
-          sourceDoctype: ref.doctype, sourceDocName: ref.docName,
-        });
-      }
-    }
+    addFromResult(result0);
+    if (ref1) addFromResult(result1);
 
-    addComms(comms0, ref0);
-    addComments(comments0, ref0);
-    if (ref1) {
-      addComms(comms1, ref1);
-      addComments(comments1, ref1);
-    }
+    all.sort((a, b) => new Date(b.creation).getTime() - new Date(a.creation).getTime());
+    return all;
+  }, [result0, result1, ref1]);
 
-    items.sort((a, b) => new Date(b.creation).getTime() - new Date(a.creation).getTime());
-    return items;
-  }, [comms0, comments0, comms1, comments1, ref0, ref1]);
-
-  if (activityItems.length === 0) {
+  if (items.length === 0) {
     return (
       <p className="text-sm text-muted-foreground text-center py-4">
-        No activity yet. Add a comment to start the conversation.
+        No internal notes yet. Add a note to start.
       </p>
     );
   }
 
   return (
     <div className="space-y-3">
-      {activityItems.map((item) => {
-        const isSent = item.type === "communication" && item.direction === "Sent";
-        const isReceived = item.type === "communication" && item.direction === "Received";
-        const isComment = item.type === "comment";
-
-        const containerClass = isSent
-          ? "bg-blue-50 dark:bg-blue-950/30 border-l-2 border-blue-400 rounded-r-md p-3"
-          : isReceived
-          ? "bg-green-50 dark:bg-green-950/30 border-l-2 border-green-400 rounded-r-md p-3"
-          : "bg-muted/30 border-l-2 border-muted rounded-r-md p-3";
-
-        const directionLabel = isSent
-          ? <span className="text-blue-600 dark:text-blue-400 font-medium">&rarr; Sent</span>
-          : isReceived
-          ? <span className="text-green-600 dark:text-green-400 font-medium">&larr; Received</span>
-          : isComment
-          ? <span className="text-muted-foreground font-medium">Comment</span>
-          : <span className="text-muted-foreground font-medium">Communication</span>;
-
-        // Show source badge if activity comes from a different doctype than the primary
-        const isFromOtherDoc = item.sourceDoctype !== ref0.doctype;
-
-        return (
-          <div key={`${item.type}-${item.name}`} className={containerClass}>
-            <div className="flex items-center gap-2 text-sm flex-wrap">
-              {directionLabel}
-              {isFromOtherDoc && (
-                <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                  from {item.sourceDoctype}
-                </span>
-              )}
-              <span className="text-muted-foreground">&middot;</span>
-              <span className="text-muted-foreground">{item.author}</span>
-              <span className="text-muted-foreground ml-auto text-xs">{formatDate(item.creation)}</span>
-            </div>
-            {item.subject && <p className="text-sm font-medium mt-1">{item.subject}</p>}
-            <div
-              className="text-sm text-muted-foreground prose prose-sm max-w-none mt-1"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
-            />
+      {items.map((item) => (
+        <div key={item.name} className="bg-muted/30 border-l-2 border-muted rounded-r-md p-3">
+          <div className="flex items-center gap-2 text-sm flex-wrap">
+            <span className="text-muted-foreground font-medium">Note</span>
+            <span className="text-muted-foreground">&middot;</span>
+            <span className="text-muted-foreground">{item.author}</span>
+            <span className="text-muted-foreground ml-auto text-xs">{formatDate(item.creation)}</span>
           </div>
-        );
-      })}
+          <div
+            className="text-sm text-muted-foreground prose prose-sm max-w-none mt-1"
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
+          />
+        </div>
+      ))}
     </div>
   );
 }
 
-export function ActivitySection({ references }: ActivitySectionProps) {
+export function InternalNotesSection({ references }: InternalNotesSectionProps) {
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [notifyStaff, setNotifyStaff] = useState(false);
+  const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const { mutateAsync: createDoc } = useCreate();
   const invalidate = useInvalidate();
 
   const primaryRef = references[0];
+
+  const { result: employeesResult } = useList({
+    resource: "Employee",
+    pagination: { pageSize: 100 },
+    filters: [{ field: "status", operator: "eq", value: "Active" }],
+    meta: { fields: ["name", "employee_name", "company_email", "personal_email"] },
+  });
+
+  const employees = useMemo(() => {
+    const data = (employeesResult as any)?.data ?? [];
+    return data
+      .map((e: any) => ({
+        id: e.name as string,
+        name: e.employee_name as string,
+        email: (e.company_email || e.personal_email || "") as string,
+      }))
+      .filter((e: { email: string }) => e.email);
+  }, [employeesResult]);
+
+  function toggleEmployee(id: string) {
+    setSelectedEmployees((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function handleAddComment() {
     if (!commentText.trim()) return;
@@ -181,12 +149,40 @@ export function ActivitySection({ references }: ActivitySectionProps) {
           content: commentText.trim(),
         },
       });
+
+      // Send email notification if staff selected
+      if (notifyStaff && selectedEmployees.size > 0) {
+        const recipientEmails = employees
+          .filter((e: { id: string }) => selectedEmployees.has(e.id))
+          .map((e: { email: string }) => e.email)
+          .join(", ");
+
+        try {
+          await createDoc({
+            resource: "Communication",
+            values: {
+              communication_type: "Notification",
+              communication_medium: "Email",
+              subject: `New note on ${primaryRef.doctype} ${primaryRef.docName}`,
+              content: `<p>${commentText.trim().replace(/\n/g, "<br>")}</p><hr><p><a href="/app/${primaryRef.doctype.toLowerCase().replace(/ /g, "-")}/${primaryRef.docName}">View in ERPNext</a></p>`,
+              recipients: recipientEmails,
+              send_email: 1,
+              reference_doctype: primaryRef.doctype,
+              reference_name: primaryRef.docName,
+            },
+          });
+        } catch (emailErr) {
+          console.error("Failed to send email notification:", emailErr);
+        }
+      }
+
       setCommentText("");
+      setNotifyStaff(false);
+      setSelectedEmployees(new Set());
       invalidate({ resource: "Comment", invalidates: ["list"] });
-      invalidate({ resource: "Communication", invalidates: ["list"] });
     } catch (err) {
-      console.error("Failed to add comment:", err);
-      alert(extractErrorMessage(err, "Failed to add comment. Please try again."));
+      console.error("Failed to add note:", err);
+      alert(extractErrorMessage(err, "Failed to add note. Please try again."));
     } finally {
       setSubmittingComment(false);
     }
@@ -195,26 +191,97 @@ export function ActivitySection({ references }: ActivitySectionProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Activity</CardTitle>
+        <CardTitle>Internal Notes</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <Textarea
-            placeholder="Add a comment..."
+            placeholder="Add an internal note..."
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
             rows={3}
           />
-          <div className="flex justify-end">
-            <Button size="sm" onClick={handleAddComment} disabled={submittingComment || !commentText.trim()}>
-              {submittingComment ? "Adding..." : "Add Comment"}
-            </Button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !notifyStaff;
+                setNotifyStaff(next);
+                if (!next) setSelectedEmployees(new Set());
+              }}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                notifyStaff
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <Bell className="h-3.5 w-3.5" />
+              Notify staff
+            </button>
+
+            {notifyStaff && (
+              <Popover.Root>
+                <Popover.Trigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 border-dashed text-xs">
+                    {selectedEmployees.size > 0
+                      ? `${selectedEmployees.size} selected`
+                      : "Select staff..."}
+                  </Button>
+                </Popover.Trigger>
+                <Popover.Portal>
+                  <Popover.Content
+                    className="z-50 w-[220px] max-h-[300px] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+                    align="start"
+                    sideOffset={4}
+                  >
+                    {employees.map((emp: { id: string; name: string }) => {
+                      const isSelected = selectedEmployees.has(emp.id);
+                      return (
+                        <button
+                          key={emp.id}
+                          onClick={() => toggleEmployee(emp.id)}
+                          className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                        >
+                          <div
+                            className={cn(
+                              "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                              isSelected ? "bg-primary text-primary-foreground" : "opacity-50"
+                            )}
+                          >
+                            {isSelected && <Check className="h-4 w-4" />}
+                          </div>
+                          <span>{emp.name}</span>
+                        </button>
+                      );
+                    })}
+                    {selectedEmployees.size > 0 && (
+                      <>
+                        <div className="-mx-1 my-1 h-px bg-muted" />
+                        <button
+                          onClick={() => setSelectedEmployees(new Set())}
+                          className="flex w-full cursor-default select-none items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                        >
+                          Clear all
+                        </button>
+                      </>
+                    )}
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover.Root>
+            )}
+
+            <div className="ml-auto">
+              <Button size="sm" onClick={handleAddComment} disabled={submittingComment || !commentText.trim()}>
+                {submittingComment ? "Adding..." : "Add Note"}
+              </Button>
+            </div>
           </div>
         </div>
 
         <Separator />
 
-        <ActivityFeed references={references} />
+        <NotesFeed references={references} />
       </CardContent>
     </Card>
   );
