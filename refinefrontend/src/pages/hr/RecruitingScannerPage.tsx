@@ -5,10 +5,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
-import { Check, X, Star, Download, ArrowRight, ChevronDown } from "lucide-react";
+import { Check, X, Star, Download, ArrowRight, ChevronDown, List, MapPin, Paperclip } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { formatAge } from "@/lib/kanban";
 import { extractErrorMessage } from "@/lib/errors";
+
+function getFileUrl(file: { file_url: string; is_private: number }) {
+  // Use file_url directly — nginx proxies both /private/ and /files/ paths
+  // Avoids the download_file API which forces Content-Disposition: attachment
+  return file.file_url;
+}
+
+function isPdf(name: string) {
+  return /\.pdf$/i.test(name);
+}
+
+function isImage(name: string) {
+  return /\.(jpe?g|png|webp|gif)$/i.test(name);
+}
 
 export default function RecruitingScannerPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -45,6 +59,7 @@ export default function RecruitingScannerPage() {
         "name", "applicant_name", "email_id", "phone_number",
         "job_title", "source", "applicant_rating", "creation",
         "cover_letter", "resume_attachment", "custom_recruiting_stage",
+        "custom_city", "country",
       ],
     },
   });
@@ -59,6 +74,33 @@ export default function RecruitingScannerPage() {
   }, [jobFilter]);
 
   const current = applicants[currentIndex] as any | undefined;
+
+  // Fetch File attachments for current applicant
+  const { result: filesResult } = useList({
+    resource: "File",
+    pagination: { mode: "off" },
+    filters: [
+      { field: "attached_to_doctype", operator: "eq", value: "Job Applicant" },
+      { field: "attached_to_name", operator: "eq", value: current?.name ?? "" },
+    ],
+    meta: {
+      fields: ["name", "file_name", "file_url", "file_size", "is_private"],
+    },
+    queryOptions: { enabled: !!current },
+  });
+
+  // Build attachment list: File records + legacy resume_attachment (if not already in list)
+  const allAttachments = useMemo(() => {
+    const files = (filesResult?.data ?? []) as any[];
+    if (current?.resume_attachment) {
+      const alreadyIncluded = files.some((f: any) => f.file_url === current.resume_attachment);
+      if (!alreadyIncluded) {
+        const fileName = current.resume_attachment.split("/").pop() || "resume";
+        files.push({ file_name: fileName, file_url: current.resume_attachment, is_private: 0, _legacy: true });
+      }
+    }
+    return files;
+  }, [filesResult, current?.resume_attachment, current?.name]);
 
   const advance = useCallback(() => {
     setExpandCover(false);
@@ -141,6 +183,12 @@ export default function RecruitingScannerPage() {
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           </div>
           <Link
+            to="/hr/recruiting/all"
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            <List className="h-4 w-4" /> All
+          </Link>
+          <Link
             to="/hr/recruiting/pipeline"
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
@@ -151,7 +199,7 @@ export default function RecruitingScannerPage() {
 
       {isLoading && (
         <div className="flex justify-center py-12">
-          <div className="w-full max-w-lg space-y-4">
+          <div className="w-full max-w-2xl space-y-4">
             <Skeleton className="h-8 w-[200px]" />
             <Skeleton className="h-64 w-full" />
             <div className="flex gap-4 justify-center">
@@ -187,7 +235,7 @@ export default function RecruitingScannerPage() {
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
           >
-            <Card className="w-full max-w-lg">
+            <Card className="w-full max-w-2xl">
               <CardContent className="p-6 space-y-4">
                 {/* Name */}
                 <div>
@@ -208,6 +256,12 @@ export default function RecruitingScannerPage() {
                 <div className="space-y-1 text-sm">
                   {current.email_id && <div>{current.email_id}</div>}
                   {current.phone_number && <div>{current.phone_number}</div>}
+                  {(current.custom_city || current.country) && (
+                    <div className="text-muted-foreground flex items-center gap-1">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {[current.custom_city, current.country].filter(Boolean).join(", ")}
+                    </div>
+                  )}
                 </div>
 
                 {/* Meta row */}
@@ -244,16 +298,36 @@ export default function RecruitingScannerPage() {
                   </div>
                 )}
 
-                {/* Resume */}
-                {current.resume_attachment && (
-                  <a
-                    href={current.resume_attachment}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                  >
-                    <Download className="h-4 w-4" /> Download Resume
-                  </a>
+                {/* Attachments */}
+                {allAttachments.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      {allAttachments.length} attachment{allAttachments.length !== 1 ? "s" : ""}
+                    </div>
+                    {allAttachments.map((file: any, i: number) => {
+                      const url = getFileUrl(file);
+                      return (
+                        <div key={file.name || i} className="space-y-1">
+                          <p className="text-xs text-muted-foreground truncate">{file.file_name}</p>
+                          {isPdf(file.file_name) ? (
+                            <iframe src={url} className="w-full h-[400px] rounded border" title={file.file_name} />
+                          ) : isImage(file.file_name) ? (
+                            <img src={url} alt={file.file_name} className="w-full rounded border" />
+                          ) : (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                            >
+                              <Download className="h-4 w-4" /> {file.file_name}
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>
