@@ -2,7 +2,7 @@ import json
 import os
 import re
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import secrets
@@ -14,6 +14,17 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
 app = FastAPI(title="Meraki Lead Webhook")
+
+# CRM Stage Configuration
+# Maps webhook stage names to ERPNext doctype and status
+STAGE_CONFIG = {
+    "new": {"doctype": "Lead", "status": "Open"},
+    "engaged": {"doctype": "Lead", "status": "Replied"},
+    "meeting": {"doctype": "Lead", "status": "Interested"},
+    "quoted": {"doctype": "Opportunity", "status": "Quotation"},
+    "won": {"doctype": "Opportunity", "status": "Converted"},
+    "lost": {"doctype": None, "lead_status": "Do Not Contact", "opp_status": "Lost"},
+}
 templates = Jinja2Templates(directory="templates")
 
 DB_PATH = Path("/app/data/webhook.db")
@@ -325,3 +336,274 @@ async def analytics(request: Request, status: str = "all", _user: str = Depends(
         "stats": dict(stats) if stats else {"total": 0, "success_count": 0, "fail_count": 0},
         "current_filter": status,
     })
+
+
+# =============================================================================
+# CRM Contact Webhook - Stage Movement API
+# =============================================================================
+
+def get_erpnext_headers() -> dict:
+    """Return headers for ERPNext API calls."""
+    return {
+        "Authorization": f"token {ERPNEXT_API_KEY}:{ERPNEXT_API_SECRET}",
+        "Content-Type": "application/json",
+    }
+
+
+async def find_lead_by_email(client: httpx.AsyncClient, email: str) -> dict | None:
+    """Find Lead by email_id."""
+    resp = await client.get(
+        f"{ERPNEXT_URL}/api/resource/Lead",
+        params={
+            "filters": json.dumps([["email_id", "=", email]]),
+            "fields": json.dumps(["name", "lead_name", "status"]),
+            "limit_page_length": 1,
+        },
+        headers=get_erpnext_headers(),
+    )
+    if resp.status_code == 200 and resp.json().get("data"):
+        return resp.json()["data"][0]
+    return None
+
+
+async def find_opportunity_for_lead(client: httpx.AsyncClient, lead_name: str) -> dict | None:
+    """Find Opportunity linked to a Lead."""
+    resp = await client.get(
+        f"{ERPNEXT_URL}/api/resource/Opportunity",
+        params={
+            "filters": json.dumps([["party_name", "=", lead_name], ["opportunity_from", "=", "Lead"]]),
+            "fields": json.dumps(["name", "status"]),
+            "limit_page_length": 1,
+            "order_by": "creation desc",
+        },
+        headers=get_erpnext_headers(),
+    )
+    if resp.status_code == 200 and resp.json().get("data"):
+        return resp.json()["data"][0]
+    return None
+
+
+async def set_value(client: httpx.AsyncClient, doctype: str, name: str, fieldname: str, value: str) -> dict:
+    """Update a field value using frappe.client.set_value (same as frontend)."""
+    resp = await client.post(
+        f"{ERPNEXT_URL}/api/method/frappe.client.set_value",
+        json={
+            "doctype": doctype,
+            "name": name,
+            "fieldname": fieldname,
+            "value": value,
+        },
+        headers=get_erpnext_headers(),
+    )
+    return resp.json()
+
+
+async def create_opportunity_from_lead(client: httpx.AsyncClient, lead_name: str, status: str) -> dict:
+    """Create Opportunity from Lead (same as frontend)."""
+    resp = await client.post(
+        f"{ERPNEXT_URL}/api/resource/Opportunity",
+        json={
+            "opportunity_from": "Lead",
+            "party_name": lead_name,
+            "status": status,
+        },
+        headers=get_erpnext_headers(),
+    )
+    if resp.status_code in (200, 201):
+        return resp.json().get("data", {})
+    raise Exception(f"Failed to create Opportunity: {resp.text[:500]}")
+
+
+async def create_meeting_event(client: httpx.AsyncClient, lead_name: str, display_name: str, meeting_date: str) -> dict:
+    """Create Event for meeting stage (same as frontend).
+
+    meeting_date format: "2026-02-10T14:00" (ISO datetime-local)
+    """
+    # Parse ISO datetime-local format
+    try:
+        dt = datetime.fromisoformat(meeting_date)
+    except ValueError:
+        # Fallback: try with seconds
+        dt = datetime.fromisoformat(meeting_date.replace("Z", "+00:00"))
+
+    starts_on = dt.strftime("%Y-%m-%d %H:%M:%S")
+    ends_on = (dt + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+    event_data = {
+        "subject": f"Meeting with {display_name}",
+        "starts_on": starts_on,
+        "ends_on": ends_on,
+        "event_category": "Meeting",
+        "event_type": "Private",
+        "event_participants": [{
+            "reference_doctype": "Lead",
+            "reference_docname": lead_name,
+        }],
+    }
+
+    resp = await client.post(
+        f"{ERPNEXT_URL}/api/resource/Event",
+        json=event_data,
+        headers=get_erpnext_headers(),
+    )
+    if resp.status_code in (200, 201):
+        return resp.json().get("data", {})
+    raise Exception(f"Failed to create Event: {resp.text[:500]}")
+
+
+async def create_communication(
+    client: httpx.AsyncClient,
+    doctype: str,
+    name: str,
+    content: str,
+    sent_or_received: str
+) -> dict:
+    """Create Communication record (same as existing /api/webhook/conversation)."""
+    comm_data = {
+        "doctype": "Communication",
+        "communication_type": "Communication",
+        "communication_medium": "Email",
+        "sent_or_received": sent_or_received,
+        "content": content,
+        "send_email": 0,
+        "reference_doctype": doctype,
+        "reference_name": name,
+    }
+
+    resp = await client.post(
+        f"{ERPNEXT_URL}/api/resource/Communication",
+        json=comm_data,
+        headers=get_erpnext_headers(),
+    )
+    if resp.status_code in (200, 201):
+        return resp.json().get("data", {})
+    raise Exception(f"Failed to create Communication: {resp.text[:500]}")
+
+
+@app.put("/api/crm/contact")
+async def update_crm_contact(request: Request):
+    """Update CRM contact stage and log communication.
+
+    Parameters:
+        email: Required. Primary identifier to find Lead/Opportunity
+        stage: Required. Target column: new, engaged, meeting, quoted, won, lost
+        payload: Required. Contains:
+            message: Required. Message content to log as Communication
+            message_type: Required. "client" (received) or "staff" (sent)
+            meeting_date: Optional. ISO datetime for meeting stage (e.g., "2026-02-10T14:00")
+    """
+    ip = request.client.host if request.client else "unknown"
+
+    try:
+        body = await request.json()
+    except Exception:
+        log_call(False, None, "Invalid JSON body", {}, None, ip)
+        return {"success": False, "error": "Invalid JSON body"}
+
+    email = (body.get("email") or "").strip()
+    stage = (body.get("stage") or "").strip()
+    payload = body.get("payload", {})
+    message = (payload.get("message") or "").strip()
+    message_type = (payload.get("message_type") or "").strip()
+    meeting_date = payload.get("meeting_date")
+
+    # 1. Validate required inputs
+    if not email:
+        log_call(False, None, "Missing required field: email", body, None, ip)
+        return {"success": False, "error": "Missing required field: email"}
+
+    if not stage or stage not in STAGE_CONFIG:
+        valid_stages = ", ".join(STAGE_CONFIG.keys())
+        log_call(False, None, f"Invalid stage: {stage}", body, None, ip)
+        return {"success": False, "error": f"Invalid stage: {stage}. Must be one of: {valid_stages}"}
+
+    if not message:
+        log_call(False, None, "Missing required field: payload.message", body, None, ip)
+        return {"success": False, "error": "Missing required field: payload.message"}
+
+    if message_type not in ("client", "staff"):
+        log_call(False, None, "payload.message_type must be 'client' or 'staff'", body, None, ip)
+        return {"success": False, "error": "payload.message_type must be 'client' or 'staff'"}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # 2. Find Lead by email
+            lead = await find_lead_by_email(client, email)
+            if not lead:
+                log_call(False, None, f"No Lead found with email: {email}", body, None, ip)
+                return {"success": False, "error": f"No Lead found with email: {email}"}
+
+            # 3. Check for linked Opportunity
+            opportunity = await find_opportunity_for_lead(client, lead["name"])
+            current_doctype = "Opportunity" if opportunity else "Lead"
+            current_doc = opportunity or lead
+
+            # 4. Get stage config
+            config = STAGE_CONFIG[stage]
+            target_doctype = config.get("doctype")
+
+            # 5. Handle stage transition
+            final_doctype = current_doctype
+            final_doc = current_doc
+
+            if stage == "lost":
+                # Lost can apply to either doctype
+                status = config["opp_status"] if current_doctype == "Opportunity" else config["lead_status"]
+                await set_value(client, current_doctype, current_doc["name"], "status", status)
+                final_doctype = current_doctype
+                final_doc = current_doc
+
+            elif target_doctype == "Lead":
+                # Moving to Lead stage (new, engaged, meeting)
+                if current_doctype == "Opportunity":
+                    log_call(False, None, "Cannot move Opportunity back to Lead stage", body, None, ip)
+                    return {"success": False, "error": "Cannot move Opportunity back to Lead stage"}
+
+                # Create Event for meeting stage (MUST happen before status update)
+                if stage == "meeting" and meeting_date:
+                    await create_meeting_event(
+                        client,
+                        lead["name"],
+                        lead.get("lead_name", lead["name"]),
+                        meeting_date
+                    )
+
+                await set_value(client, "Lead", lead["name"], "status", config["status"])
+                final_doctype = "Lead"
+                final_doc = lead
+
+            elif target_doctype == "Opportunity":
+                # Moving to Opportunity stage (quoted, won)
+                if current_doctype == "Lead":
+                    # Convert Lead to Opportunity
+                    opportunity = await create_opportunity_from_lead(client, lead["name"], config["status"])
+                    final_doctype = "Opportunity"
+                    final_doc = opportunity
+                else:
+                    # Already an Opportunity, just update status
+                    await set_value(client, "Opportunity", opportunity["name"], "status", config["status"])
+                    final_doctype = "Opportunity"
+                    final_doc = opportunity
+
+            # 6. Create Communication (always, message is required)
+            sent_or_received = "Sent" if message_type == "staff" else "Received"
+            await create_communication(
+                client,
+                doctype=final_doctype,
+                name=final_doc["name"],
+                content=message,
+                sent_or_received=sent_or_received,
+            )
+
+            log_call(True, final_doc["name"], None, body, 200, ip)
+            return {
+                "success": True,
+                "doctype": final_doctype,
+                "name": final_doc["name"],
+                "stage": stage,
+            }
+
+    except Exception as e:
+        error_msg = str(e)[:500]
+        log_call(False, None, f"Error: {error_msg}", body, None, ip)
+        return {"success": False, "error": error_msg}
