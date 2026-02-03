@@ -44,6 +44,42 @@ services:
     depends_on:
       - frontend
 
+  webhook:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meraki-webhook.rule=Host(`webhook.merakierp.loc`)"
+      - "traefik.http.routers.meraki-webhook.entrypoints=web"
+      - "traefik.http.services.meraki-webhook.loadbalancer.server.port=8091"
+      - "traefik.docker.network=local-dev"
+    networks:
+      - default
+      - traefik
+
+  email-processor:
+    build:
+      context: ./webhook
+      dockerfile: Dockerfile.email
+    restart: unless-stopped
+    volumes:
+      - email-processor-data:/app/data
+    environment:
+      - ZOHO_IMAP_HOST=${ZOHO_IMAP_HOST:-imappro.zoho.com}
+      - ZOHO_EMAIL=${ZOHO_EMAIL:-info@merakiweddingplanner.com}
+      - ZOHO_PASSWORD=${ZOHO_PASSWORD}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      - WEBHOOK_URL=http://webhook:8091
+    depends_on:
+      - webhook
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  email-processor-data:
+
 networks:
   traefik:
     name: local-dev
