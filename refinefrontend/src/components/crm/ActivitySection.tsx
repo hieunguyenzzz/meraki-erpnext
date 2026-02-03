@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useList, useCreate, useInvalidate } from "@refinedev/core";
 import DOMPurify from "dompurify";
 import * as Popover from "@radix-ui/react-popover";
-import { Check, Bell } from "lucide-react";
+import { Check, Bell, Mail, MailOpen, RefreshCw, StickyNote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,18 +16,20 @@ interface NoteRef {
   docName: string;
 }
 
-interface InternalNotesSectionProps {
+interface ActivitySectionProps {
   references: NoteRef[];
 }
 
-type NoteItem = {
-  name: string;
+type ActivityItem = {
+  id: string;
+  type: "email_sent" | "email_received" | "stage_change" | "note";
   content: string;
   author: string;
   creation: string;
+  subject?: string;
 };
 
-function useCommentsForRef(ref: NoteRef) {
+function useCommentsForRef(ref: NoteRef, commentTypes: string[]) {
   return useList({
     resource: "Comment",
     pagination: { pageSize: 50 },
@@ -35,71 +37,173 @@ function useCommentsForRef(ref: NoteRef) {
     filters: [
       { field: "reference_doctype", operator: "eq", value: ref.doctype },
       { field: "reference_name", operator: "eq", value: ref.docName },
-      { field: "comment_type", operator: "eq", value: "Comment" },
+      { field: "comment_type", operator: "in", value: commentTypes },
     ],
-    meta: { fields: ["name", "content", "comment_email", "creation"] },
+    meta: { fields: ["name", "content", "comment_email", "comment_type", "creation"] },
   });
 }
 
-function NotesFeed({ references }: InternalNotesSectionProps) {
+function useCommunicationsForRef(ref: NoteRef) {
+  return useList({
+    resource: "Communication",
+    pagination: { pageSize: 50 },
+    sorters: [{ field: "creation", order: "desc" }],
+    filters: [
+      { field: "reference_doctype", operator: "eq", value: ref.doctype },
+      { field: "reference_name", operator: "eq", value: ref.docName },
+      { field: "communication_type", operator: "eq", value: "Communication" },
+    ],
+    meta: { fields: ["name", "content", "sender", "sent_or_received", "subject", "creation"] },
+  });
+}
+
+function ActivityFeed({ references }: ActivitySectionProps) {
   const ref0 = references[0];
   const ref1 = references.length > 1 ? references[1] : null;
 
-  const { result: result0 } = useCommentsForRef(ref0);
-  const { result: result1 } = useCommentsForRef(
+  // Fetch Comments (both Comment and Info types)
+  const { result: comments0 } = useCommentsForRef(ref0, ["Comment", "Info"]);
+  const { result: comments1 } = useCommentsForRef(
+    ref1 ?? { doctype: "__none__", docName: "__none__" },
+    ["Comment", "Info"],
+  );
+
+  // Fetch Communications (emails)
+  const { result: comms0 } = useCommunicationsForRef(ref0);
+  const { result: comms1 } = useCommunicationsForRef(
     ref1 ?? { doctype: "__none__", docName: "__none__" },
   );
 
-  const items = useMemo<NoteItem[]>(() => {
-    const all: NoteItem[] = [];
+  const items = useMemo<ActivityItem[]>(() => {
+    const all: ActivityItem[] = [];
+    const seen = new Set<string>();
 
-    function addFromResult(result: any) {
-      for (const c of (result?.data ?? []) as any[]) {
-        all.push({
-          name: c.name,
-          content: c.content ?? "",
-          author: c.comment_email ?? "",
-          creation: c.creation,
-        });
+    function addComment(c: any) {
+      if (seen.has(c.name)) return;
+      seen.add(c.name);
+
+      const commentType = c.comment_type;
+      let type: ActivityItem["type"] = "note";
+      if (commentType === "Info") {
+        type = "stage_change";
       }
+
+      all.push({
+        id: c.name,
+        type,
+        content: c.content ?? "",
+        author: c.comment_email ?? "",
+        creation: c.creation,
+      });
     }
 
-    addFromResult(result0);
-    if (ref1) addFromResult(result1);
+    function addCommunication(comm: any) {
+      if (seen.has(comm.name)) return;
+      seen.add(comm.name);
 
+      const type: ActivityItem["type"] = comm.sent_or_received === "Sent" ? "email_sent" : "email_received";
+
+      all.push({
+        id: comm.name,
+        type,
+        content: comm.content ?? "",
+        author: comm.sender ?? "",
+        creation: comm.creation,
+        subject: comm.subject,
+      });
+    }
+
+    // Add comments from both refs
+    for (const c of ((comments0 as any)?.data ?? [])) addComment(c);
+    if (ref1) {
+      for (const c of ((comments1 as any)?.data ?? [])) addComment(c);
+    }
+
+    // Add communications from both refs
+    for (const comm of ((comms0 as any)?.data ?? [])) addCommunication(comm);
+    if (ref1) {
+      for (const comm of ((comms1 as any)?.data ?? [])) addCommunication(comm);
+    }
+
+    // Sort by creation date (newest first)
     all.sort((a, b) => new Date(b.creation).getTime() - new Date(a.creation).getTime());
     return all;
-  }, [result0, result1, ref1]);
+  }, [comments0, comments1, comms0, comms1, ref1]);
 
   if (items.length === 0) {
     return (
       <p className="text-sm text-muted-foreground text-center py-4">
-        No internal notes yet. Add a note to start.
+        No activity yet. Add a note or send an email to start.
       </p>
     );
   }
 
   return (
     <div className="space-y-3">
-      {items.map((item) => (
-        <div key={item.name} className="bg-muted/30 border-l-2 border-muted rounded-r-md p-3">
-          <div className="flex items-center gap-2 text-sm flex-wrap">
-            <span className="text-muted-foreground font-medium">Note</span>
-            <span className="text-muted-foreground">&middot;</span>
-            <span className="text-muted-foreground">{item.author}</span>
-            <span className="text-muted-foreground ml-auto text-xs">{formatDate(item.creation)}</span>
+      {items.map((item) => {
+        let borderColor = "border-muted";
+        let icon = <StickyNote className="h-4 w-4" />;
+        let label = "Note";
+        let bgColor = "bg-muted/30";
+
+        switch (item.type) {
+          case "email_sent":
+            borderColor = "border-green-500";
+            bgColor = "bg-green-50 dark:bg-green-950/30";
+            icon = <Mail className="h-4 w-4 text-green-600" />;
+            label = "Email Sent";
+            break;
+          case "email_received":
+            borderColor = "border-blue-500";
+            bgColor = "bg-blue-50 dark:bg-blue-950/30";
+            icon = <MailOpen className="h-4 w-4 text-blue-600" />;
+            label = "Email Received";
+            break;
+          case "stage_change":
+            borderColor = "border-gray-400";
+            bgColor = "bg-gray-50 dark:bg-gray-900/30";
+            icon = <RefreshCw className="h-4 w-4 text-gray-500" />;
+            label = "Stage Changed";
+            break;
+          case "note":
+            borderColor = "border-yellow-500";
+            bgColor = "bg-yellow-50 dark:bg-yellow-950/30";
+            icon = <StickyNote className="h-4 w-4 text-yellow-600" />;
+            label = "Note";
+            break;
+        }
+
+        return (
+          <div key={item.id} className={cn("border-l-2 rounded-r-md p-3", borderColor, bgColor)}>
+            <div className="flex items-center gap-2 text-sm flex-wrap">
+              {icon}
+              <span className="font-medium">{label}</span>
+              {item.subject && (
+                <>
+                  <span className="text-muted-foreground">&middot;</span>
+                  <span className="text-muted-foreground truncate max-w-[200px]">{item.subject}</span>
+                </>
+              )}
+              {item.author && (
+                <>
+                  <span className="text-muted-foreground">&middot;</span>
+                  <span className="text-muted-foreground">{item.author}</span>
+                </>
+              )}
+              <span className="text-muted-foreground ml-auto text-xs">{formatDate(item.creation)}</span>
+            </div>
+            <div
+              className="text-sm text-muted-foreground prose prose-sm max-w-none mt-1"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
+            />
           </div>
-          <div
-            className="text-sm text-muted-foreground prose prose-sm max-w-none mt-1"
-            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
-          />
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-export function InternalNotesSection({ references }: InternalNotesSectionProps) {
+export function ActivitySection({ references }: ActivitySectionProps) {
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
   const [notifyStaff, setNotifyStaff] = useState(false);
@@ -191,7 +295,7 @@ export function InternalNotesSection({ references }: InternalNotesSectionProps) 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Internal Notes</CardTitle>
+        <CardTitle>Activity Timeline</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
@@ -281,8 +385,11 @@ export function InternalNotesSection({ references }: InternalNotesSectionProps) 
 
         <Separator />
 
-        <NotesFeed references={references} />
+        <ActivityFeed references={references} />
       </CardContent>
     </Card>
   );
 }
+
+// Keep backwards compatibility - export the old name too
+export { ActivitySection as InternalNotesSection };

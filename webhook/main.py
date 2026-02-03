@@ -25,6 +25,22 @@ STAGE_CONFIG = {
     "won": {"doctype": "Opportunity", "status": "Converted"},
     "lost": {"doctype": None, "lead_status": "Do Not Contact", "opp_status": "Lost"},
 }
+
+# Reverse mapping: ERPNext status → stage name (for logging transitions)
+LEAD_STATUS_TO_STAGE = {
+    "Lead": "new",
+    "Open": "new",
+    "Replied": "engaged",
+    "Interested": "meeting",
+    "Do Not Contact": "lost",
+}
+
+OPP_STATUS_TO_STAGE = {
+    "Open": "quoted",
+    "Quotation": "quoted",
+    "Converted": "won",
+    "Lost": "lost",
+}
 templates = Jinja2Templates(directory="templates")
 
 DB_PATH = Path("/app/data/webhook.db")
@@ -480,6 +496,29 @@ async def create_communication(
     raise Exception(f"Failed to create Communication: {resp.text[:500]}")
 
 
+async def create_stage_change_comment(
+    client: httpx.AsyncClient,
+    doctype: str,
+    name: str,
+    from_stage: str,
+    to_stage: str
+) -> dict:
+    """Log stage transition as Comment with type Info."""
+    resp = await client.post(
+        f"{ERPNEXT_URL}/api/resource/Comment",
+        json={
+            "reference_doctype": doctype,
+            "reference_name": name,
+            "comment_type": "Info",
+            "content": f"Stage: {from_stage} → {to_stage}",
+        },
+        headers=get_erpnext_headers(),
+    )
+    if resp.status_code in (200, 201):
+        return resp.json().get("data", {})
+    raise Exception(f"Failed to create stage change comment: {resp.text[:500]}")
+
+
 @app.put("/api/crm/contact")
 async def update_crm_contact(request: Request):
     """Update CRM contact stage and log communication.
@@ -538,11 +577,17 @@ async def update_crm_contact(request: Request):
             current_doctype = "Opportunity" if opportunity else "Lead"
             current_doc = opportunity or lead
 
-            # 4. Get stage config
+            # 4. Determine current stage from status
+            if current_doctype == "Opportunity":
+                current_stage = OPP_STATUS_TO_STAGE.get(current_doc.get("status", ""), "quoted")
+            else:
+                current_stage = LEAD_STATUS_TO_STAGE.get(current_doc.get("status", ""), "new")
+
+            # 5. Get stage config
             config = STAGE_CONFIG[stage]
             target_doctype = config.get("doctype")
 
-            # 5. Handle stage transition
+            # 6. Handle stage transition
             final_doctype = current_doctype
             final_doc = current_doc
 
@@ -585,7 +630,17 @@ async def update_crm_contact(request: Request):
                     final_doctype = "Opportunity"
                     final_doc = opportunity
 
-            # 6. Create Communication (always, message is required)
+            # 7. Log stage transition if stage changed
+            if current_stage != stage:
+                await create_stage_change_comment(
+                    client,
+                    doctype=final_doctype,
+                    name=final_doc["name"],
+                    from_stage=current_stage,
+                    to_stage=stage,
+                )
+
+            # 8. Create Communication (always, message is required)
             sent_or_received = "Sent" if message_type == "staff" else "Received"
             await create_communication(
                 client,
