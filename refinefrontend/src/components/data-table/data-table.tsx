@@ -2,7 +2,9 @@ import { useState } from "react";
 import {
   type ColumnDef,
   type ColumnFiltersState,
+  type RowSelectionState,
   type SortingState,
+  type Updater,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
@@ -25,6 +27,10 @@ interface DataTableProps<TData, TValue> {
   searchKey?: string;
   searchPlaceholder?: string;
   filterableColumns?: FilterableColumn[];
+  enableRowSelection?: boolean;
+  rowSelection?: Record<string, boolean>;
+  onRowSelectionChange?: (value: Record<string, boolean>) => void;
+  getRowId?: (row: TData) => string;
 }
 
 export function DataTable<TData, TValue>({
@@ -34,16 +40,30 @@ export function DataTable<TData, TValue>({
   searchKey,
   searchPlaceholder,
   filterableColumns,
+  enableRowSelection,
+  rowSelection,
+  onRowSelectionChange,
+  getRowId,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
+  const handleRowSelectionChange = onRowSelectionChange
+    ? (updater: Updater<RowSelectionState>) => {
+        const next = typeof updater === "function" ? updater(rowSelection ?? {}) : updater;
+        onRowSelectionChange(next);
+      }
+    : undefined;
+
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, columnFilters },
+    state: { sorting, columnFilters, ...(rowSelection !== undefined && { rowSelection }) },
+    enableRowSelection: enableRowSelection ?? false,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onRowSelectionChange: handleRowSelectionChange,
+    getRowId: getRowId as ((row: TData, index: number, parent?: any) => string) | undefined,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),

@@ -211,10 +211,13 @@ export interface JobApplicant {
   job_title?: string;
   source?: string;
   rating?: number;
+  applicant_rating?: number;
   creation: string;
   cover_letter?: string;
   resume_attachment?: string;
   custom_recruiting_stage?: string;
+  custom_city?: string;
+  country?: string;
   status: string;
 }
 
@@ -224,6 +227,24 @@ export interface JobOpening {
   status: string;
   designation?: string;
   department?: string;
+}
+
+export interface Interview {
+  name: string;
+  interview_round: string;
+  job_applicant: string;
+  job_opening?: string;
+  scheduled_on: string;
+  from_time: string;
+  to_time: string;
+  status: string;
+  interview_details?: InterviewDetail[];
+}
+
+export interface InterviewDetail {
+  name?: string;
+  parent: string;
+  interviewer: string;
 }
 
 export interface EmployeeProfile {
