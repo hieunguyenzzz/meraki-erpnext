@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router";
 import { useOne, useList, useCreate, useDelete, useInvalidate, useNavigation } from "@refinedev/core";
+import { useQuery } from "@tanstack/react-query";
 import { formatDate, formatVND } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, ArrowRightLeft } from "lucide-react";
+import { Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
 import { extractErrorMessage } from "@/lib/errors";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
@@ -71,6 +72,32 @@ export default function LeadDetailPage() {
     ],
     meta: { fields: ["name", "customer_name", "status"] },
     queryOptions: { enabled: !!weddingDate },
+  });
+
+  // Fetch Events linked to this Lead using direct API call
+  const { data: scheduledMeetings = [] } = useQuery({
+    queryKey: ["lead-meetings", name],
+    queryFn: async () => {
+      if (!name) return [];
+      const params = new URLSearchParams({
+        doctype: "Event",
+        fields: JSON.stringify(["name", "subject", "starts_on", "ends_on"]),
+        filters: JSON.stringify([
+          ["Event Participants", "reference_doctype", "=", "Lead"],
+          ["Event Participants", "reference_docname", "=", name],
+        ]),
+        order_by: "starts_on asc",
+        limit_page_length: "0",
+      });
+      const res = await fetch(`/api/method/frappe.client.get_list?${params}`, {
+        credentials: "include",
+        headers: { "X-Frappe-Site-Name": "erp.merakiwp.com" },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.message ?? []) as Array<{ name: string; subject: string; starts_on: string; ends_on?: string }>;
+    },
+    enabled: !!name,
   });
 
   const conflictingLeads = (conflictingLeadsResult?.data ?? []) as Array<{ name: string; lead_name: string; status: string }>;
@@ -239,6 +266,50 @@ export default function LeadDetailPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm whitespace-pre-wrap">{lead.notes}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Scheduled Meetings */}
+      {scheduledMeetings.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+              Scheduled Meetings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {scheduledMeetings.map((meeting) => {
+                const startDate = new Date(meeting.starts_on);
+                const isPast = startDate < new Date();
+                return (
+                  <div
+                    key={meeting.name}
+                    className={`flex items-start gap-3 p-3 rounded-lg border ${
+                      isPast
+                        ? "bg-muted/50 border-muted"
+                        : "bg-cyan-50 dark:bg-cyan-950/30 border-cyan-200 dark:border-cyan-800"
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <p className={`font-medium ${isPast ? "text-muted-foreground" : "text-foreground"}`}>
+                        {meeting.subject}
+                      </p>
+                      <p className={`text-sm ${isPast ? "text-muted-foreground" : "text-cyan-700 dark:text-cyan-400"}`}>
+                        {startDate.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                        {" at "}
+                        {startDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    {isPast && (
+                      <Badge variant="secondary" className="text-xs">Past</Badge>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       )}

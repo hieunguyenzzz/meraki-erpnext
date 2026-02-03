@@ -1,4 +1,4 @@
-export type ColumnKey = "new" | "engaged" | "converted" | "lost";
+export type ColumnKey = "new" | "engaged" | "meeting" | "quoted" | "won" | "lost";
 
 export interface KanbanItem {
   id: string;          // doctype name (unique ID)
@@ -12,6 +12,7 @@ export interface KanbanItem {
     date: string;                    // ISO timestamp of last communication
     waitingFor: "client" | "staff";  // Sent by staff → waiting for client, Received → waiting for staff
   };
+  meetingDate?: string; // ISO datetime of scheduled meeting (from ERPNext Event)
 }
 
 export interface ColumnDef {
@@ -33,33 +34,51 @@ export const COLUMNS: ColumnDef[] = [
     label: "New",
     color: "blue",
     leadStatuses: ["Lead", "Open"],
-    oppStatuses: ["Open"],
+    oppStatuses: [],
     leadTarget: "Open",
-    oppTarget: "Open",
+    oppTarget: "",
   },
   {
     key: "engaged",
     label: "Engaged",
     color: "amber",
-    leadStatuses: ["Replied", "Interested"],
-    oppStatuses: ["Replied"],
+    leadStatuses: ["Replied"],
+    oppStatuses: [],
     leadTarget: "Replied",
-    oppTarget: "Replied",
+    oppTarget: "",
   },
   {
-    key: "converted",
-    label: "Converted",
+    key: "meeting",
+    label: "Meeting",
+    color: "cyan",
+    leadStatuses: ["Interested"],
+    oppStatuses: [],
+    leadTarget: "Interested",
+    oppTarget: "",
+  },
+  {
+    key: "quoted",
+    label: "Quoted",
+    color: "indigo",
+    leadStatuses: [],
+    oppStatuses: ["Open", "Quotation"],
+    leadTarget: "",
+    oppTarget: "Quotation",
+  },
+  {
+    key: "won",
+    label: "Won",
     color: "green",
-    leadStatuses: ["Opportunity", "Converted", "Quotation"],
-    oppStatuses: ["Quotation", "Converted"],
-    leadTarget: "Converted",
+    leadStatuses: [],
+    oppStatuses: ["Converted"],
+    leadTarget: "",
     oppTarget: "Converted",
   },
   {
     key: "lost",
     label: "Lost",
     color: "rose",
-    leadStatuses: ["Lost Quotation", "Do Not Contact"],
+    leadStatuses: ["Do Not Contact", "Lost Quotation"],
     oppStatuses: ["Lost", "Closed"],
     leadTarget: "Do Not Contact",
     oppTarget: "Lost",
@@ -79,12 +98,24 @@ export function getTargetStatus(col: ColumnDef, doctype: "Lead" | "Opportunity")
   return doctype === "Lead" ? col.leadTarget : col.oppTarget;
 }
 
+/** Lead statuses that indicate conversion to Opportunity — hide even if no Opportunity doc exists */
+const HIDDEN_LEAD_STATUSES = new Set(["Converted", "Opportunity", "Quotation"]);
+
 export function buildKanbanItems(
   leads: any[],
   opportunities: any[],
 ): KanbanItem[] {
+  // Build set of Lead names that already have an Opportunity (party_name references the Lead)
+  const leadsWithOpportunity = new Set(
+    opportunities.map((o) => o.party_name).filter(Boolean),
+  );
+
+  // Lookup from Lead name → lead record for fallback contact info on Opportunities
+  const leadsByName = new Map(leads.map((l) => [l.name, l]));
+
   const items: KanbanItem[] = [];
   for (const l of leads) {
+    if (leadsWithOpportunity.has(l.name) || HIDDEN_LEAD_STATUSES.has(l.status)) continue;
     items.push({
       id: `Lead::${l.name}`,
       doctype: "Lead",
@@ -96,13 +127,14 @@ export function buildKanbanItems(
     });
   }
   for (const o of opportunities) {
+    const sourceLead = leadsByName.get(o.party_name);
     items.push({
       id: `Opportunity::${o.name}`,
       doctype: "Opportunity",
-      displayName: o.party_name || o.name,
+      displayName: o.customer_name || o.party_name || o.name,
       status: o.status,
-      email: o.contact_email,
-      phone: o.contact_mobile,
+      email: o.contact_email || sourceLead?.email_id,
+      phone: o.contact_mobile || sourceLead?.phone,
       creation: o.creation,
     });
   }
@@ -157,4 +189,31 @@ export function enrichWithActivity(
     ...item,
     lastActivity: latestByRef.get(item.id),
   }));
+}
+
+/** Merge meeting dates from Events into kanban items (for Leads) */
+export function enrichWithMeetings(
+  items: KanbanItem[],
+  events: { reference_docname: string; starts_on: string }[],
+): KanbanItem[] {
+  // Map from Lead name to earliest upcoming meeting date
+  const meetingMap = new Map<string, string>();
+  for (const e of events) {
+    const existing = meetingMap.get(e.reference_docname);
+    if (!existing || e.starts_on < existing) {
+      meetingMap.set(e.reference_docname, e.starts_on);
+    }
+  }
+  return items.map(item => ({
+    ...item,
+    meetingDate: item.doctype === "Lead" ? meetingMap.get(getDocName(item)) : undefined,
+  }));
+}
+
+/** Format meeting date for display on cards: "15 Feb, 10:30" */
+export function formatMeetingDate(datetime: string): string {
+  const d = new Date(datetime);
+  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return `${date}, ${time}`;
 }

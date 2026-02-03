@@ -3,7 +3,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import type { KanbanItem } from "@/lib/kanban";
-import { getColumnForItem, getDocName, isItemLocked, formatAge, hoursElapsed } from "@/lib/kanban";
+import { getColumnForItem, getDocName, isItemLocked, formatAge, hoursElapsed, formatMeetingDate } from "@/lib/kanban";
+import { CalendarDays } from "lucide-react";
 
 interface KanbanCardProps {
   item: KanbanItem;
@@ -92,7 +93,13 @@ export function KanbanCard({ item, isDragOverlay }: KanbanCardProps) {
         <div className="text-[10px] opacity-60">{item.status}</div>
       </div>
       {column === "new" && <NewIndicator creation={item.creation} />}
-      {(column === "engaged" || column === "qualified" || column === "quoted") && <EngagedIndicator item={item} />}
+      {(column === "engaged" || column === "meeting" || column === "quoted") && <EngagedIndicator item={item} />}
+      {item.meetingDate && (
+        <div className="mt-1 flex items-center gap-1 text-xs font-medium text-cyan-600 dark:text-cyan-400">
+          <CalendarDays className="h-3 w-3" />
+          {formatMeetingDate(item.meetingDate)}
+        </div>
+      )}
     </div>
   );
 }

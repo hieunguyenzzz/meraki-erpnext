@@ -35,7 +35,7 @@ interface KanbanBoardProps {
   getTargetStatus?: (columnKey: string, item: any) => string;
   /** Custom card renderer. Defaults to CRM KanbanCard. */
   renderCard?: (item: any, isDragOverlay?: boolean) => ReactNode;
-  onUpdateStatus: (item: any, newStatus: string) => Promise<void>;
+  onUpdateStatus: (item: any, newStatus: string, targetColumn: string) => Promise<void>;
   onConvertLead?: (item: KanbanItem, targetColumnKey: ColumnKey) => Promise<void>;
 }
 
@@ -127,7 +127,7 @@ export function KanbanBoard({
 
     setUpdating(true);
     try {
-      await onUpdateStatus({ ...item, status: newStatus }, newStatus);
+      await onUpdateStatus({ ...item, status: newStatus }, newStatus, targetColumnKey);
     } catch (err) {
       setLocalItems(snapshot);
       const msg = err instanceof Error ? err.message : `Failed to move ${item.displayName ?? "item"}`;
