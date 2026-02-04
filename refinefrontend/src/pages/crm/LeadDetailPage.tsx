@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useOne, useList, useCreate, useDelete, useInvalidate, useNavigation } from "@refinedev/core";
+import { useOne, useList, useDelete, useInvalidate, useNavigation } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
 import { formatDate, formatVND } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, ArrowRightLeft, CalendarDays, ChevronDown, ArrowLeft, Mail, Phone, MapPin, User, Calendar } from "lucide-react";
-import { extractErrorMessage } from "@/lib/errors";
+import { Trash2, CalendarDays, ChevronDown, ArrowLeft, Mail, Phone, MapPin } from "lucide-react";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { EditableField } from "@/components/crm/EditableField";
@@ -31,8 +30,6 @@ function parseContactFormDetails(content: string): Record<string, string> {
   }
   return details;
 }
-
-const TERMINAL_LEAD_STATUSES = new Set(["Converted", "Do Not Contact", "Opportunity"]);
 
 function statusVariant(status: string) {
   switch (status) {
@@ -63,16 +60,12 @@ export default function LeadDetailPage() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [convertOpen, setConvertOpen] = useState(false);
-  const [converting, setConverting] = useState(false);
   const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
 
   const invalidate = useInvalidate();
   const { mutateAsync: deleteRecord } = useDelete();
   const { list } = useNavigation();
   const { result: lead } = useOne({ resource: "Lead", id: name! });
-
-  const { mutateAsync: createDoc } = useCreate();
 
   // Lead Sources for dropdown
   const { result: sourcesResult } = useList({
@@ -158,32 +151,6 @@ export default function LeadDetailPage() {
   const conflictingSalesOrders = (conflictingSalesOrdersResult?.data ?? []) as Array<{ name: string; customer_name: string; status: string }>;
   const hasDateConflicts = conflictingLeads.length > 0 || conflictingSalesOrders.length > 0;
 
-  async function handleConvert() {
-    if (!lead || converting) return;
-    setConverting(true);
-    try {
-      const result = await createDoc({
-        resource: "Opportunity",
-        values: {
-          opportunity_from: "Lead",
-          party_name: lead.name,
-          status: "Open",
-          source: lead.source ?? "",
-        },
-      });
-      setConvertOpen(false);
-      const newName = (result as any)?.data?.name;
-      if (newName) {
-        list("Opportunity");
-      }
-    } catch (err) {
-      console.error("Failed to convert lead:", err);
-      alert(extractErrorMessage(err, "Failed to convert to Opportunity."));
-    } finally {
-      setConverting(false);
-    }
-  }
-
   async function handleDelete() {
     await deleteRecord({ resource: "Lead", id: name! });
     list("Lead");
@@ -198,7 +165,6 @@ export default function LeadDetailPage() {
   }
 
   const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.lead_name;
-  const canConvert = !TERMINAL_LEAD_STATUSES.has(lead.status);
 
   // Sidebar content (reused in both desktop and mobile)
   const SidebarContent = () => (
@@ -286,27 +252,6 @@ export default function LeadDetailPage() {
 
       {/* Actions */}
       <div className="space-y-2 pt-2 border-t">
-        <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full justify-start" disabled={!canConvert}>
-              <ArrowRightLeft className="h-4 w-4 mr-2" /> Convert to Opportunity
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Convert to Opportunity</DialogTitle>
-              <DialogDescription>
-                This will create a new Opportunity linked to this Lead. The Lead will be marked as converted.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConvertOpen(false)}>Cancel</Button>
-              <Button onClick={handleConvert} disabled={converting}>
-                {converting ? "Converting..." : "Convert"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
         <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
           <DialogTrigger asChild>
             <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10">
@@ -368,18 +313,6 @@ export default function LeadDetailPage() {
           </CollapsibleContent>
         </Collapsible>
 
-        {/* Mobile quick actions */}
-        {canConvert && (
-          <div className="flex gap-2 mb-4">
-            <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="flex-1">
-                  <ArrowRightLeft className="h-4 w-4 mr-1.5" /> Convert
-                </Button>
-              </DialogTrigger>
-            </Dialog>
-          </div>
-        )}
       </div>
 
       {/* Desktop Header */}
