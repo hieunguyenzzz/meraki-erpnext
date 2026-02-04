@@ -38,12 +38,6 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        stage: {
-          lead: "hsl(var(--stage-lead))",
-          opportunity: "hsl(var(--stage-opportunity))",
-          customer: "hsl(var(--stage-customer))",
-          wedding: "hsl(var(--stage-wedding))",
-        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

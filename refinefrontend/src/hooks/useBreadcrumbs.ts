@@ -26,9 +26,10 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
           crumbs.push({ label: child.label });
           return crumbs;
         }
-        if (pathname.startsWith(child.path + "/")) {
+        // Only use startsWith match if the child path differs from the module path
+        // (e.g. /crm has a child at /crm which should only exact-match)
+        if (child.path !== mod.path && pathname.startsWith(child.path + "/")) {
           crumbs.push({ label: child.label, href: child.path });
-          // detail page: show the ID segment
           const rest = pathname.slice(child.path.length + 1);
           if (rest) {
             crumbs.push({ label: rest });
@@ -37,7 +38,18 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
         }
       }
 
-      // Exact module match (e.g. /crm)
+      // Detail pages under the module that don't match any child (e.g. /crm/leads/LEAD-001)
+      const segments = pathname.slice(mod.path.length + 1).split("/").filter(Boolean);
+      if (segments.length > 0) {
+        // First segment is a sub-section (e.g. "leads"), rest is an ID
+        crumbs.push({ label: segments[0].charAt(0).toUpperCase() + segments[0].slice(1) });
+        if (segments.length > 1) {
+          crumbs.push({ label: segments.slice(1).join("/") });
+        }
+        return crumbs;
+      }
+
+      // Exact module match with a child at the same path (e.g. /crm)
       const exactChild = mod.children.find((c) => c.path === pathname);
       if (exactChild) {
         crumbs.push({ label: exactChild.label });

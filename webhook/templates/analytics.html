@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meraki Lead Webhook - Analytics</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
+        h1 { font-size: 1.5rem; margin-bottom: 20px; color: #f8fafc; }
+        .stats { display: flex; gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: #1e293b; border-radius: 8px; padding: 16px 24px; flex: 1; }
+        .stat-card .label { font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.05em; }
+        .stat-card .value { font-size: 1.75rem; font-weight: 700; margin-top: 4px; }
+        .stat-card.total .value { color: #e2e8f0; }
+        .stat-card.success .value { color: #4ade80; }
+        .stat-card.failed .value { color: #f87171; }
+        .filters { margin-bottom: 16px; display: flex; gap: 8px; }
+        .filters a { padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; color: #94a3b8; background: #1e293b; }
+        .filters a.active { background: #334155; color: #f8fafc; }
+        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; }
+        th { background: #334155; text-align: left; padding: 10px 14px; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.05em; }
+        td { padding: 10px 14px; border-top: 1px solid #334155; font-size: 0.85rem; vertical-align: top; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+        .badge.ok { background: #166534; color: #4ade80; }
+        .badge.fail { background: #7f1d1d; color: #f87171; }
+        .lead-link { color: #60a5fa; text-decoration: none; }
+        .lead-link:hover { text-decoration: underline; }
+        .expandable { cursor: pointer; color: #60a5fa; font-size: 0.8rem; }
+        .request-data { display: none; margin-top: 6px; background: #0f172a; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+        .error-text { color: #f87171; font-size: 0.8rem; max-width: 300px; word-break: break-word; }
+        .empty { text-align: center; padding: 40px; color: #64748b; }
+    </style>
+</head>
+<body>
+    <h1>Meraki Lead Webhook</h1>
+
+    <div class="stats">
+        <div class="stat-card total">
+            <div class="label">Total Calls</div>
+            <div class="value">{{ stats.total }}</div>
+        </div>
+        <div class="stat-card success">
+            <div class="label">Success</div>
+            <div class="value">{{ stats.success_count }}</div>
+        </div>
+        <div class="stat-card failed">
+            <div class="label">Failed</div>
+            <div class="value">{{ stats.fail_count }}</div>
+        </div>
+    </div>
+
+    <div class="filters">
+        <a href="/analytics?status=all" class="{{ 'active' if current_filter == 'all' }}">All</a>
+        <a href="/analytics?status=success" class="{{ 'active' if current_filter == 'success' }}">Success</a>
+        <a href="/analytics?status=failed" class="{{ 'active' if current_filter == 'failed' }}">Failed</a>
+    </div>
+
+    {% if logs %}
+    <table>
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Status</th>
+                <th>Lead</th>
+                <th>Request Data</th>
+                <th>Error</th>
+                <th>HTTP</th>
+                <th>IP</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.timestamp }}</td>
+                <td>
+                    {% if log.success %}
+                        <span class="badge ok">OK</span>
+                    {% else %}
+                        <span class="badge fail">FAIL</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if log.lead_name %}
+                        <a class="lead-link" href="http://merakierp.loc/app/lead/{{ log.lead_name }}" target="_blank">{{ log.lead_name }}</a>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="expandable" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'block' ? 'none' : 'block'">Show data</span>
+                    <div class="request-data">{{ log.request_data }}</div>
+                </td>
+                <td>
+                    {% if log.error %}
+                        <span class="error-text">{{ log.error }}</span>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>{{ log.response_status or '-' }}</td>
+                <td>{{ log.ip_address }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No webhook calls recorded yet.</div>
+    {% endif %}
+
+    <script>
+    </script>
+</body>
+</html>

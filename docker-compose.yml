@@ -161,8 +161,22 @@ services:
     profiles:
       - migrate
 
+  webhook:
+    build:
+      context: ./webhook
+    restart: unless-stopped
+    volumes:
+      - webhook-data:/app/data
+    environment:
+      - ERPNEXT_URL=${ERPNEXT_URL:-http://frontend:8080}
+      - ERPNEXT_API_KEY=${ERPNEXT_API_KEY}
+      - ERPNEXT_API_SECRET=${ERPNEXT_API_SECRET}
+    depends_on:
+      - frontend
+
 volumes:
   meraki-db-data:
   meraki-redis-queue-data:
   meraki-sites:
   meraki-logs:
+  webhook-data:

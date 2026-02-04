@@ -160,12 +160,15 @@ Body:
 CLASSIFY as one of:
 - new_lead: First inquiry about wedding services from a potential client (create new lead)
 - client_message: Reply or follow-up from an existing/potential client
-- staff_message: Sent BY Meraki staff (info@merakiweddingplanner.com) TO a client
+- staff_message: Sent BY Meraki staff (info@merakiweddingplanner.com) TO a client - general follow-up or response
 - meeting_confirmed: Meeting, visit, or consultation date/time is mentioned or confirmed
+- quote_sent: Sent BY Meraki staff containing quotation, pricing details, proposal, package information, or cost breakdown
 - irrelevant: Spam, newsletters, vendor emails, automated notifications, not wedding-client-related
 
 IMPORTANT CLASSIFICATION RULES:
-- If sender contains "merakiweddingplanner.com" or "merakiwp.com", classify as "staff_message"
+- If sender contains "merakiweddingplanner.com" or "merakiwp.com":
+  - If email contains pricing, costs, packages, quotation, proposal = "quote_sent"
+  - Otherwise = "staff_message"
 - If it's a first-time wedding inquiry, classify as "new_lead"
 - If discussing existing wedding plans or is a reply, classify as "client_message"
 - Newsletters, promotions, vendor invoices, job applications = "irrelevant"
@@ -264,9 +267,10 @@ def call_crm_contact_webhook(data: dict, classification: str) -> bool:
 
     # Map classification to stage and message type
     stage_mapping = {
-        "client_message": ("current", "client"),
+        "client_message": ("engaged", "client"),
         "staff_message": ("engaged", "staff"),
         "meeting_confirmed": ("meeting", "staff"),
+        "quote_sent": ("quoted", "staff"),
     }
 
     stage, message_type = stage_mapping.get(classification, ("current", "client"))
@@ -367,7 +371,7 @@ def process_inbox():
                         # Call appropriate webhook
                         if classification == "new_lead":
                             call_lead_webhook(result)
-                        elif classification in ("client_message", "staff_message", "meeting_confirmed"):
+                        elif classification in ("client_message", "staff_message", "meeting_confirmed", "quote_sent"):
                             call_crm_contact_webhook(result, classification)
                         # Skip irrelevant emails
 

@@ -4,7 +4,7 @@ import { useList, useCustomMutation, useInvalidate } from "@refinedev/core";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { RecruitingCard } from "@/components/recruiting/RecruitingCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronDown, List } from "lucide-react";
 import { extractErrorMessage } from "@/lib/errors";
 import {
   PIPELINE_COLUMNS,
@@ -121,6 +121,18 @@ export default function RecruitingPipelinePage() {
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           </div>
+          <Link
+            to="/hr/recruiting/all"
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            <List className="h-4 w-4" /> All
+          </Link>
+          <Link
+            to="/hr/recruiting/interviews"
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            <CalendarDays className="h-4 w-4" /> Interviews
+          </Link>
           <Link
             to="/hr/recruiting"
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"

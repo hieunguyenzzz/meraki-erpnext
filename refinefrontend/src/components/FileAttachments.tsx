@@ -82,7 +82,9 @@ export default function FileAttachments({
             {files.map((f: any) => (
               <div key={f.name} className="flex items-center justify-between text-sm">
                 <a
-                  href={f.file_url}
+                  href={f.is_private
+                    ? `/api/method/frappe.utils.file_manager.download_file?file_url=${encodeURIComponent(f.file_url)}`
+                    : f.file_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline truncate max-w-[70%]"

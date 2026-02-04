@@ -91,7 +91,7 @@ export interface Lead {
   city?: string;
   country?: string;
   creation: string;
-  notes?: string;
+  notes?: Array<{ note: string }>;
   custom_relationship?: string;
   custom_couple_name?: string;
   custom_wedding_date?: string;

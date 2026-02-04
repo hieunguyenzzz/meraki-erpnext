@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router";
-import { useOne, useList, useDelete, useNavigation } from "@refinedev/core";
+import { useOne, useList, useDelete, useNavigation, useCustomMutation, useInvalidate } from "@refinedev/core";
 import { formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, Download, Star, ArrowLeft } from "lucide-react";
+import { Trash2, Download, Star, ArrowLeft, CalendarDays } from "lucide-react";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
+import FileAttachments from "@/components/FileAttachments";
 
 function stageBadgeVariant(stage: string) {
   switch (stage) {
@@ -25,7 +26,10 @@ function stageBadgeVariant(stage: string) {
 export default function ApplicantDetailPage() {
   const { name } = useParams<{ name: string }>();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [hoveredStar, setHoveredStar] = useState(0);
   const { mutateAsync: deleteRecord } = useDelete();
+  const { mutateAsync: customMutation } = useCustomMutation();
+  const invalidate = useInvalidate();
   const { list } = useNavigation();
 
   const { result: applicant } = useOne({
@@ -64,6 +68,24 @@ export default function ApplicantDetailPage() {
     list("Job Applicant");
   }
 
+  const currentStars = Math.round((applicant?.applicant_rating ?? 0) * 5);
+
+  async function handleRating(starIndex: number) {
+    const newStars = starIndex === currentStars ? 0 : starIndex;
+    const newRating = newStars / 5; // 0.0–1.0
+    await customMutation({
+      url: "/api/method/frappe.client.set_value",
+      method: "post",
+      values: {
+        doctype: "Job Applicant",
+        name: name!,
+        fieldname: "applicant_rating",
+        value: newRating,
+      },
+    });
+    invalidate({ resource: "Job Applicant", invalidates: ["detail"], id: name! });
+  }
+
   if (!applicant) return <DetailSkeleton />;
 
   const stage = applicant.custom_recruiting_stage || "Applied";
@@ -81,12 +103,20 @@ export default function ApplicantDetailPage() {
           </h1>
           <Badge variant={stageBadgeVariant(stage)}>{stage}</Badge>
         </div>
-        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-          <DialogTrigger asChild>
-            <Button variant="destructive" size="sm">
-              <Trash2 className="h-4 w-4 mr-1" /> Delete
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          {stage === "Interview" && (
+            <Link to={`/hr/recruiting/interviews?candidate=${name}`}>
+              <Button variant="outline" size="sm">
+                <CalendarDays className="h-4 w-4 mr-1" /> Schedule Interview
+              </Button>
+            </Link>
+          )}
+          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <DialogTrigger asChild>
+              <Button variant="destructive" size="sm">
+                <Trash2 className="h-4 w-4 mr-1" /> Delete
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Delete Applicant</DialogTitle>
@@ -100,6 +130,7 @@ export default function ApplicantDetailPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -118,29 +149,40 @@ export default function ApplicantDetailPage() {
           <CardContent className="space-y-3">
             <ReadOnlyField label="Position" value={applicant.job_title ?? ""} />
             <ReadOnlyField label="Source" value={applicant.source ?? ""} />
-            {applicant.applicant_rating > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="text-sm text-muted-foreground mr-2">Rating</span>
-                <span className="flex items-center gap-0.5 text-amber-500">
-                  {Array.from({ length: Math.min(Math.round((applicant.applicant_rating ?? 0) * 5), 5) }).map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-current" />
-                  ))}
-                </span>
-              </div>
-            )}
+            <div className="flex items-center gap-1">
+              <span className="text-sm text-muted-foreground mr-2">Rating</span>
+              <span
+                className="flex items-center gap-0.5"
+                onMouseLeave={() => setHoveredStar(0)}
+              >
+                {[1, 2, 3, 4, 5].map((i) => {
+                  const filled = hoveredStar > 0 ? i <= hoveredStar : i <= currentStars;
+                  return (
+                    <Star
+                      key={i}
+                      className={`h-5 w-5 cursor-pointer transition-colors ${
+                        filled ? "text-amber-500 fill-amber-500" : "text-muted-foreground/30"
+                      }`}
+                      onMouseEnter={() => setHoveredStar(i)}
+                      onClick={() => handleRating(i)}
+                    />
+                  );
+                })}
+              </span>
+            </div>
             <ReadOnlyField label="Applied" value={formatDate(applicant.creation)} />
             <ReadOnlyField label="ERPNext Status" value={applicant.status ?? ""} />
           </CardContent>
         </Card>
       </div>
 
-      {/* Resume */}
+      {/* Resume link (legacy) */}
       {applicant.resume_attachment && (
         <Card>
           <CardHeader><CardTitle>Resume</CardTitle></CardHeader>
           <CardContent>
             <a
-              href={applicant.resume_attachment}
+              href={`/api/method/frappe.utils.file_manager.download_file?file_url=${encodeURIComponent(applicant.resume_attachment)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
@@ -150,6 +192,9 @@ export default function ApplicantDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Documents */}
+      <FileAttachments doctype="Job Applicant" docname={name!} />
 
       {/* Cover Letter */}
       {applicant.cover_letter && (

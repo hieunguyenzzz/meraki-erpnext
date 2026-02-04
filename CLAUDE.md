@@ -120,7 +120,7 @@ Use Task tool with subagent_type='erpnext-developer':
 ```
 Use Task tool with subagent_type='erpnext-tester':
 "Test the employee migration:
-1. Verify employees were created by calling: curl http://100.65.0.28:8082/api/resource/Employee
+1. Verify employees were created by calling: curl http://merakierp.loc/api/resource/Employee
 2. Check that custom fields exist on Employee doctype
 3. Verify 16 employees were migrated from the source database
 4. Document results in Plane ticket MWP-33 comment"
@@ -193,7 +193,7 @@ See **[docs/erpnext_setup.md](./docs/erpnext_setup.md)** for the full ERPNext se
 
 | Resource | URL |
 |----------|-----|
-| ERPNext (local) | http://100.65.0.28:8082 |
+| ERPNext (local) | http://merakierp.loc |
 | Source DB | 14.225.210.164:5432 (meraki_nocodb) |
 | Plane | https://plane.mobelaris.com (workspace: soundboxstore, project: MWP) |
 

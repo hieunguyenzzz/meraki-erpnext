@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from "react-router";
-import { LayoutDashboard, PanelLeft } from "lucide-react";
+import { LayoutDashboard } from "lucide-react";
 import { usePermissions } from "@refinedev/core";
 import { MODULES, hasModuleAccess } from "@/lib/roles";
 import { ThemeProvider } from "@/context/theme-context";

@@ -53,6 +53,24 @@ ANALYTICS_PASS = os.environ.get("ANALYTICS_PASS", "meraki123")
 
 VALID_LEAD_SOURCES = {"google", "facebook", "instagram", "referral", "other"}
 
+# ERPNext valid relationship values for Lead.custom_relationship
+VALID_RELATIONSHIPS = {
+    "": "",
+    "bride/groom": "Bride/Groom",
+    "bride": "Bride/Groom",
+    "groom": "Bride/Groom",
+    "mother": "Mother of Bride/Groom",
+    "mother of bride": "Mother of Bride/Groom",
+    "mother of groom": "Mother of Bride/Groom",
+    "father": "Mother of Bride/Groom",  # Using same category
+    "parent": "Mother of Bride/Groom",
+    "family": "Mother of Bride/Groom",
+    "friend": "Friend of Bride/Groom",
+    "friend of bride": "Friend of Bride/Groom",
+    "friend of groom": "Friend of Bride/Groom",
+    "other": "Other",
+}
+
 security = HTTPBasic()
 
 
@@ -137,6 +155,17 @@ def match_lead_source(ref: str) -> str | None:
     return "Other"
 
 
+def match_relationship(position: str) -> str | None:
+    """Map position/relationship to valid ERPNext values."""
+    if not position:
+        return None
+    normalized = position.strip().lower()
+    if normalized in VALID_RELATIONSHIPS:
+        return VALID_RELATIONSHIPS[normalized]
+    # Default to Other for any unrecognized value
+    return "Other"
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -182,7 +211,7 @@ async def create_lead(request: Request):
     if wedding_date:
         lead_data["custom_wedding_date"] = wedding_date
 
-    relationship = (body.get("position") or "").strip()
+    relationship = match_relationship(body.get("position", ""))
     if relationship:
         lead_data["custom_relationship"] = relationship
 
@@ -214,6 +243,18 @@ async def create_lead(request: Request):
     if resp.status_code in (200, 201):
         result = resp.json()
         lead_name = result.get("data", {}).get("name", "")
+
+        # Handle historical timestamp for backfill
+        timestamp = body.get("timestamp")
+        if timestamp and lead_name:
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as ts_client:
+                    await set_value(ts_client, "Lead", lead_name, "creation", timestamp)
+            except Exception as e:
+                # Log but don't fail - lead was created successfully
+                log_call(True, lead_name, f"Warning: failed to set timestamp: {e}", body, resp.status_code, ip)
+                return {"success": True, "lead": lead_name}
+
         log_call(True, lead_name, None, body, resp.status_code, ip)
         return {"success": True, "lead": lead_name}
     else:
@@ -290,6 +331,8 @@ async def create_conversation(request: Request):
             attached_name = opp_resp.json()["data"][0]["name"]
 
         # 3. Create Communication
+        timestamp = body.get("timestamp")  # Optional: ISO datetime for historical records
+
         comm_data = {
             "doctype": "Communication",
             "communication_type": "Communication",
@@ -302,6 +345,10 @@ async def create_conversation(request: Request):
             "reference_name": attached_name,
         }
 
+        # Set communication_date for historical records (convert to ERPNext format)
+        if timestamp:
+            comm_data["communication_date"] = to_erpnext_datetime(timestamp)
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             comm_resp = await client.post(
                 f"{ERPNEXT_URL}/api/resource/Communication",
@@ -309,18 +356,25 @@ async def create_conversation(request: Request):
                 headers=headers,
             )
 
-        if comm_resp.status_code in (200, 201):
-            comm_name = comm_resp.json().get("data", {}).get("name", "")
-            log_call(True, comm_name, None, body, comm_resp.status_code, ip)
-            return {
-                "success": True,
-                "communication": comm_name,
-                "attached_to": f"{attached_doctype}/{attached_name}",
-            }
-        else:
-            error_text = comm_resp.text[:500]
-            log_call(False, None, error_text, body, comm_resp.status_code, ip)
-            return {"success": False, "error": error_text}
+            if comm_resp.status_code in (200, 201):
+                comm_name = comm_resp.json().get("data", {}).get("name", "")
+
+                # Update both creation and communication_date for historical records
+                if timestamp and comm_name:
+                    erpnext_ts = to_erpnext_datetime(timestamp)
+                    await set_value(client, "Communication", comm_name, "creation", erpnext_ts)
+                    await set_value(client, "Communication", comm_name, "communication_date", erpnext_ts)
+
+                log_call(True, comm_name, None, body, comm_resp.status_code, ip)
+                return {
+                    "success": True,
+                    "communication": comm_name,
+                    "attached_to": f"{attached_doctype}/{attached_name}",
+                }
+            else:
+                error_text = comm_resp.text[:500]
+                log_call(False, None, error_text, body, comm_resp.status_code, ip)
+                return {"success": False, "error": error_text}
 
     except httpx.RequestError as e:
         log_call(False, None, f"ERPNext connection error: {e}", body, None, ip)
@@ -399,6 +453,19 @@ async def find_opportunity_for_lead(client: httpx.AsyncClient, lead_name: str) -
     return None
 
 
+def to_erpnext_datetime(iso_timestamp: str) -> str:
+    """Convert ISO timestamp to ERPNext datetime format.
+
+    ERPNext expects 'YYYY-MM-DD HH:MM:SS' without timezone.
+    Input can be ISO format like '2026-02-01T08:13:31+00:00'.
+    """
+    try:
+        dt = datetime.fromisoformat(iso_timestamp.replace('Z', '+00:00'))
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return iso_timestamp  # Return as-is if parsing fails
+
+
 async def set_value(client: httpx.AsyncClient, doctype: str, name: str, fieldname: str, value: str) -> dict:
     """Update a field value using frappe.client.set_value (same as frontend)."""
     resp = await client.post(
@@ -472,9 +539,10 @@ async def create_communication(
     doctype: str,
     name: str,
     content: str,
-    sent_or_received: str
+    sent_or_received: str,
+    timestamp: str | None = None
 ) -> dict:
-    """Create Communication record (same as existing /api/webhook/conversation)."""
+    """Create Communication record with optional historical timestamp."""
     comm_data = {
         "doctype": "Communication",
         "communication_type": "Communication",
@@ -486,13 +554,21 @@ async def create_communication(
         "reference_name": name,
     }
 
+    # Set communication_date for historical records
+    if timestamp:
+        comm_data["communication_date"] = timestamp
+
     resp = await client.post(
         f"{ERPNEXT_URL}/api/resource/Communication",
         json=comm_data,
         headers=get_erpnext_headers(),
     )
     if resp.status_code in (200, 201):
-        return resp.json().get("data", {})
+        result = resp.json().get("data", {})
+        # Update creation field for historical timestamp display
+        if timestamp and result.get("name"):
+            await set_value(client, "Communication", result["name"], "creation", timestamp)
+        return result
     raise Exception(f"Failed to create Communication: {resp.text[:500]}")
 
 
@@ -501,9 +577,10 @@ async def create_stage_change_comment(
     doctype: str,
     name: str,
     from_stage: str,
-    to_stage: str
+    to_stage: str,
+    timestamp: str | None = None
 ) -> dict:
-    """Log stage transition as Comment with type Info."""
+    """Log stage transition as Comment with type Info and optional historical timestamp."""
     resp = await client.post(
         f"{ERPNEXT_URL}/api/resource/Comment",
         json={
@@ -515,7 +592,11 @@ async def create_stage_change_comment(
         headers=get_erpnext_headers(),
     )
     if resp.status_code in (200, 201):
-        return resp.json().get("data", {})
+        result = resp.json().get("data", {})
+        # Update creation field for historical timestamp display
+        if timestamp and result.get("name"):
+            await set_value(client, "Comment", result["name"], "creation", timestamp)
+        return result
     raise Exception(f"Failed to create stage change comment: {resp.text[:500]}")
 
 
@@ -530,6 +611,7 @@ async def update_crm_contact(request: Request):
             message: Required. Message content to log as Communication
             message_type: Required. "client" (received) or "staff" (sent)
             meeting_date: Optional. ISO datetime for meeting stage (e.g., "2026-02-10T14:00")
+            timestamp: Optional. ISO datetime for historical records (backfill)
     """
     ip = request.client.host if request.client else "unknown"
 
@@ -545,6 +627,7 @@ async def update_crm_contact(request: Request):
     message = (payload.get("message") or "").strip()
     message_type = (payload.get("message_type") or "").strip()
     meeting_date = payload.get("meeting_date")
+    timestamp = payload.get("timestamp")  # Optional: ISO datetime for historical records
 
     # 1. Validate required inputs
     if not email:
@@ -638,6 +721,7 @@ async def update_crm_contact(request: Request):
                     name=final_doc["name"],
                     from_stage=current_stage,
                     to_stage=stage,
+                    timestamp=timestamp,
                 )
 
             # 8. Create Communication (always, message is required)
@@ -648,6 +732,7 @@ async def update_crm_contact(request: Request):
                 name=final_doc["name"],
                 content=message,
                 sent_or_received=sent_or_received,
+                timestamp=timestamp,
             )
 
             log_call(True, final_doc["name"], None, body, 200, ip)

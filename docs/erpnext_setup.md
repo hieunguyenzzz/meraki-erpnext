@@ -139,7 +139,7 @@ The workspace is assigned to the Stock module so that Item and related doctypes 
 
 ## ERPNext APIs
 
-All endpoints use the base URL http://100.65.0.28:8082 and require authentication via API key/secret headers or session cookie.
+All endpoints use the base URL http://merakierp.loc and require authentication via API key/secret headers or session cookie.
 
 ### Resource APIs (CRUD)
 
@@ -162,6 +162,9 @@ Each doctype referenced in this document has a corresponding REST resource API a
 | Property Setter | /api/resource/Property Setter | Field defaults like skip_delivery_note |
 | Account | /api/resource/Account | Chart of accounts entries |
 | Item Group | /api/resource/Item Group | Wedding Services and Add-on Services groups |
+| Lead | /api/resource/Lead | CRM leads with wedding custom fields |
+| Lead Source | /api/resource/Lead Source | Lead acquisition channels (Google, Facebook, Instagram, Referral, Other) |
+| Custom Field | /api/resource/Custom Field | Custom field definitions on doctypes |
 
 ### Standard Operations
 
@@ -277,12 +280,18 @@ Public holidays: New Year (Jan 1), Tet/Lunar New Year (Feb 17-21), Hung Kings Co
 | DocType | Field | Type | Fetch From | Purpose |
 |---------|-------|------|------------|---------|
 | Leave Application | employee_email | Data | employee.user_id | Notification recipient resolution |
+| Lead | custom_relationship | Select | — | Relationship to couple (Bride/Groom, Mother, Friend, Other) |
+| Lead | custom_couple_name | Data | — | Names of the wedding couple |
+| Lead | custom_wedding_date | Date | — | Planned wedding date |
+| Lead | custom_wedding_venue | Data | — | Wedding venue or city |
+| Lead | custom_guest_count | Int | — | Expected number of guests |
+| Lead | custom_estimated_budget | Currency | — | Estimated wedding budget (VND) |
 
 ## Access
 
 | Resource | Details |
 |----------|---------|
-| ERPNext URL | http://100.65.0.28:8082 (or http://merakierp.loc via Traefik) |
+| ERPNext URL | http://merakierp.loc |
 | Admin Login | Administrator / MerakiErp2025! |
 | API Key | 2c17d14ed504109 |
 | API Secret | eaa8dc0027a2236 |
