@@ -179,8 +179,13 @@ export function enrichWithActivity(
   for (const c of communications) {
     const key = `${c.reference_doctype}::${c.reference_name}`;
     if (!latestByRef.has(key)) {
+      // communication_date is stored in UTC, append 'Z' so JS interprets it correctly
+      // creation is stored in server local time, use as-is
+      const dateStr = c.communication_date
+        ? c.communication_date.replace(" ", "T") + "Z"
+        : c.creation;
       latestByRef.set(key, {
-        date: c.communication_date || c.creation,
+        date: dateStr,
         waitingFor: c.sent_or_received === "Sent" ? "client" : "staff",
       });
     }

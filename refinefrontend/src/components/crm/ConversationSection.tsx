@@ -1,12 +1,13 @@
 import { useState, useMemo } from "react";
 import { useList, useCreate, useInvalidate } from "@refinedev/core";
+import { useQuery } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import {
   Phone, MessageSquare, Mail, Users, MoreHorizontal,
-  ArrowRight, ArrowLeft,
+  ArrowRight, ArrowLeft, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/format";
+import { formatDateTime, formatDateTimeUTC } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,6 +33,14 @@ const MEDIUM_ICONS: Record<Medium, typeof Phone> = {
   Phone, WhatsApp: MessageSquare, Email: Mail, Meeting: Users, Other: MoreHorizontal,
 };
 
+// Helper to strip HTML tags and get plain text for preview
+function stripHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.body.textContent || "";
+}
+
+const PREVIEW_LENGTH = 150;
+
 type ConversationItem = {
   name: string;
   content: string;
@@ -40,8 +49,50 @@ type ConversationItem = {
   direction: "Sent" | "Received";
   author: string;
   creation: string;
+  communication_date?: string;
 };
 
+// Fetch Communications linked via timeline_links (child table)
+function useTimelineLinkedConversations(ref: ConversationRef) {
+  return useQuery({
+    queryKey: ["timeline-communications", ref.doctype, ref.docName],
+    queryFn: async () => {
+      if (!ref.docName || ref.docName === "__none__") return [];
+      const params = new URLSearchParams({
+        doctype: "Communication",
+        fields: JSON.stringify([
+          "name", "subject", "content", "communication_medium",
+          "sender", "creation", "sent_or_received", "communication_date",
+        ]),
+        filters: JSON.stringify([
+          ["Communication Link", "link_doctype", "=", ref.doctype],
+          ["Communication Link", "link_name", "=", ref.docName],
+        ]),
+        order_by: "creation desc",
+        limit_page_length: "50",
+      });
+      const res = await fetch(`/api/method/frappe.client.get_list?${params}`, {
+        credentials: "include",
+        headers: { "X-Frappe-Site-Name": "erp.merakiwp.com" },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.message ?? []) as Array<{
+        name: string;
+        subject?: string;
+        content: string;
+        communication_medium: string;
+        sender: string;
+        creation: string;
+        sent_or_received: string;
+        communication_date?: string;
+      }>;
+    },
+    enabled: !!ref.docName && ref.docName !== "__none__",
+  });
+}
+
+// Also keep direct reference query for completeness
 function useConversationsForRef(ref: ConversationRef) {
   return useList({
     resource: "Communication",
@@ -55,44 +106,74 @@ function useConversationsForRef(ref: ConversationRef) {
     meta: {
       fields: [
         "name", "subject", "content", "communication_medium",
-        "sender", "creation", "sent_or_received",
+        "sender", "creation", "sent_or_received", "communication_date",
       ],
     },
   });
 }
 
 function ConversationFeed({ references }: ConversationSectionProps) {
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const ref0 = references[0];
   const ref1 = references.length > 1 ? references[1] : null;
 
+  // Direct reference queries
   const { result: result0 } = useConversationsForRef(ref0);
   const { result: result1 } = useConversationsForRef(
     ref1 ?? { doctype: "__none__", docName: "__none__" },
   );
 
+  // Timeline links queries
+  const { data: timelineComms0 = [] } = useTimelineLinkedConversations(ref0);
+  const { data: timelineComms1 = [] } = useTimelineLinkedConversations(
+    ref1 ?? { doctype: "__none__", docName: "__none__" },
+  );
+
+  function toggleExpanded(id: string) {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const items = useMemo<ConversationItem[]>(() => {
     const all: ConversationItem[] = [];
+    const seen = new Set<string>();
 
-    function addFromResult(result: any) {
-      for (const c of (result?.data ?? []) as any[]) {
-        all.push({
-          name: c.name,
-          content: c.content ?? "",
-          subject: c.subject || undefined,
-          medium: c.communication_medium ?? "Other",
-          direction: c.sent_or_received === "Sent" ? "Sent" : "Received",
-          author: c.sender ?? "",
-          creation: c.creation,
-        });
-      }
+    function addItem(c: any) {
+      if (seen.has(c.name)) return;
+      seen.add(c.name);
+      all.push({
+        name: c.name,
+        content: c.content ?? "",
+        subject: c.subject || undefined,
+        medium: c.communication_medium ?? "Other",
+        direction: c.sent_or_received === "Sent" ? "Sent" : "Received",
+        author: c.sender ?? "",
+        creation: c.creation,
+        communication_date: c.communication_date,
+      });
     }
 
-    addFromResult(result0);
-    if (ref1) addFromResult(result1);
+    // Add from direct reference results
+    for (const c of ((result0 as any)?.data ?? [])) addItem(c);
+    if (ref1) {
+      for (const c of ((result1 as any)?.data ?? [])) addItem(c);
+    }
 
-    all.sort((a, b) => new Date(b.creation).getTime() - new Date(a.creation).getTime());
+    // Add from timeline links results
+    for (const c of timelineComms0) addItem(c);
+    for (const c of timelineComms1) addItem(c);
+
+    all.sort((a, b) => {
+      const dateA = new Date(a.communication_date || a.creation).getTime();
+      const dateB = new Date(b.communication_date || b.creation).getTime();
+      return dateB - dateA;
+    });
     return all;
-  }, [result0, result1, ref1]);
+  }, [result0, result1, ref1, timelineComms0, timelineComms1]);
 
   if (items.length === 0) {
     return (
@@ -133,16 +214,58 @@ function ConversationFeed({ references }: ConversationSectionProps) {
                 <MediumIcon className="h-3.5 w-3.5" /> {item.medium}
               </span>
               <span className="text-muted-foreground ml-auto text-xs">
-                {formatDate(item.creation)}
+                {item.communication_date ? formatDateTimeUTC(item.communication_date) : formatDateTime(item.creation)}
               </span>
             </div>
             {item.subject && (
               <p className="text-sm font-medium mt-1">{item.subject}</p>
             )}
-            <div
-              className="text-sm text-muted-foreground prose prose-sm max-w-none mt-1"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
-            />
+            {(() => {
+              const plainText = stripHtml(item.content);
+              const needsTruncation = plainText.length > PREVIEW_LENGTH;
+              const isExpanded = expandedItems.has(item.name);
+
+              if (!needsTruncation) {
+                return (
+                  <div
+                    className="text-sm prose prose-sm max-w-none mt-2"
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
+                  />
+                );
+              }
+
+              if (isExpanded) {
+                return (
+                  <div className="mt-2">
+                    <div
+                      className="text-sm prose prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
+                    />
+                    <button
+                      onClick={() => toggleExpanded(item.name)}
+                      className="mt-2 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                    >
+                      <ChevronUp className="h-3 w-3" />
+                      Show less
+                    </button>
+                  </div>
+                );
+              }
+
+              const preview = plainText.slice(0, PREVIEW_LENGTH).trim() + "...";
+              return (
+                <div className="mt-2">
+                  <p className="text-sm text-muted-foreground">{preview}</p>
+                  <button
+                    onClick={() => toggleExpanded(item.name)}
+                    className="mt-1 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                    Show more
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         );
       })}

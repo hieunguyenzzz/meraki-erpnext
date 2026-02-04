@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { useList, useCreate, useInvalidate } from "@refinedev/core";
+import { useQuery } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import * as Popover from "@radix-ui/react-popover";
-import { Check, Bell, Mail, MailOpen, RefreshCw, StickyNote } from "lucide-react";
+import { Check, Bell, Mail, MailOpen, RefreshCw, StickyNote, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,9 +58,117 @@ function useCommunicationsForRef(ref: NoteRef) {
   });
 }
 
+// Fetch Communications linked via timeline_links (child table)
+function useTimelineLinkedCommunications(ref: NoteRef) {
+  return useQuery({
+    queryKey: ["timeline-communications-activity", ref.doctype, ref.docName],
+    queryFn: async () => {
+      if (!ref.docName || ref.docName === "__none__") return [];
+      const params = new URLSearchParams({
+        doctype: "Communication",
+        fields: JSON.stringify(["name", "content", "sender", "sent_or_received", "subject", "creation"]),
+        filters: JSON.stringify([
+          ["Communication Link", "link_doctype", "=", ref.doctype],
+          ["Communication Link", "link_name", "=", ref.docName],
+        ]),
+        order_by: "creation desc",
+        limit_page_length: "50",
+      });
+      const res = await fetch(`/api/method/frappe.client.get_list?${params}`, {
+        credentials: "include",
+        headers: { "X-Frappe-Site-Name": "erp.merakiwp.com" },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.message ?? []) as Array<{
+        name: string;
+        content: string;
+        sender: string;
+        sent_or_received: string;
+        subject?: string;
+        creation: string;
+      }>;
+    },
+    enabled: !!ref.docName && ref.docName !== "__none__",
+  });
+}
+
+// Helper to strip HTML tags and get plain text for preview
+function stripHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.body.textContent || "";
+}
+
+const PREVIEW_LENGTH = 150;
+
+interface EmailContentProps {
+  content: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+function EmailContent({ content, isExpanded, onToggle }: EmailContentProps) {
+  const plainText = stripHtml(content);
+  const needsTruncation = plainText.length > PREVIEW_LENGTH;
+
+  if (!needsTruncation) {
+    // Short content - show full HTML, no toggle needed
+    return (
+      <div
+        className="text-sm prose prose-sm max-w-none mt-2"
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }}
+      />
+    );
+  }
+
+  if (isExpanded) {
+    // Expanded - show full HTML content
+    return (
+      <div className="mt-2">
+        <div
+          className="text-sm prose prose-sm max-w-none"
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }}
+        />
+        <button
+          onClick={onToggle}
+          className="mt-2 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+        >
+          <ChevronUp className="h-3 w-3" />
+          Show less
+        </button>
+      </div>
+    );
+  }
+
+  // Collapsed - show plain text preview
+  const preview = plainText.slice(0, PREVIEW_LENGTH).trim() + "...";
+  return (
+    <div className="mt-2">
+      <p className="text-sm text-muted-foreground">{preview}</p>
+      <button
+        onClick={onToggle}
+        className="mt-1 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+      >
+        <ChevronDown className="h-3 w-3" />
+        Show more
+      </button>
+    </div>
+  );
+}
+
 function ActivityFeed({ references }: ActivitySectionProps) {
+  const [expandedEmails, setExpandedEmails] = useState<Set<string>>(new Set());
   const ref0 = references[0];
   const ref1 = references.length > 1 ? references[1] : null;
+
+  function toggleEmailExpanded(id: string) {
+    setExpandedEmails((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // Fetch Comments (both Comment and Info types)
   const { result: comments0 } = useCommentsForRef(ref0, ["Comment", "Info"]);
@@ -68,9 +177,15 @@ function ActivityFeed({ references }: ActivitySectionProps) {
     ["Comment", "Info"],
   );
 
-  // Fetch Communications (emails)
+  // Fetch Communications (emails) - direct reference
   const { result: comms0 } = useCommunicationsForRef(ref0);
   const { result: comms1 } = useCommunicationsForRef(
+    ref1 ?? { doctype: "__none__", docName: "__none__" },
+  );
+
+  // Fetch Communications via timeline_links
+  const { data: timelineComms0 = [] } = useTimelineLinkedCommunications(ref0);
+  const { data: timelineComms1 = [] } = useTimelineLinkedCommunications(
     ref1 ?? { doctype: "__none__", docName: "__none__" },
   );
 
@@ -119,16 +234,20 @@ function ActivityFeed({ references }: ActivitySectionProps) {
       for (const c of ((comments1 as any)?.data ?? [])) addComment(c);
     }
 
-    // Add communications from both refs
+    // Add communications from both refs (direct reference)
     for (const comm of ((comms0 as any)?.data ?? [])) addCommunication(comm);
     if (ref1) {
       for (const comm of ((comms1 as any)?.data ?? [])) addCommunication(comm);
     }
 
+    // Add communications from timeline_links
+    for (const comm of timelineComms0) addCommunication(comm);
+    for (const comm of timelineComms1) addCommunication(comm);
+
     // Sort by creation date (newest first)
     all.sort((a, b) => new Date(b.creation).getTime() - new Date(a.creation).getTime());
     return all;
-  }, [comments0, comments1, comms0, comms1, ref1]);
+  }, [comments0, comments1, comms0, comms1, ref1, timelineComms0, timelineComms1]);
 
   if (items.length === 0) {
     return (
@@ -173,6 +292,8 @@ function ActivityFeed({ references }: ActivitySectionProps) {
             break;
         }
 
+        const isEmail = item.type === "email_sent" || item.type === "email_received";
+
         return (
           <div key={item.id} className={cn("border-l-2 rounded-r-md p-3", borderColor, bgColor)}>
             <div className="flex items-center gap-2 text-sm flex-wrap">
@@ -190,12 +311,20 @@ function ActivityFeed({ references }: ActivitySectionProps) {
                   <span className="text-muted-foreground">{item.author}</span>
                 </>
               )}
-              <span className="text-muted-foreground ml-auto text-xs">{formatDate(item.creation)}</span>
+              <span className="text-muted-foreground ml-auto text-xs">{formatDateTime(item.creation)}</span>
             </div>
-            <div
-              className="text-sm text-muted-foreground prose prose-sm max-w-none mt-1"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
-            />
+            {isEmail ? (
+              <EmailContent
+                content={item.content}
+                isExpanded={expandedEmails.has(item.id)}
+                onToggle={() => toggleEmailExpanded(item.id)}
+              />
+            ) : (
+              <div
+                className="text-sm text-muted-foreground prose prose-sm max-w-none mt-1"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
+              />
+            )}
           </div>
         );
       })}

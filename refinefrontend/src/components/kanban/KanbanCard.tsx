@@ -18,11 +18,13 @@ function waitingClasses(waitingFor: "client" | "staff", hours: number): string {
   return "text-muted-foreground bg-muted/50";
 }
 
-function NewIndicator({ creation }: { creation: string }) {
-  const hours = hoursElapsed(creation);
+function NewIndicator({ item }: { item: KanbanItem }) {
+  // Use last communication time if available, otherwise fall back to creation
+  const timestamp = item.lastActivity?.date ?? item.creation;
+  const hours = hoursElapsed(timestamp);
   return (
     <div className={`mt-1 rounded-md px-2 py-1 text-xs font-medium ${waitingClasses("staff", hours)}`}>
-      Awaiting staff · {formatAge(creation)}
+      Awaiting staff · {formatAge(timestamp)}
     </div>
   );
 }
@@ -92,7 +94,7 @@ export function KanbanCard({ item, isDragOverlay }: KanbanCardProps) {
         {item.phone && <div>{item.phone}</div>}
         <div className="text-[10px] opacity-60">{item.status}</div>
       </div>
-      {column === "new" && <NewIndicator creation={item.creation} />}
+      {column === "new" && <NewIndicator item={item} />}
       {(column === "engaged" || column === "meeting" || column === "quoted") && <EngagedIndicator item={item} />}
       {item.meetingDate && (
         <div className="mt-1 flex items-center gap-1 text-xs font-medium text-cyan-600 dark:text-cyan-400">
