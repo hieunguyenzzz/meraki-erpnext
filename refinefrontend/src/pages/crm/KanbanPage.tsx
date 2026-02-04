@@ -231,31 +231,50 @@ export default function KanbanPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">CRM Kanban</h1>
-        <p className="text-muted-foreground">Drag and drop to update lead and opportunity status</p>
+        <h1 className="text-2xl font-semibold tracking-tight">CRM Pipeline</h1>
+        <p className="text-sm text-muted-foreground">Drag and drop to update status</p>
       </div>
       {isLoading ? (
-        <div className="grid grid-cols-6 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-xl border-2 border-muted p-3 space-y-3 min-h-[300px]">
-              <Skeleton className="h-5 w-[80px]" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
+        <>
+          {/* Desktop skeleton */}
+          <div className="hidden md:grid grid-cols-6 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-lg border border-muted p-3 space-y-3 min-h-[300px]">
+                <Skeleton className="h-4 w-[60px]" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            ))}
+          </div>
+          {/* Mobile skeleton */}
+          <div className="md:hidden space-y-3">
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-9 w-20 shrink-0 rounded-lg" />
+              ))}
             </div>
-          ))}
-        </div>
+            <div className="rounded-lg border border-muted p-3 space-y-3 min-h-[200px]">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          </div>
+        </>
       ) : (
         <>
           <KanbanBoard items={items} onUpdateStatus={handleUpdateStatus} onConvertLead={handleConvertLead} />
-          <ul className="mt-6 space-y-1 text-xs text-muted-foreground list-disc list-inside">
-            <li><span className="font-medium text-foreground">New</span> — Fresh inquiry, not yet contacted. <span className="font-medium">Lead</span>.</li>
-            <li><span className="font-medium text-foreground">Engaged</span> — In conversation, follow-up started. <span className="font-medium">Lead</span>.</li>
-            <li><span className="font-medium text-foreground">Meeting</span> — Meeting scheduled to discuss requirements. <span className="font-medium">Lead</span>.</li>
-            <li><span className="font-medium text-foreground">Quoted</span> — Quote sent after successful meeting. <span className="font-medium">Opportunity</span>.</li>
-            <li><span className="font-medium text-foreground">Won</span> — Booked, deal closed. <span className="font-medium">Opportunity</span>.</li>
-            <li><span className="font-medium text-foreground">Lost</span> — Did not proceed. <span className="font-medium">Lead</span> or <span className="font-medium">Opportunity</span>.</li>
-          </ul>
+          <div className="hidden md:block mt-6 text-xs text-muted-foreground">
+            <p className="mb-2 font-medium text-foreground uppercase tracking-wide">Stage Guide</p>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
+              <div><span className="font-medium text-foreground">New</span> — Fresh inquiry (Lead)</div>
+              <div><span className="font-medium text-foreground">Engaged</span> — In conversation (Lead)</div>
+              <div><span className="font-medium text-foreground">Meeting</span> — Meeting scheduled (Lead)</div>
+              <div><span className="font-medium text-foreground">Quoted</span> — Quote sent (Opportunity)</div>
+              <div><span className="font-medium text-foreground">Won</span> — Deal closed (Opportunity)</div>
+              <div><span className="font-medium text-foreground">Lost</span> — Did not proceed</div>
+            </div>
+          </div>
         </>
       )}
       <MeetingScheduleDialog

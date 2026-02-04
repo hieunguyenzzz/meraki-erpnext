@@ -1,19 +1,36 @@
-import { useState } from "react";
-import { useParams, Link } from "react-router";
+import { useState, useMemo } from "react";
+import { useParams, Link, useNavigate } from "react-router";
 import { useOne, useList, useCreate, useDelete, useInvalidate, useNavigation } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
 import { formatDate, formatVND } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
+import { Trash2, ArrowRightLeft, CalendarDays, ChevronDown, ArrowLeft, Mail, Phone, MapPin, User, Calendar } from "lucide-react";
 import { extractErrorMessage } from "@/lib/errors";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { EditableField } from "@/components/crm/EditableField";
 import { ConversationSection } from "@/components/crm/ConversationSection";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
+import { cn } from "@/lib/utils";
+
+function parseContactFormDetails(content: string): Record<string, string> {
+  const details: Record<string, string> = {};
+  const regex = /^([^:]+):\s*(.+?)(?:<br>|$)/gm;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    const key = match[1].trim();
+    const value = match[2].trim();
+    if (key && value && !key.includes('---')) {
+      details[key] = value;
+    }
+  }
+  return details;
+}
 
 const TERMINAL_LEAD_STATUSES = new Set(["Converted", "Do Not Contact", "Opportunity"]);
 
@@ -27,11 +44,28 @@ function statusVariant(status: string) {
   }
 }
 
+/** Inline contact info item */
+function ContactItem({ icon: Icon, value, href }: { icon: typeof Mail; value?: string; href?: string }) {
+  if (!value) return null;
+  const content = (
+    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">{value}</span>
+    </span>
+  );
+  if (href) {
+    return <a href={href} className="hover:text-foreground transition-colors">{content}</a>;
+  }
+  return content;
+}
+
 export default function LeadDetailPage() {
   const { name } = useParams<{ name: string }>();
+  const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
 
   const invalidate = useInvalidate();
   const { mutateAsync: deleteRecord } = useDelete();
@@ -100,6 +134,26 @@ export default function LeadDetailPage() {
     enabled: !!name,
   });
 
+  // Fetch Contact Form Communication for wedding details
+  const { result: contactFormResult } = useList({
+    resource: "Communication",
+    filters: [
+      { field: "reference_doctype", operator: "eq", value: "Lead" },
+      { field: "reference_name", operator: "eq", value: name! },
+      { field: "subject", operator: "eq", value: "Meraki Contact Form" },
+    ],
+    sorters: [{ field: "creation", order: "asc" }],
+    pagination: { pageSize: 1 },
+    meta: { fields: ["name", "subject", "content"] },
+    queryOptions: { enabled: !!name },
+  });
+
+  const contactDetails = useMemo(() => {
+    const comm = (contactFormResult as any)?.data?.[0];
+    if (!comm?.content) return null;
+    return parseContactFormDetails(comm.content);
+  }, [contactFormResult]);
+
   const conflictingLeads = (conflictingLeadsResult?.data ?? []) as Array<{ name: string; lead_name: string; status: string }>;
   const conflictingSalesOrders = (conflictingSalesOrdersResult?.data ?? []) as Array<{ name: string; customer_name: string; status: string }>;
   const hasDateConflicts = conflictingLeads.length > 0 || conflictingSalesOrders.length > 0;
@@ -144,181 +198,263 @@ export default function LeadDetailPage() {
   }
 
   const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.lead_name;
+  const canConvert = !TERMINAL_LEAD_STATUSES.has(lead.status);
+
+  // Sidebar content (reused in both desktop and mobile)
+  const SidebarContent = () => (
+    <div className="space-y-6">
+      {/* Contact Info */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Contact</h3>
+        <div className="space-y-2">
+          <ReadOnlyField label="Name" value={fullName} />
+          <ReadOnlyField label="Email" value={lead.email_id ?? ""} />
+          <ReadOnlyField label="Phone" value={lead.phone ?? ""} />
+          {lead.mobile_no && <ReadOnlyField label="Mobile" value={lead.mobile_no} />}
+          <ReadOnlyField label="Location" value={lead.city ?? ""} />
+          <EditableField
+            label="Source"
+            value={lead.source}
+            fieldName="source"
+            doctype="Lead"
+            docName={lead.name}
+            type="select"
+            options={leadSources}
+            onSaved={handleFieldSaved}
+          />
+        </div>
+      </div>
+
+      {/* Wedding Details */}
+      {contactDetails && Object.keys(contactDetails).length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Wedding</h3>
+          <div className="space-y-2">
+            {contactDetails["Wedding Date"] && <ReadOnlyField label="Date" value={contactDetails["Wedding Date"]} />}
+            {contactDetails["Wedding Venue"] && <ReadOnlyField label="Venue" value={contactDetails["Wedding Venue"]} />}
+            {contactDetails["Guest Count"] && <ReadOnlyField label="Guests" value={contactDetails["Guest Count"]} />}
+            {contactDetails.Budget && <ReadOnlyField label="Budget" value={contactDetails.Budget} />}
+            {contactDetails.Couple && <ReadOnlyField label="Partner" value={contactDetails.Couple} />}
+          </div>
+        </div>
+      )}
+
+      {/* Scheduled Meetings */}
+      {scheduledMeetings.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5 text-cyan-600" />
+            Meetings
+          </h3>
+          <div className="space-y-2">
+            {scheduledMeetings.map((meeting) => {
+              const startDate = new Date(meeting.starts_on);
+              const isPast = startDate < new Date();
+              return (
+                <div
+                  key={meeting.name}
+                  className={cn(
+                    "p-2.5 rounded-md border text-sm",
+                    isPast
+                      ? "bg-muted/30 border-muted text-muted-foreground"
+                      : "bg-cyan-50/50 dark:bg-cyan-950/20 border-cyan-200/60 dark:border-cyan-800/60"
+                  )}
+                >
+                  <p className={cn("font-medium", isPast && "line-through")}>
+                    {meeting.subject}
+                  </p>
+                  <p className={cn("text-xs mt-0.5", isPast ? "text-muted-foreground" : "text-cyan-700 dark:text-cyan-400")}>
+                    {startDate.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                    {" at "}
+                    {startDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Meta */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Meta</h3>
+        <div className="space-y-2">
+          <ReadOnlyField label="Created" value={formatDate(lead.creation)} />
+          <ReadOnlyField label="ID" value={lead.name} />
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="space-y-2 pt-2 border-t">
+        <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full justify-start" disabled={!canConvert}>
+              <ArrowRightLeft className="h-4 w-4 mr-2" /> Convert to Opportunity
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Convert to Opportunity</DialogTitle>
+              <DialogDescription>
+                This will create a new Opportunity linked to this Lead. The Lead will be marked as converted.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConvertOpen(false)}>Cancel</Button>
+              <Button onClick={handleConvert} disabled={converting}>
+                {converting ? "Converting..." : "Convert"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10">
+              <Trash2 className="h-4 w-4 mr-2" /> Delete Lead
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Lead</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this lead? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">{lead.lead_name}</h1>
-        <div className="flex items-center gap-2">
-          <Badge variant={statusVariant(lead.status)}>{lead.status}</Badge>
-          <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" disabled={TERMINAL_LEAD_STATUSES.has(lead.status)}>
-                <ArrowRightLeft className="h-4 w-4 mr-1" /> Convert to Opportunity
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Convert to Opportunity</DialogTitle>
-                <DialogDescription>
-                  This will create a new Opportunity linked to this Lead. The Lead will be marked as converted.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setConvertOpen(false)}>Cancel</Button>
-                <Button onClick={handleConvert} disabled={converting}>
-                  {converting ? "Converting..." : "Convert"}
+    <div className="space-y-4">
+      {/* Mobile Header */}
+      <div className="lg:hidden">
+        <div className="flex items-center gap-3 mb-3">
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight truncate">{lead.lead_name}</h1>
+          </div>
+          <Badge variant={statusVariant(lead.status)} className="shrink-0">{lead.status}</Badge>
+        </div>
+
+        {/* Mobile contact info summary */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mb-3">
+          <ContactItem icon={Mail} value={lead.email_id} href={`mailto:${lead.email_id}`} />
+          <ContactItem icon={Phone} value={lead.phone} href={`tel:${lead.phone}`} />
+          {lead.city && <ContactItem icon={MapPin} value={lead.city} />}
+        </div>
+
+        {/* Collapsible details */}
+        <Collapsible open={mobileInfoOpen} onOpenChange={setMobileInfoOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full justify-between mb-4">
+              {mobileInfoOpen ? "Hide details" : "Show all details"}
+              <ChevronDown className={cn("h-4 w-4 transition-transform", mobileInfoOpen && "rotate-180")} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <Card className="mb-4">
+              <CardContent className="pt-4">
+                <SidebarContent />
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* Mobile quick actions */}
+        {canConvert && (
+          <div className="flex gap-2 mb-4">
+            <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="flex-1">
+                  <ArrowRightLeft className="h-4 w-4 mr-1.5" /> Convert
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <DialogTrigger asChild>
-              <Button variant="destructive" size="sm">
-                <Trash2 className="h-4 w-4 mr-1" /> Delete
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Delete Lead</DialogTitle>
-                <DialogDescription>
-                  Are you sure you want to delete this lead? This action cannot be undone.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-                <Button variant="destructive" onClick={handleDelete}>Delete</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+            </Dialog>
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Header */}
+      <div className="hidden lg:flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{lead.lead_name}</h1>
+          <Badge variant={statusVariant(lead.status)}>{lead.status}</Badge>
         </div>
       </div>
 
       {/* Date conflict warning */}
       {hasDateConflicts && (
-        <div className="rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30 px-4 py-3 text-yellow-800 dark:text-yellow-400">
-          <p className="font-medium mb-1">Date Conflict: {formatDate(weddingDate!)} has other events</p>
-          <ul className="text-sm space-y-1 ml-4 list-disc">
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3 text-amber-800 dark:text-amber-400">
+          <p className="font-medium text-sm mb-1">Date Conflict: {formatDate(weddingDate!)}</p>
+          <ul className="text-sm space-y-0.5 ml-4 list-disc">
             {conflictingLeads.map((cl) => (
               <li key={cl.name}>
-                Lead: <Link to={`/crm/leads/${cl.name}`} className="font-medium underline hover:no-underline">{cl.lead_name}</Link>{" "}
-                <span className="text-yellow-600 dark:text-yellow-500">({cl.status})</span>
+                <Link to={`/crm/leads/${cl.name}`} className="font-medium hover:underline">{cl.lead_name}</Link>{" "}
+                <span className="text-amber-600 dark:text-amber-500">({cl.status})</span>
               </li>
             ))}
             {conflictingSalesOrders.map((so) => (
               <li key={so.name}>
-                Wedding: {so.customer_name} <span className="text-yellow-600 dark:text-yellow-500">({so.name})</span>
+                Wedding: {so.customer_name} <span className="text-amber-600 dark:text-amber-500">({so.name})</span>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {/* Two-column grid */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Contact Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Contact Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <ReadOnlyField label="Name" value={fullName} />
-            <ReadOnlyField label="Email" value={lead.email_id ?? ""} />
-            <ReadOnlyField label="Phone" value={lead.phone ?? ""} />
-            {lead.mobile_no && <ReadOnlyField label="Mobile" value={lead.mobile_no} />}
-            <ReadOnlyField label="Location" value={lead.city ?? ""} />
-            <EditableField
-              label="Source"
-              value={lead.source}
-              fieldName="source"
-              doctype="Lead"
-              docName={lead.name}
-              type="select"
-              options={leadSources}
-              onSaved={handleFieldSaved}
-            />
-            <ReadOnlyField label="Created" value={formatDate(lead.creation)} />
-          </CardContent>
-        </Card>
+      {/* Two-column layout (desktop) */}
+      <div className="lg:grid lg:grid-cols-[280px_1fr] lg:gap-6">
+        {/* Desktop Sidebar */}
+        <div className="hidden lg:block">
+          <div className="sticky top-4">
+            <Card>
+              <CardContent className="pt-4">
+                <SidebarContent />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
-        {/* Wedding Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Wedding Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <ReadOnlyField label="Relationship" value={lead.custom_relationship ?? ""} />
-            <ReadOnlyField label="Couple Name" value={lead.custom_couple_name ?? ""} />
-            <ReadOnlyField label="Wedding Date" value={lead.custom_wedding_date ? formatDate(lead.custom_wedding_date) : ""} />
-            <ReadOnlyField label="Wedding Venue" value={lead.custom_wedding_venue ?? ""} />
-            <ReadOnlyField label="Guest Count" value={lead.custom_guest_count ? String(lead.custom_guest_count) : ""} />
-            <ReadOnlyField label="Estimated Budget" value={lead.custom_estimated_budget ? formatVND(lead.custom_estimated_budget) : ""} />
-          </CardContent>
-        </Card>
+        {/* Main Content - Tabs */}
+        <div className="min-w-0">
+          {/* Notes (shown above tabs if present) */}
+          {Array.isArray(lead.notes) && lead.notes.length > 0 && (
+            <Card className="mb-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {lead.notes.map((note, idx) => (
+                    <p key={idx} className="text-sm whitespace-pre-wrap text-muted-foreground">{note.note}</p>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Tabs defaultValue="conversation" className="w-full">
+            <TabsList className="w-full lg:w-auto">
+              <TabsTrigger value="conversation" className="flex-1 lg:flex-none">Conversation</TabsTrigger>
+              <TabsTrigger value="activity" className="flex-1 lg:flex-none">Activity</TabsTrigger>
+            </TabsList>
+            <TabsContent value="conversation" className="mt-4">
+              <ConversationSection references={[{ doctype: "Lead", docName: name! }]} />
+            </TabsContent>
+            <TabsContent value="activity" className="mt-4">
+              <InternalNotesSection references={[{ doctype: "Lead", docName: name! }]} />
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
-
-      {/* Notes */}
-      {typeof lead.notes === "string" && lead.notes.trim() && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm whitespace-pre-wrap">{lead.notes}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Scheduled Meetings */}
-      {scheduledMeetings.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              Scheduled Meetings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {scheduledMeetings.map((meeting) => {
-                const startDate = new Date(meeting.starts_on);
-                const isPast = startDate < new Date();
-                return (
-                  <div
-                    key={meeting.name}
-                    className={`flex items-start gap-3 p-3 rounded-lg border ${
-                      isPast
-                        ? "bg-muted/50 border-muted"
-                        : "bg-cyan-50 dark:bg-cyan-950/30 border-cyan-200 dark:border-cyan-800"
-                    }`}
-                  >
-                    <div className="flex-1">
-                      <p className={`font-medium ${isPast ? "text-muted-foreground" : "text-foreground"}`}>
-                        {meeting.subject}
-                      </p>
-                      <p className={`text-sm ${isPast ? "text-muted-foreground" : "text-cyan-700 dark:text-cyan-400"}`}>
-                        {startDate.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
-                        {" at "}
-                        {startDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    </div>
-                    {isPast && (
-                      <Badge variant="secondary" className="text-xs">Past</Badge>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Conversation */}
-      <ConversationSection references={[{ doctype: "Lead", docName: name! }]} />
-
-      {/* Internal Notes */}
-      <InternalNotesSection references={[{ doctype: "Lead", docName: name! }]} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import type { KanbanItem } from "@/lib/kanban";
 import { getColumnForItem, getDocName, isItemLocked, formatAge, hoursElapsed, formatMeetingDate } from "@/lib/kanban";
 import { CalendarDays } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface KanbanCardProps {
   item: KanbanItem;
@@ -12,10 +13,10 @@ interface KanbanCardProps {
 }
 
 function waitingClasses(waitingFor: "client" | "staff", hours: number): string {
-  if (hours >= 48) return "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30";
-  if (hours >= 24) return "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30";
-  if (waitingFor === "client") return "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30";
-  return "text-muted-foreground bg-muted/50";
+  if (hours >= 48) return "text-red-600 dark:text-red-400 bg-red-50/80 dark:bg-red-950/40";
+  if (hours >= 24) return "text-amber-600 dark:text-amber-400 bg-amber-50/80 dark:bg-amber-950/40";
+  if (waitingFor === "client") return "text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-950/40";
+  return "text-muted-foreground bg-muted/40";
 }
 
 function NewIndicator({ item }: { item: KanbanItem }) {
@@ -57,7 +58,7 @@ export function KanbanCard({ item, isDragOverlay }: KanbanCardProps) {
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.3 : locked ? 0.6 : 1,
     ...(isDragOverlay
-      ? { transform: "rotate(2deg)", boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }
+      ? { transform: "rotate(2deg)", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }
       : {}),
   };
 
@@ -71,18 +72,24 @@ export function KanbanCard({ item, isDragOverlay }: KanbanCardProps) {
       style={style}
       {...listeners}
       {...attributes}
-      className={`rounded-lg border bg-card p-3 space-y-2 touch-none ${locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
+      className={cn(
+        "rounded-lg border bg-card p-3 space-y-2 touch-none transition-shadow",
+        // Mobile: larger touch target with min height
+        "min-h-[72px] md:min-h-0",
+        locked ? "cursor-default opacity-60" : "cursor-grab active:cursor-grabbing hover:shadow-sm",
+        isDragOverlay && "shadow-lg"
+      )}
     >
       <div className="flex items-center gap-2">
         <Badge
           variant={item.doctype === "Lead" ? "info" : "warning"}
-          className="text-[10px] px-1.5 py-0"
+          className="text-[10px] px-1.5 py-0 shrink-0"
         >
           {item.doctype === "Lead" ? "Lead" : "Opp"}
         </Badge>
         <Link
           to={detailPath}
-          className="text-sm font-medium text-primary hover:underline truncate"
+          className="text-sm font-medium text-foreground hover:text-primary hover:underline truncate"
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
@@ -92,7 +99,7 @@ export function KanbanCard({ item, isDragOverlay }: KanbanCardProps) {
       <div className="text-xs text-muted-foreground space-y-0.5">
         {item.email && <div className="truncate">{item.email}</div>}
         {item.phone && <div>{item.phone}</div>}
-        <div className="text-[10px] opacity-60">{item.status}</div>
+        <div className="text-[10px] opacity-50">{item.status}</div>
       </div>
       {column === "new" && <NewIndicator item={item} />}
       {(column === "engaged" || column === "meeting" || column === "quoted") && <EngagedIndicator item={item} />}
