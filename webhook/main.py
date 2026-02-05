@@ -244,6 +244,11 @@ async def create_lead(request: Request):
         result = resp.json()
         lead_name = result.get("data", {}).get("name", "")
 
+        # Validate lead_name is not empty
+        if not lead_name:
+            log_call(False, None, "ERPNext returned empty lead name", body, resp.status_code, ip)
+            return {"success": False, "error": "ERPNext returned empty lead name"}
+
         # Handle historical timestamp for backfill
         timestamp = body.get("timestamp")
         if timestamp and lead_name:
