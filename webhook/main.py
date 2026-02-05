@@ -204,11 +204,22 @@ async def create_lead(request: Request):
     guest_count_raw = (body.get("approximate") or "").strip()
     wedding_date_raw = (body.get("weddingDate") or "").strip()
 
+    # Build lead_name - prefer coupleName (e.g., "Di & Jesse") over individual name
+    # ERPNext auto-generates lead_name from first_name + last_name, so we set first_name
+    # to couple_name when available to get the desired lead title
+    couple_name = (body.get("coupleName") or "").strip()
+    if couple_name:
+        # Use couple_name as first_name (no last_name) so ERPNext shows couple name as title
+        display_first_name = couple_name
+        display_last_name = ""
+    else:
+        display_first_name = firstname
+        display_last_name = lastname
+
     lead_data = {
         "doctype": "Lead",
-        "first_name": firstname,
-        "last_name": lastname,
-        "lead_name": f"{firstname} {lastname}".strip(),
+        "first_name": display_first_name,
+        "last_name": display_last_name,
         "email_id": email,
         "phone": (body.get("phone") or "").strip() or None,
         "city": (body.get("address") or "").strip() or None,
@@ -332,27 +343,11 @@ async def create_conversation(request: Request):
 
         lead_name = lead_resp.json()["data"][0]["name"]
 
-        # 2. Check if Lead has a linked Opportunity
+        # Always attach to Lead (no Opportunity lookup - simplified CRM)
         attached_doctype = "Lead"
         attached_name = lead_name
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            opp_resp = await client.get(
-                f"{ERPNEXT_URL}/api/resource/Opportunity",
-                params={
-                    "filters": json.dumps([["party_name", "=", lead_name], ["opportunity_from", "=", "Lead"]]),
-                    "fields": json.dumps(["name"]),
-                    "limit_page_length": 1,
-                    "order_by": "creation desc",
-                },
-                headers=headers,
-            )
-
-        if opp_resp.status_code == 200 and opp_resp.json().get("data"):
-            attached_doctype = "Opportunity"
-            attached_name = opp_resp.json()["data"][0]["name"]
-
-        # 3. Check for duplicate Communication
+        # 2. Check for duplicate Communication
         timestamp = body.get("timestamp")  # Optional: ISO datetime for historical records
         subject = body.get("subject", "")
 
