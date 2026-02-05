@@ -26,6 +26,10 @@ export interface ColumnDef {
   leadTarget: string;
   /** Status to set when dropping an Opportunity into this column */
   oppTarget: string;
+  /** Can this column be collapsed? */
+  collapsible?: boolean;
+  /** Start collapsed by default? */
+  collapsedByDefault?: boolean;
 }
 
 export const COLUMNS: ColumnDef[] = [
@@ -73,6 +77,8 @@ export const COLUMNS: ColumnDef[] = [
     oppStatuses: ["Converted"],
     leadTarget: "",
     oppTarget: "Converted",
+    collapsible: true,
+    collapsedByDefault: true,
   },
   {
     key: "lost",
@@ -82,6 +88,8 @@ export const COLUMNS: ColumnDef[] = [
     oppStatuses: ["Lost", "Closed"],
     leadTarget: "Do Not Contact",
     oppTarget: "Lost",
+    collapsible: true,
+    collapsedByDefault: true,
   },
 ];
 

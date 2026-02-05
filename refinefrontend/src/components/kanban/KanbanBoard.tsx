@@ -9,7 +9,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { KanbanColumn, MobileKanbanList } from "./KanbanColumn";
+import { KanbanColumn, MobileKanbanList, colorMap } from "./KanbanColumn";
 import { KanbanCard } from "./KanbanCard";
 import {
   COLUMNS,
@@ -17,8 +17,10 @@ import {
   getTargetStatus,
   type KanbanItem,
   type ColumnKey,
+  type ColumnDef,
 } from "@/lib/kanban";
 import { cn } from "@/lib/utils";
+import { ChevronRight } from "lucide-react";
 
 interface GenericColumnDef {
   key: string;
@@ -62,6 +64,67 @@ export function KanbanBoard({
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileActiveTab, setMobileActiveTab] = useState<string>(columns[0]?.key ?? "new");
+
+  // Collapsed columns state with localStorage persistence
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    const stored = localStorage.getItem("kanban-collapsed-columns");
+    if (stored) {
+      try {
+        return new Set(JSON.parse(stored));
+      } catch {
+        // Invalid JSON, use defaults
+      }
+    }
+    // Default: collapse columns marked as collapsedByDefault
+    const defaults = (columns as ColumnDef[])
+      .filter((c) => c.collapsedByDefault)
+      .map((c) => c.key);
+    return new Set(defaults);
+  });
+
+  // Persist collapsed state to localStorage
+  useEffect(() => {
+    localStorage.setItem(
+      "kanban-collapsed-columns",
+      JSON.stringify([...collapsedColumns])
+    );
+  }, [collapsedColumns]);
+
+  const toggleColumnCollapse = useCallback((columnKey: string) => {
+    setCollapsedColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(columnKey)) {
+        next.delete(columnKey);
+      } else {
+        next.add(columnKey);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleAllCollapsible = useCallback(() => {
+    const collapsibleKeys = (columns as ColumnDef[])
+      .filter((c) => c.collapsible)
+      .map((c) => c.key);
+    const allCollapsed = collapsibleKeys.every((k) => collapsedColumns.has(k));
+
+    if (allCollapsed) {
+      // Expand all
+      setCollapsedColumns((prev) => {
+        const next = new Set(prev);
+        collapsibleKeys.forEach((k) => next.delete(k));
+        return next;
+      });
+    } else {
+      // Collapse all
+      setCollapsedColumns((prev) => {
+        const next = new Set(prev);
+        collapsibleKeys.forEach((k) => next.add(k));
+        return next;
+      });
+    }
+  }, [columns, collapsedColumns]);
 
   // Sync when parent items change (e.g. after refetch), but skip during active drag
   useEffect(() => {
@@ -172,22 +235,50 @@ export function KanbanBoard({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        {/* Desktop: 6-column grid */}
+        {/* Desktop: flexible grid with collapsed columns */}
         <div
           className={cn(
-            "hidden md:grid gap-3 transition-opacity",
+            "hidden md:flex gap-3 transition-opacity",
             updating && "opacity-40 pointer-events-none"
           )}
-          style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}
         >
-          {columns.map((col) => (
-            <KanbanColumn
-              key={col.key}
-              column={col}
-              items={columnItems(col.key)}
-              renderCard={renderCard ? (item) => renderCard(item, false) : undefined}
+          {/* Regular (visible) columns */}
+          {columns
+            .filter((col) => !collapsedColumns.has(col.key))
+            .map((col) => (
+              <div key={col.key} className="flex-1 min-w-0">
+                <KanbanColumn
+                  column={col}
+                  items={columnItems(col.key)}
+                  renderCard={renderCard ? (item) => renderCard(item, false) : undefined}
+                  collapsible={(col as ColumnDef).collapsible}
+                  onCollapse={
+                    (col as ColumnDef).collapsible
+                      ? () => toggleColumnCollapse(col.key)
+                      : undefined
+                  }
+                />
+              </div>
+            ))}
+
+          {/* Collapsed columns summary */}
+          {columns.some(
+            (col) => (col as ColumnDef).collapsible && collapsedColumns.has(col.key)
+          ) && (
+            <CollapsedColumnsSummary
+              columns={columns.filter((col) => collapsedColumns.has(col.key))}
+              itemCounts={columns
+                .filter((c) => collapsedColumns.has(c.key))
+                .reduce(
+                  (acc, col) => ({
+                    ...acc,
+                    [col.key]: columnItems(col.key).length,
+                  }),
+                  {} as Record<string, number>
+                )}
+              onExpand={toggleAllCollapsible}
             />
-          ))}
+          )}
         </div>
 
         {/* Mobile: Tabs + vertical list */}
@@ -242,6 +333,51 @@ export function KanbanBoard({
             : null}
         </DragOverlay>
       </DndContext>
+    </div>
+  );
+}
+
+/** Summary display for collapsed columns (Won/Lost) */
+interface CollapsedColumnsSummaryProps {
+  columns: { key: string; label: string; color: string }[];
+  itemCounts: Record<string, number>;
+  onExpand: () => void;
+}
+
+function CollapsedColumnsSummary({
+  columns,
+  itemCounts,
+  onExpand,
+}: CollapsedColumnsSummaryProps) {
+  return (
+    <div className="flex flex-col gap-2 w-24 shrink-0">
+      {columns.map((col) => {
+        const colors = colorMap[col.color] ?? colorMap.blue;
+        return (
+          <div
+            key={col.key}
+            className={cn(
+              "rounded-lg border p-2 text-center",
+              colors.bg,
+              colors.border
+            )}
+          >
+            <div className={cn("text-xs font-medium truncate", colors.header)}>
+              {col.label}
+            </div>
+            <div className={cn("text-xl font-bold tabular-nums", colors.header)}>
+              {itemCounts[col.key] || 0}
+            </div>
+          </div>
+        );
+      })}
+      <button
+        onClick={onExpand}
+        className="flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5 px-2 rounded hover:bg-muted"
+      >
+        <ChevronRight className="h-3 w-3" />
+        Show
+      </button>
     </div>
   );
 }

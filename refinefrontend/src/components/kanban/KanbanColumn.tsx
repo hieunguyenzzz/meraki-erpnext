@@ -3,6 +3,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { KanbanCard } from "./KanbanCard";
 import type { ColumnDef, KanbanItem } from "@/lib/kanban";
 import { cn } from "@/lib/utils";
+import { ChevronLeft } from "lucide-react";
 
 const colorMap: Record<string, { bg: string; border: string; header: string; dropBorder: string }> = {
   blue:   { bg: "bg-blue-50/50 dark:bg-blue-950/20",   border: "border-blue-200/60 dark:border-blue-800/60",   header: "text-blue-700 dark:text-blue-400",   dropBorder: "border-blue-400 dark:border-blue-500" },
@@ -26,9 +27,11 @@ interface KanbanColumnProps {
   column: GenericColumnDef;
   items: Array<{ id: string; [k: string]: any }>;
   renderCard?: (item: any) => ReactNode;
+  collapsible?: boolean;
+  onCollapse?: () => void;
 }
 
-export function KanbanColumn({ column, items, renderCard }: KanbanColumnProps) {
+export function KanbanColumn({ column, items, renderCard, collapsible, onCollapse }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.key });
   const colors = colorMap[column.color] ?? colorMap.blue;
 
@@ -43,7 +46,21 @@ export function KanbanColumn({ column, items, renderCard }: KanbanColumnProps) {
     >
       <div className={cn("px-3 py-2.5 flex items-center justify-between border-b", colors.border)}>
         <span className={cn("text-xs font-medium uppercase tracking-wide", colors.header)}>{column.label}</span>
-        <span className={cn("text-xs font-medium tabular-nums", colors.header, "opacity-70")}>{items.length}</span>
+        <div className="flex items-center gap-1">
+          <span className={cn("text-xs font-medium tabular-nums", colors.header, "opacity-70")}>{items.length}</span>
+          {collapsible && onCollapse && (
+            <button
+              onClick={onCollapse}
+              className={cn(
+                "ml-1 p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors",
+                colors.header
+              )}
+              title="Collapse column"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-220px)]">
         {items.map((item) => (
