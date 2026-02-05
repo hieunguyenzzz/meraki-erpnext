@@ -1,24 +1,14 @@
-import { useMemo, useCallback, useState } from "react";
-import { useList, useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useMemo } from "react";
+import { useList } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
-import { MeetingScheduleDialog } from "@/components/crm/MeetingScheduleDialog";
-import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, getDocName, type KanbanItem, type ColumnKey } from "@/lib/kanban";
-import { extractErrorMessage } from "@/lib/errors";
+import { buildKanbanItems, enrichWithActivity, enrichWithMeetings } from "@/lib/kanban";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Simplified Lead-only CRM: All stages use Lead doctype (no Opportunity conversion)
+// Drag and drop disabled - leads are moved via webhook API only
 
 export default function KanbanPage() {
-  const invalidate = useInvalidate();
-  const { mutateAsync: customMutation } = useCustomMutation();
-
-  // Dialog state for scheduling meetings
-  const [pendingMeeting, setPendingMeeting] = useState<{
-    item: KanbanItem;
-    targetColumn: ColumnKey;
-  } | null>(null);
-  const [meetingError, setMeetingError] = useState<string | null>(null);
 
   const { result: leadsResult, query: leadsQuery } = useList({
     resource: "Lead",
@@ -105,104 +95,11 @@ export default function KanbanPage() {
 
   const isLoading = leadsQuery?.isLoading || oppsQuery?.isLoading || commsQuery?.isLoading;
 
-  const handleUpdateStatus = useCallback(
-    async (item: KanbanItem, newStatus: string, targetColumn: string) => {
-      // Prevent new drops while meeting dialog is open (race condition fix)
-      if (pendingMeeting) return;
-
-      // Intercept drops to "meeting" column — show dialog instead
-      if (targetColumn === "meeting" && item.doctype === "Lead") {
-        setMeetingError(null);
-        setPendingMeeting({ item, targetColumn: targetColumn as ColumnKey });
-        return;
-      }
-
-      try {
-        await customMutation({
-          url: "/api/method/frappe.client.set_value",
-          method: "post",
-          values: {
-            doctype: item.doctype,
-            name: getDocName(item),
-            fieldname: "status",
-            value: newStatus,
-          },
-        });
-        // Refetch both lists to sync server state
-        invalidate({ resource: "Lead", invalidates: ["list"] });
-        invalidate({ resource: "Opportunity", invalidates: ["list"] });
-      } catch (err) {
-        throw new Error(
-          extractErrorMessage(err, `Failed to update ${item.doctype} status`)
-        );
-      }
-    },
-    [customMutation, invalidate, pendingMeeting]
-  );
-
-  const handleMeetingConfirm = useCallback(
-    async (datetime: string, subject: string) => {
-      if (!pendingMeeting) return;
-      const { item } = pendingMeeting;
-
-      try {
-        // Create Event with Event Participants linking to Lead
-        // Parse datetime and add 1 hour for ends_on (handles day rollover correctly)
-        const startsOn = datetime.replace("T", " ") + ":00";
-        const startDate = new Date(datetime);
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Add 1 hour
-        // Format as "YYYY-MM-DD HH:MM:SS" in local time
-        const endsOn = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")} ${String(endDate.getHours()).padStart(2, "0")}:${String(endDate.getMinutes()).padStart(2, "0")}:00`;
-
-        await customMutation({
-          url: "/api/resource/Event",
-          method: "post",
-          values: {
-            subject,
-            starts_on: startsOn,
-            ends_on: endsOn,
-            event_category: "Meeting",
-            event_type: "Private",
-            event_participants: [
-              {
-                reference_doctype: "Lead",
-                reference_docname: getDocName(item),
-              },
-            ],
-          },
-        });
-
-        // Update Lead status to "Interested" (maps to Meeting column)
-        await customMutation({
-          url: "/api/method/frappe.client.set_value",
-          method: "post",
-          values: {
-            doctype: "Lead",
-            name: getDocName(item),
-            fieldname: "status",
-            value: "Interested",
-          },
-        });
-
-        invalidate({ resource: "Lead", invalidates: ["list"] });
-        invalidate({ resource: "Event", invalidates: ["list"] });
-        setPendingMeeting(null);
-      } catch (err) {
-        setMeetingError(extractErrorMessage(err, "Failed to schedule meeting"));
-      }
-    },
-    [pendingMeeting, customMutation, invalidate]
-  );
-
-  const handleMeetingCancel = useCallback(() => {
-    setPendingMeeting(null);
-  }, []);
-
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">CRM Pipeline</h1>
-        <p className="text-sm text-muted-foreground">Drag and drop to update status</p>
+        <p className="text-sm text-muted-foreground">View leads by stage</p>
       </div>
       {isLoading ? (
         <>
@@ -233,7 +130,7 @@ export default function KanbanPage() {
         </>
       ) : (
         <>
-          <KanbanBoard items={items} onUpdateStatus={handleUpdateStatus} />
+          <KanbanBoard items={items} />
           <div className="hidden md:block mt-6 text-xs text-muted-foreground">
             <p className="mb-2 font-medium text-foreground uppercase tracking-wide">Stage Guide</p>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
@@ -247,15 +144,6 @@ export default function KanbanPage() {
           </div>
         </>
       )}
-      <MeetingScheduleDialog
-        open={!!pendingMeeting}
-        onOpenChange={(open) => !open && handleMeetingCancel()}
-        itemName={pendingMeeting?.item.displayName ?? ""}
-        onConfirm={handleMeetingConfirm}
-        onCancel={handleMeetingCancel}
-        error={meetingError}
-        onErrorDismiss={() => setMeetingError(null)}
-      />
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { useDroppable } from "@dnd-kit/core";
 import { KanbanCard } from "./KanbanCard";
-import type { ColumnDef, KanbanItem } from "@/lib/kanban";
+import type { KanbanItem } from "@/lib/kanban";
 import { cn } from "@/lib/utils";
 import { ChevronLeft } from "lucide-react";
 
@@ -32,16 +31,14 @@ interface KanbanColumnProps {
 }
 
 export function KanbanColumn({ column, items, renderCard, collapsible, onCollapse }: KanbanColumnProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: column.key });
   const colors = colorMap[column.color] ?? colorMap.blue;
 
   return (
     <div
-      ref={setNodeRef}
       className={cn(
-        "flex flex-col rounded-lg border min-h-[300px] transition-colors",
+        "flex flex-col rounded-lg border min-h-[300px]",
         colors.bg,
-        isOver ? colors.dropBorder : colors.border
+        colors.border
       )}
     >
       <div className={cn("px-3 py-2.5 flex items-center justify-between border-b", colors.border)}>
@@ -85,18 +82,16 @@ interface MobileKanbanListProps {
 }
 
 export function MobileKanbanList({ column, items, isVisible, renderCard }: MobileKanbanListProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: column.key });
   const colors = colorMap[column.color] ?? colorMap.blue;
 
   if (!isVisible) return null;
 
   return (
     <div
-      ref={setNodeRef}
       className={cn(
-        "mt-3 rounded-lg border p-3 min-h-[200px] transition-colors",
+        "mt-3 rounded-lg border p-3 min-h-[200px]",
         colors.bg,
-        isOver ? colors.dropBorder : colors.border
+        colors.border
       )}
     >
       <div className="space-y-3">

@@ -1,40 +1,16 @@
-import { useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Star, MessageSquare, Gift } from "lucide-react";
-import { isPipelineItemLocked, type RecruitingItem } from "@/lib/recruiting-kanban";
+import type { RecruitingItem } from "@/lib/recruiting-kanban";
 import { formatAge } from "@/lib/kanban";
 
 interface RecruitingCardProps {
   item: RecruitingItem;
-  isDragOverlay?: boolean;
 }
 
-export function RecruitingCard({ item, isDragOverlay }: RecruitingCardProps) {
-  const locked = isPipelineItemLocked(item);
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: item.id,
-    data: item,
-    disabled: locked,
-  });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.3 : locked ? 0.6 : 1,
-    ...(isDragOverlay
-      ? { transform: "rotate(2deg)", boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }
-      : {}),
-  };
-
+export function RecruitingCard({ item }: RecruitingCardProps) {
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className={`rounded-lg border bg-card p-3 space-y-1.5 touch-none ${locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
-    >
+    <div className="rounded-lg border bg-card p-3 space-y-1.5 hover:shadow-sm">
       <Link
         to={`/hr/recruiting/${item.id}`}
         className="text-sm font-medium text-primary hover:underline truncate block"

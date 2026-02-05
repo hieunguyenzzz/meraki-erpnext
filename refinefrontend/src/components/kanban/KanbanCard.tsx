@@ -1,15 +1,12 @@
-import { useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import type { KanbanItem } from "@/lib/kanban";
-import { getColumnForItem, getDocName, isItemLocked, formatAge, hoursElapsed, formatMeetingDate } from "@/lib/kanban";
+import { getColumnForItem, getDocName, formatAge, hoursElapsed, formatMeetingDate } from "@/lib/kanban";
 import { CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface KanbanCardProps {
   item: KanbanItem;
-  isDragOverlay?: boolean;
 }
 
 function waitingClasses(waitingFor: "client" | "staff", hours: number): string {
@@ -20,12 +17,16 @@ function waitingClasses(waitingFor: "client" | "staff", hours: number): string {
 }
 
 function NewIndicator({ item }: { item: KanbanItem }) {
-  // Use last communication time if available, otherwise fall back to creation
-  const timestamp = item.lastActivity?.date ?? item.creation;
+  const activity = item.lastActivity;
+  const timestamp = activity?.date ?? item.creation;
   const hours = hoursElapsed(timestamp);
+  // If we have activity data, use the actual waitingFor; otherwise default to staff (new lead)
+  const waiting: "client" | "staff" = activity?.waitingFor ?? "staff";
+  const label = waiting === "client" ? `Awaiting client · ${formatAge(timestamp)}` : `Awaiting staff · ${formatAge(timestamp)}`;
+
   return (
-    <div className={`mt-1 rounded-md px-2 py-1 text-xs font-medium ${waitingClasses("staff", hours)}`}>
-      Awaiting staff · {formatAge(timestamp)}
+    <div className={`mt-1 rounded-md px-2 py-1 text-xs font-medium ${waitingClasses(waiting, hours)}`}>
+      {label}
     </div>
   );
 }
@@ -45,22 +46,8 @@ function EngagedIndicator({ item }: { item: KanbanItem }) {
   );
 }
 
-export function KanbanCard({ item, isDragOverlay }: KanbanCardProps) {
-  const locked = isItemLocked(item);
+export function KanbanCard({ item }: KanbanCardProps) {
   const column = getColumnForItem(item);
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: item.id,
-    data: item,
-    disabled: locked,
-  });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.3 : locked ? 0.6 : 1,
-    ...(isDragOverlay
-      ? { transform: "rotate(2deg)", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }
-      : {}),
-  };
 
   const detailPath = item.doctype === "Lead"
     ? `/crm/leads/${getDocName(item)}`
@@ -68,16 +55,11 @@ export function KanbanCard({ item, isDragOverlay }: KanbanCardProps) {
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
       className={cn(
-        "rounded-lg border bg-card p-3 space-y-2 touch-none transition-shadow",
+        "rounded-lg border bg-card p-3 space-y-2",
         // Mobile: larger touch target with min height
         "min-h-[72px] md:min-h-0",
-        locked ? "cursor-default opacity-60" : "cursor-grab active:cursor-grabbing hover:shadow-sm",
-        isDragOverlay && "shadow-lg"
+        "hover:shadow-sm"
       )}
     >
       <div className="flex items-center gap-2">

@@ -1,25 +1,23 @@
 import { useMemo, useCallback, useState } from "react";
 import { Link } from "react-router";
-import { useList, useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useList } from "@refinedev/core";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { RecruitingCard } from "@/components/recruiting/RecruitingCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, CalendarDays, ChevronDown, List } from "lucide-react";
-import { extractErrorMessage } from "@/lib/errors";
 import {
   PIPELINE_COLUMNS,
   buildRecruitingItems,
   enrichRecruitingItems,
   getPipelineColumn,
-  getPipelineTargetStatus,
 } from "@/lib/recruiting-kanban";
+
+// Drag and drop disabled - status changes via admin panel only
 
 const PIPELINE_STAGES = ["Screening", "Interview", "Offer", "Hired", "Rejected"];
 
 export default function RecruitingPipelinePage() {
   const [jobFilter, setJobFilter] = useState("");
-  const invalidate = useInvalidate();
-  const { mutateAsync: customMutation } = useCustomMutation();
 
   // Job Openings for filter
   const { result: jobOpeningsResult } = useList({
@@ -71,32 +69,9 @@ export default function RecruitingPipelinePage() {
 
   const isLoading = applicantsQuery?.isLoading;
 
-  const handleUpdateStatus = useCallback(
-    async (item: any, newStatus: string) => {
-      try {
-        await customMutation({
-          url: "/api/method/frappe.client.set_value",
-          method: "post",
-          values: {
-            doctype: "Job Applicant",
-            name: item.id,
-            fieldname: "custom_recruiting_stage",
-            value: newStatus,
-          },
-        });
-        invalidate({ resource: "Job Applicant", invalidates: ["list"] });
-      } catch (err) {
-        throw new Error(
-          extractErrorMessage(err, `Failed to update applicant stage`)
-        );
-      }
-    },
-    [customMutation, invalidate]
-  );
-
   const renderCard = useCallback(
-    (item: any, isDragOverlay?: boolean) => (
-      <RecruitingCard key={item.id} item={item} isDragOverlay={isDragOverlay} />
+    (item: any) => (
+      <RecruitingCard key={item.id} item={item} />
     ),
     []
   );
@@ -159,9 +134,7 @@ export default function RecruitingPipelinePage() {
               items={items}
               columns={[...PIPELINE_COLUMNS]}
               getColumnForItem={getPipelineColumn}
-              getTargetStatus={(colKey) => getPipelineTargetStatus(colKey)}
               renderCard={renderCard}
-              onUpdateStatus={handleUpdateStatus}
             />
           </div>
         </div>

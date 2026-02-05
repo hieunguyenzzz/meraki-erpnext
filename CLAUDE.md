@@ -78,6 +78,10 @@ To enable monthly P&L reports showing historical revenue and expenses:
 
 > **Always use `http://merakierp.loc`** for all API calls and browser access. Never use the direct IP:port (`http://100.65.0.28:8082`).
 
+**Local Admin Testing Credentials:**
+- Username: `Administrator`
+- Password: `admin123`
+
 ```bash
 docker context use default
 docker compose up -d
