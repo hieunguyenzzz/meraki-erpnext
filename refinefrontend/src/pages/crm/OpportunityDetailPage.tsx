@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useOne, useList, useDelete, useNavigation, useInvalidate } from "@refinedev/core";
-import { Trash2, ArrowLeft, Mail, Phone, ExternalLink, Calendar, MapPin } from "lucide-react";
+import { useOne, useDelete, useNavigation, useInvalidate } from "@refinedev/core";
+import { Trash2, ArrowLeft, Mail, Phone, ExternalLink } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,21 +24,6 @@ function statusVariant(status: string) {
     case "Lost": case "Closed": return "destructive" as const;
     default: return "secondary" as const;
   }
-}
-
-/** Parse contact form content like "Key: Value<br>" into a record */
-function parseContactFormDetails(content: string): Record<string, string> {
-  const details: Record<string, string> = {};
-  const regex = /^([^:]+):\s*(.+?)(?:<br>|$)/gm;
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    const key = match[1].trim();
-    const value = match[2].trim();
-    if (key && value && !key.includes('---')) {
-      details[key] = value;
-    }
-  }
-  return details;
 }
 
 /** Inline contact info item */
@@ -78,27 +63,6 @@ export default function OpportunityDetailPage() {
     id: opportunity?.party_name ?? "",
     queryOptions: { enabled: isFromLead },
   });
-
-  // Fetch the Contact Form Communication from the linked Lead
-  const { result: contactFormResult } = useList({
-    resource: "Communication",
-    filters: [
-      { field: "reference_doctype", operator: "eq", value: "Lead" },
-      { field: "reference_name", operator: "eq", value: opportunity?.party_name },
-      { field: "subject", operator: "eq", value: "Meraki Contact Form" },
-    ],
-    sorters: [{ field: "creation", order: "asc" }],
-    pagination: { pageSize: 1 },
-    meta: { fields: ["name", "subject", "content"] },
-    queryOptions: { enabled: isFromLead },
-  });
-
-  // Parse wedding details from the contact form content
-  const contactDetails = useMemo(() => {
-    const comm = contactFormResult?.data?.[0];
-    if (!comm?.content) return null;
-    return parseContactFormDetails(comm.content);
-  }, [contactFormResult]);
 
   async function handleDelete() {
     await deleteRecord({ resource: "Opportunity", id: name! });
@@ -179,16 +143,22 @@ export default function OpportunityDetailPage() {
         </div>
       </div>
 
-      {/* Wedding Details */}
-      {contactDetails && Object.keys(contactDetails).length > 0 && (
+      {/* Wedding Details - display raw values from linked Lead for form submission fidelity */}
+      {lead && (lead.custom_wedding_date_raw || lead.custom_wedding_date || lead.custom_wedding_venue || lead.custom_guest_count_raw || lead.custom_guest_count || lead.custom_budget_raw || lead.custom_estimated_budget || lead.custom_couple_name) && (
         <div className="space-y-3">
           <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Wedding</h3>
           <div className="space-y-2">
-            {contactDetails["Wedding Date"] && <ReadOnlyField label="Date" value={contactDetails["Wedding Date"]} />}
-            {contactDetails["Wedding Venue"] && <ReadOnlyField label="Venue" value={contactDetails["Wedding Venue"]} />}
-            {contactDetails["Guest Count"] && <ReadOnlyField label="Guests" value={contactDetails["Guest Count"]} />}
-            {contactDetails.Budget && <ReadOnlyField label="Budget" value={contactDetails.Budget} />}
-            {contactDetails.Couple && <ReadOnlyField label="Partner" value={contactDetails.Couple} />}
+            {(lead.custom_wedding_date_raw || lead.custom_wedding_date) && (
+              <ReadOnlyField label="Date" value={lead.custom_wedding_date_raw || formatDate(lead.custom_wedding_date)} />
+            )}
+            {lead.custom_wedding_venue && <ReadOnlyField label="Venue" value={lead.custom_wedding_venue} />}
+            {(lead.custom_guest_count_raw || lead.custom_guest_count) && (
+              <ReadOnlyField label="Guests" value={lead.custom_guest_count_raw || String(lead.custom_guest_count)} />
+            )}
+            {(lead.custom_budget_raw || lead.custom_estimated_budget) && (
+              <ReadOnlyField label="Budget" value={lead.custom_budget_raw || formatVND(lead.custom_estimated_budget)} />
+            )}
+            {lead.custom_couple_name && <ReadOnlyField label="Couple" value={lead.custom_couple_name} />}
           </div>
         </div>
       )}

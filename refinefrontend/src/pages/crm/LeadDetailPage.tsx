@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { useOne, useList, useDelete, useInvalidate, useNavigation } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
@@ -16,20 +16,6 @@ import { EditableField } from "@/components/crm/EditableField";
 import { ConversationSection } from "@/components/crm/ConversationSection";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
-
-function parseContactFormDetails(content: string): Record<string, string> {
-  const details: Record<string, string> = {};
-  const regex = /^([^:]+):\s*(.+?)(?:<br>|$)/gm;
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    const key = match[1].trim();
-    const value = match[2].trim();
-    if (key && value && !key.includes('---')) {
-      details[key] = value;
-    }
-  }
-  return details;
-}
 
 function statusVariant(status: string) {
   switch (status) {
@@ -66,6 +52,19 @@ export default function LeadDetailPage() {
   const { mutateAsync: deleteRecord } = useDelete();
   const { list } = useNavigation();
   const { result: lead } = useOne({ resource: "Lead", id: name! });
+
+  // Linked Opportunity (for conversation display)
+  const { result: linkedOpportunityResult } = useList({
+    resource: "Opportunity",
+    pagination: { mode: "off" as const },
+    filters: [
+      { field: "opportunity_from", operator: "eq", value: "Lead" },
+      { field: "party_name", operator: "eq", value: name! },
+    ],
+    meta: { fields: ["name"] },
+    queryOptions: { enabled: !!name },
+  });
+  const linkedOpportunity = (linkedOpportunityResult?.data ?? [])[0];
 
   // Lead Sources for dropdown
   const { result: sourcesResult } = useList({
@@ -127,26 +126,6 @@ export default function LeadDetailPage() {
     enabled: !!name,
   });
 
-  // Fetch Contact Form Communication for wedding details
-  const { result: contactFormResult } = useList({
-    resource: "Communication",
-    filters: [
-      { field: "reference_doctype", operator: "eq", value: "Lead" },
-      { field: "reference_name", operator: "eq", value: name! },
-      { field: "subject", operator: "eq", value: "Meraki Contact Form" },
-    ],
-    sorters: [{ field: "creation", order: "asc" }],
-    pagination: { pageSize: 1 },
-    meta: { fields: ["name", "subject", "content"] },
-    queryOptions: { enabled: !!name },
-  });
-
-  const contactDetails = useMemo(() => {
-    const comm = (contactFormResult as any)?.data?.[0];
-    if (!comm?.content) return null;
-    return parseContactFormDetails(comm.content);
-  }, [contactFormResult]);
-
   const conflictingLeads = (conflictingLeadsResult?.data ?? []) as Array<{ name: string; lead_name: string; status: string }>;
   const conflictingSalesOrders = (conflictingSalesOrdersResult?.data ?? []) as Array<{ name: string; customer_name: string; status: string }>;
   const hasDateConflicts = conflictingLeads.length > 0 || conflictingSalesOrders.length > 0;
@@ -191,16 +170,22 @@ export default function LeadDetailPage() {
         </div>
       </div>
 
-      {/* Wedding Details */}
-      {contactDetails && Object.keys(contactDetails).length > 0 && (
+      {/* Wedding Details - display raw values for form submission fidelity */}
+      {(lead.custom_wedding_date_raw || lead.custom_wedding_date || lead.custom_wedding_venue || lead.custom_guest_count_raw || lead.custom_guest_count || lead.custom_budget_raw || lead.custom_estimated_budget || lead.custom_couple_name) && (
         <div className="space-y-3">
           <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Wedding</h3>
           <div className="space-y-2">
-            {contactDetails["Wedding Date"] && <ReadOnlyField label="Date" value={contactDetails["Wedding Date"]} />}
-            {contactDetails["Wedding Venue"] && <ReadOnlyField label="Venue" value={contactDetails["Wedding Venue"]} />}
-            {contactDetails["Guest Count"] && <ReadOnlyField label="Guests" value={contactDetails["Guest Count"]} />}
-            {contactDetails.Budget && <ReadOnlyField label="Budget" value={contactDetails.Budget} />}
-            {contactDetails.Couple && <ReadOnlyField label="Partner" value={contactDetails.Couple} />}
+            {(lead.custom_wedding_date_raw || lead.custom_wedding_date) && (
+              <ReadOnlyField label="Date" value={lead.custom_wedding_date_raw || formatDate(lead.custom_wedding_date)} />
+            )}
+            {lead.custom_wedding_venue && <ReadOnlyField label="Venue" value={lead.custom_wedding_venue} />}
+            {(lead.custom_guest_count_raw || lead.custom_guest_count) && (
+              <ReadOnlyField label="Guests" value={lead.custom_guest_count_raw || String(lead.custom_guest_count)} />
+            )}
+            {(lead.custom_budget_raw || lead.custom_estimated_budget) && (
+              <ReadOnlyField label="Budget" value={lead.custom_budget_raw || formatVND(lead.custom_estimated_budget)} />
+            )}
+            {lead.custom_couple_name && <ReadOnlyField label="Couple" value={lead.custom_couple_name} />}
           </div>
         </div>
       )}
@@ -380,10 +365,16 @@ export default function LeadDetailPage() {
               <TabsTrigger value="activity" className="flex-1 lg:flex-none">Activity</TabsTrigger>
             </TabsList>
             <TabsContent value="conversation" className="mt-4">
-              <ConversationSection references={[{ doctype: "Lead", docName: name! }]} />
+              <ConversationSection references={[
+                { doctype: "Lead", docName: name! },
+                ...(linkedOpportunity ? [{ doctype: "Opportunity", docName: linkedOpportunity.name }] : []),
+              ]} />
             </TabsContent>
             <TabsContent value="activity" className="mt-4">
-              <InternalNotesSection references={[{ doctype: "Lead", docName: name! }]} />
+              <InternalNotesSection references={[
+                { doctype: "Lead", docName: name! },
+                ...(linkedOpportunity ? [{ doctype: "Opportunity", docName: linkedOpportunity.name }] : []),
+              ]} />
             </TabsContent>
           </Tabs>
         </div>

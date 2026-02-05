@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import {
   Phone, MessageSquare, Mail, Users, MoreHorizontal,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { formatDateTime, formatDateTimeUTC } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -40,6 +41,7 @@ type ConversationItem = {
   author: string;
   creation: string;
   communication_date?: string;
+  sent_or_received?: "Sent" | "Received";
 };
 
 // Fetch Communications linked via timeline_links (child table)
@@ -143,6 +145,7 @@ function ConversationFeed({ references }: ConversationSectionProps) {
         author: c.sender ?? "",
         creation: c.creation,
         communication_date: c.communication_date,
+        sent_or_received: c.sent_or_received as "Sent" | "Received" | undefined,
       });
     }
 
@@ -186,6 +189,20 @@ function ConversationFeed({ references }: ConversationSectionProps) {
               <span className="inline-flex items-center gap-1 text-muted-foreground">
                 <MediumIcon className="h-3.5 w-3.5" /> {item.medium}
               </span>
+              {item.sent_or_received && (
+                <span className={cn(
+                  "inline-flex items-center gap-0.5 text-xs font-medium",
+                  item.sent_or_received === "Sent"
+                    ? "text-green-600 dark:text-green-400"
+                    : "text-blue-600 dark:text-blue-400"
+                )}>
+                  {item.sent_or_received === "Sent" ? (
+                    <><ArrowUpRight className="h-3 w-3" /> Sent</>
+                  ) : (
+                    <><ArrowDownLeft className="h-3 w-3" /> Received</>
+                  )}
+                </span>
+              )}
               <span className="text-muted-foreground ml-auto text-xs">
                 {item.communication_date ? formatDateTimeUTC(item.communication_date) : formatDateTime(item.creation)}
               </span>

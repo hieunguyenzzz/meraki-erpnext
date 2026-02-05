@@ -20,6 +20,7 @@ from email.utils import parseaddr, parsedate_to_datetime
 import google.generativeai as genai
 import httpx
 import psycopg2
+from psycopg2.extras import Json
 
 # =============================================================================
 # Configuration
@@ -41,6 +42,11 @@ MERAKI_DOMAINS = ['merakiweddingplanner.com', 'merakiwp.com']
 
 # Webhook URL
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'http://webhook:8000')
+
+# ERPNext Config (for duplicate checking)
+ERPNEXT_URL = os.environ.get('ERPNEXT_URL', 'http://frontend:8080')
+ERPNEXT_API_KEY = os.environ.get('ERPNEXT_API_KEY', '')
+ERPNEXT_API_SECRET = os.environ.get('ERPNEXT_API_SECRET', '')
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +166,81 @@ def parse_gemini_response(response_text: str) -> dict:
         return {"classification": "irrelevant", "is_client_related": False}
 
 
+def extract_new_message(body: str) -> str:
+    """Extract the new message content from an email reply, removing auto-quoted previous emails.
+
+    Removes ONLY the automatic email client quote (the previous email thread), such as:
+    - "On [date], [person] wrote:" followed by the quoted previous email
+    - "> " prefixed lines (automatic quote markers)
+    - "----Original Message----" blocks
+    - "From: ... Sent: ... To: ... Subject: ..." forwarded headers
+
+    Keeps:
+    - The person's actual new message content
+    - Their email signature (if part of the new message)
+
+    Returns the extracted new message content, or original body if extraction fails.
+    """
+    if not body or not body.strip():
+        return body
+
+    if not GEMINI_API_KEY:
+        logger.warning("GEMINI_API_KEY not set, returning original body")
+        return body
+
+    prompt = f"""Extract the NEW message content from this email reply.
+
+REMOVE ONLY the automatic email client quote - the previous email thread that gets auto-appended when replying:
+- Text after "On [date], [person] wrote:" (the quoted reply)
+- Lines starting with ">" (automatic quote markers)
+- "----Original Message----" blocks
+- "From: ... Sent: ... To: ..." forwarded message headers
+
+KEEP:
+- The person's actual new message they wrote
+- Their signature (name, regards, etc.) if it's part of their message
+- Any content before the automatic quote marker
+
+Example:
+INPUT:
+"Hi Phung! Thanks for the info. Zoe
+
+On 2 Feb 2026, Meraki Wedding Planner wrote:
+Warmest greetings..."
+
+OUTPUT:
+"Hi Phung! Thanks for the info. Zoe"
+
+Email content:
+{body[:4000]}
+
+Return ONLY the new message content (before the automatic quote), nothing else:"""
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(GEMINI_MODEL)
+        response = model.generate_content(prompt)
+        extracted = response.text.strip()
+
+        # Sanity check - if Gemini returns empty or very short, use original
+        if not extracted or len(extracted) < 10:
+            logger.warning("Gemini returned empty/short response, using original body")
+            return body[:3000]
+
+        return extracted
+    except genai.types.BlockedPromptException as e:
+        logger.warning(f"Gemini blocked message extraction (safety filter): {e}")
+        return body[:3000]
+    except Exception as e:
+        error_str = str(e).lower()
+        # Rate limits should be surfaced for retry logic
+        if 'rate' in error_str or '429' in error_str or 'quota' in error_str:
+            logger.warning(f"Gemini rate limit during message extraction: {e}")
+        else:
+            logger.error(f"Gemini message extraction failed: {e}")
+        return body[:3000]
+
+
 def classify_email(subject: str, body: str, sender: str, recipient: str) -> dict:
     """Use Gemini to classify email and extract lead data.
 
@@ -172,8 +253,8 @@ def classify_email(subject: str, body: str, sender: str, recipient: str) -> dict
     - irrelevant: Spam, newsletters, vendor emails
     """
     if not GEMINI_API_KEY:
-        logger.warning("GEMINI_API_KEY not set, skipping classification")
-        return {"classification": "irrelevant", "is_client_related": False}
+        logger.error("GEMINI_API_KEY not set - this is required for email classification")
+        raise RuntimeError("GEMINI_API_KEY environment variable is required but not set")
 
     sender_email = extract_email_address(sender)
     is_outgoing = is_meraki_email(sender_email)
@@ -248,7 +329,23 @@ Return ONLY valid JSON (no markdown, no explanation):
         model = genai.GenerativeModel(GEMINI_MODEL)
         response = model.generate_content(prompt)
         return parse_gemini_response(response.text)
+    except genai.types.BlockedPromptException as e:
+        logger.warning(f"Gemini blocked prompt (safety filter): {e}")
+        return {"classification": "irrelevant", "is_client_related": False}
+    except genai.types.StopCandidateException as e:
+        logger.warning(f"Gemini stopped generation: {e}")
+        return {"classification": "irrelevant", "is_client_related": False}
     except Exception as e:
+        error_str = str(e).lower()
+        # Check for rate limit errors
+        if 'rate' in error_str or '429' in error_str or 'quota' in error_str:
+            logger.error(f"Gemini rate limit/quota exceeded: {e}")
+            raise  # Re-raise so caller can implement backoff/retry
+        # Check for authentication errors
+        if 'api key' in error_str or 'auth' in error_str or '401' in error_str or '403' in error_str:
+            logger.error(f"Gemini authentication error: {e}")
+            raise RuntimeError(f"Gemini API authentication failed: {e}")
+        # Other errors - log and return safe default
         logger.error(f"Gemini classification failed: {e}")
         return {"classification": "irrelevant", "is_client_related": False}
 
@@ -266,6 +363,82 @@ def format_html_content(text: str) -> str:
     return escaped.replace("\n", "<br>\n")
 
 
+def format_initial_communication(data: dict, original_message: str, is_contact_form: bool = False) -> str:
+    """Format the initial Communication content with ALL extracted info.
+
+    This gives staff the complete context at a glance in the Lead Activity timeline.
+    Returns HTML-formatted content for ERPNext Communication.
+
+    Args:
+        data: Dictionary with extracted lead data (firstname, lastname, email, etc.)
+        original_message: The original email/form message body
+        is_contact_form: If True, formats as "Contact Form Submission" instead of "Email Inquiry"
+    """
+    if is_contact_form:
+        lines = ["--- Contact Form Submission ---"]
+    else:
+        lines = ["--- Email Inquiry ---"]
+
+    # Name
+    name_parts = []
+    if data.get('firstname'):
+        name_parts.append(data['firstname'])
+    if data.get('lastname'):
+        name_parts.append(data['lastname'])
+    if name_parts:
+        lines.append(f"Name: {' '.join(name_parts)}")
+
+    # Email
+    if data.get('email'):
+        lines.append(f"Email: {data['email']}")
+
+    # Phone
+    if data.get('phone'):
+        lines.append(f"Phone: {data['phone']}")
+
+    # Position/Relationship
+    if data.get('position'):
+        lines.append(f"Position: {data['position']}")
+
+    # Couple name
+    if data.get('coupleName'):
+        lines.append(f"Couple: {data['coupleName']}")
+
+    # Address/Location
+    if data.get('address'):
+        lines.append(f"Address: {data['address']}")
+
+    # Wedding date (raw text)
+    if data.get('weddingDate'):
+        lines.append(f"Wedding Date: {data['weddingDate']}")
+
+    # Wedding venue (raw text)
+    if data.get('weddingVenue'):
+        lines.append(f"Wedding Venue: {data['weddingVenue']}")
+
+    # Guest count (raw text)
+    if data.get('approximate'):
+        lines.append(f"Guest Count: {data['approximate']}")
+
+    # Budget (raw text)
+    if data.get('budget'):
+        lines.append(f"Budget: {data['budget']}")
+
+    # Source/Referral
+    if data.get('ref'):
+        lines.append(f"Source: {data['ref']}")
+
+    # Add the full message
+    message = data.get('moreDetails') or original_message
+    if message:
+        lines.append("")
+        lines.append("--- Message ---")
+        lines.append(message)
+
+    # Convert to HTML with proper line breaks
+    return format_html_content("\n".join(lines))
+
+
 def determine_sent_or_received(email_dict: dict) -> str:
     """Determine if email should be logged as Sent or Received.
 
@@ -278,9 +451,84 @@ def determine_sent_or_received(email_dict: dict) -> str:
     return "Sent" if is_meraki_email(sender_email) else "Received"
 
 
+def check_communication_exists(email: str, subject: str, timestamp: str = None) -> str | None:
+    """
+    Check if a Communication already exists for this email/subject/timestamp.
+    Returns the Communication name if found, None otherwise.
+    """
+    if not ERPNEXT_API_KEY or not ERPNEXT_API_SECRET:
+        logger.warning("ERPNext API keys not set, skipping duplicate check")
+        return None
+
+    headers = {
+        "Authorization": f"token {ERPNEXT_API_KEY}:{ERPNEXT_API_SECRET}",
+    }
+
+    try:
+        # First find the Lead by email
+        lead_resp = httpx.get(
+            f"{ERPNEXT_URL}/api/resource/Lead",
+            params={
+                "filters": json.dumps([["email_id", "=", email]]),
+                "fields": json.dumps(["name"]),
+                "limit_page_length": 1,
+            },
+            headers=headers,
+            timeout=30,
+        )
+
+        if lead_resp.status_code != 200 or not lead_resp.json().get("data"):
+            return None
+
+        lead_name = lead_resp.json()["data"][0]["name"]
+
+        # Check for existing communication
+        filters = [
+            ["reference_doctype", "=", "Lead"],
+            ["reference_name", "=", lead_name],
+            ["subject", "=", subject],
+        ]
+
+        if timestamp:
+            # Convert timestamp to ERPNext datetime format and match exactly
+            try:
+                from datetime import datetime as dt
+                parsed = dt.fromisoformat(timestamp.replace('Z', '+00:00'))
+                erpnext_ts = parsed.strftime('%Y-%m-%d %H:%M:%S')
+                filters.append(["communication_date", "=", erpnext_ts])
+            except Exception:
+                # Fallback to date-only match
+                filters.append(["communication_date", "like", f"{timestamp[:10]}%"])
+
+        comm_resp = httpx.get(
+            f"{ERPNEXT_URL}/api/resource/Communication",
+            params={
+                "filters": json.dumps(filters),
+                "fields": json.dumps(["name"]),
+                "limit_page_length": 1,
+            },
+            headers=headers,
+            timeout=30,
+        )
+
+        if comm_resp.status_code == 200 and comm_resp.json().get("data"):
+            return comm_resp.json()["data"][0]["name"]
+
+        return None
+    except Exception as e:
+        logger.error(f"Error checking for duplicate communication: {e}")
+        return None
+
+
 def call_conversation_webhook(email: str, content: str, sent_or_received: str,
                                subject: str = "", timestamp: str = None) -> bool:
     """Create a Communication record via the conversation webhook."""
+    # Check for duplicate before creating
+    existing = check_communication_exists(email, subject, timestamp)
+    if existing:
+        logger.info(f"Skipping duplicate communication: {existing}")
+        return True  # Return success since the communication already exists
+
     payload = {
         "email": email,
         "content": content,
@@ -304,4 +552,197 @@ def call_conversation_webhook(email: str, content: str, sent_or_received: str,
             return False
     except Exception as e:
         logger.error(f"Conversation webhook error: {e}")
+        return False
+
+
+# =============================================================================
+# Database Operations (consolidated from email_backfill.py, email_processor.py)
+# =============================================================================
+
+def mark_email_processed(conn, email_id: int, classification: str, data: dict):
+    """Mark an email as processed in the staging database.
+
+    Args:
+        conn: PostgreSQL connection
+        email_id: ID of the email in staged_emails table
+        classification: Classification result (new_lead, client_message, etc.)
+        data: Classification data dict to store as JSON
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE staged_emails
+            SET processed = TRUE,
+                processed_at = NOW(),
+                classification = %s,
+                classification_data = %s
+            WHERE id = %s
+        """, (classification, Json(data), email_id))
+        conn.commit()
+
+
+# =============================================================================
+# Lead/CRM Webhook Functions (consolidated from email_backfill.py, email_processor.py)
+# =============================================================================
+
+def search_lead_by_email(email: str) -> str | None:
+    """Search for a Lead in ERPNext by email address.
+
+    Args:
+        email: Email address to search for
+
+    Returns:
+        Lead name (e.g., 'CRM-LEAD-2026-00013') on success, None if not found.
+    """
+    if not ERPNEXT_API_KEY or not ERPNEXT_API_SECRET:
+        logger.warning("ERPNext API credentials not configured, cannot search for lead")
+        return None
+
+    try:
+        response = httpx.get(
+            f"{ERPNEXT_URL}/api/resource/Lead",
+            params={
+                "filters": json.dumps([["email_id", "=", email]]),
+                "fields": json.dumps(["name"]),
+                "limit_page_length": 1,
+            },
+            headers={
+                "Authorization": f"token {ERPNEXT_API_KEY}:{ERPNEXT_API_SECRET}",
+            },
+            timeout=30,
+        )
+        if response.status_code == 200:
+            data = response.json().get("data", [])
+            if data:
+                lead_name = data[0].get("name")
+                logger.info(f"Found existing lead by email search: {lead_name}")
+                return lead_name
+        return None
+    except Exception as e:
+        logger.error(f"Error searching for lead by email: {e}")
+        return None
+
+
+def call_lead_webhook(data: dict, timestamp: str = None, attachments: list[dict] = None) -> str | None:
+    """Create a new lead via the lead webhook.
+
+    Args:
+        data: Lead data dict with fields like firstname, email, etc.
+        timestamp: Optional ISO timestamp for historical backfill
+        attachments: Optional list of attachment dicts with 'filename' key
+
+    Returns:
+        Lead name (e.g., 'CRM-LEAD-2026-00013') on success, None on failure.
+    """
+    payload = {
+        "firstname": data.get("firstname") or "Unknown",
+        "email": data.get("email") or "",
+    }
+
+    if timestamp:
+        payload["timestamp"] = timestamp
+
+    optional_fields = [
+        "lastname", "phone", "address", "coupleName", "weddingVenue",
+        "approximate", "budget", "weddingDate", "position", "ref", "moreDetails"
+    ]
+    for field in optional_fields:
+        if data.get(field):
+            payload[field] = data[field]
+
+    payload["ref"] = payload.get("ref") or "email"
+
+    # Add attachment info to moreDetails
+    details = data.get("moreDetails") or ""
+    if attachments:
+        attachment_info = ", ".join([a['filename'] for a in attachments])
+        details = f"[From Email] {details}\n\nAttachments: {attachment_info}"
+    elif details:
+        details = f"[From Email] {details}"
+    if details:
+        payload["moreDetails"] = details
+
+    try:
+        url = f"{WEBHOOK_URL}/api/webhook/lead"
+        email = payload.get('email')
+        ts_info = f" @ {timestamp}" if timestamp else ""
+        logger.info(f"Creating lead via {url}: {payload.get('firstname')} <{email}>{ts_info}")
+
+        response = httpx.post(url, json=payload, timeout=30)
+        if response.status_code in (200, 201):
+            result = response.json()
+            lead_name = result.get('lead')
+
+            # Fallback: search by email if response parsing failed
+            if not lead_name and email:
+                logger.warning(f"Empty lead name in response, searching by email: {email}")
+                lead_name = search_lead_by_email(email)
+
+            if lead_name:
+                logger.info(f"Lead created/found: {lead_name}")
+                return lead_name
+            else:
+                logger.error(f"Failed to get lead name from response or search for {email}")
+                return None
+        else:
+            logger.error(f"Lead webhook failed: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Lead webhook error: {e}")
+        return None
+
+
+def call_crm_contact_webhook(data: dict, classification: str, timestamp: str = None) -> bool:
+    """Update CRM contact stage via the CRM webhook.
+
+    Args:
+        data: Data dict with email and message_summary
+        classification: Email classification (client_message, staff_message, etc.)
+        timestamp: Optional ISO timestamp for historical backfill
+
+    Returns:
+        True on success, False on failure.
+    """
+    email = data.get("email")
+    if not email:
+        logger.warning("No email address found, cannot update CRM contact")
+        return False
+
+    stage_mapping = {
+        "client_message": ("engaged", "client"),
+        "staff_message": ("engaged", "staff"),
+        "meeting_confirmed": ("meeting", "staff"),
+        "quote_sent": ("quoted", "staff"),
+    }
+
+    stage, message_type = stage_mapping.get(classification, ("engaged", "client"))
+
+    payload = {
+        "email": email,
+        "stage": stage,
+        "payload": {
+            "message": data.get("message_summary") or "(Email content)",
+            "message_type": message_type,
+        }
+    }
+
+    if timestamp:
+        payload["payload"]["timestamp"] = timestamp
+
+    if classification == "meeting_confirmed" and data.get("meeting_date"):
+        payload["payload"]["meeting_date"] = data["meeting_date"]
+
+    try:
+        url = f"{WEBHOOK_URL}/api/crm/contact"
+        ts_info = f" @ {timestamp}" if timestamp else ""
+        logger.info(f"Updating CRM contact via {url}: {email} -> stage={stage}{ts_info}")
+
+        response = httpx.put(url, json=payload, timeout=30)
+        if response.status_code in (200, 201):
+            logger.info(f"CRM contact updated successfully")
+            return True
+        else:
+            logger.error(f"CRM webhook failed: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"CRM webhook error: {e}")
         return False

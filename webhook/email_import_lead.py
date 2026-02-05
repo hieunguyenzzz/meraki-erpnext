@@ -14,7 +14,6 @@ Usage:
 
 import argparse
 import logging
-import os
 
 import httpx
 
@@ -22,13 +21,13 @@ from email_utils import (
     get_db_connection,
     extract_email_address,
     is_meraki_email,
-    parse_gemini_response,
     classify_email,
     get_body_from_dict,
     format_html_content,
+    format_initial_communication,
     determine_sent_or_received,
     call_conversation_webhook,
-    MERAKI_DOMAINS,
+    extract_new_message,
     WEBHOOK_URL,
 )
 
@@ -192,81 +191,6 @@ def is_higher_stage(new_stage: str, current_stage: str) -> bool:
 
 
 # =============================================================================
-# Communication Content Formatting
-# =============================================================================
-
-def format_initial_communication(data: dict, original_message: str, is_contact_form: bool = False) -> str:
-    """Format the initial Communication content with ALL extracted info.
-
-    This gives staff the complete context at a glance in the Lead Activity timeline.
-    Returns HTML-formatted content for ERPNext Communication.
-    """
-    if is_contact_form:
-        lines = ["--- Contact Form Submission ---"]
-    else:
-        lines = ["--- Email Inquiry ---"]
-
-    # Name
-    name_parts = []
-    if data.get('firstname'):
-        name_parts.append(data['firstname'])
-    if data.get('lastname'):
-        name_parts.append(data['lastname'])
-    if name_parts:
-        lines.append(f"Name: {' '.join(name_parts)}")
-
-    # Email
-    if data.get('email'):
-        lines.append(f"Email: {data['email']}")
-
-    # Phone
-    if data.get('phone'):
-        lines.append(f"Phone: {data['phone']}")
-
-    # Position/Relationship
-    if data.get('position'):
-        lines.append(f"Position: {data['position']}")
-
-    # Couple name
-    if data.get('coupleName'):
-        lines.append(f"Couple: {data['coupleName']}")
-
-    # Address/Location
-    if data.get('address'):
-        lines.append(f"Address: {data['address']}")
-
-    # Wedding date (raw text)
-    if data.get('weddingDate'):
-        lines.append(f"Wedding Date: {data['weddingDate']}")
-
-    # Wedding venue (raw text)
-    if data.get('weddingVenue'):
-        lines.append(f"Wedding Venue: {data['weddingVenue']}")
-
-    # Guest count (raw text)
-    if data.get('approximate'):
-        lines.append(f"Guest Count: {data['approximate']}")
-
-    # Budget (raw text)
-    if data.get('budget'):
-        lines.append(f"Budget: {data['budget']}")
-
-    # Source/Referral
-    if data.get('ref'):
-        lines.append(f"Source: {data['ref']}")
-
-    # Add the full message
-    message = data.get('moreDetails') or original_message
-    if message:
-        lines.append("")
-        lines.append("--- Message ---")
-        lines.append(message)
-
-    # Convert to HTML with proper line breaks
-    return format_html_content("\n".join(lines))
-
-
-# =============================================================================
 # Main Import Function
 # =============================================================================
 
@@ -386,8 +310,9 @@ def import_lead_emails(target_email: str, dry_run: bool = False):
         message_type = get_message_type(classification)
 
         # Use actual email body for Communication content (not Gemini summary)
-        # Truncate if too long and format as HTML
-        formatted_content = format_html_content(email_body[:3000] if email_body else (email.get('subject') or ''))
+        # Extract only new message, stripping quoted replies
+        extracted_body = extract_new_message(email_body)
+        formatted_content = format_html_content(extracted_body[:3000] if extracted_body else (email.get('subject') or ''))
 
         # Gemini summary still used for stage transition messages
         stage_message = result.get('message_summary') or email.get('subject') or ''

@@ -17,13 +17,9 @@ Usage:
 
 import argparse
 import logging
-import os
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
-
-import httpx
-import psycopg2
-from psycopg2.extras import Json
 
 from email_utils import (
     get_db_connection,
@@ -32,8 +28,15 @@ from email_utils import (
     classify_email,
     get_body_from_dict,
     format_html_content,
+    format_initial_communication,
     determine_sent_or_received,
     call_conversation_webhook,
+    extract_new_message,
+    # Consolidated functions
+    mark_email_processed,
+    search_lead_by_email,
+    call_lead_webhook,
+    call_crm_contact_webhook,
 )
 
 # Configure logging
@@ -43,15 +46,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'http://webhook:8000')
-
 # System email that sends auto-replies (indicates first contact)
 SYSTEM_EMAIL = 'contact@merakiweddingplanner.com'
-
-# ERPNext API credentials (from webhook service)
-ERPNEXT_URL = os.environ.get('ERPNEXT_URL', 'http://frontend:8080')
-ERPNEXT_API_KEY = os.environ.get('ERPNEXT_API_KEY', '')
-ERPNEXT_API_SECRET = os.environ.get('ERPNEXT_API_SECRET', '')
 
 
 # =============================================================================
@@ -76,21 +72,13 @@ def get_emails_for_backfill(conn, days: int) -> list[dict]:
         """, (since_date,))
 
         columns = [desc[0] for desc in cur.description]
-        return [dict(zip(columns, row)) for row in cur.fetchall()]
-
-
-def mark_email_processed(conn, email_id: int, classification: str, data: dict):
-    """Mark an email as processed in the staging database."""
-    with conn.cursor() as cur:
-        cur.execute("""
-            UPDATE staged_emails
-            SET processed = TRUE,
-                processed_at = NOW(),
-                classification = %s,
-                classification_data = %s
-            WHERE id = %s
-        """, (classification, Json(data), email_id))
-        conn.commit()
+        emails = []
+        for row in cur.fetchall():
+            email_dict = dict(zip(columns, row))
+            # Contact form emails have subject "Meraki Contact Form"
+            email_dict['is_contact_form'] = (email_dict.get('subject') or '').strip() == 'Meraki Contact Form'
+            emails.append(email_dict)
+        return emails
 
 
 def reset_processed_emails(conn, days: int):
@@ -117,8 +105,34 @@ def reset_processed_emails(conn, days: int):
 # Email Grouping Functions
 # =============================================================================
 
-def get_external_email(sender: str, recipient: str) -> str | None:
-    """Get the external (non-Meraki) email address from sender/recipient."""
+def extract_email_from_contact_form(body: str) -> str | None:
+    """Extract client email from contact form body.
+
+    Contact form format includes: email: client@example.com
+    """
+    if not body:
+        return None
+
+    match = re.search(r'email:\s*([^\s]+@[^\s]+)', body, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().lower()
+    return None
+
+
+def get_external_email(email_dict: dict) -> str | None:
+    """Get the external (non-Meraki) email address.
+
+    For contact forms, extract email from body since sender/recipient are both Meraki.
+    For regular emails, extract from sender or recipient headers.
+    """
+    # Check if this is a contact form
+    if email_dict.get('is_contact_form'):
+        body = get_body_from_dict(email_dict)
+        return extract_email_from_contact_form(body)
+
+    sender = email_dict.get('sender') or ''
+    recipient = email_dict.get('recipient') or ''
+
     sender_email = extract_email_address(sender)
     recipient_email = extract_email_address(recipient)
 
@@ -137,9 +151,7 @@ def group_emails_by_contact(emails: list[dict]) -> dict[str, list[dict]]:
     groups = defaultdict(list)
 
     for email in emails:
-        sender = email.get('sender') or ''
-        recipient = email.get('recipient') or ''
-        external_email = get_external_email(sender, recipient)
+        external_email = get_external_email(email)  # Pass full email dict
 
         if external_email:
             email['external_email'] = external_email
@@ -168,154 +180,6 @@ def is_first_contact_email(classification: str, sender: str) -> bool:
         return True
 
     return False
-
-
-# =============================================================================
-# ERPNext API Functions
-# =============================================================================
-
-def search_lead_by_email(email: str) -> str | None:
-    """
-    Search for a Lead in ERPNext by email address.
-    Returns the lead name (e.g., 'CRM-LEAD-2026-00013') on success, None if not found.
-    """
-    if not ERPNEXT_API_KEY or not ERPNEXT_API_SECRET:
-        logger.warning("ERPNext API credentials not configured, cannot search for lead")
-        return None
-
-    try:
-        import json
-        response = httpx.get(
-            f"{ERPNEXT_URL}/api/resource/Lead",
-            params={
-                "filters": json.dumps([["email_id", "=", email]]),
-                "fields": json.dumps(["name"]),
-                "limit_page_length": 1,
-            },
-            headers={
-                "Authorization": f"token {ERPNEXT_API_KEY}:{ERPNEXT_API_SECRET}",
-            },
-            timeout=30,
-        )
-        if response.status_code == 200:
-            data = response.json().get("data", [])
-            if data:
-                lead_name = data[0].get("name")
-                logger.info(f"Found existing lead by email search: {lead_name}")
-                return lead_name
-        return None
-    except Exception as e:
-        logger.error(f"Error searching for lead by email: {e}")
-        return None
-
-
-# =============================================================================
-# Webhook Functions
-# =============================================================================
-
-def call_lead_webhook(data: dict, timestamp: str, attachments: list[dict] = None) -> str | None:
-    """
-    Create a new lead via the lead webhook with historical timestamp.
-    Returns the lead name (e.g., 'CRM-LEAD-2026-00013') on success, None on failure.
-    """
-    payload = {
-        "firstname": data.get("firstname") or "Unknown",
-        "email": data.get("email") or "",
-        "timestamp": timestamp,
-    }
-
-    optional_fields = [
-        "lastname", "phone", "address", "coupleName", "weddingVenue",
-        "approximate", "budget", "weddingDate", "position", "ref", "moreDetails"
-    ]
-    for field in optional_fields:
-        if data.get(field):
-            payload[field] = data[field]
-
-    payload["ref"] = payload.get("ref") or "email"
-
-    # Add attachment info to moreDetails
-    details = data.get("moreDetails") or ""
-    if attachments:
-        attachment_info = ", ".join([a['filename'] for a in attachments])
-        details = f"[From Email] {details}\n\nAttachments: {attachment_info}"
-    elif details:
-        details = f"[From Email] {details}"
-    if details:
-        payload["moreDetails"] = details
-
-    try:
-        url = f"{WEBHOOK_URL}/api/webhook/lead"
-        email = payload.get('email')
-        logger.info(f"Creating lead via {url}: {payload.get('firstname')} <{email}> @ {timestamp}")
-
-        response = httpx.post(url, json=payload, timeout=30)
-        if response.status_code in (200, 201):
-            result = response.json()
-            lead_name = result.get('lead')
-
-            # Fallback: search by email if response parsing failed
-            if not lead_name and email:
-                logger.warning(f"Empty lead name in response, searching by email: {email}")
-                lead_name = search_lead_by_email(email)
-
-            if lead_name:
-                logger.info(f"Lead created/found: {lead_name}")
-                return lead_name
-            else:
-                logger.error(f"Failed to get lead name from response or search for {email}")
-                return None
-        else:
-            logger.error(f"Lead webhook failed: {response.status_code} - {response.text}")
-            return None
-    except Exception as e:
-        logger.error(f"Lead webhook error: {e}")
-        return None
-
-
-def call_crm_contact_webhook(data: dict, classification: str, timestamp: str) -> bool:
-    """Update CRM contact stage via the CRM webhook with historical timestamp."""
-    email = data.get("email")
-    if not email:
-        logger.warning("No email address found, cannot update CRM contact")
-        return False
-
-    stage_mapping = {
-        "client_message": ("engaged", "client"),
-        "staff_message": ("engaged", "staff"),
-        "meeting_confirmed": ("meeting", "staff"),
-        "quote_sent": ("quoted", "staff"),
-    }
-
-    stage, message_type = stage_mapping.get(classification, ("engaged", "client"))
-
-    payload = {
-        "email": email,
-        "stage": stage,
-        "payload": {
-            "message": data.get("message_summary") or "(Email content)",
-            "message_type": message_type,
-            "timestamp": timestamp,
-        }
-    }
-
-    if classification == "meeting_confirmed" and data.get("meeting_date"):
-        payload["payload"]["meeting_date"] = data["meeting_date"]
-
-    try:
-        url = f"{WEBHOOK_URL}/api/crm/contact"
-        logger.info(f"Updating CRM contact via {url}: {email} -> stage={stage} @ {timestamp}")
-
-        response = httpx.put(url, json=payload, timeout=30)
-        if response.status_code in (200, 201):
-            logger.info(f"CRM contact updated successfully")
-            return True
-        else:
-            logger.error(f"CRM webhook failed: {response.status_code} - {response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"CRM webhook error: {e}")
-        return False
 
 
 # =============================================================================
@@ -410,17 +274,37 @@ def run_backfill(days: int = 90, dry_run: bool = False, reset: bool = False):
 
                 # Track for post-processing timestamp update
                 try:
+                    from zoneinfo import ZoneInfo
                     dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    mysql_ts = dt.strftime('%Y-%m-%d %H:%M:%S')
+                    # Convert to Vietnam timezone (ICT, UTC+7)
+                    vietnam_tz = ZoneInfo('Asia/Ho_Chi_Minh')
+                    dt_vietnam = dt.astimezone(vietnam_tz)
+                    mysql_ts = dt_vietnam.strftime('%Y-%m-%d %H:%M:%S')
                     lead_timestamps.append((lead_name, mysql_ts))
                 except Exception as e:
                     logger.warning(f"  Could not parse timestamp {timestamp}: {e}")
 
                 # Create Communication record for the first email
+                # Use format_initial_communication for contact forms to show structured data
+                if oldest_email.get('is_contact_form'):
+                    content = format_initial_communication(
+                        oldest_result,
+                        body[:3000] if body else '',
+                        is_contact_form=True
+                    )
+                else:
+                    content = format_html_content(body[:3000] if body else '')
+
+                # For contact forms, always mark as Received (client inquiry)
+                if oldest_email.get('is_contact_form'):
+                    first_sent_or_received = 'Received'
+                else:
+                    first_sent_or_received = determine_sent_or_received(oldest_email)
+
                 call_conversation_webhook(
                     email=contact_email,
-                    content=format_html_content(body[:3000] if body else ''),
-                    sent_or_received=determine_sent_or_received(oldest_email),
+                    content=content,
+                    sent_or_received=first_sent_or_received,
                     subject=oldest_email.get('subject') or '',
                     timestamp=timestamp
                 )
@@ -465,9 +349,11 @@ def run_backfill(days: int = 90, dry_run: bool = False, reset: bool = False):
                     call_crm_contact_webhook(result, classification, timestamp)
 
                     # Create Communication record for follow-up email
+                    # Extract only new message, stripping quoted replies
+                    extracted_body = extract_new_message(body)
                     call_conversation_webhook(
                         email=contact_email,
-                        content=format_html_content(body[:3000] if body else ''),
+                        content=format_html_content(extracted_body[:3000] if extracted_body else ''),
                         sent_or_received=determine_sent_or_received(email_data),
                         subject=email_data.get('subject') or '',
                         timestamp=timestamp
