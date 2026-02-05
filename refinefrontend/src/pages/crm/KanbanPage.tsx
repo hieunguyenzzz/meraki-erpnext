@@ -7,6 +7,8 @@ import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, getDocName, t
 import { extractErrorMessage } from "@/lib/errors";
 import { Skeleton } from "@/components/ui/skeleton";
 
+// Simplified Lead-only CRM: All stages use Lead doctype (no Opportunity conversion)
+
 export default function KanbanPage() {
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
@@ -102,38 +104,6 @@ export default function KanbanPage() {
   }, [leadsResult, oppsResult, commsResult, meetingEvents]);
 
   const isLoading = leadsQuery?.isLoading || oppsQuery?.isLoading || commsQuery?.isLoading;
-
-  // Lead→Opportunity conversion happens when moving from Meeting to Quoted
-  const conversionStatusMap: Partial<Record<ColumnKey, string>> = {
-    quoted: "Quotation",
-  };
-
-  const handleConvertLead = useCallback(
-    async (item: KanbanItem, targetColumnKey: ColumnKey) => {
-      const oppStatus = conversionStatusMap[targetColumnKey];
-      if (!oppStatus) {
-        throw new Error(`Cannot convert Lead to column "${targetColumnKey}"`);
-      }
-      try {
-        await customMutation({
-          url: "/api/resource/Opportunity",
-          method: "post",
-          values: {
-            opportunity_from: "Lead",
-            party_name: getDocName(item),
-            status: oppStatus,
-          },
-        });
-        invalidate({ resource: "Lead", invalidates: ["list"] });
-        invalidate({ resource: "Opportunity", invalidates: ["list"] });
-      } catch (err) {
-        throw new Error(
-          extractErrorMessage(err, `Failed to convert ${item.displayName} to Opportunity`)
-        );
-      }
-    },
-    [customMutation, invalidate]
-  );
 
   const handleUpdateStatus = useCallback(
     async (item: KanbanItem, newStatus: string, targetColumn: string) => {
@@ -263,15 +233,15 @@ export default function KanbanPage() {
         </>
       ) : (
         <>
-          <KanbanBoard items={items} onUpdateStatus={handleUpdateStatus} onConvertLead={handleConvertLead} />
+          <KanbanBoard items={items} onUpdateStatus={handleUpdateStatus} />
           <div className="hidden md:block mt-6 text-xs text-muted-foreground">
             <p className="mb-2 font-medium text-foreground uppercase tracking-wide">Stage Guide</p>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
-              <div><span className="font-medium text-foreground">New</span> — Fresh inquiry (Lead)</div>
-              <div><span className="font-medium text-foreground">Engaged</span> — In conversation (Lead)</div>
-              <div><span className="font-medium text-foreground">Meeting</span> — Meeting scheduled (Lead)</div>
-              <div><span className="font-medium text-foreground">Quoted</span> — Quote sent (Opportunity)</div>
-              <div><span className="font-medium text-foreground">Won</span> — Deal closed (Opportunity)</div>
+              <div><span className="font-medium text-foreground">New</span> — Fresh inquiry</div>
+              <div><span className="font-medium text-foreground">Engaged</span> — In conversation</div>
+              <div><span className="font-medium text-foreground">Meeting</span> — Meeting scheduled</div>
+              <div><span className="font-medium text-foreground">Quoted</span> — Quote sent</div>
+              <div><span className="font-medium text-foreground">Won</span> — Deal closed</div>
               <div><span className="font-medium text-foreground">Lost</span> — Did not proceed</div>
             </div>
           </div>

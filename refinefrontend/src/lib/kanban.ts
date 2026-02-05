@@ -32,6 +32,7 @@ export interface ColumnDef {
   collapsedByDefault?: boolean;
 }
 
+// Simplified Lead-only CRM: All stages use Lead doctype (no Opportunity conversion)
 export const COLUMNS: ColumnDef[] = [
   {
     key: "new",
@@ -64,18 +65,18 @@ export const COLUMNS: ColumnDef[] = [
     key: "quoted",
     label: "Quoted",
     color: "indigo",
-    leadStatuses: [],
-    oppStatuses: ["Open", "Quotation"],
-    leadTarget: "",
+    leadStatuses: ["Quotation"],
+    oppStatuses: ["Open", "Quotation"],  // Keep oppStatuses for existing Opportunities
+    leadTarget: "Quotation",
     oppTarget: "Quotation",
   },
   {
     key: "won",
     label: "Won",
     color: "green",
-    leadStatuses: [],
-    oppStatuses: ["Converted"],
-    leadTarget: "",
+    leadStatuses: ["Converted"],
+    oppStatuses: ["Converted"],  // Keep oppStatuses for existing Opportunities
+    leadTarget: "Converted",
     oppTarget: "Converted",
     collapsible: true,
     collapsedByDefault: true,
@@ -85,7 +86,7 @@ export const COLUMNS: ColumnDef[] = [
     label: "Lost",
     color: "rose",
     leadStatuses: ["Do Not Contact", "Lost Quotation"],
-    oppStatuses: ["Lost", "Closed"],
+    oppStatuses: ["Lost", "Closed"],  // Keep oppStatuses for existing Opportunities
     leadTarget: "Do Not Contact",
     oppTarget: "Lost",
     collapsible: true,
@@ -106,8 +107,8 @@ export function getTargetStatus(col: ColumnDef, doctype: "Lead" | "Opportunity")
   return doctype === "Lead" ? col.leadTarget : col.oppTarget;
 }
 
-/** Lead statuses that indicate conversion to Opportunity — hide even if no Opportunity doc exists */
-const HIDDEN_LEAD_STATUSES = new Set(["Converted", "Opportunity", "Quotation"]);
+/** Lead statuses that should be hidden from Kanban (none - all Leads are now shown) */
+const HIDDEN_LEAD_STATUSES = new Set<string>();
 
 export function buildKanbanItems(
   leads: any[],
@@ -149,12 +150,13 @@ export function buildKanbanItems(
   return items;
 }
 
-/** Statuses where ERPNext won't allow backward transitions */
-const LOCKED_LEAD_STATUSES = new Set(["Opportunity", "Converted"]);
+/** Statuses where items should not be moved (existing Opportunities only) */
 const LOCKED_OPP_STATUSES = new Set(["Converted", "Lost", "Closed"]);
 
 export function isItemLocked(item: KanbanItem): boolean {
-  if (item.doctype === "Lead") return LOCKED_LEAD_STATUSES.has(item.status);
+  // Leads can move through all stages (simplified Lead-only CRM)
+  if (item.doctype === "Lead") return false;
+  // Lock existing Opportunities in terminal states
   return LOCKED_OPP_STATUSES.has(item.status);
 }
 

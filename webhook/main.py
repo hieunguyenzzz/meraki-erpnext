@@ -16,30 +16,26 @@ from fastapi.templating import Jinja2Templates
 app = FastAPI(title="Meraki Lead Webhook")
 
 # CRM Stage Configuration
-# Maps webhook stage names to ERPNext doctype and status
+# Maps webhook stage names to ERPNext Lead status
+# Simplified: All stages use Lead doctype (no Opportunity conversion)
 STAGE_CONFIG = {
-    "new": {"doctype": "Lead", "status": "Open"},
-    "engaged": {"doctype": "Lead", "status": "Replied"},
-    "meeting": {"doctype": "Lead", "status": "Interested"},
-    "quoted": {"doctype": "Opportunity", "status": "Quotation"},
-    "won": {"doctype": "Opportunity", "status": "Converted"},
-    "lost": {"doctype": None, "lead_status": "Do Not Contact", "opp_status": "Lost"},
+    "new": {"status": "Open"},
+    "engaged": {"status": "Replied"},
+    "meeting": {"status": "Interested"},
+    "quoted": {"status": "Quotation"},
+    "won": {"status": "Converted"},
+    "lost": {"status": "Do Not Contact"},
 }
 
-# Reverse mapping: ERPNext status → stage name (for logging transitions)
+# Reverse mapping: ERPNext Lead status → stage name (for logging transitions)
 LEAD_STATUS_TO_STAGE = {
     "Lead": "new",
     "Open": "new",
     "Replied": "engaged",
     "Interested": "meeting",
-    "Do Not Contact": "lost",
-}
-
-OPP_STATUS_TO_STAGE = {
-    "Open": "quoted",
     "Quotation": "quoted",
     "Converted": "won",
-    "Lost": "lost",
+    "Do Not Contact": "lost",
 }
 templates = Jinja2Templates(directory="templates")
 
@@ -48,8 +44,13 @@ ERPNEXT_URL = os.environ.get("ERPNEXT_URL", "http://frontend:8080")
 ERPNEXT_API_KEY = os.environ.get("ERPNEXT_API_KEY", "")
 ERPNEXT_API_SECRET = os.environ.get("ERPNEXT_API_SECRET", "")
 
-ANALYTICS_USER = os.environ.get("ANALYTICS_USER", "meraki")
-ANALYTICS_PASS = os.environ.get("ANALYTICS_PASS", "meraki123")
+# Analytics dashboard credentials - must be set via environment variables
+ANALYTICS_USER = os.environ.get("ANALYTICS_USER")
+ANALYTICS_PASS = os.environ.get("ANALYTICS_PASS")
+
+if not ANALYTICS_USER or not ANALYTICS_PASS:
+    import logging
+    logging.warning("ANALYTICS_USER/ANALYTICS_PASS not set - analytics dashboard will be inaccessible")
 
 VALID_LEAD_SOURCES = {"google", "facebook", "instagram", "referral", "other"}
 
@@ -75,6 +76,12 @@ security = HTTPBasic()
 
 
 def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
+    """Verify HTTP Basic Auth credentials for analytics dashboard."""
+    if not ANALYTICS_USER or not ANALYTICS_PASS:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Analytics dashboard not configured",
+        )
     correct_user = secrets.compare_digest(credentials.username.encode(), ANALYTICS_USER.encode())
     correct_pass = secrets.compare_digest(credentials.password.encode(), ANALYTICS_PASS.encode())
     if not (correct_user and correct_pass):
@@ -178,7 +185,7 @@ async def create_lead(request: Request):
         body = await request.json()
     except Exception:
         log_call(False, None, "Invalid JSON body", {}, None, ip)
-        return {"success": False, "error": "Invalid JSON body"}
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     firstname = (body.get("firstname") or "").strip()
     lastname = (body.get("lastname") or "").strip()
@@ -186,11 +193,16 @@ async def create_lead(request: Request):
 
     if not email:
         log_call(False, None, "Missing required field: email", body, None, ip)
-        return {"success": False, "error": "Missing required field: email"}
+        raise HTTPException(status_code=400, detail="Missing required field: email")
 
     if not firstname:
         log_call(False, None, "Missing required field: firstname", body, None, ip)
-        return {"success": False, "error": "Missing required field: firstname"}
+        raise HTTPException(status_code=400, detail="Missing required field: firstname")
+
+    # Raw values for display fidelity
+    budget_raw = (body.get("budget") or "").strip()
+    guest_count_raw = (body.get("approximate") or "").strip()
+    wedding_date_raw = (body.get("weddingDate") or "").strip()
 
     lead_data = {
         "doctype": "Lead",
@@ -203,11 +215,16 @@ async def create_lead(request: Request):
         "status": "Lead",
         "custom_couple_name": (body.get("coupleName") or "").strip() or None,
         "custom_wedding_venue": (body.get("weddingVenue") or "").strip() or None,
-        "custom_guest_count": parse_guest_count(body.get("approximate", "")),
-        "custom_estimated_budget": parse_budget(body.get("budget", "")),
+        # Parsed values (for filtering/sorting)
+        "custom_guest_count": parse_guest_count(guest_count_raw),
+        "custom_estimated_budget": parse_budget(budget_raw),
+        # Raw values (for display)
+        "custom_budget_raw": budget_raw or None,
+        "custom_guest_count_raw": guest_count_raw or None,
+        "custom_wedding_date_raw": wedding_date_raw or None,
     }
 
-    wedding_date = parse_date(body.get("weddingDate", ""))
+    wedding_date = parse_date(wedding_date_raw)
     if wedding_date:
         lead_data["custom_wedding_date"] = wedding_date
 
@@ -238,7 +255,7 @@ async def create_lead(request: Request):
             )
     except httpx.RequestError as e:
         log_call(False, None, f"ERPNext connection error: {e}", body, None, ip)
-        return {"success": False, "error": f"ERPNext connection error: {e}"}
+        raise HTTPException(status_code=502, detail=f"ERPNext connection error: {e}")
 
     if resp.status_code in (200, 201):
         result = resp.json()
@@ -247,7 +264,7 @@ async def create_lead(request: Request):
         # Validate lead_name is not empty
         if not lead_name:
             log_call(False, None, "ERPNext returned empty lead name", body, resp.status_code, ip)
-            return {"success": False, "error": "ERPNext returned empty lead name"}
+            raise HTTPException(status_code=500, detail="ERPNext returned empty lead name")
 
         # Handle historical timestamp for backfill
         timestamp = body.get("timestamp")
@@ -265,7 +282,7 @@ async def create_lead(request: Request):
     else:
         error_text = resp.text[:500]
         log_call(False, None, error_text, body, resp.status_code, ip)
-        return {"success": False, "error": error_text}
+        raise HTTPException(status_code=resp.status_code, detail=error_text)
 
 
 @app.post("/api/webhook/conversation")
@@ -275,7 +292,7 @@ async def create_conversation(request: Request):
         body = await request.json()
     except Exception:
         log_call(False, None, "Invalid JSON body", {}, None, ip)
-        return {"success": False, "error": "Invalid JSON body"}
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     email = (body.get("email") or "").strip()
     content = (body.get("content") or "").strip()
@@ -283,13 +300,13 @@ async def create_conversation(request: Request):
 
     if not email:
         log_call(False, None, "Missing required field: email", body, None, ip)
-        return {"success": False, "error": "Missing required field: email"}
+        raise HTTPException(status_code=400, detail="Missing required field: email")
     if not content:
         log_call(False, None, "Missing required field: content", body, None, ip)
-        return {"success": False, "error": "Missing required field: content"}
+        raise HTTPException(status_code=400, detail="Missing required field: content")
     if sent_or_received not in ("Sent", "Received"):
         log_call(False, None, "sent_or_received must be 'Sent' or 'Received'", body, None, ip)
-        return {"success": False, "error": "sent_or_received must be 'Sent' or 'Received'"}
+        raise HTTPException(status_code=400, detail="sent_or_received must be 'Sent' or 'Received'")
 
     headers = {
         "Authorization": f"token {ERPNEXT_API_KEY}:{ERPNEXT_API_SECRET}",
@@ -311,7 +328,7 @@ async def create_conversation(request: Request):
 
         if lead_resp.status_code != 200 or not lead_resp.json().get("data"):
             log_call(False, None, f"No Lead found with email: {email}", body, lead_resp.status_code, ip)
-            return {"success": False, "error": f"No Lead found with email: {email}"}
+            raise HTTPException(status_code=404, detail=f"No Lead found with email: {email}")
 
         lead_name = lead_resp.json()["data"][0]["name"]
 
@@ -335,8 +352,44 @@ async def create_conversation(request: Request):
             attached_doctype = "Opportunity"
             attached_name = opp_resp.json()["data"][0]["name"]
 
-        # 3. Create Communication
+        # 3. Check for duplicate Communication
         timestamp = body.get("timestamp")  # Optional: ISO datetime for historical records
+        subject = body.get("subject", "")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Build duplicate check filters
+            dup_filters = [
+                ["reference_doctype", "=", attached_doctype],
+                ["reference_name", "=", attached_name],
+                ["subject", "=", subject],
+            ]
+
+            # If timestamp provided, also match communication_date
+            if timestamp:
+                erpnext_ts = to_erpnext_datetime(timestamp)
+                dup_filters.append(["communication_date", "=", erpnext_ts])
+
+            dup_check = await client.get(
+                f"{ERPNEXT_URL}/api/resource/Communication",
+                params={
+                    "filters": json.dumps(dup_filters),
+                    "fields": json.dumps(["name"]),
+                    "limit_page_length": 1,
+                },
+                headers=headers,
+            )
+
+            if dup_check.status_code == 200 and dup_check.json().get("data"):
+                existing = dup_check.json()["data"][0]["name"]
+                log_call(True, existing, "Duplicate prevented - communication already exists", body, 200, ip)
+                return {
+                    "success": True,
+                    "communication": existing,
+                    "duplicate": True,
+                    "message": "Communication already exists",
+                }
+
+        # 4. Create Communication
 
         comm_data = {
             "doctype": "Communication",
@@ -379,11 +432,11 @@ async def create_conversation(request: Request):
             else:
                 error_text = comm_resp.text[:500]
                 log_call(False, None, error_text, body, comm_resp.status_code, ip)
-                return {"success": False, "error": error_text}
+                raise HTTPException(status_code=comm_resp.status_code, detail=error_text)
 
     except httpx.RequestError as e:
         log_call(False, None, f"ERPNext connection error: {e}", body, None, ip)
-        return {"success": False, "error": f"ERPNext connection error: {e}"}
+        raise HTTPException(status_code=502, detail=f"ERPNext connection error: {e}")
 
 
 @app.get("/analytics", response_class=HTMLResponse)
@@ -441,32 +494,20 @@ async def find_lead_by_email(client: httpx.AsyncClient, email: str) -> dict | No
     return None
 
 
-async def find_opportunity_for_lead(client: httpx.AsyncClient, lead_name: str) -> dict | None:
-    """Find Opportunity linked to a Lead."""
-    resp = await client.get(
-        f"{ERPNEXT_URL}/api/resource/Opportunity",
-        params={
-            "filters": json.dumps([["party_name", "=", lead_name], ["opportunity_from", "=", "Lead"]]),
-            "fields": json.dumps(["name", "status"]),
-            "limit_page_length": 1,
-            "order_by": "creation desc",
-        },
-        headers=get_erpnext_headers(),
-    )
-    if resp.status_code == 200 and resp.json().get("data"):
-        return resp.json()["data"][0]
-    return None
-
-
 def to_erpnext_datetime(iso_timestamp: str) -> str:
-    """Convert ISO timestamp to ERPNext datetime format.
+    """Convert ISO timestamp to ERPNext datetime format in Vietnam timezone.
 
     ERPNext expects 'YYYY-MM-DD HH:MM:SS' without timezone.
     Input can be ISO format like '2026-02-01T08:13:31+00:00'.
+    Converts to Vietnam timezone (UTC+7) before stripping timezone info.
     """
+    from zoneinfo import ZoneInfo
     try:
         dt = datetime.fromisoformat(iso_timestamp.replace('Z', '+00:00'))
-        return dt.strftime('%Y-%m-%d %H:%M:%S')
+        # Convert to Vietnam timezone (ICT, UTC+7)
+        vietnam_tz = ZoneInfo('Asia/Ho_Chi_Minh')
+        dt_vietnam = dt.astimezone(vietnam_tz)
+        return dt_vietnam.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
         return iso_timestamp  # Return as-is if parsing fails
 
@@ -484,22 +525,6 @@ async def set_value(client: httpx.AsyncClient, doctype: str, name: str, fieldnam
         headers=get_erpnext_headers(),
     )
     return resp.json()
-
-
-async def create_opportunity_from_lead(client: httpx.AsyncClient, lead_name: str, status: str) -> dict:
-    """Create Opportunity from Lead (same as frontend)."""
-    resp = await client.post(
-        f"{ERPNEXT_URL}/api/resource/Opportunity",
-        json={
-            "opportunity_from": "Lead",
-            "party_name": lead_name,
-            "status": status,
-        },
-        headers=get_erpnext_headers(),
-    )
-    if resp.status_code in (200, 201):
-        return resp.json().get("data", {})
-    raise Exception(f"Failed to create Opportunity: {resp.text[:500]}")
 
 
 async def create_meeting_event(client: httpx.AsyncClient, lead_name: str, display_name: str, meeting_date: str) -> dict:
@@ -559,9 +584,10 @@ async def create_communication(
         "reference_name": name,
     }
 
-    # Set communication_date for historical records
+    # Set communication_date for historical records (convert to ERPNext format)
     if timestamp:
-        comm_data["communication_date"] = timestamp
+        erpnext_ts = to_erpnext_datetime(timestamp)
+        comm_data["communication_date"] = erpnext_ts
 
     resp = await client.post(
         f"{ERPNEXT_URL}/api/resource/Communication",
@@ -572,7 +598,8 @@ async def create_communication(
         result = resp.json().get("data", {})
         # Update creation field for historical timestamp display
         if timestamp and result.get("name"):
-            await set_value(client, "Communication", result["name"], "creation", timestamp)
+            erpnext_ts = to_erpnext_datetime(timestamp)
+            await set_value(client, "Communication", result["name"], "creation", erpnext_ts)
         return result
     raise Exception(f"Failed to create Communication: {resp.text[:500]}")
 
@@ -600,7 +627,8 @@ async def create_stage_change_comment(
         result = resp.json().get("data", {})
         # Update creation field for historical timestamp display
         if timestamp and result.get("name"):
-            await set_value(client, "Comment", result["name"], "creation", timestamp)
+            erpnext_ts = to_erpnext_datetime(timestamp)
+            await set_value(client, "Comment", result["name"], "creation", erpnext_ts)
         return result
     raise Exception(f"Failed to create stage change comment: {resp.text[:500]}")
 
@@ -609,8 +637,10 @@ async def create_stage_change_comment(
 async def update_crm_contact(request: Request):
     """Update CRM contact stage and log communication.
 
+    Simplified Lead-only CRM: All stages use Lead doctype (no Opportunity conversion).
+
     Parameters:
-        email: Required. Primary identifier to find Lead/Opportunity
+        email: Required. Primary identifier to find Lead
         stage: Required. Target column: new, engaged, meeting, quoted, won, lost
         payload: Required. Contains:
             message: Required. Message content to log as Communication
@@ -624,7 +654,7 @@ async def update_crm_contact(request: Request):
         body = await request.json()
     except Exception:
         log_call(False, None, "Invalid JSON body", {}, None, ip)
-        return {"success": False, "error": "Invalid JSON body"}
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     email = (body.get("email") or "").strip()
     stage = (body.get("stage") or "").strip()
@@ -637,20 +667,20 @@ async def update_crm_contact(request: Request):
     # 1. Validate required inputs
     if not email:
         log_call(False, None, "Missing required field: email", body, None, ip)
-        return {"success": False, "error": "Missing required field: email"}
+        raise HTTPException(status_code=400, detail="Missing required field: email")
 
     if not stage or stage not in STAGE_CONFIG:
         valid_stages = ", ".join(STAGE_CONFIG.keys())
         log_call(False, None, f"Invalid stage: {stage}", body, None, ip)
-        return {"success": False, "error": f"Invalid stage: {stage}. Must be one of: {valid_stages}"}
+        raise HTTPException(status_code=400, detail=f"Invalid stage: {stage}. Must be one of: {valid_stages}")
 
     if not message:
         log_call(False, None, "Missing required field: payload.message", body, None, ip)
-        return {"success": False, "error": "Missing required field: payload.message"}
+        raise HTTPException(status_code=400, detail="Missing required field: payload.message")
 
     if message_type not in ("client", "staff"):
         log_call(False, None, "payload.message_type must be 'client' or 'staff'", body, None, ip)
-        return {"success": False, "error": "payload.message_type must be 'client' or 'staff'"}
+        raise HTTPException(status_code=400, detail="payload.message_type must be 'client' or 'staff'")
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -658,72 +688,32 @@ async def update_crm_contact(request: Request):
             lead = await find_lead_by_email(client, email)
             if not lead:
                 log_call(False, None, f"No Lead found with email: {email}", body, None, ip)
-                return {"success": False, "error": f"No Lead found with email: {email}"}
+                raise HTTPException(status_code=404, detail=f"No Lead found with email: {email}")
 
-            # 3. Check for linked Opportunity
-            opportunity = await find_opportunity_for_lead(client, lead["name"])
-            current_doctype = "Opportunity" if opportunity else "Lead"
-            current_doc = opportunity or lead
+            # 3. Determine current stage from Lead status
+            current_stage = LEAD_STATUS_TO_STAGE.get(lead.get("status", ""), "new")
 
-            # 4. Determine current stage from status
-            if current_doctype == "Opportunity":
-                current_stage = OPP_STATUS_TO_STAGE.get(current_doc.get("status", ""), "quoted")
-            else:
-                current_stage = LEAD_STATUS_TO_STAGE.get(current_doc.get("status", ""), "new")
+            # 4. Get target status from stage config
+            target_status = STAGE_CONFIG[stage]["status"]
 
-            # 5. Get stage config
-            config = STAGE_CONFIG[stage]
-            target_doctype = config.get("doctype")
+            # 5. Create Event for meeting stage (MUST happen before status update)
+            if stage == "meeting" and meeting_date:
+                await create_meeting_event(
+                    client,
+                    lead["name"],
+                    lead.get("lead_name", lead["name"]),
+                    meeting_date
+                )
 
-            # 6. Handle stage transition
-            final_doctype = current_doctype
-            final_doc = current_doc
-
-            if stage == "lost":
-                # Lost can apply to either doctype
-                status = config["opp_status"] if current_doctype == "Opportunity" else config["lead_status"]
-                await set_value(client, current_doctype, current_doc["name"], "status", status)
-                final_doctype = current_doctype
-                final_doc = current_doc
-
-            elif target_doctype == "Lead":
-                # Moving to Lead stage (new, engaged, meeting)
-                if current_doctype == "Opportunity":
-                    log_call(False, None, "Cannot move Opportunity back to Lead stage", body, None, ip)
-                    return {"success": False, "error": "Cannot move Opportunity back to Lead stage"}
-
-                # Create Event for meeting stage (MUST happen before status update)
-                if stage == "meeting" and meeting_date:
-                    await create_meeting_event(
-                        client,
-                        lead["name"],
-                        lead.get("lead_name", lead["name"]),
-                        meeting_date
-                    )
-
-                await set_value(client, "Lead", lead["name"], "status", config["status"])
-                final_doctype = "Lead"
-                final_doc = lead
-
-            elif target_doctype == "Opportunity":
-                # Moving to Opportunity stage (quoted, won)
-                if current_doctype == "Lead":
-                    # Convert Lead to Opportunity
-                    opportunity = await create_opportunity_from_lead(client, lead["name"], config["status"])
-                    final_doctype = "Opportunity"
-                    final_doc = opportunity
-                else:
-                    # Already an Opportunity, just update status
-                    await set_value(client, "Opportunity", opportunity["name"], "status", config["status"])
-                    final_doctype = "Opportunity"
-                    final_doc = opportunity
+            # 6. Update Lead status
+            await set_value(client, "Lead", lead["name"], "status", target_status)
 
             # 7. Log stage transition if stage changed
             if current_stage != stage:
                 await create_stage_change_comment(
                     client,
-                    doctype=final_doctype,
-                    name=final_doc["name"],
+                    doctype="Lead",
+                    name=lead["name"],
                     from_stage=current_stage,
                     to_stage=stage,
                     timestamp=timestamp,
@@ -733,22 +723,27 @@ async def update_crm_contact(request: Request):
             sent_or_received = "Sent" if message_type == "staff" else "Received"
             await create_communication(
                 client,
-                doctype=final_doctype,
-                name=final_doc["name"],
+                doctype="Lead",
+                name=lead["name"],
                 content=message,
                 sent_or_received=sent_or_received,
                 timestamp=timestamp,
             )
 
-            log_call(True, final_doc["name"], None, body, 200, ip)
+            log_call(True, lead["name"], None, body, 200, ip)
             return {
                 "success": True,
-                "doctype": final_doctype,
-                "name": final_doc["name"],
+                "doctype": "Lead",
+                "name": lead["name"],
                 "stage": stage,
             }
 
+    except HTTPException:
+        raise  # Re-raise HTTPException as-is
+    except httpx.RequestError as e:
+        log_call(False, None, f"ERPNext connection error: {e}", body, None, ip)
+        raise HTTPException(status_code=502, detail=f"ERPNext connection error: {e}")
     except Exception as e:
         error_msg = str(e)[:500]
         log_call(False, None, f"Error: {error_msg}", body, None, ip)
-        return {"success": False, "error": error_msg}
+        raise HTTPException(status_code=500, detail=error_msg)
