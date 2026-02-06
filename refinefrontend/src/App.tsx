@@ -16,6 +16,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import LeadDetailPage from "@/pages/crm/LeadDetailPage";
 import OpportunityDetailPage from "@/pages/crm/OpportunityDetailPage";
 import KanbanPage from "@/pages/crm/KanbanPage";
+import ChatsPage from "@/pages/crm/ChatsPage";
 import EmployeesPage from "@/pages/hr/EmployeesPage";
 import EmployeeDetailPage from "@/pages/hr/EmployeeDetailPage";
 import LeavesPage from "@/pages/hr/LeavesPage";
@@ -128,6 +129,7 @@ export default function App() {
 
               {/* CRM */}
               <Route path="/crm" element={<KanbanPage />} />
+              <Route path="/crm/chats" element={<ChatsPage />} />
               <Route path="/crm/leads/:name" element={<LeadDetailPage />} />
               <Route path="/crm/opportunities/:name" element={<OpportunityDetailPage />} />
 

@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Columns3,
+  Columns3, MessageSquare,
   UserCheck, Calendar, ClipboardList, Banknote, Users,
   FileText, Receipt, CreditCard, BookOpen, PieChart,
 } from "lucide-react";
@@ -29,6 +29,7 @@ export const MODULES: ModuleConfig[] = [
     roles: CRM_ROLES,
     children: [
       { label: "Kanban", path: "/crm", icon: Columns3 },
+      { label: "Chats", path: "/crm/chats", icon: MessageSquare },
     ],
   },
   {
