@@ -169,8 +169,11 @@ class ERPNextClient:
         Returns:
             Lead name on success, None on failure.
         """
-        # Build lead title (couple name or first/last name)
-        if classification.couple_name:
+        # Build lead title combining firstname and couple_name when both exist
+        # Example: firstname="Michele", couple_name="Trevor" -> "Michele & Trevor"
+        if classification.couple_name and classification.firstname:
+            lead_name = f"{classification.firstname} & {classification.couple_name}"
+        elif classification.couple_name:
             lead_name = classification.couple_name
         else:
             parts = []
@@ -196,7 +199,11 @@ class ERPNextClient:
 
         # Custom fields (if exist in ERPNext)
         if classification.couple_name:
-            data["custom_couple_name"] = classification.couple_name
+            # Store combined couple name if we have both names
+            if classification.firstname:
+                data["custom_couple_name"] = f"{classification.firstname} & {classification.couple_name}"
+            else:
+                data["custom_couple_name"] = classification.couple_name
         if classification.wedding_venue:
             data["custom_wedding_venue"] = classification.wedding_venue
         if classification.guest_count:

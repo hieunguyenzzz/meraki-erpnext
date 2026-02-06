@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDateTime, formatDateTimeUTC } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface ConversationRef {
@@ -204,7 +204,7 @@ function ConversationFeed({ references }: ConversationSectionProps) {
                 </span>
               )}
               <span className="text-muted-foreground ml-auto text-xs">
-                {item.communication_date ? formatDateTimeUTC(item.communication_date) : formatDateTime(item.creation)}
+                {formatDateTime(item.communication_date || item.creation)}
               </span>
             </div>
             {item.subject && (

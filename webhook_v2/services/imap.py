@@ -5,6 +5,7 @@ IMAP client for fetching emails from Zoho.
 import imaplib
 from datetime import datetime, timedelta
 from email import message_from_bytes
+from email.header import decode_header as email_decode_header
 from email.utils import parsedate_to_datetime
 from typing import Iterator
 
@@ -106,6 +107,21 @@ class IMAPClient:
             except Exception as e:
                 log.error("imap_fetch_error", error=str(e), message_num=num.decode())
 
+    def _decode_header(self, header: str) -> str:
+        """Decode MIME-encoded email header.
+
+        Handles headers like '=?UTF-8?B?...?=' for Vietnamese and other non-ASCII text.
+        """
+        if not header:
+            return ""
+        decoded_parts = []
+        for part, charset in email_decode_header(header):
+            if isinstance(part, bytes):
+                decoded_parts.append(part.decode(charset or 'utf-8', errors='replace'))
+            else:
+                decoded_parts.append(part)
+        return ''.join(decoded_parts).replace('\r\n', '').replace('\n', '')
+
     def _parse_email(self, msg, folder: str) -> Email | None:
         """Parse email message into Email object."""
         message_id = msg.get("Message-ID", "")
@@ -143,10 +159,10 @@ class IMAPClient:
             message_id=message_id,
             mailbox=self.email,
             folder=folder,
-            subject=msg.get("Subject", ""),
-            sender=msg.get("From", ""),
-            recipient=msg.get("To", ""),
-            cc=msg.get("Cc", ""),
+            subject=self._decode_header(msg.get("Subject", "")),
+            sender=self._decode_header(msg.get("From", "")),
+            recipient=self._decode_header(msg.get("To", "")),
+            cc=self._decode_header(msg.get("Cc", "")),
             email_date=email_date,
             body_plain=body_plain,
             body_html=body_html,

@@ -54,8 +54,12 @@ class ProcessRequest(BaseModel):
     limit: int = 50
 
 
+class FetchRequest(BaseModel):
+    days: int = 7
+
+
 class BackfillRequest(BaseModel):
-    days: int = 30
+    since: str | None = None  # YYYY-MM-DD format, defaults to all pending
     doctype: str = "lead"
     dry_run: bool = False
 
@@ -117,46 +121,68 @@ async def trigger_backfill(
     background_tasks: BackgroundTasks,
 ):
     """
-    Trigger historical backfill.
+    Process stored emails to ERPNext.
 
-    Runs in background to avoid timeout.
+    Unlike /fetch which pulls from IMAP, this only processes
+    emails already in PostgreSQL.
+
+    Args:
+        since: Optional start date in YYYY-MM-DD format (filters by email date)
+        doctype: Document type to process (default "lead")
+        dry_run: If true, count emails without processing
     """
     try:
         doctype = DocType(request.doctype)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid doctype: {request.doctype}")
 
-    from datetime import datetime, timedelta
-    since_date = datetime.now() - timedelta(days=request.days)
+    from datetime import datetime
+
+    since_date = None
+    if request.since:
+        try:
+            since_date = datetime.strptime(request.since, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid date format: {request.since}. Use YYYY-MM-DD.")
 
     def run_backfill():
         processor = BackfillProcessor(dry_run=request.dry_run)
-        processor.backfill(since_date, doctype=doctype)
+        if since_date:
+            processor.backfill(since_date, doctype=doctype)
+        else:
+            processor.process_pending(doctype)
 
     background_tasks.add_task(run_backfill)
 
     return {
         "status": "backfill_started",
-        "days": request.days,
+        "since": request.since or "all pending",
         "doctype": request.doctype,
         "dry_run": request.dry_run,
     }
 
 
 @app.post("/fetch")
-async def trigger_fetch(background_tasks: BackgroundTasks):
+async def trigger_fetch(
+    request: FetchRequest,
+    background_tasks: BackgroundTasks,
+):
     """
     Trigger email fetch from IMAP (without processing).
 
     Useful for manually pulling new emails into the database.
+    Args:
+        days: Number of days to fetch (default 7, max 365)
     """
+    days = min(request.days, 365)  # Cap at 1 year
+
     def run_fetch():
         processor = RealtimeProcessor()
-        processor.fetch_and_store()
+        processor.fetch_and_store(since_days=days)
 
     background_tasks.add_task(run_fetch)
 
-    return {"status": "fetch_started"}
+    return {"status": "fetch_started", "days": days}
 
 
 # Run with: uvicorn webhook_v2.main:app --host 0.0.0.0 --port 8001

@@ -142,9 +142,19 @@ class LeadHandler(BaseHandler):
         lead_name = self.erpnext.find_lead_by_email(target_email)
 
         if not lead_name:
-            # Create lead if not found (edge case: reply to untracked inquiry)
-            log.info("lead_not_found_creating", email=target_email)
-            return self._handle_new_lead(email, classification, timestamp)
+            # Lead not found - skip silently (don't create leads for follow-ups)
+            log.info(
+                "lead_not_found_skipping",
+                email=target_email,
+                classification=classification.classification.value,
+            )
+            return ProcessingResult(
+                success=True,
+                email_id=email.id or 0,
+                classification=classification.classification,
+                action="skipped_no_lead",
+                details={"reason": "Lead not found for follow-up email"},
+            )
 
         # Extract new message content (remove quoted replies)
         body = email.body

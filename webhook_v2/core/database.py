@@ -211,7 +211,9 @@ class Database:
     def get_unprocessed_emails(
         self,
         doctype: DocType = DocType.LEAD,
-        limit: int = 50
+        limit: int = 50,
+        since_date: datetime | None = None,
+        order: str = "asc",
     ) -> list[Email]:
         """
         Fetch unprocessed emails for a given doctype.
@@ -219,27 +221,46 @@ class Database:
         Args:
             doctype: Document type to filter by
             limit: Maximum number of emails to return
+            since_date: Only return emails from this date onwards (optional)
+            order: Sort order for email_date ('asc' or 'desc')
 
         Returns:
             List of Email objects
         """
-        sql = """
-        SELECT id, message_id, mailbox, folder, subject, sender, recipient, cc,
-               email_date, body_plain, body_html, has_attachments, raw_headers,
-               doctype, processed, processed_at, classification, classification_data,
-               error_message, retry_count
-        FROM emails
-        WHERE processed = FALSE
-          AND doctype = %s
-          AND (retry_count < %s OR retry_count IS NULL)
-        ORDER BY email_date ASC
-        LIMIT %s
-        """
+        order_sql = "DESC" if order.lower() == "desc" else "ASC"
+
+        if since_date:
+            sql = f"""
+            SELECT id, message_id, mailbox, folder, subject, sender, recipient, cc,
+                   email_date, body_plain, body_html, has_attachments, raw_headers,
+                   doctype, processed, processed_at, classification, classification_data,
+                   error_message, retry_count
+            FROM emails
+            WHERE processed = FALSE
+              AND doctype = %s
+              AND (retry_count < %s OR retry_count IS NULL)
+              AND email_date >= %s
+            ORDER BY email_date {order_sql}
+            LIMIT %s
+            """
+            params = (doctype.value, settings.max_retries, since_date, limit)
+        else:
+            sql = f"""
+            SELECT id, message_id, mailbox, folder, subject, sender, recipient, cc,
+                   email_date, body_plain, body_html, has_attachments, raw_headers,
+                   doctype, processed, processed_at, classification, classification_data,
+                   error_message, retry_count
+            FROM emails
+            WHERE processed = FALSE
+              AND doctype = %s
+              AND (retry_count < %s OR retry_count IS NULL)
+            ORDER BY email_date {order_sql}
+            LIMIT %s
+            """
+            params = (doctype.value, settings.max_retries, limit)
 
         with self.get_connection() as conn:
-            rows = conn.execute(
-                sql, (doctype.value, settings.max_retries, limit)
-            ).fetchall()
+            rows = conn.execute(sql, params).fetchall()
 
             emails = []
             for row in rows:
@@ -382,6 +403,93 @@ class Database:
                 error_message=row["error_message"],
                 retry_count=row["retry_count"] or 0,
             )
+
+    def get_emails_by_date(
+        self,
+        since_date: datetime,
+        until_date: datetime | None = None,
+        limit: int = 100,
+        order: str = "asc",
+    ) -> list[Email]:
+        """
+        Fetch emails by date range (ignores processed flag).
+
+        Used by --force mode to re-process or re-preview already processed emails.
+
+        Args:
+            since_date: Start date (inclusive)
+            until_date: End date (exclusive, optional)
+            limit: Maximum number of emails to return
+            order: Sort order for email_date ('asc' or 'desc')
+
+        Returns:
+            List of Email objects
+        """
+        order_sql = "DESC" if order.lower() == "desc" else "ASC"
+
+        if until_date:
+            sql = f"""
+            SELECT id, message_id, mailbox, folder, subject, sender, recipient, cc,
+                   email_date, body_plain, body_html, has_attachments, raw_headers,
+                   doctype, processed, processed_at, classification, classification_data,
+                   error_message, retry_count
+            FROM emails
+            WHERE email_date >= %s AND email_date < %s
+            ORDER BY email_date {order_sql}
+            LIMIT %s
+            """
+            params = (since_date, until_date, limit)
+        else:
+            sql = f"""
+            SELECT id, message_id, mailbox, folder, subject, sender, recipient, cc,
+                   email_date, body_plain, body_html, has_attachments, raw_headers,
+                   doctype, processed, processed_at, classification, classification_data,
+                   error_message, retry_count
+            FROM emails
+            WHERE email_date >= %s
+            ORDER BY email_date {order_sql}
+            LIMIT %s
+            """
+            params = (since_date, limit)
+
+        with self.get_connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+
+            emails = []
+            for row in rows:
+                classification = None
+                if row["classification"]:
+                    try:
+                        classification = Classification(row["classification"])
+                    except ValueError:
+                        pass
+
+                email = Email(
+                    id=row["id"],
+                    message_id=row["message_id"],
+                    mailbox=row["mailbox"],
+                    folder=row["folder"],
+                    subject=row["subject"] or "",
+                    sender=row["sender"] or "",
+                    recipient=row["recipient"] or "",
+                    cc=row["cc"] or "",
+                    email_date=row["email_date"],
+                    body_plain=row["body_plain"] or "",
+                    body_html=row["body_html"] or "",
+                    has_attachments=row["has_attachments"] or False,
+                    raw_headers=row["raw_headers"] or {},
+                    doctype=DocType(row["doctype"]) if row["doctype"] else DocType.LEAD,
+                    processed=row["processed"],
+                    processed_at=row["processed_at"],
+                    classification=classification,
+                    classification_data=row["classification_data"] or {},
+                    error_message=row["error_message"],
+                    retry_count=row["retry_count"] or 0,
+                )
+                emails.append(email)
+
+            log.info("fetched_emails_by_date", count=len(emails), since=since_date.isoformat())
+            return emails
 
     def get_stats(self) -> dict[str, Any]:
         """Get processing statistics."""
