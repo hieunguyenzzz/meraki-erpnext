@@ -4,7 +4,7 @@ ERPNext API client for CRM operations.
 
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
@@ -370,3 +370,67 @@ class ERPNextClient:
         except Exception as e:
             log.error("update_lead_status_error", error=str(e), lead=lead_name)
             return False
+
+    def get_stale_awaiting_client_leads(self, days: int = 3) -> list[dict]:
+        """
+        Find leads where:
+        - Status is active (not in terminal states)
+        - Last communication was sent by staff (awaiting client response)
+        - Last communication is older than `days` days
+
+        Returns:
+            List of lead dicts with 'name' and 'status' fields.
+        """
+        # Terminal statuses to exclude
+        terminal = ["Do Not Contact", "Lost Quotation", "Converted"]
+
+        # Get active leads
+        try:
+            leads = self._get(
+                "/api/resource/Lead",
+                params={
+                    "filters": json.dumps([["status", "not in", terminal]]),
+                    "fields": json.dumps(["name", "status"]),
+                    "limit_page_length": 0,
+                },
+            ).get("data", [])
+        except Exception as e:
+            log.error("get_active_leads_error", error=str(e))
+            return []
+
+        stale_leads = []
+        cutoff = datetime.now() - timedelta(days=days)
+
+        for lead in leads:
+            try:
+                # Get latest communication for this lead
+                comms = self._get(
+                    "/api/resource/Communication",
+                    params={
+                        "filters": json.dumps([
+                            ["reference_doctype", "=", "Lead"],
+                            ["reference_name", "=", lead["name"]],
+                        ]),
+                        "fields": json.dumps(["sent_or_received", "communication_date"]),
+                        "order_by": "communication_date desc",
+                        "limit_page_length": 1,
+                    },
+                ).get("data", [])
+
+                if comms and comms[0]["sent_or_received"] == "Sent":
+                    # Parse communication date
+                    comm_date_str = comms[0]["communication_date"]
+                    comm_date = datetime.fromisoformat(
+                        comm_date_str.replace(" ", "T")
+                    )
+                    if comm_date < cutoff:
+                        stale_leads.append(lead)
+            except Exception as e:
+                log.warning(
+                    "check_lead_staleness_error",
+                    lead=lead["name"],
+                    error=str(e),
+                )
+                continue
+
+        return stale_leads

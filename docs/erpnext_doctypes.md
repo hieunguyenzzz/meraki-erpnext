@@ -24,6 +24,16 @@ First contact / inquiry from a potential client. Appears on the Kanban board in 
 | Lost | Do Not Contact, Lost Quotation |
 | (hidden) | Converted, Opportunity, Quotation |
 
+**Automated status changes (webhook_v2):**
+| Trigger | Status Change |
+|---------|---------------|
+| New inquiry email | → Lead |
+| Client replies | → Replied |
+| Meeting confirmed | → Interested |
+| Quote sent | → Quotation |
+| No response 3+ days (stale) | → Do Not Contact |
+| Client comes back after lost | → Replied (re-engaged) |
+
 **Frontend operations:** List, Get, Update (status + source field), Delete
 
 **Key components:** `KanbanPage`, `LeadDetailPage`, `DashboardPage`

@@ -235,6 +235,7 @@ class LeadHandler(BaseHandler):
           Interested, Converted, Do Not Contact
         """
         mapping = {
+            Classification.CLIENT_MESSAGE: "Replied",  # Re-engage lost leads
             Classification.MEETING_CONFIRMED: "Interested",
             Classification.QUOTE_SENT: "Quotation",
         }
