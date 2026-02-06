@@ -182,7 +182,9 @@ class Database:
                 "SELECT id FROM emails WHERE message_id = %s",
                 (email.message_id,)
             ).fetchone()
-            return existing["id"] if existing else 0
+            if not existing:
+                raise RuntimeError(f"Failed to insert or fetch email: {email.message_id}")
+            return existing["id"]
 
     def insert_attachment(self, attachment: Attachment) -> int:
         """Insert an attachment record."""
@@ -206,7 +208,9 @@ class Database:
                 "storage_url": attachment.storage_url,
             }).fetchone()
             conn.commit()
-            return result["id"] if result else 0
+            if not result:
+                raise RuntimeError(f"Failed to insert attachment: {attachment.filename}")
+            return result["id"]
 
     def get_unprocessed_emails(
         self,

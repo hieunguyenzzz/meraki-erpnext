@@ -142,8 +142,8 @@ class ERPNextClient:
             result = self._get(
                 "/api/resource/Lead",
                 params={
-                    "filters": f'[["email_id", "=", "{email}"]]',
-                    "fields": '["name"]',
+                    "filters": json.dumps([["email_id", "=", email]]),
+                    "fields": json.dumps(["name"]),
                     "limit_page_length": 1,
                 },
             )
@@ -338,7 +338,7 @@ class ERPNextClient:
                 "/api/resource/Communication",
                 params={
                     "filters": json.dumps(filters),
-                    "fields": '["name"]',
+                    "fields": json.dumps(["name"]),
                     "limit_page_length": 1,
                 },
             )

@@ -33,9 +33,20 @@ class IMAPClient:
     def connect(self) -> None:
         """Connect and authenticate to IMAP server."""
         log.info("imap_connecting", host=self.host, email=self.email)
-        self._conn = imaplib.IMAP4_SSL(self.host)
-        self._conn.login(self.email, self.password)
-        log.info("imap_connected")
+        conn = None
+        try:
+            conn = imaplib.IMAP4_SSL(self.host)
+            conn.login(self.email, self.password)
+            self._conn = conn  # Only set if login succeeds
+            log.info("imap_connected")
+        except Exception:
+            # Clean up partial connection if login fails
+            if conn:
+                try:
+                    conn.logout()
+                except Exception:
+                    pass
+            raise
 
     def disconnect(self) -> None:
         """Close IMAP connection."""
