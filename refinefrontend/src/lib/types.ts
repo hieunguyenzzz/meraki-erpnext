@@ -47,6 +47,7 @@ export interface Employee {
   ctc?: number;
   custom_last_review_date?: string;
   custom_review_notes?: string;
+  custom_staff_roles?: string;
 }
 
 export interface SalesInvoice {

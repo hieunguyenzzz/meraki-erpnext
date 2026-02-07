@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router";
 import { useList, useUpdate, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Users, AlertCircle, Clock, CheckCircle } from "lucide-react";
+import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   getReviewStatus,
   getReviewBadgeVariant,
@@ -19,6 +20,13 @@ import {
   getLeaveBalanceVariant,
   type ReviewStatus,
 } from "@/lib/review-status";
+import {
+  STAFF_ROLES,
+  type StaffRole,
+  parseStaffRoles,
+  serializeStaffRoles,
+  getRoleBadgeVariant,
+} from "@/lib/staff-roles";
 
 interface StaffRow {
   name: string;
@@ -28,6 +36,8 @@ interface StaffRow {
   date_of_joining: string;
   custom_last_review_date?: string;
   custom_review_notes?: string;
+  custom_staff_roles?: string;
+  staff_roles: StaffRole[];
   review_status: ReviewStatus;
   leave_allocated: number;
   leave_taken: number;
@@ -39,9 +49,11 @@ type SummaryFilter = "all" | "overdue" | "due-soon" | "up-to-date";
 export default function StaffOverviewPage() {
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>("all");
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [rolesDialogOpen, setRolesDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<StaffRow | null>(null);
   const [reviewDate, setReviewDate] = useState(new Date().toISOString().split("T")[0]);
   const [reviewNotes, setReviewNotes] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +75,7 @@ export default function StaffOverviewPage() {
         "date_of_joining",
         "custom_last_review_date",
         "custom_review_notes",
+        "custom_staff_roles",
       ],
     },
   });
@@ -124,6 +137,8 @@ export default function StaffOverviewPage() {
         date_of_joining: emp.date_of_joining,
         custom_last_review_date: emp.custom_last_review_date,
         custom_review_notes: emp.custom_review_notes,
+        custom_staff_roles: emp.custom_staff_roles,
+        staff_roles: parseStaffRoles(emp.custom_staff_roles),
         review_status: getReviewStatus(emp.custom_last_review_date),
         leave_allocated: allocated,
         leave_taken: taken,
@@ -205,6 +220,45 @@ export default function StaffOverviewPage() {
     }
   }
 
+  // Handle roles dialog
+  function openRolesDialog(employee: StaffRow) {
+    setSelectedEmployee(employee);
+    setSelectedRoles(new Set(employee.staff_roles));
+    setError(null);
+    setRolesDialogOpen(true);
+  }
+
+  function toggleRole(role: string) {
+    setSelectedRoles(prev => {
+      const next = new Set(prev);
+      if (next.has(role)) next.delete(role);
+      else next.add(role);
+      return next;
+    });
+  }
+
+  async function handleSaveRoles() {
+    if (!selectedEmployee) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await updateEmployee({
+        resource: "Employee",
+        id: selectedEmployee.name,
+        values: {
+          custom_staff_roles: serializeStaffRoles(Array.from(selectedRoles) as StaffRole[]),
+        },
+      });
+      invalidate({ resource: "Employee", invalidates: ["list"] });
+      setRolesDialogOpen(false);
+      setSelectedEmployee(null);
+    } catch (err: any) {
+      setError(err?.message || "Failed to save roles");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // Table columns
   const columns: ColumnDef<StaffRow, unknown>[] = [
     {
@@ -220,6 +274,35 @@ export default function StaffOverviewPage() {
     {
       accessorKey: "designation",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
+    },
+    {
+      id: "staff_roles",
+      accessorFn: (row) => row.staff_roles.join(","),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Staff Roles" />,
+      cell: ({ row }) => (
+        <div className="flex gap-1 flex-wrap items-center">
+          {row.original.staff_roles.length > 0 ? (
+            row.original.staff_roles.map(role => (
+              <Badge key={role} variant={getRoleBadgeVariant(role)}>{role}</Badge>
+            ))
+          ) : (
+            <span className="text-muted-foreground text-sm">—</span>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 ml-1"
+            onClick={() => openRolesDialog(row.original)}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </div>
+      ),
+      filterFn: (row, id, filterValue) => {
+        if (!filterValue || filterValue.length === 0) return true;
+        const roles = row.original.staff_roles;
+        return filterValue.some((v: string) => roles.includes(v as StaffRole));
+      },
     },
     {
       accessorKey: "department",
@@ -345,6 +428,11 @@ export default function StaffOverviewPage() {
         searchPlaceholder="Search by name..."
         filterableColumns={[
           {
+            id: "staff_roles",
+            title: "Staff Role",
+            options: STAFF_ROLES.map(role => ({ label: role, value: role })),
+          },
+          {
             id: "department",
             title: "Department",
             options: [
@@ -404,6 +492,48 @@ export default function StaffOverviewPage() {
               Cancel
             </Button>
             <Button onClick={handleSaveReview} disabled={saving || !reviewDate}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Roles Dialog */}
+      <Dialog open={rolesDialogOpen} onOpenChange={setRolesDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Assign Staff Roles</DialogTitle>
+            <DialogDescription>
+              {selectedEmployee?.employee_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            {STAFF_ROLES.map(role => (
+              <div
+                key={role}
+                className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50"
+                onClick={() => toggleRole(role)}
+              >
+                <div className={cn(
+                  "h-5 w-5 rounded border-2 flex items-center justify-center transition-colors",
+                  selectedRoles.has(role)
+                    ? "bg-primary border-primary text-primary-foreground"
+                    : "border-muted-foreground/30"
+                )}>
+                  {selectedRoles.has(role) && <Check className="h-3 w-3" />}
+                </div>
+                <Badge variant={getRoleBadgeVariant(role)}>{role}</Badge>
+              </div>
+            ))}
+            {error && (
+              <p className="text-sm text-red-600">{error}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRolesDialogOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveRoles} disabled={saving}>
               {saving ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
