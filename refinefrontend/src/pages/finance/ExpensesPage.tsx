@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { useList, useCreate, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,11 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+
+// Constants
+const SITE_NAME = "erp.merakiwp.com";
+const DEFAULT_CASH_ACCOUNT = "Cash - MWP";
+const COMPANY_NAME = "Meraki Wedding Planner";
 
 interface Expense {
   name: string;
@@ -65,6 +70,20 @@ const EXPENSE_ACCOUNTS: ExpenseAccount[] = [
   { name: "Utility Expenses - MWP", account_name: "Utility Expenses" },
   { name: "Telephone Expenses - MWP", account_name: "Telephone Expenses" },
 ];
+
+// Initial form states
+const initialQuickForm = {
+  date: new Date().toISOString().slice(0, 10),
+  description: "",
+  amount: "",
+  category: "",
+};
+
+const initialInvoiceForm = {
+  supplier: "",
+  date: new Date().toISOString().slice(0, 10),
+  items: [{ description: "", category: "", amount: "" }] as InvoiceItem[],
+};
 
 const columns: ColumnDef<Expense, unknown>[] = [
   {
@@ -118,20 +137,17 @@ export default function ExpensesPage() {
   const [supplierInvoiceOpen, setSupplierInvoiceOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Feedback states
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const [quickSuccess, setQuickSuccess] = useState<string | null>(null);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [invoiceSuccess, setInvoiceSuccess] = useState<string | null>(null);
+
   // Quick Expense form state
-  const [quickForm, setQuickForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    description: "",
-    amount: "",
-    category: "",
-  });
+  const [quickForm, setQuickForm] = useState(initialQuickForm);
 
   // Supplier Invoice form state
-  const [invoiceForm, setInvoiceForm] = useState({
-    supplier: "",
-    date: new Date().toISOString().slice(0, 10),
-    items: [{ description: "", category: "", amount: "" }] as InvoiceItem[],
-  });
+  const [invoiceForm, setInvoiceForm] = useState(initialInvoiceForm);
 
   const { result, query } = useList({
     resource: "Purchase Invoice",
@@ -157,56 +173,102 @@ export default function ExpensesPage() {
   const suppliers = (suppliersResult?.data ?? []) as Supplier[];
   const isLoading = query.isLoading;
 
+  // Reset quick expense form
+  function resetQuickForm() {
+    setQuickForm({ ...initialQuickForm, date: new Date().toISOString().slice(0, 10) });
+    setQuickError(null);
+    setQuickSuccess(null);
+  }
+
+  // Reset invoice form
+  function resetInvoiceForm() {
+    setInvoiceForm({ ...initialInvoiceForm, date: new Date().toISOString().slice(0, 10) });
+    setInvoiceError(null);
+    setInvoiceSuccess(null);
+  }
+
+  // Handle quick expense dialog close
+  function handleQuickExpenseOpenChange(open: boolean) {
+    setQuickExpenseOpen(open);
+    if (!open) {
+      resetQuickForm();
+    }
+  }
+
+  // Handle supplier invoice dialog close
+  function handleSupplierInvoiceOpenChange(open: boolean) {
+    setSupplierInvoiceOpen(open);
+    if (!open) {
+      resetInvoiceForm();
+    }
+  }
+
   // Submit Journal Entry for quick expense
   async function handleQuickExpenseSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const amount = parseFloat(quickForm.amount);
     if (!quickForm.description || !quickForm.amount || !quickForm.category) return;
+    if (amount <= 0) {
+      setQuickError("Amount must be greater than 0");
+      return;
+    }
 
     setIsSubmitting(true);
+    setQuickError(null);
+    setQuickSuccess(null);
+
     try {
       // Create Journal Entry
-      const result = await createDoc({
+      const createResult = await createDoc({
         resource: "Journal Entry",
         values: {
           posting_date: quickForm.date,
           voucher_type: "Journal Entry",
-          company: "Meraki Wedding Planner",
+          company: COMPANY_NAME,
           user_remark: quickForm.description,
           accounts: [
             {
               account: quickForm.category,
-              debit_in_account_currency: parseFloat(quickForm.amount),
+              debit_in_account_currency: Math.round(amount),
               credit_in_account_currency: 0,
             },
             {
-              account: "Cash - MWP",
+              account: DEFAULT_CASH_ACCOUNT,
               debit_in_account_currency: 0,
-              credit_in_account_currency: parseFloat(quickForm.amount),
+              credit_in_account_currency: Math.round(amount),
             },
           ],
         },
       });
 
       // Submit the Journal Entry
-      if (result?.data?.name) {
-        await fetch("/api/method/frappe.client.submit", {
+      if (createResult?.data?.name) {
+        const submitRes = await fetch("/api/method/frappe.client.submit", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": "erp.merakiwp.com" },
+          headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
           credentials: "include",
           body: JSON.stringify({
-            doc: { doctype: "Journal Entry", name: result.data.name },
+            doc: { doctype: "Journal Entry", name: createResult.data.name },
           }),
         });
-      }
 
-      setQuickExpenseOpen(false);
-      setQuickForm({
-        date: new Date().toISOString().slice(0, 10),
-        description: "",
-        amount: "",
-        category: "",
-      });
-      invalidate({ resource: "Journal Entry", invalidates: ["list"] });
+        if (!submitRes.ok) {
+          const errorData = await submitRes.json().catch(() => ({}));
+          throw new Error(errorData.message || "Failed to submit Journal Entry");
+        }
+
+        setQuickSuccess(`Journal Entry ${createResult.data.name} created successfully`);
+        invalidate({ resource: "Journal Entry", invalidates: ["list"] });
+
+        // Close dialog after short delay to show success message
+        setTimeout(() => {
+          setQuickExpenseOpen(false);
+          resetQuickForm();
+        }, 1500);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create expense";
+      setQuickError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -217,45 +279,64 @@ export default function ExpensesPage() {
     e.preventDefault();
     if (!invoiceForm.supplier || invoiceForm.items.some(i => !i.description || !i.category || !i.amount)) return;
 
+    // Validate all amounts are positive
+    const invalidAmount = invoiceForm.items.find(i => parseFloat(i.amount) <= 0);
+    if (invalidAmount) {
+      setInvoiceError("All amounts must be greater than 0");
+      return;
+    }
+
     setIsSubmitting(true);
+    setInvoiceError(null);
+    setInvoiceSuccess(null);
+
     try {
       // Create Purchase Invoice
-      const result = await createDoc({
+      const createResult = await createDoc({
         resource: "Purchase Invoice",
         values: {
           supplier: invoiceForm.supplier,
           posting_date: invoiceForm.date,
-          company: "Meraki Wedding Planner",
+          company: COMPANY_NAME,
           items: invoiceForm.items.map((item) => ({
             item_code: "EXPENSE-ITEM",
             item_name: item.description,
             description: item.description,
             expense_account: item.category,
             qty: 1,
-            rate: parseFloat(item.amount),
+            rate: Math.round(parseFloat(item.amount)),
           })),
         },
       });
 
       // Submit the Purchase Invoice
-      if (result?.data?.name) {
-        await fetch("/api/method/frappe.client.submit", {
+      if (createResult?.data?.name) {
+        const submitRes = await fetch("/api/method/frappe.client.submit", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": "erp.merakiwp.com" },
+          headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
           credentials: "include",
           body: JSON.stringify({
-            doc: { doctype: "Purchase Invoice", name: result.data.name },
+            doc: { doctype: "Purchase Invoice", name: createResult.data.name },
           }),
         });
-      }
 
-      setSupplierInvoiceOpen(false);
-      setInvoiceForm({
-        supplier: "",
-        date: new Date().toISOString().slice(0, 10),
-        items: [{ description: "", category: "", amount: "" }],
-      });
-      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
+        if (!submitRes.ok) {
+          const errorData = await submitRes.json().catch(() => ({}));
+          throw new Error(errorData.message || "Failed to submit Purchase Invoice");
+        }
+
+        setInvoiceSuccess(`Purchase Invoice ${createResult.data.name} created successfully`);
+        invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
+
+        // Close dialog after short delay to show success message
+        setTimeout(() => {
+          setSupplierInvoiceOpen(false);
+          resetInvoiceForm();
+        }, 1500);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create invoice";
+      setInvoiceError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -318,7 +399,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Quick Expense Dialog */}
-      <Dialog open={quickExpenseOpen} onOpenChange={setQuickExpenseOpen}>
+      <Dialog open={quickExpenseOpen} onOpenChange={handleQuickExpenseOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Quick Expense</DialogTitle>
@@ -327,6 +408,18 @@ export default function ExpensesPage() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleQuickExpenseSubmit} className="space-y-4">
+            {quickError && (
+              <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                <AlertCircle className="h-4 w-4" />
+                {quickError}
+              </div>
+            )}
+            {quickSuccess && (
+              <div className="flex items-center gap-2 p-3 text-sm text-green-600 bg-green-50 rounded-md">
+                <CheckCircle2 className="h-4 w-4" />
+                {quickSuccess}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="quick-date">Date *</Label>
               <Input
@@ -352,6 +445,8 @@ export default function ExpensesPage() {
               <Input
                 id="quick-amount"
                 type="number"
+                min="1"
+                step="1"
                 placeholder="500000"
                 value={quickForm.amount}
                 onChange={(e) => setQuickForm({ ...quickForm, amount: e.target.value })}
@@ -382,7 +477,7 @@ export default function ExpensesPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || !quickForm.description || !quickForm.amount || !quickForm.category}
+                disabled={isSubmitting || !quickForm.description || !quickForm.amount || !quickForm.category || !!quickSuccess}
               >
                 {isSubmitting ? "Creating..." : "Create Expense"}
               </Button>
@@ -392,7 +487,7 @@ export default function ExpensesPage() {
       </Dialog>
 
       {/* Supplier Invoice Dialog */}
-      <Dialog open={supplierInvoiceOpen} onOpenChange={setSupplierInvoiceOpen}>
+      <Dialog open={supplierInvoiceOpen} onOpenChange={handleSupplierInvoiceOpenChange}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add Supplier Invoice</DialogTitle>
@@ -401,6 +496,18 @@ export default function ExpensesPage() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSupplierInvoiceSubmit} className="space-y-4">
+            {invoiceError && (
+              <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                <AlertCircle className="h-4 w-4" />
+                {invoiceError}
+              </div>
+            )}
+            {invoiceSuccess && (
+              <div className="flex items-center gap-2 p-3 text-sm text-green-600 bg-green-50 rounded-md">
+                <CheckCircle2 className="h-4 w-4" />
+                {invoiceSuccess}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="invoice-supplier">Supplier *</Label>
@@ -474,6 +581,8 @@ export default function ExpensesPage() {
                       {index === 0 && <Label className="text-xs text-muted-foreground">Amount</Label>}
                       <Input
                         type="number"
+                        min="1"
+                        step="1"
                         placeholder="Amount"
                         className="w-32"
                         value={item.amount}
@@ -512,7 +621,8 @@ export default function ExpensesPage() {
                 disabled={
                   isSubmitting ||
                   !invoiceForm.supplier ||
-                  invoiceForm.items.some(i => !i.description || !i.category || !i.amount)
+                  invoiceForm.items.some(i => !i.description || !i.category || !i.amount) ||
+                  !!invoiceSuccess
                 }
               >
                 {isSubmitting ? "Creating..." : "Create Invoice"}
