@@ -44,87 +44,7 @@ services:
     depends_on:
       - frontend
 
-  # DEPRECATED: Old webhook system - replaced by email-processor-v2
-  # webhook:
-  #   labels:
-  #     - "traefik.enable=true"
-  #     - "traefik.http.routers.meraki-webhook.rule=Host(`webhook.merakierp.loc`)"
-  #     - "traefik.http.routers.meraki-webhook.entrypoints=web"
-  #     - "traefik.http.services.meraki-webhook.loadbalancer.server.port=8091"
-  #     - "traefik.docker.network=local-dev"
-  #   environment:
-  #     - GEMINI_API_KEY=${GEMINI_API_KEY}
-  #     - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
-  #     - WEBHOOK_URL=http://webhook:8091
-  #     - STAGING_DB_HOST=staging-db
-  #     - STAGING_DB_NAME=email_staging
-  #     - STAGING_DB_USER=meraki
-  #     - STAGING_DB_PASSWORD=${STAGING_DB_PASSWORD:-meraki_staging}
-  #     - ZOHO_IMAP_HOST=${ZOHO_IMAP_HOST:-imappro.zoho.com}
-  #     - ZOHO_EMAIL=${ZOHO_EMAIL:-info@merakiweddingplanner.com}
-  #     - ZOHO_PASSWORD=${ZOHO_PASSWORD}
-  #     - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio-api.hieunguyen.dev}
-  #     - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-  #     - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-  #     - MINIO_BUCKET=${MINIO_BUCKET:-merakiweddingplanner}
-  #   networks:
-  #     - default
-  #     - traefik
-
-  # DEPRECATED: Old email processor - replaced by email-processor-v2
-  # email-processor:
-  #   build:
-  #     context: ./webhook
-  #     dockerfile: Dockerfile.email
-  #   restart: unless-stopped
-  #   volumes:
-  #     - email-processor-data:/app/data
-  #   environment:
-  #     - ZOHO_IMAP_HOST=${ZOHO_IMAP_HOST:-imappro.zoho.com}
-  #     - ZOHO_EMAIL=${ZOHO_EMAIL:-info@merakiweddingplanner.com}
-  #     - ZOHO_PASSWORD=${ZOHO_PASSWORD}
-  #     - GEMINI_API_KEY=${GEMINI_API_KEY}
-  #     - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
-  #     - WEBHOOK_URL=http://webhook:8091
-  #     - ERPNEXT_URL=http://frontend:8080
-  #     - ERPNEXT_API_KEY=${ERPNEXT_API_KEY}
-  #     - ERPNEXT_API_SECRET=${ERPNEXT_API_SECRET}
-  #     - STAGING_DB_HOST=staging-db
-  #     - STAGING_DB_NAME=email_staging
-  #     - STAGING_DB_USER=meraki
-  #     - STAGING_DB_PASSWORD=${STAGING_DB_PASSWORD:-meraki_staging}
-  #     - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio-api.hieunguyen.dev}
-  #     - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-  #     - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-  #     - MINIO_BUCKET=${MINIO_BUCKET:-merakiweddingplanner}
-  #   depends_on:
-  #     - webhook
-  #     - staging-db
-  #   logging:
-  #     driver: "json-file"
-  #     options:
-  #       max-size: "10m"
-  #       max-file: "3"
-
-  # DEPRECATED: Old staging DB - can be removed after confirming email-storage works
-  staging-db:
-    image: postgres:15-alpine
-    restart: unless-stopped
-    ports:
-      - "5433:5432"
-    environment:
-      POSTGRES_USER: meraki
-      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:-meraki_staging}
-      POSTGRES_DB: email_staging
-    volumes:
-      - staging-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U meraki -d email_staging"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # Email Processing v2 - new system
+  # Email Processing v2
   email-storage:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -191,8 +111,6 @@ services:
         max-file: "3"
 
 volumes:
-  email-processor-data:
-  staging-db-data:
   email-storage-data:
 
 networks:
