@@ -239,13 +239,40 @@ Public holidays: New Year (Jan 1), Tet/Lunar New Year (Feb 17-21), Hung Kings Co
 
 **Leave Approver:** Administrator (has Leave Approver role)
 
+### Leave Approver Configuration
+
+Each employee must have a `leave_approver` set on their Employee record for leave approval workflow to function. The leave_approver is notified when the employee submits a leave request and is the only user who can approve/reject it.
+
+**Current Status:**
+| Employee | Leave Approver |
+|----------|----------------|
+| HR-EMP-00001 (Xu) | Administrator |
+| All others | **Not configured** |
+
+**TODO:** Set leave_approver for all employees. Options:
+1. Set Administrator as approver for all employees
+2. Set department heads as approvers for their team members
+3. Create a dedicated HR user to approve all leaves
+
+To configure: Employee > [Employee Name] > Attendance and Leave Details > Leave Approver
+
+### Attendance Request (WFH)
+
+WFH requests use the Attendance Request doctype with `reason = "Work From Home"`. These are approved by users with the **HR Manager** role (currently Administrator).
+
 ## Email Configuration
 
 **Outgoing Email Account:** Meraki Notifications
-- Email: erp-noreply@mobelaris.info
-- SMTP Server: 154.26.135.60, Port 465, SSL
+- Email: noreply@merakiweddingplanner.com
+- SMTP Server: smtp.sendgrid.net, Port 587, STARTTLS
+- Login: `apikey` (literal string, SendGrid requirement)
 - Default outgoing, always use account email as sender
 - Used for all ERPNext system emails and notifications
+
+**SendGrid Configuration:**
+- Authentication uses API key with "Mail Send" permission
+- Sender identity verified via domain authentication
+- Activity tracking available at https://app.sendgrid.com/email_activity
 
 **Test Employee Email:** xu-test@mobelaris.info (mapped to HR-EMP-00001)
 
@@ -258,6 +285,14 @@ Public holidays: New Year (Jan 1), Tet/Lunar New Year (Feb 17-21), Hung Kings Co
 
 ## Notifications
 
+### Leave Application Submitted for Approval
+
+- **Document Type:** Leave Application
+- **Event:** New
+- **Channel:** Email
+- **Recipient:** `leave_approver` field on the document
+- **Template:** HTML email with leave details (employee name, type, dates, days, reason)
+
 ### Leave Rejection Email
 
 - **Document Type:** Leave Application
@@ -266,6 +301,15 @@ Public holidays: New Year (Jan 1), Tet/Lunar New Year (Feb 17-21), Hung Kings Co
 - **Channel:** Email + System Notification
 - **Recipient:** Employee (via custom `employee_email` field that fetches from `employee.user_id`)
 - **Template:** HTML email with leave details table (type, dates, days, reason, approver)
+
+### WFH Request Submitted
+
+- **Document Type:** Attendance Request
+- **Event:** New
+- **Condition:** `doc.reason == "Work From Home"`
+- **Channel:** Email
+- **Recipient:** Users with HR Manager role
+- **Template:** HTML email with WFH details (employee name, dates, notes)
 
 ### Leave Submission Telegram
 

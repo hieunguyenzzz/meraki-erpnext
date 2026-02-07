@@ -40,6 +40,8 @@ import PaymentDetailPage from "@/pages/finance/PaymentDetailPage";
 import JournalsPage from "@/pages/finance/JournalsPage";
 import OverviewPage from "@/pages/finance/OverviewPage";
 import MyProfilePage from "@/pages/self-service/MyProfilePage";
+import MyLeavesPage from "@/pages/self-service/MyLeavesPage";
+import MyAttendancePage from "@/pages/self-service/MyAttendancePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -93,6 +95,9 @@ export default function App() {
             { name: "Interview Detail" },
             { name: "Employee", list: "/hr/employees", show: "/hr/employees/:id" },
             { name: "Leave Application", list: "/hr/leaves" },
+            { name: "Leave Type" },
+            { name: "Leave Allocation" },
+            { name: "Attendance Request" },
             { name: "Employee Onboarding", list: "/hr/onboarding", show: "/hr/onboarding/:id" },
             { name: "Payroll Entry", list: "/hr/payroll" },
             { name: "Salary Slip", list: "/hr/payroll" },
@@ -107,16 +112,17 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<ThemeProvider><LoginPage /></ThemeProvider>} />
 
-            {/* Self-service: employee profile (no sidebar) */}
+            {/* Self-service routes (no sidebar) */}
             <Route
-              path="/my-profile"
               element={
                 <Authenticated key="self-service" fallback={<Navigate to="/login" />}>
                   <SelfServiceLayout />
                 </Authenticated>
               }
             >
-              <Route index element={<MyProfilePage />} />
+              <Route path="/my-profile" element={<MyProfilePage />} />
+              <Route path="/my-leaves" element={<MyLeavesPage />} />
+              <Route path="/my-attendance" element={<MyAttendancePage />} />
             </Route>
 
             {/* Admin: full app with sidebar */}

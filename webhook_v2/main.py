@@ -13,6 +13,7 @@ from webhook_v2.core.database import Database
 from webhook_v2.core.models import DocType
 from webhook_v2.processors.realtime import RealtimeProcessor
 from webhook_v2.processors.backfill import BackfillProcessor
+from webhook_v2.processors.expense import ExpenseProcessor
 from webhook_v2.scheduler import start_scheduler, stop_scheduler
 
 log = get_logger(__name__)
@@ -183,6 +184,37 @@ async def trigger_fetch(
     background_tasks.add_task(run_fetch)
 
     return {"status": "fetch_started", "days": days}
+
+
+class ExpenseProcessRequest(BaseModel):
+    days: int = 30  # How far back to look for emails
+
+
+@app.post("/process/expenses")
+async def trigger_expense_processing(
+    request: ExpenseProcessRequest,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Process supplier invoice emails.
+
+    Identifies emails with PDF invoices and creates Purchase Invoices in ERPNext.
+
+    1. Fetches emails from INBOX (last N days)
+    2. Classifies emails using expense classifier
+    3. Extracts invoice data from PDF attachments using Gemini Vision
+    4. Creates Purchase Invoices in ERPNext
+    """
+    days = min(request.days, 365)
+
+    def run_expense_processor():
+        processor = ExpenseProcessor()
+        processor.fetch_and_store(since_days=days)
+        processor.process(DocType.EXPENSE)
+
+    background_tasks.add_task(run_expense_processor)
+
+    return {"status": "expense_processing_started", "days": days}
 
 
 # Run with: uvicorn webhook_v2.main:app --host 0.0.0.0 --port 8001

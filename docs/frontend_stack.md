@@ -236,7 +236,10 @@ refinefrontend/src/
     crm/                    # Customers, Weddings, Leads, Opportunities
     hr/                     # Employees, Leaves, Onboarding
     finance/                # Invoices, Journals, Overview
-    self-service/           # MyProfilePage (employee onboarding)
+    self-service/           # Employee Self Service portal
+      MyProfilePage.tsx     # Personal info, emergency contact, bank details
+      MyLeavesPage.tsx      # Leave balance + request leave
+      MyAttendancePage.tsx  # WFH requests
 ```
 
 ### Routing
@@ -244,7 +247,10 @@ refinefrontend/src/
 Two authenticated route branches in `App.tsx`:
 
 1. **Admin branch** (pathless layout route) -- uses `<Layout />` with sidebar, guarded by `AdminGuard` which redirects ESS-only users.
-2. **Self-service branch** (`/my-profile`) -- uses `<SelfServiceLayout />` with top bar only, no sidebar.
+2. **Self-service branch** -- uses `<SelfServiceLayout />` with top navigation bar, no sidebar. Routes:
+   - `/my-profile` -- Personal profile editing
+   - `/my-leaves` -- Leave balance and request submission
+   - `/my-attendance` -- WFH request submission
 
 The index route (`/`) renders `<RoleRedirect />` which checks roles:
 - ESS-only user -> redirect to `/my-profile`

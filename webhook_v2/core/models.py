@@ -26,6 +26,7 @@ class Classification(str, Enum):
     MEETING_CONFIRMED = "meeting_confirmed"
     QUOTE_SENT = "quote_sent"
     IRRELEVANT = "irrelevant"
+    SUPPLIER_INVOICE = "supplier_invoice"
 
 
 class DocType(str, Enum):
@@ -138,6 +139,14 @@ class ClassificationResult:
     message_summary: str | None = None
     meeting_date: str | None = None
 
+    # Invoice extraction fields (for supplier invoices)
+    supplier_name: str | None = None
+    invoice_number: str | None = None
+    invoice_date: str | None = None
+    invoice_total: float | None = None
+    invoice_currency: str | None = None
+    invoice_items: list[dict] | None = None  # [{description, amount, category}]
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ClassificationResult":
         """Create ClassificationResult from classifier response dict."""
@@ -165,6 +174,13 @@ class ClassificationResult:
             message_details=data.get("moreDetails"),
             message_summary=data.get("message_summary"),
             meeting_date=data.get("meeting_date"),
+            # Invoice fields
+            supplier_name=data.get("supplier_name"),
+            invoice_number=data.get("invoice_number"),
+            invoice_date=data.get("invoice_date"),
+            invoice_total=data.get("invoice_total"),
+            invoice_currency=data.get("invoice_currency"),
+            invoice_items=data.get("invoice_items"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -187,6 +203,13 @@ class ClassificationResult:
             "moreDetails": self.message_details,
             "message_summary": self.message_summary,
             "meeting_date": self.meeting_date,
+            # Invoice fields
+            "supplier_name": self.supplier_name,
+            "invoice_number": self.invoice_number,
+            "invoice_date": self.invoice_date,
+            "invoice_total": self.invoice_total,
+            "invoice_currency": self.invoice_currency,
+            "invoice_items": self.invoice_items,
         }
 
 

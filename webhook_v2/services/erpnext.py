@@ -371,6 +371,178 @@ class ERPNextClient:
             log.error("update_lead_status_error", error=str(e), lead=lead_name)
             return False
 
+    # Supplier Operations
+
+    def find_supplier_by_name(self, name: str) -> str | None:
+        """
+        Find a Supplier by name (case-insensitive partial match).
+
+        Returns:
+            Supplier name if found, None otherwise.
+        """
+        try:
+            result = self._get(
+                "/api/resource/Supplier",
+                params={
+                    "filters": json.dumps([["supplier_name", "like", f"%{name}%"]]),
+                    "fields": json.dumps(["name", "supplier_name"]),
+                    "limit_page_length": 1,
+                },
+            )
+            data = result.get("data", [])
+            if data:
+                return data[0].get("name")
+        except Exception as e:
+            log.error("find_supplier_error", name=name, error=str(e))
+        return None
+
+    def create_supplier(
+        self,
+        name: str,
+        supplier_group: str = "Services",
+    ) -> str | None:
+        """
+        Create a new Supplier in ERPNext.
+
+        Args:
+            name: Supplier name
+            supplier_group: Supplier group (default: Services)
+
+        Returns:
+            Supplier name on success, None on failure.
+        """
+        data = {
+            "doctype": "Supplier",
+            "supplier_name": name,
+            "supplier_group": supplier_group,
+            "supplier_type": "Company",
+        }
+
+        try:
+            result = self._post("/api/resource/Supplier", data)
+            supplier_name = result.get("data", {}).get("name")
+            log.info("supplier_created", supplier_name=supplier_name)
+            return supplier_name
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 409:
+                log.info("supplier_exists", name=name)
+                return self.find_supplier_by_name(name)
+            log.error("create_supplier_error", error=str(e), name=name)
+        except Exception as e:
+            log.error("create_supplier_error", error=str(e), name=name)
+        return None
+
+    def get_or_create_supplier(self, name: str) -> str | None:
+        """Find existing supplier or create new one."""
+        supplier = self.find_supplier_by_name(name)
+        if supplier:
+            return supplier
+        return self.create_supplier(name)
+
+    # Purchase Invoice Operations
+
+    def create_purchase_invoice(
+        self,
+        supplier: str,
+        items: list[dict],
+        posting_date: str | None = None,
+        bill_no: str | None = None,
+        currency: str = "VND",
+    ) -> str | None:
+        """
+        Create a Purchase Invoice in ERPNext.
+
+        Args:
+            supplier: Supplier name (docname)
+            items: List of item dicts with keys:
+                   - description: Item description
+                   - amount: Item amount
+                   - expense_account: Expense account name
+            posting_date: Invoice date (YYYY-MM-DD format)
+            bill_no: External invoice/bill number
+            currency: Currency code (default VND)
+
+        Returns:
+            Purchase Invoice name on success, None on failure.
+        """
+        # Format items for ERPNext
+        invoice_items = []
+        for item in items:
+            invoice_items.append({
+                "item_name": item.get("description", "Invoice Item")[:140],
+                "description": item.get("description", "Invoice Item"),
+                "qty": 1,
+                "rate": item.get("amount", 0),
+                "expense_account": item.get("expense_account", "Miscellaneous Expenses - MWP"),
+            })
+
+        data = {
+            "doctype": "Purchase Invoice",
+            "supplier": supplier,
+            "currency": currency,
+            "items": invoice_items,
+            "update_stock": 0,  # Service invoice, no stock
+            "is_paid": 0,  # Not paid yet
+        }
+
+        if posting_date:
+            data["posting_date"] = posting_date
+            data["bill_date"] = posting_date
+
+        if bill_no:
+            data["bill_no"] = bill_no
+
+        try:
+            result = self._post("/api/resource/Purchase Invoice", data)
+            invoice_name = result.get("data", {}).get("name")
+            log.info(
+                "purchase_invoice_created",
+                invoice_name=invoice_name,
+                supplier=supplier,
+                total=sum(item.get("amount", 0) for item in items),
+            )
+            return invoice_name
+        except requests.HTTPError as e:
+            if e.response is not None:
+                log.error(
+                    "create_purchase_invoice_error",
+                    error=str(e),
+                    response=e.response.text[:500],
+                    supplier=supplier,
+                )
+            else:
+                log.error("create_purchase_invoice_error", error=str(e), supplier=supplier)
+        except Exception as e:
+            log.error("create_purchase_invoice_error", error=str(e), supplier=supplier)
+        return None
+
+    def submit_document(self, doctype: str, name: str) -> bool:
+        """
+        Submit a document in ERPNext.
+
+        Args:
+            doctype: Document type (e.g., "Purchase Invoice")
+            name: Document name
+
+        Returns:
+            True on success, False on failure.
+        """
+        try:
+            self._post(
+                "/api/method/frappe.client.submit",
+                {"doc": {"doctype": doctype, "name": name}},
+            )
+            log.info("document_submitted", doctype=doctype, name=name)
+            return True
+        except Exception as e:
+            log.error(
+                "submit_document_error",
+                doctype=doctype,
+                name=name,
+                error=str(e),
+            )
+            return False
+
     def get_stale_awaiting_client_leads(self, days: int = 3) -> list[dict]:
         """
         Find leads where:

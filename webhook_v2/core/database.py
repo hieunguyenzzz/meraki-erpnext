@@ -495,6 +495,27 @@ class Database:
             log.info("fetched_emails_by_date", count=len(emails), since=since_date.isoformat())
             return emails
 
+    def get_attachments(self, email_id: int) -> list[Attachment]:
+        """Fetch attachments for an email."""
+        sql = """
+        SELECT id, email_id, filename, content_type, size_bytes, storage_url
+        FROM attachments
+        WHERE email_id = %s
+        """
+
+        with self.get_connection() as conn:
+            rows = conn.execute(sql, (email_id,)).fetchall()
+            attachments = []
+            for row in rows:
+                attachments.append(Attachment(
+                    filename=row["filename"],
+                    content_type=row["content_type"],
+                    size_bytes=row["size_bytes"],
+                    storage_url=row["storage_url"],
+                    email_id=row["email_id"],
+                ))
+            return attachments
+
     def get_stats(self) -> dict[str, Any]:
         """Get processing statistics."""
         sql = """
