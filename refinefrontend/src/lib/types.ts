@@ -45,6 +45,8 @@ export interface Employee {
   company_email?: string;
   custom_meraki_id?: number;
   ctc?: number;
+  custom_last_review_date?: string;
+  custom_review_notes?: string;
 }
 
 export interface SalesInvoice {

@@ -26,6 +26,7 @@ import PayrollPage from "@/pages/hr/PayrollPage";
 import OnboardingPage from "@/pages/hr/OnboardingPage";
 import OnboardingDetailPage from "@/pages/hr/OnboardingDetailPage";
 import RecruitingScannerPage from "@/pages/hr/RecruitingScannerPage";
+import StaffOverviewPage from "@/pages/hr/StaffOverviewPage";
 import RecruitingPipelinePage from "@/pages/hr/RecruitingPipelinePage";
 import ApplicantDetailPage from "@/pages/hr/ApplicantDetailPage";
 import ApplicantsListPage from "@/pages/hr/ApplicantsListPage";
@@ -141,6 +142,7 @@ export default function App() {
               <Route path="/projects/:name" element={<ProjectDetailPage />} />
 
               {/* HR */}
+              <Route path="/hr/staff-overview" element={<StaffOverviewPage />} />
               <Route path="/hr/recruiting" element={<RecruitingScannerPage />} />
               <Route path="/hr/recruiting/pipeline" element={<RecruitingPipelinePage />} />
               <Route path="/hr/recruiting/all" element={<ApplicantsListPage />} />
