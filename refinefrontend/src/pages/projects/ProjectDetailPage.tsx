@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useOne, useList, useDelete, useUpdate, useInvalidate, useNavigation } from "@refinedev/core";
+import { useOne, useList, useDelete, useUpdate, useInvalidate, useNavigation, useCreate } from "@refinedev/core";
+import * as Popover from "@radix-ui/react-popover";
 import { formatDate, formatVND } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import {
@@ -33,6 +36,10 @@ import {
   DollarSign,
   FileText,
   ExternalLink,
+  Plus,
+  Check,
+  User,
+  Clock,
 } from "lucide-react";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
@@ -41,6 +48,36 @@ import { cn } from "@/lib/utils";
 import { PROJECT_COLUMNS } from "@/lib/projectKanban";
 
 const STAGE_OPTIONS = PROJECT_COLUMNS.map((col) => col.stages[0]);
+
+const WEDDING_PHASES = [
+  "Onboarding",
+  "Planning",
+  "Final Details",
+  "Wedding Week",
+  "Day-of",
+  "Completed",
+];
+
+const PRIORITY_OPTIONS = ["Low", "Medium", "High", "Urgent"];
+
+function phaseBadgeVariant(phase: string) {
+  switch (phase) {
+    case "Onboarding":
+      return "info" as const;
+    case "Planning":
+      return "warning" as const;
+    case "Final Details":
+      return "info" as const;
+    case "Wedding Week":
+      return "destructive" as const;
+    case "Day-of":
+      return "secondary" as const;
+    case "Completed":
+      return "success" as const;
+    default:
+      return "secondary" as const;
+  }
+}
 
 function statusVariant(status: string) {
   switch (status) {
@@ -79,10 +116,21 @@ export default function ProjectDetailPage() {
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
+  const [taskForm, setTaskForm] = useState({
+    subject: "",
+    phase: "",
+    deadline: "",
+    priority: "Medium",
+    assignee: "",
+  });
+  const [sharedWith, setSharedWith] = useState<Set<string>>(new Set());
 
   const invalidate = useInvalidate();
   const { mutateAsync: deleteRecord } = useDelete();
   const { mutateAsync: updateRecord } = useUpdate();
+  const { mutateAsync: createDoc } = useCreate();
   const { list } = useNavigation();
 
   // Fetch Project
@@ -159,11 +207,34 @@ export default function ProjectDetailPage() {
     filters: [{ field: "project", operator: "eq", value: name! }],
     sorters: [{ field: "creation", order: "desc" }],
     meta: {
-      fields: ["name", "subject", "status", "priority", "exp_end_date"],
+      fields: [
+        "name",
+        "subject",
+        "status",
+        "priority",
+        "exp_end_date",
+        "custom_wedding_phase",
+        "_assign",
+        "custom_shared_with",
+        "owner",
+      ],
     },
     queryOptions: { enabled: !!name },
   });
   const tasks = tasksResult?.data ?? [];
+
+  // Fetch Employees for task assignment
+  const { result: employeesResult } = useList({
+    resource: "Employee",
+    pagination: { mode: "off" as const },
+    filters: [{ field: "status", operator: "eq", value: "Active" }],
+    meta: { fields: ["name", "employee_name", "user_id"] },
+  });
+  const employees = (employeesResult?.data ?? []).map((e: any) => ({
+    id: e.name,
+    name: e.employee_name,
+    userId: e.user_id,
+  }));
 
   async function handleDelete() {
     await deleteRecord({ resource: "Project", id: name! });
@@ -177,6 +248,100 @@ export default function ProjectDetailPage() {
       values: { custom_project_stage: newStage },
     });
     invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
+  }
+
+  function toggleSharedWith(employeeId: string) {
+    setSharedWith((prev) => {
+      const next = new Set(prev);
+      if (next.has(employeeId)) {
+        next.delete(employeeId);
+      } else {
+        next.add(employeeId);
+      }
+      return next;
+    });
+  }
+
+  function resetTaskForm() {
+    setTaskForm({
+      subject: "",
+      phase: "",
+      deadline: "",
+      priority: "Medium",
+      assignee: "",
+    });
+    setSharedWith(new Set());
+  }
+
+  async function handleCreateTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!taskForm.subject.trim() || !taskForm.phase || !taskForm.deadline) return;
+
+    setIsSubmittingTask(true);
+    try {
+      // Get user_id for the assignee
+      const assigneeEmployee = employees.find((e) => e.id === taskForm.assignee);
+      const assigneeUserId = assigneeEmployee?.userId;
+
+      // Create the task first
+      const result = await createDoc({
+        resource: "Task",
+        values: {
+          subject: taskForm.subject.trim(),
+          project: name,
+          custom_wedding_phase: taskForm.phase,
+          exp_end_date: taskForm.deadline,
+          priority: taskForm.priority || "Medium",
+          custom_shared_with: Array.from(sharedWith).join(","),
+          status: "Open",
+        },
+      });
+
+      // If assignee selected, use ERPNext's assignment API
+      if (assigneeUserId && result?.data?.name) {
+        await fetch("/api/method/frappe.desk.form.assign_to.add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            doctype: "Task",
+            name: result.data.name,
+            assign_to: [assigneeUserId],
+          }),
+        });
+      }
+
+      setCreateTaskOpen(false);
+      resetTaskForm();
+      invalidate({ resource: "Task", invalidates: ["list"] });
+    } finally {
+      setIsSubmittingTask(false);
+    }
+  }
+
+  // Helper to get employee name from task's _assign field
+  function getAssigneeFromTask(task: any) {
+    try {
+      const assignedUsers = JSON.parse(task._assign || "[]");
+      if (assignedUsers.length === 0) return null;
+      const userId = assignedUsers[0];
+      const employee = employees.find((e) => e.userId === userId);
+      return employee?.name || userId;
+    } catch {
+      return null;
+    }
+  }
+
+  // Helper to get shared with employee names
+  function getSharedWithFromTask(task: any) {
+    if (!task.custom_shared_with) return [];
+    const ids = task.custom_shared_with.split(",").filter(Boolean);
+    return ids
+      .map((id: string) => {
+        const employee = employees.find((e) => e.id === id.trim());
+        return employee?.name || id;
+      })
+      .filter(Boolean);
   }
 
   if (!project) {
@@ -473,66 +638,286 @@ export default function ProjectDetailPage() {
 
             <TabsContent value="tasks" className="mt-4">
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                   <CardTitle className="flex items-center gap-2">
                     <Users className="h-5 w-5" />
                     Project Tasks
                   </CardTitle>
+                  <Dialog open={createTaskOpen} onOpenChange={setCreateTaskOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm">
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        Add Task
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[500px]">
+                      <DialogHeader>
+                        <DialogTitle>Create Task</DialogTitle>
+                        <DialogDescription>
+                          Add a new task to this wedding project.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleCreateTask} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="task-subject">Subject *</Label>
+                          <Input
+                            id="task-subject"
+                            placeholder="e.g. Send vendor contracts"
+                            value={taskForm.subject}
+                            onChange={(e) =>
+                              setTaskForm({ ...taskForm, subject: e.target.value })
+                            }
+                            required
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="task-phase">Phase *</Label>
+                            <Select
+                              value={taskForm.phase}
+                              onValueChange={(value) =>
+                                setTaskForm({ ...taskForm, phase: value })
+                              }
+                              required
+                            >
+                              <SelectTrigger id="task-phase">
+                                <SelectValue placeholder="Select phase" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {WEDDING_PHASES.map((phase) => (
+                                  <SelectItem key={phase} value={phase}>
+                                    {phase}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="task-deadline">Deadline *</Label>
+                            <Input
+                              id="task-deadline"
+                              type="date"
+                              value={taskForm.deadline}
+                              onChange={(e) =>
+                                setTaskForm({ ...taskForm, deadline: e.target.value })
+                              }
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="task-assignee">Assign To</Label>
+                            <Select
+                              value={taskForm.assignee}
+                              onValueChange={(value) =>
+                                setTaskForm({ ...taskForm, assignee: value })
+                              }
+                            >
+                              <SelectTrigger id="task-assignee">
+                                <SelectValue placeholder="Select employee" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {employees.map((emp) => (
+                                  <SelectItem key={emp.id} value={emp.id}>
+                                    {emp.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="task-priority">Priority</Label>
+                            <Select
+                              value={taskForm.priority}
+                              onValueChange={(value) =>
+                                setTaskForm({ ...taskForm, priority: value })
+                              }
+                            >
+                              <SelectTrigger id="task-priority">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PRIORITY_OPTIONS.map((priority) => (
+                                  <SelectItem key={priority} value={priority}>
+                                    {priority}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Share With</Label>
+                          <Popover.Root>
+                            <Popover.Trigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full justify-start"
+                              >
+                                {sharedWith.size > 0
+                                  ? `${sharedWith.size} employee(s) selected`
+                                  : "Select employees to share with..."}
+                              </Button>
+                            </Popover.Trigger>
+                            <Popover.Portal>
+                              <Popover.Content
+                                className="z-50 w-[260px] max-h-[300px] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+                                align="start"
+                                sideOffset={4}
+                              >
+                                {employees
+                                  .filter((emp) => emp.id !== taskForm.assignee)
+                                  .map((emp) => {
+                                    const isSelected = sharedWith.has(emp.id);
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={emp.id}
+                                        onClick={() => toggleSharedWith(emp.id)}
+                                        className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                                      >
+                                        <div
+                                          className={cn(
+                                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                            isSelected
+                                              ? "bg-primary text-primary-foreground"
+                                              : "opacity-50"
+                                          )}
+                                        >
+                                          {isSelected && <Check className="h-4 w-4" />}
+                                        </div>
+                                        <span>{emp.name}</span>
+                                      </button>
+                                    );
+                                  })}
+                                {sharedWith.size > 0 && (
+                                  <>
+                                    <div className="-mx-1 my-1 h-px bg-muted" />
+                                    <button
+                                      type="button"
+                                      onClick={() => setSharedWith(new Set())}
+                                      className="flex w-full cursor-default select-none items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                                    >
+                                      Clear all
+                                    </button>
+                                  </>
+                                )}
+                              </Popover.Content>
+                            </Popover.Portal>
+                          </Popover.Root>
+                          <p className="text-xs text-muted-foreground">
+                            Additional employees who can see this task
+                          </p>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setCreateTaskOpen(false);
+                              resetTaskForm();
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={
+                              isSubmittingTask ||
+                              !taskForm.subject.trim() ||
+                              !taskForm.phase ||
+                              !taskForm.deadline
+                            }
+                          >
+                            {isSubmittingTask ? "Creating..." : "Create Task"}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
                 </CardHeader>
                 <CardContent>
                   {tasks.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-8">
-                      No tasks yet. Create tasks in ERPNext to track wedding
-                      preparation.
+                      No tasks yet. Click "Add Task" to create your first task.
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {tasks.map((task: any) => (
-                        <div
-                          key={task.name}
-                          className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {task.subject}
-                            </p>
-                            {task.exp_end_date && (
-                              <p className="text-xs text-muted-foreground">
-                                Due: {formatDate(task.exp_end_date)}
+                      {tasks.map((task: any) => {
+                        const assignee = getAssigneeFromTask(task);
+                        const sharedWithNames = getSharedWithFromTask(task);
+                        return (
+                          <div
+                            key={task.name}
+                            className="flex items-start justify-between p-3 rounded-lg border bg-muted/30 gap-3"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {task.subject}
                               </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {task.priority && (
+                              <div className="flex flex-wrap items-center gap-2 mt-1">
+                                {task.exp_end_date && (
+                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                    <Clock className="h-3 w-3" />
+                                    {formatDate(task.exp_end_date)}
+                                  </span>
+                                )}
+                                {assignee && (
+                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                    <User className="h-3 w-3" />
+                                    {assignee}
+                                  </span>
+                                )}
+                                {sharedWithNames.length > 0 && (
+                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                    <Users className="h-3 w-3" />
+                                    +{sharedWithNames.length} shared
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                              {task.custom_wedding_phase && (
+                                <Badge
+                                  variant={phaseBadgeVariant(task.custom_wedding_phase)}
+                                  className="text-[10px]"
+                                >
+                                  {task.custom_wedding_phase}
+                                </Badge>
+                              )}
+                              {task.priority && (
+                                <Badge
+                                  variant={
+                                    task.priority === "High" ||
+                                    task.priority === "Urgent"
+                                      ? "destructive"
+                                      : task.priority === "Medium"
+                                      ? "warning"
+                                      : "secondary"
+                                  }
+                                  className="text-[10px]"
+                                >
+                                  {task.priority}
+                                </Badge>
+                              )}
                               <Badge
                                 variant={
-                                  task.priority === "High" ||
-                                  task.priority === "Urgent"
+                                  task.status === "Completed"
+                                    ? "success"
+                                    : task.status === "Cancelled"
                                     ? "destructive"
-                                    : task.priority === "Medium"
-                                    ? "warning"
                                     : "secondary"
                                 }
                                 className="text-[10px]"
                               >
-                                {task.priority}
+                                {task.status}
                               </Badge>
-                            )}
-                            <Badge
-                              variant={
-                                task.status === "Completed"
-                                  ? "success"
-                                  : task.status === "Cancelled"
-                                  ? "destructive"
-                                  : "secondary"
-                              }
-                              className="text-[10px]"
-                            >
-                              {task.status}
-                            </Badge>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
