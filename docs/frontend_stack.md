@@ -2,6 +2,45 @@
 
 Custom React admin panel for Meraki Wedding Planner, built on **Refine v5** with a Shadcn-style component library. Deployed as a separate container (`react-frontend`) that proxies API calls to the ERPNext backend.
 
+## Reference Template
+
+This frontend is based on **[shadcn-admin](https://github.com/satnaing/shadcn-admin)** - a production-ready admin dashboard template built on shadcn/ui.
+
+### Component Reuse Principle
+
+> **Before creating any new component, check if shadcn-admin already has it.**
+
+| Scenario | Action |
+|----------|--------|
+| shadcn-admin has the component | Copy and adapt it |
+| shadcn-admin has similar component | Use as starting point |
+| No equivalent exists | Create new (domain-specific) |
+
+### Components to Use from shadcn-admin
+
+These components should be copied from shadcn-admin when needed:
+
+| Component | Path in shadcn-admin | Use For |
+|-----------|---------------------|---------|
+| ConfirmDialog | `components/confirm-dialog.tsx` | Delete confirmations |
+| PasswordInput | `components/password-input.tsx` | Login/password forms |
+| DatePicker | `components/date-picker.tsx` | Date selection in forms |
+| LongText | `components/long-text.tsx` | Text truncation with "show more" |
+| NavigationProgress | `components/navigation-progress.tsx` | Route transition loading |
+| SkipToMain | `components/skip-to-main.tsx` | Accessibility |
+| Error pages | `features/errors/` | 404, 500 pages |
+
+### Our Custom Components (No shadcn-admin Equivalent)
+
+These are domain-specific and built from scratch:
+
+- **Kanban board** (`components/kanban/`) - CRM/recruiting pipelines
+- **CRM detail pages** - Lead/Opportunity views with activity tracking
+- **Conversation section** - Chat/communication history
+- **Editable fields** - Inline editing for ERP forms
+- **Interview scheduling** - HR recruiting workflows
+- **Finance summaries** - Payment/invoice metric cards
+
 ## Tech Stack
 
 | Layer | Library | Version |

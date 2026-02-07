@@ -72,6 +72,8 @@ export interface Project {
   name: string;
   project_name: string;
   status: string;
+  custom_project_stage?: string;
+  customer?: string;
   sales_order?: string;
   expected_start_date?: string;
   expected_end_date?: string;

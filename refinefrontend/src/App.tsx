@@ -17,6 +17,8 @@ import LeadDetailPage from "@/pages/crm/LeadDetailPage";
 import OpportunityDetailPage from "@/pages/crm/OpportunityDetailPage";
 import KanbanPage from "@/pages/crm/KanbanPage";
 import ChatsPage from "@/pages/crm/ChatsPage";
+import ProjectKanbanPage from "@/pages/projects/ProjectKanbanPage";
+import ProjectDetailPage from "@/pages/projects/ProjectDetailPage";
 import EmployeesPage from "@/pages/hr/EmployeesPage";
 import EmployeeDetailPage from "@/pages/hr/EmployeeDetailPage";
 import LeavesPage from "@/pages/hr/LeavesPage";
@@ -97,6 +99,7 @@ export default function App() {
             { name: "Payment Entry", list: "/finance/payments", show: "/finance/payments/:id" },
             { name: "Purchase Invoice", list: "/finance/expenses", show: "/finance/expenses/:id" },
             { name: "Journal Entry", list: "/finance/journals" },
+            { name: "Project", list: "/projects", show: "/projects/:id" },
           ]}
           options={{ syncWithLocation: true, disableTelemetry: true }}
         >
@@ -132,6 +135,10 @@ export default function App() {
               <Route path="/crm/chats" element={<ChatsPage />} />
               <Route path="/crm/leads/:name" element={<LeadDetailPage />} />
               <Route path="/crm/opportunities/:name" element={<OpportunityDetailPage />} />
+
+              {/* Weddings/Projects */}
+              <Route path="/projects" element={<ProjectKanbanPage />} />
+              <Route path="/projects/:name" element={<ProjectDetailPage />} />
 
               {/* HR */}
               <Route path="/hr/recruiting" element={<RecruitingScannerPage />} />
