@@ -179,6 +179,28 @@ Todo → In Progress → PR Submitted → Testing → Done
 - Move ticket to "Done" if tests pass
 - Move back to "In Progress" if issues found (with details)
 
+## Email Processing (webhook_v2)
+
+The `webhook_v2/` directory contains the email processing pipeline that:
+1. Fetches emails from Zoho IMAP and stores in PostgreSQL
+2. Classifies emails using Gemini AI
+3. Creates Leads and Communications in ERPNext
+
+See **[docs/webhook_v2_operations.md](./docs/webhook_v2_operations.md)** for:
+- How to flush and re-process leads/communications
+- Diagnosing duplicates and missing data
+- Useful PostgreSQL and ERPNext API queries
+- Notes on ERPNext API authentication issues
+
+**Key commands:**
+```bash
+# Run backfill (process stored emails to ERPNext)
+docker compose exec email-processor-v2 python -m webhook_v2.processors.backfill --since 2026-02-06
+
+# Check stats
+docker compose exec email-processor-v2 python -c "from webhook_v2.services.erpnext import ERPNextClient; c = ERPNextClient(); print(c._get('/api/resource/Lead', params={'limit_page_length': 1000}))"
+```
+
 ## React Frontend
 
 The custom admin panel lives in `refinefrontend/`. **Before working on frontend code, read [docs/frontend_stack.md](./docs/frontend_stack.md)** -- it covers the Refine v5 API quirks (return shapes differ from standard docs), component library, deployment, and conventions.
