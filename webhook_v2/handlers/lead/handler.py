@@ -91,6 +91,17 @@ class LeadHandler(BaseHandler):
         timestamp: str | None,
     ) -> ProcessingResult:
         """Handle new lead classification."""
+        # Check by message_id first (primary deduplication)
+        if email.message_id and self.erpnext.communication_exists_by_message_id(email.message_id):
+            log.info("communication_duplicate_skipped", message_id=email.message_id)
+            return ProcessingResult(
+                success=True,
+                email_id=email.id or 0,
+                classification=classification.classification,
+                action="skipped_duplicate",
+                details={"reason": "Communication already exists for this message_id"},
+            )
+
         # Create lead
         lead_name = self.erpnext.create_lead(classification, timestamp)
 
@@ -103,7 +114,7 @@ class LeadHandler(BaseHandler):
                 error="Failed to create lead in ERPNext",
             )
 
-        # Create initial communication
+        # Create initial communication with message_id for deduplication
         content = self._format_initial_communication(email, classification)
         comm_name = self.erpnext.create_communication(
             lead_name=lead_name,
@@ -111,6 +122,7 @@ class LeadHandler(BaseHandler):
             content=content,
             sent_or_received=self._get_direction(email).value,
             timestamp=timestamp,
+            message_id=email.message_id,
         )
 
         log.info(
@@ -137,6 +149,17 @@ class LeadHandler(BaseHandler):
     ) -> ProcessingResult:
         """Handle follow-up email classifications."""
         target_email = classification.email or self._get_target_email(email, classification)
+
+        # Check by message_id first (primary deduplication)
+        if email.message_id and self.erpnext.communication_exists_by_message_id(email.message_id):
+            log.info("communication_duplicate_skipped", message_id=email.message_id)
+            return ProcessingResult(
+                success=True,
+                email_id=email.id or 0,
+                classification=classification.classification,
+                action="skipped_duplicate",
+                details={"reason": "Communication already exists for this message_id"},
+            )
 
         # Find existing lead
         lead_name = self.erpnext.find_lead_by_email(target_email)
@@ -166,18 +189,7 @@ class LeadHandler(BaseHandler):
         ):
             body = self.classifier.extract_new_message(body)
 
-        # Check for duplicate communication
-        if self.erpnext.communication_exists(lead_name, email.subject, timestamp):
-            log.info("communication_duplicate_skipped", lead=lead_name)
-            return ProcessingResult(
-                success=True,
-                email_id=email.id or 0,
-                classification=classification.classification,
-                action="skipped_duplicate",
-                result_id=lead_name,
-            )
-
-        # Create communication
+        # Create communication with message_id for deduplication
         content = self._format_html_content(body[:3000] if body else email.subject)
         comm_name = self.erpnext.create_communication(
             lead_name=lead_name,
@@ -185,6 +197,7 @@ class LeadHandler(BaseHandler):
             content=content,
             sent_or_received=self._get_direction(email).value,
             timestamp=timestamp,
+            message_id=email.message_id,
         )
 
         # Update lead status based on classification

@@ -53,8 +53,16 @@ class ERPNextClient:
 
     @property
     def _auth_headers(self) -> dict[str, str]:
-        """Headers for all requests (auth only)."""
-        return {"Authorization": f"token {self.api_key}:{self.api_secret}"}
+        """Headers for all requests.
+
+        Includes auth and site name headers required when connecting
+        directly to backend (bypassing nginx).
+        """
+        return {
+            "Authorization": f"token {self.api_key}:{self.api_secret}",
+            "X-Frappe-Site-Name": "erp.merakiwp.com",
+            "Host": "erp.merakiwp.com",
+        }
 
     def _get(self, endpoint: str, params: dict | None = None) -> dict[str, Any]:
         """Make GET request to ERPNext API with retry for 401 errors."""
@@ -280,6 +288,7 @@ class ERPNextClient:
         content: str,
         sent_or_received: str,
         timestamp: str | None = None,
+        message_id: str | None = None,
     ) -> str | None:
         """
         Create a Communication record linked to a Lead.
@@ -290,6 +299,7 @@ class ERPNextClient:
             content: HTML content
             sent_or_received: "Sent" or "Received"
             timestamp: Optional timestamp for backfill
+            message_id: Email message_id for deduplication (stored in custom_email_message_id)
 
         Returns:
             Communication name on success, None on failure.
@@ -309,6 +319,9 @@ class ERPNextClient:
         if timestamp:
             data["communication_date"] = to_erpnext_datetime(timestamp)
 
+        if message_id:
+            data["custom_email_message_id"] = self._normalize_message_id(message_id)
+
         try:
             result = self._post("/api/resource/Communication", data)
             comm_name = result.get("data", {}).get("name")
@@ -324,7 +337,7 @@ class ERPNextClient:
         subject: str,
         timestamp: str | None = None,
     ) -> bool:
-        """Check if a communication already exists (for deduplication)."""
+        """Check if a communication already exists (for deduplication by subject)."""
         try:
             filters = [
                 ["reference_doctype", "=", "Lead"],
@@ -345,6 +358,52 @@ class ERPNextClient:
             return bool(result.get("data"))
         except Exception:
             return False
+
+    def _normalize_message_id(self, message_id: str) -> str:
+        """Normalize message_id by stripping angle brackets.
+
+        ERPNext HTML-encodes < and > to &lt; and &gt;, breaking exact matches.
+        Stripping brackets ensures consistent storage and lookup.
+        """
+        if not message_id:
+            return ""
+        return message_id.strip().strip("<>")
+
+    def communication_exists_by_message_id(self, message_id: str) -> bool:
+        """Check if a communication with this message_id already exists.
+
+        This is the primary deduplication method using the unique email message_id.
+        Uses retry logic to handle intermittent 401 errors.
+        """
+        if not message_id:
+            return False
+        normalized = self._normalize_message_id(message_id)
+        if not normalized:
+            return False
+
+        # Retry logic for intermittent 401 errors
+        for attempt in range(MAX_RETRIES):
+            try:
+                # Use 'like' to handle any encoding variations
+                result = self._get(
+                    "/api/resource/Communication",
+                    params={
+                        "filters": json.dumps([["custom_email_message_id", "like", f"%{normalized}%"]]),
+                        "fields": json.dumps(["name"]),
+                        "limit_page_length": 1,
+                    },
+                )
+                return bool(result.get("data"))
+            except Exception as e:
+                if attempt < MAX_RETRIES - 1:
+                    log.warning("communication_exists_check_retry", attempt=attempt + 1, error=str(e))
+                    time.sleep(RETRY_DELAY)
+                    continue
+                log.error("communication_exists_check_failed", error=str(e), message_id=normalized)
+                # Return True to be safe - prevents duplicates on error
+                # Better to skip than create duplicate
+                return True
+        return True  # Default to True to prevent duplicates
 
     # Lead Stage Updates
 

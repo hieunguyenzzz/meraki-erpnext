@@ -495,6 +495,100 @@ class Database:
             log.info("fetched_emails_by_date", count=len(emails), since=since_date.isoformat())
             return emails
 
+    def get_skipped_followups(
+        self,
+        since_date: datetime,
+        until_date: datetime | None = None,
+        limit: int = 100,
+    ) -> list[Email]:
+        """
+        Fetch follow-up emails that were skipped because lead didn't exist.
+
+        These are emails that:
+        - Have a follow-up classification (quote_sent, client_message, etc.)
+        - Have a processing_log entry with action='skipped_no_lead'
+        - Have NOT been successfully processed since (no 'communication_added' log)
+
+        Used by backfill to retry follow-ups after leads are created.
+        """
+        if until_date:
+            sql = """
+            SELECT DISTINCT e.id, e.message_id, e.mailbox, e.folder, e.subject, e.sender,
+                   e.recipient, e.cc, e.email_date, e.body_plain, e.body_html,
+                   e.has_attachments, e.raw_headers, e.doctype, e.processed, e.processed_at,
+                   e.classification, e.classification_data, e.error_message, e.retry_count
+            FROM emails e
+            JOIN processing_logs pl ON e.id = pl.email_id
+            WHERE pl.action = 'skipped_no_lead'
+              AND e.email_date >= %s AND e.email_date < %s
+              AND NOT EXISTS (
+                SELECT 1 FROM processing_logs pl2
+                WHERE pl2.email_id = e.id
+                AND pl2.action = 'communication_added'
+              )
+            ORDER BY e.email_date ASC
+            LIMIT %s
+            """
+            params = (since_date, until_date, limit)
+        else:
+            sql = """
+            SELECT DISTINCT e.id, e.message_id, e.mailbox, e.folder, e.subject, e.sender,
+                   e.recipient, e.cc, e.email_date, e.body_plain, e.body_html,
+                   e.has_attachments, e.raw_headers, e.doctype, e.processed, e.processed_at,
+                   e.classification, e.classification_data, e.error_message, e.retry_count
+            FROM emails e
+            JOIN processing_logs pl ON e.id = pl.email_id
+            WHERE pl.action = 'skipped_no_lead'
+              AND e.email_date >= %s
+              AND NOT EXISTS (
+                SELECT 1 FROM processing_logs pl2
+                WHERE pl2.email_id = e.id
+                AND pl2.action = 'communication_added'
+              )
+            ORDER BY e.email_date ASC
+            LIMIT %s
+            """
+            params = (since_date, limit)
+
+        with self.get_connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+
+            emails = []
+            for row in rows:
+                classification = None
+                if row["classification"]:
+                    try:
+                        classification = Classification(row["classification"])
+                    except ValueError:
+                        pass
+
+                email = Email(
+                    id=row["id"],
+                    message_id=row["message_id"],
+                    mailbox=row["mailbox"],
+                    folder=row["folder"],
+                    subject=row["subject"] or "",
+                    sender=row["sender"] or "",
+                    recipient=row["recipient"] or "",
+                    cc=row["cc"] or "",
+                    email_date=row["email_date"],
+                    body_plain=row["body_plain"] or "",
+                    body_html=row["body_html"] or "",
+                    has_attachments=row["has_attachments"] or False,
+                    raw_headers=row["raw_headers"] or {},
+                    doctype=DocType(row["doctype"]) if row["doctype"] else DocType.LEAD,
+                    processed=row["processed"],
+                    processed_at=row["processed_at"],
+                    classification=classification,
+                    classification_data=row["classification_data"] or {},
+                    error_message=row["error_message"],
+                    retry_count=row["retry_count"] or 0,
+                )
+                emails.append(email)
+
+            log.info("fetched_skipped_followups", count=len(emails))
+            return emails
+
     def get_attachments(self, email_id: int) -> list[Attachment]:
         """Fetch attachments for an email."""
         sql = """

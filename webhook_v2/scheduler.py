@@ -5,6 +5,7 @@ APScheduler job runner for periodic email processing.
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from webhook_v2.config import settings
 from webhook_v2.core.logging import get_logger
 from webhook_v2.core.models import DocType
 
@@ -14,8 +15,33 @@ log = get_logger(__name__)
 _scheduler: BackgroundScheduler | None = None
 
 
+def fetch_emails_job():
+    """Scheduled job to fetch emails from IMAP (without processing).
+
+    This is a lightweight job that only:
+    1. Connects to IMAP
+    2. Fetches emails from last N days
+    3. Stores them in PostgreSQL
+
+    Processing is done separately via manual backfill.
+    """
+    from webhook_v2.processors.realtime import RealtimeProcessor
+
+    log.info("scheduled_job_starting", job="fetch_emails")
+    try:
+        processor = RealtimeProcessor()
+        stats = processor.fetch_and_store(since_days=settings.scheduler_fetch_days)
+        log.info("scheduled_job_complete", job="fetch_emails", **stats)
+    except Exception as e:
+        log.error("scheduled_job_error", job="fetch_emails", error=str(e))
+
+
 def process_emails_job():
-    """Scheduled job to process new emails."""
+    """Scheduled job to process new emails (fetch + process).
+
+    Note: This processes ALL unprocessed emails regardless of date.
+    Use with caution - prefer manual backfill with date filters.
+    """
     from webhook_v2.processors.realtime import RealtimeProcessor
 
     log.info("scheduled_job_starting", job="process_emails")
@@ -55,9 +81,50 @@ def mark_stale_leads_job():
         log.error("scheduled_job_error", job="mark_stale_leads", error=str(e))
 
 
+def start_fetch_scheduler() -> BackgroundScheduler:
+    """
+    Start the fetch-only scheduler (IMAP fetch without processing).
+
+    This is a lightweight scheduler that only fetches emails from IMAP
+    and stores them in PostgreSQL. Processing is done separately via
+    manual backfill.
+
+    Returns:
+        The scheduler instance
+    """
+    global _scheduler
+
+    if _scheduler is not None:
+        log.warning("scheduler_already_running")
+        return _scheduler
+
+    _scheduler = BackgroundScheduler()
+
+    # Add fetch-only job
+    _scheduler.add_job(
+        fetch_emails_job,
+        trigger=IntervalTrigger(minutes=settings.scheduler_fetch_interval_minutes),
+        id="fetch_emails",
+        name="Fetch emails from IMAP",
+        replace_existing=True,
+    )
+
+    _scheduler.start()
+    log.info(
+        "fetch_scheduler_started",
+        interval_minutes=settings.scheduler_fetch_interval_minutes,
+        fetch_days=settings.scheduler_fetch_days,
+    )
+
+    return _scheduler
+
+
 def start_scheduler(interval_minutes: int = 5) -> BackgroundScheduler:
     """
-    Start the background scheduler.
+    Start the full background scheduler (fetch + process).
+
+    Note: This processes ALL unprocessed emails regardless of date.
+    Prefer start_fetch_scheduler() + manual backfill for controlled processing.
 
     Args:
         interval_minutes: How often to run the processing job (default: 5)

@@ -84,8 +84,8 @@ services:
       - EMAIL_STORAGE_DB=email_processing
       - EMAIL_STORAGE_USER=email_processor
       - EMAIL_STORAGE_PASSWORD=${EMAIL_STORAGE_PASSWORD:-email_processor_secret}
-      # ERPNext
-      - ERPNEXT_URL=http://frontend:8080
+      # ERPNext - connect directly to backend to avoid nginx intermittent 401 issues
+      - ERPNEXT_URL=http://meraki-backend:8000
       - ERPNEXT_API_KEY=${ERPNEXT_API_KEY}
       - ERPNEXT_API_SECRET=${ERPNEXT_API_SECRET}
       # Gemini

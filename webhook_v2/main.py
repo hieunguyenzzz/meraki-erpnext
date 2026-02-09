@@ -14,7 +14,7 @@ from webhook_v2.core.models import DocType
 from webhook_v2.processors.realtime import RealtimeProcessor
 from webhook_v2.processors.backfill import BackfillProcessor
 from webhook_v2.processors.expense import ExpenseProcessor
-from webhook_v2.scheduler import start_scheduler, stop_scheduler
+from webhook_v2.scheduler import start_scheduler, start_fetch_scheduler, stop_scheduler
 
 log = get_logger(__name__)
 
@@ -31,12 +31,21 @@ async def lifespan(app: FastAPI):
     db.init_schema()
 
     # Start scheduler
-    start_scheduler()
+    # Priority: full scheduler > fetch-only scheduler
+    if settings.scheduler_enabled:
+        start_scheduler()
+        log.info("full_scheduler_enabled")
+    elif settings.scheduler_fetch_enabled:
+        start_fetch_scheduler()
+        log.info("fetch_scheduler_enabled", reason="IMAP fetch only, run backfill manually to process")
+    else:
+        log.info("scheduler_disabled", reason="use backfill for controlled processing")
 
     yield
 
     # Shutdown
-    stop_scheduler()
+    if settings.scheduler_enabled or settings.scheduler_fetch_enabled:
+        stop_scheduler()
     log.info("application_stopped")
 
 

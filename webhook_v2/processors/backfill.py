@@ -32,11 +32,28 @@ class BackfillProcessor(BaseProcessor):
     Unlike RealtimeProcessor which handles new emails, this processes
     historical emails already stored in PostgreSQL.
 
+    Uses two-pass processing by default:
+    1. First pass: Process new_lead emails (creates leads)
+    2. Second pass: Process follow-up emails (links to existing leads)
+
+    This ensures leads exist before follow-ups try to link to them.
+
     Separation of concerns:
     - /fetch: IMAP → PostgreSQL (fetch new emails)
     - /backfill: PostgreSQL → ERPNext (process stored emails with date filter)
     - /process: PostgreSQL → ERPNext (process all pending)
     """
+
+    # Classifications that create new leads
+    LEAD_CLASSIFICATIONS = {Classification.NEW_LEAD}
+
+    # Classifications that follow up on existing leads
+    FOLLOWUP_CLASSIFICATIONS = {
+        Classification.QUOTE_SENT,
+        Classification.CLIENT_MESSAGE,
+        Classification.STAFF_MESSAGE,
+        Classification.MEETING_CONFIRMED,
+    }
 
     def __init__(
         self,
@@ -106,7 +123,7 @@ class BackfillProcessor(BaseProcessor):
             since_date: Only process emails from this date onwards (for backfill)
             until_date: Only process emails before this date (for backfill)
         """
-        stats = {"processed": 0, "errors": 0, "skipped": 0}
+        stats = {"processed": 0, "errors": 0, "skipped": 0, "retried": 0}
 
         if self.dry_run:
             return stats
@@ -127,13 +144,48 @@ class BackfillProcessor(BaseProcessor):
                 order=self.order,
             )
 
-        log.info("backfill_processing", count=len(emails))
+        # Also fetch previously skipped follow-ups (they already have classification)
+        skipped_followups: list[Email] = []
+        if since_date:
+            skipped_followups = self.db.get_skipped_followups(
+                since_date=since_date,
+                until_date=until_date,
+                limit=self.limit,
+            )
+
+        log.info("backfill_processing", count=len(emails), skipped_followups=len(skipped_followups))
+
+        return self._process_emails(emails, skipped_followups, doctype, stats)
+
+    def _process_emails(
+        self,
+        emails: list[Email],
+        skipped_followups: list[Email],
+        doctype: DocType,
+        stats: dict,
+    ) -> dict:
+        """Process emails in two passes: new_leads first, then follow-ups.
+
+        This ensures leads exist before follow-up emails try to link to them.
+        Each email is classified once and the result is reused in the second pass.
+
+        Args:
+            emails: Unprocessed emails to classify and process
+            skipped_followups: Previously skipped follow-ups to retry (already classified)
+            doctype: Document type for processing
+            stats: Statistics dict to update
+        """
+        # First pass: classify all and process new_leads immediately
+        deferred_followups: list[tuple[Email, ClassificationResult]] = []
+
+        log.info("pass_1_new_leads", total_emails=len(emails))
+        print(f"\n[Pass 1] Processing new_lead emails from {len(emails)} unprocessed...")
 
         for email in emails:
             try:
                 bind_context(email_id=email.id)
 
-                # Classify
+                # Classify once - reuse result in second pass
                 classification = self.classifier.classify(email)
 
                 if classification.classification == Classification.IRRELEVANT:
@@ -145,34 +197,16 @@ class BackfillProcessor(BaseProcessor):
                     stats["skipped"] += 1
                     continue
 
-                # Get handler
-                handler = get_handler(classification.classification)
-                if not handler:
-                    stats["skipped"] += 1
-                    continue
-
-                # Handle with original timestamp
-                timestamp = email.email_date.isoformat() if email.email_date else None
-                result = handler.handle(email, classification, timestamp)
-
-                self.db.mark_processed(
-                    email.id,
-                    classification.classification,
-                    classification.to_dict(),
-                )
-
-                self.db.add_processing_log(ProcessingLog(
-                    email_id=email.id,
-                    action=result.action,
-                    doctype=doctype,
-                    result_id=result.result_id,
-                    details=result.details,
-                ))
-
-                if result.success:
-                    stats["processed"] += 1
+                # Check if this is a new_lead or follow-up
+                if classification.classification in self.LEAD_CLASSIFICATIONS:
+                    # Process immediately
+                    self._handle_email(email, classification, doctype, stats)
+                elif classification.classification in self.FOLLOWUP_CLASSIFICATIONS:
+                    # Defer to second pass (don't re-classify)
+                    deferred_followups.append((email, classification))
                 else:
-                    stats["errors"] += 1
+                    # Other classifications (e.g., supplier_invoice) - process immediately
+                    self._handle_email(email, classification, doctype, stats)
 
             except Exception as e:
                 log.error("backfill_process_error", error=str(e))
@@ -182,7 +216,71 @@ class BackfillProcessor(BaseProcessor):
             finally:
                 clear_context()
 
+        # Add previously skipped follow-ups (already have classification from before)
+        for email in skipped_followups:
+            if email.classification and email.classification in self.FOLLOWUP_CLASSIFICATIONS:
+                # Use existing classification from classification_data
+                classification = ClassificationResult.from_dict(email.classification_data)
+                deferred_followups.append((email, classification))
+
+        # Second pass: process all follow-ups (new + previously skipped)
+        if deferred_followups:
+            new_count = len(deferred_followups) - len(skipped_followups)
+            retry_count = len([e for e in skipped_followups if e.classification in self.FOLLOWUP_CLASSIFICATIONS])
+            log.info("pass_2_followups", new=new_count, retry=retry_count)
+            print(f"[Pass 2] Processing {new_count} new + {retry_count} previously skipped follow-ups...")
+
+            for email, classification in deferred_followups:
+                try:
+                    bind_context(email_id=email.id)
+                    was_skipped = email.processed  # If already processed, it was a retry
+                    self._handle_email(email, classification, doctype, stats)
+                    if was_skipped:
+                        stats["retried"] += 1
+                except Exception as e:
+                    log.error("backfill_process_error", error=str(e))
+                    self.db.mark_error(email.id, str(e))
+                    stats["errors"] += 1
+                finally:
+                    clear_context()
+
         return stats
+
+    def _handle_email(
+        self,
+        email: Email,
+        classification: ClassificationResult,
+        doctype: DocType,
+        stats: dict,
+    ) -> None:
+        """Handle a single classified email."""
+        handler = get_handler(classification.classification)
+        if not handler:
+            stats["skipped"] += 1
+            return
+
+        # Handle with original timestamp
+        timestamp = email.email_date.isoformat() if email.email_date else None
+        result = handler.handle(email, classification, timestamp)
+
+        self.db.mark_processed(
+            email.id,
+            classification.classification,
+            classification.to_dict(),
+        )
+
+        self.db.add_processing_log(ProcessingLog(
+            email_id=email.id,
+            action=result.action,
+            doctype=doctype,
+            result_id=result.result_id,
+            details=result.details,
+        ))
+
+        if result.success:
+            stats["processed"] += 1
+        else:
+            stats["errors"] += 1
 
     def preview_pending(
         self,
@@ -193,18 +291,31 @@ class BackfillProcessor(BaseProcessor):
         """Preview what would be created without actually processing.
 
         Classifies emails and prints lead/communication details.
+
+        NOTE: Dry-run is FULLY READ-ONLY. It does not modify any database state.
+        - With --force or date range: fetches ALL emails (ignores processed flag)
+        - Without --force: fetches only unprocessed emails
+
+        This ensures you never need to reset processed flags before previewing,
+        avoiding race conditions with the background scheduler.
         """
         stats = {"total": 0, "new_leads": 0, "client_messages": 0, "irrelevant": 0, "errors": 0}
 
-        if self.force and since_date:
-            # Force mode: fetch ALL emails in date range, ignoring processed flag
+        if since_date:
+            # Date range specified: ALWAYS fetch ALL emails in range, ignoring processed flag
+            # This makes dry-run fully read-only - no need to reset processed flags first
             emails = self.db.get_emails_by_date(
                 since_date=since_date,
                 until_date=until_date,
                 limit=self.limit,
                 order=self.order,
             )
+        elif self.force:
+            # Force mode without date: not supported, need date range
+            log.warning("force_requires_since_date")
+            emails = []
         else:
+            # No date range: show only unprocessed emails
             emails = self.db.get_unprocessed_emails(
                 doctype=doctype,
                 limit=self.limit,
@@ -212,7 +323,12 @@ class BackfillProcessor(BaseProcessor):
                 order=self.order,
             )
 
-        mode = "FORCE MODE (all emails)" if self.force else "unprocessed only"
+        if since_date:
+            mode = "all emails in date range"
+        elif self.force:
+            mode = "FORCE MODE (requires --since)"
+        else:
+            mode = "unprocessed only"
         print(f"\n{'='*60}")
         print(f"DRY RUN PREVIEW - {len(emails)} emails ({mode})")
         print(f"{'='*60}\n")
@@ -297,12 +413,16 @@ def main():
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Classify and preview leads without creating in ERPNext",
+        help="Classify and preview leads without creating in ERPNext. "
+             "With --since, previews ALL emails in range (ignoring processed flag). "
+             "Without --since, previews only unprocessed emails. "
+             "Fully read-only - does not modify database.",
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Ignore processed flag - process/preview ALL emails in date range (requires --since)",
+        help="For actual processing (not dry-run): ignore processed flag and "
+             "reprocess ALL emails in date range (requires --since)",
     )
     parser.add_argument(
         "--limit",
@@ -342,7 +462,12 @@ def main():
         return
 
     # Run backfill
-    processor = BackfillProcessor(dry_run=args.dry_run, force=args.force, limit=args.limit, order=args.order)
+    processor = BackfillProcessor(
+        dry_run=args.dry_run,
+        force=args.force,
+        limit=args.limit,
+        order=args.order,
+    )
 
     if since_date:
         stats = processor.backfill(since_date, until_date)
@@ -360,6 +485,7 @@ def main():
     else:
         print(f"\nBackfill complete:")
         print(f"  Processed: {stats['processed']}")
+        print(f"  Retried (skipped_no_lead): {stats.get('retried', 0)}")
         print(f"  Skipped: {stats['skipped']}")
         print(f"  Errors: {stats['errors']}")
 

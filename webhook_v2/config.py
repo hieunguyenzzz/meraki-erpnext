@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     processing_batch_size: int = 50
     max_retries: int = 3
 
+    # Scheduler settings
+    # Full scheduler (fetch + process) - disabled by default
+    scheduler_enabled: bool = False
+    # Fetch-only scheduler (IMAP fetch without processing) - enabled by default
+    scheduler_fetch_enabled: bool = True
+    scheduler_fetch_interval_minutes: int = 5
+    scheduler_fetch_days: int = 7  # How many days back to fetch from IMAP
+
     # Meraki domains (for detecting outgoing emails)
     meraki_domains: list[str] = ["merakiweddingplanner.com", "merakiwp.com"]
 
