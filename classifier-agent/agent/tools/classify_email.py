@@ -3,15 +3,15 @@ Email classification tool for lead/client emails.
 """
 
 import json
-import logging
 
 from google import genai
 
 from agent.config import settings
+from agent.logging import get_logger
 from agent.models import ClassifyEmailRequest, ClassificationResult
 from agent.prompts import LEAD_PROMPT
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def classify_lead_email(
@@ -41,6 +41,13 @@ def classify_lead_email(
         body=request.body[:3000],
     )
 
+    log.debug(
+        "classify_lead_request",
+        sender=request.sender,
+        subject=request.subject[:50] if request.subject else None,
+        is_outgoing=is_outgoing,
+    )
+
     try:
         response = client.models.generate_content(
             model=settings.gemini_model,
@@ -50,10 +57,9 @@ def classify_lead_email(
 
         log.info(
             "email_classified",
-            extra={
-                "classification": data.get("classification"),
-                "subject": request.subject[:50],
-            },
+            classification=data.get("classification"),
+            is_client_related=data.get("is_client_related"),
+            subject=request.subject[:50] if request.subject else None,
         )
 
         return ClassificationResult(**data)
@@ -63,7 +69,7 @@ def classify_lead_email(
 
         # Rate limit - include in response
         if any(x in error_str for x in ["rate", "429", "quota"]):
-            log.error("gemini_rate_limit: %s", str(e))
+            log.error("gemini_rate_limit", error=str(e))
             return ClassificationResult(
                 classification="irrelevant",
                 is_client_related=False,
@@ -72,14 +78,14 @@ def classify_lead_email(
 
         # Auth error
         if any(x in error_str for x in ["api key", "auth", "401", "403"]):
-            log.error("gemini_auth_error: %s", str(e))
+            log.error("gemini_auth_error", error=str(e))
             return ClassificationResult(
                 classification="irrelevant",
                 is_client_related=False,
                 error=f"auth_error: {e}",
             )
 
-        log.error("gemini_error: %s", str(e))
+        log.error("gemini_error", error=str(e))
         return ClassificationResult(
             classification="irrelevant",
             is_client_related=False,
@@ -102,5 +108,5 @@ def _parse_response(response_text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        log.error("gemini_parse_error: %s, response: %s", str(e), text[:500])
+        log.error("gemini_parse_error", error=str(e), response_preview=text[:200])
         return {"classification": "irrelevant", "is_client_related": False}

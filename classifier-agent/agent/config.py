@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
 
+    # Logging
+    log_level: str = "INFO"
+    json_logs: bool = True  # False for colored dev output
+
     # Meraki domains (for detecting outgoing emails)
     meraki_domains: list[str] = ["merakiweddingplanner.com", "merakiwp.com"]
 

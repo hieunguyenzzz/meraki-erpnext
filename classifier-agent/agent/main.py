@@ -6,7 +6,6 @@ Gemini AI. Uses direct Gemini calls (Custom Agent pattern) for deterministic
 classification without LLM tool-selection overhead.
 """
 
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -14,6 +13,7 @@ from google import genai
 
 from agent import __version__
 from agent.config import settings
+from agent.logging import configure_logging, get_logger
 from agent.models import (
     ClassifyEmailRequest,
     ClassificationResult,
@@ -32,12 +32,9 @@ from agent.tools import (
     extract_invoice_from_pdf,
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-log = logging.getLogger(__name__)
+# Configure structured logging
+configure_logging(log_level=settings.log_level, json_output=settings.json_logs)
+log = get_logger(__name__)
 
 # Global Gemini client
 _client: genai.Client | None = None
@@ -58,25 +55,25 @@ async def lifespan(app: FastAPI):
     """Application lifespan - initialize and cleanup."""
     # Startup
     log.info(
-        "Starting Classifier Agent v%s with model %s",
-        __version__,
-        settings.gemini_model,
+        "classifier_agent_starting",
+        version=__version__,
+        model=settings.gemini_model,
     )
 
     # Verify Gemini API key
     if not settings.gemini_api_key:
-        log.warning("GEMINI_API_KEY not set - classification will fail")
+        log.warning("gemini_api_key_not_set")
     else:
         try:
             client = get_client()
-            log.info("Gemini client initialized successfully")
+            log.info("gemini_client_initialized")
         except Exception as e:
-            log.error("Failed to initialize Gemini client: %s", e)
+            log.error("gemini_client_init_failed", error=str(e))
 
     yield
 
     # Shutdown
-    log.info("Shutting down Classifier Agent")
+    log.info("classifier_agent_shutdown")
 
 
 app = FastAPI(
@@ -114,6 +111,7 @@ async def classify_email(request: ClassifyEmailRequest):
         client = get_client()
         return classify_lead_email(request, client)
     except ValueError as e:
+        log.error("classify_email_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -128,6 +126,7 @@ async def classify_expense(request: ClassifyExpenseRequest):
         client = get_client()
         return classify_expense_email(request, client)
     except ValueError as e:
+        log.error("classify_expense_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -142,6 +141,7 @@ async def extract_message(request: ExtractMessageRequest):
         client = get_client()
         return extract_new_message(request, client)
     except ValueError as e:
+        log.error("extract_message_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -156,6 +156,7 @@ async def extract_invoice(request: ExtractInvoiceRequest):
         client = get_client()
         return extract_invoice_from_pdf(request, client)
     except ValueError as e:
+        log.error("extract_invoice_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 

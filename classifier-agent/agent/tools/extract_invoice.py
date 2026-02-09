@@ -3,7 +3,7 @@ Invoice extraction tool - extracts data from PDF invoices.
 """
 
 import base64
-import logging
+import json
 from io import BytesIO
 
 import fitz  # PyMuPDF
@@ -11,10 +11,11 @@ from google import genai
 from PIL import Image
 
 from agent.config import settings
+from agent.logging import get_logger
 from agent.models import ExtractInvoiceRequest, ExtractInvoiceResult, InvoiceItem
 from agent.prompts import PDF_EXTRACTION_PROMPT
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def extract_invoice_from_pdf(
@@ -31,15 +32,20 @@ def extract_invoice_from_pdf(
     Returns:
         ExtractInvoiceResult with extracted invoice fields
     """
+    log.debug("extract_invoice_request", pdf_size=len(request.pdf_base64))
+
     try:
         # Decode base64 PDF
         pdf_data = base64.b64decode(request.pdf_base64)
+        log.debug("pdf_decoded", pdf_bytes=len(pdf_data))
 
         # Convert PDF to images for Gemini Vision
         images = _pdf_to_images(pdf_data)
         if not images:
             log.warning("pdf_conversion_failed")
             return ExtractInvoiceResult(error="pdf_conversion_failed")
+
+        log.debug("pdf_to_images_complete", page_count=len(images))
 
         # Use first page (usually contains invoice details)
         image = images[0]
@@ -78,10 +84,10 @@ def extract_invoice_from_pdf(
 
         log.info(
             "invoice_extracted",
-            extra={
-                "supplier": data.get("supplier_name"),
-                "total": data.get("invoice_total"),
-            },
+            supplier_name=data.get("supplier_name"),
+            invoice_number=data.get("invoice_number"),
+            invoice_total=data.get("invoice_total"),
+            items_count=len(items),
         )
 
         return ExtractInvoiceResult(
@@ -94,7 +100,7 @@ def extract_invoice_from_pdf(
         )
 
     except Exception as e:
-        log.error("pdf_extraction_error: %s", str(e))
+        log.error("pdf_extraction_error", error=str(e))
         return ExtractInvoiceResult(error=str(e))
 
 
@@ -103,22 +109,26 @@ def _pdf_to_images(pdf_data: bytes) -> list[Image.Image]:
     images = []
     try:
         doc = fitz.open(stream=pdf_data, filetype="pdf")
-        for page_num in range(min(len(doc), 3)):  # Max 3 pages
+        page_count = len(doc)
+        log.debug("pdf_opened", page_count=page_count)
+
+        for page_num in range(min(page_count, 3)):  # Max 3 pages
             page = doc[page_num]
             # Render at 150 DPI for good quality
             pix = page.get_pixmap(dpi=150)
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             images.append(img)
+
         doc.close()
+        log.debug("pdf_pages_rendered", rendered_count=len(images))
+
     except Exception as e:
-        log.error("pdf_to_image_error: %s", str(e))
+        log.error("pdf_to_image_error", error=str(e))
     return images
 
 
 def _parse_response(response_text: str) -> dict:
     """Parse JSON from Gemini response."""
-    import json
-
     text = response_text.strip()
 
     # Remove markdown code blocks if present
@@ -132,5 +142,5 @@ def _parse_response(response_text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        log.error("gemini_parse_error: %s, response: %s", str(e), text[:500])
+        log.error("gemini_parse_error", error=str(e), response_preview=text[:200])
         return {}

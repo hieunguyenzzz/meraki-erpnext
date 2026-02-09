@@ -3,15 +3,15 @@ Expense email classification tool.
 """
 
 import json
-import logging
 
 from google import genai
 
 from agent.config import settings
+from agent.logging import get_logger
 from agent.models import ClassifyExpenseRequest, ExpenseClassificationResult
 from agent.prompts import EXPENSE_CLASSIFY_PROMPT
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def classify_expense_email(
@@ -42,6 +42,13 @@ def classify_expense_email(
         body=request.body[:2000],
     )
 
+    log.debug(
+        "classify_expense_request",
+        sender=request.sender,
+        subject=request.subject[:50] if request.subject else None,
+        has_pdf=request.has_pdf,
+    )
+
     try:
         response = client.models.generate_content(
             model=settings.gemini_model,
@@ -51,10 +58,9 @@ def classify_expense_email(
 
         log.info(
             "expense_email_classified",
-            extra={
-                "classification": data.get("classification"),
-                "supplier": data.get("supplier_name"),
-            },
+            classification=data.get("classification"),
+            supplier_name=data.get("supplier_name"),
+            is_supplier_email=data.get("is_supplier_email"),
         )
 
         return ExpenseClassificationResult(
@@ -69,20 +75,20 @@ def classify_expense_email(
         error_str = str(e).lower()
 
         if any(x in error_str for x in ["rate", "429", "quota"]):
-            log.error("gemini_rate_limit: %s", str(e))
+            log.error("gemini_rate_limit", error=str(e))
             return ExpenseClassificationResult(
                 classification="irrelevant",
                 error=f"rate_limit: {e}",
             )
 
         if any(x in error_str for x in ["api key", "auth", "401", "403"]):
-            log.error("gemini_auth_error: %s", str(e))
+            log.error("gemini_auth_error", error=str(e))
             return ExpenseClassificationResult(
                 classification="irrelevant",
                 error=f"auth_error: {e}",
             )
 
-        log.error("expense_classify_error: %s", str(e))
+        log.error("expense_classify_error", error=str(e))
         return ExpenseClassificationResult(
             classification="irrelevant",
             error=str(e),
@@ -104,5 +110,5 @@ def _parse_response(response_text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        log.error("gemini_parse_error: %s, response: %s", str(e), text[:500])
+        log.error("gemini_parse_error", error=str(e), response_preview=text[:200])
         return {"classification": "irrelevant", "is_supplier_email": False}
