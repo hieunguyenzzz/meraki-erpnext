@@ -12,7 +12,7 @@ from webhook_v2.core.models import (
 from webhook_v2.handlers.base import BaseHandler
 from webhook_v2.handlers.registry import register_handler
 from webhook_v2.services.erpnext import ERPNextClient
-from webhook_v2.classifiers import ExpenseClassifier
+from webhook_v2.classifiers import get_expense_classifier
 
 log = get_logger(__name__)
 
@@ -27,7 +27,7 @@ class ExpenseHandler(BaseHandler):
     HANDLED_CLASSIFICATIONS = {Classification.SUPPLIER_INVOICE}
 
     def __init__(self):
-        self._classifier: ExpenseClassifier | None = None
+        self._classifier = None
 
     @property
     def erpnext(self) -> ERPNextClient:
@@ -35,10 +35,10 @@ class ExpenseHandler(BaseHandler):
         return ERPNextClient()
 
     @property
-    def classifier(self) -> ExpenseClassifier:
+    def classifier(self):
         """Lazy-load classifier (needs API key)."""
         if self._classifier is None:
-            self._classifier = ExpenseClassifier()
+            self._classifier = get_expense_classifier()
         return self._classifier
 
     def can_handle(self, classification: Classification) -> bool:

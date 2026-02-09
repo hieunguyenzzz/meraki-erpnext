@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # Webhook (for backward compatibility during transition)
     webhook_url: str = "http://webhook:8000"
 
+    # Classifier service (remote classifier-agent)
+    classifier_service_url: str = "http://classifier-agent:8002"
+    use_remote_classifier: bool = True  # Feature flag for gradual rollout
+
     # Processing
     processing_batch_size: int = 50
     max_retries: int = 3

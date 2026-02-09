@@ -16,7 +16,7 @@ from webhook_v2.core.models import (
     ProcessingLog,
     ProcessingResult,
 )
-from webhook_v2.classifiers import ExpenseClassifier
+from webhook_v2.classifiers import get_expense_classifier
 from webhook_v2.handlers import get_handler
 from webhook_v2.services.imap import IMAPClient
 from webhook_v2.processors.base import BaseProcessor
@@ -36,11 +36,11 @@ class ExpenseProcessor(BaseProcessor):
         self,
         db: Database | None = None,
         imap: IMAPClient | None = None,
-        classifier: ExpenseClassifier | None = None,
+        classifier=None,
     ):
         self.db = db or Database()
         self.imap = imap or IMAPClient()
-        self.classifier = classifier or ExpenseClassifier()
+        self.classifier = classifier or get_expense_classifier()
 
     def process(self, doctype: DocType = DocType.EXPENSE) -> dict:
         """

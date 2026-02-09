@@ -18,7 +18,7 @@ from webhook_v2.core.models import (
     Email,
     ProcessingLog,
 )
-from webhook_v2.classifiers import GeminiClassifier
+from webhook_v2.classifiers import get_classifier
 from webhook_v2.handlers import get_handler
 from webhook_v2.processors.base import BaseProcessor
 
@@ -58,14 +58,14 @@ class BackfillProcessor(BaseProcessor):
     def __init__(
         self,
         db: Database | None = None,
-        classifier: GeminiClassifier | None = None,
+        classifier=None,
         dry_run: bool = False,
         force: bool = False,
         limit: int | None = None,
         order: str = "asc",
     ):
         self.db = db or Database()
-        self.classifier = classifier or GeminiClassifier()
+        self.classifier = classifier or get_classifier()
         self.dry_run = dry_run
         self.force = force
         self.limit = limit or settings.processing_batch_size

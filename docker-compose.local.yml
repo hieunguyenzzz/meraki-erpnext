@@ -62,6 +62,36 @@ services:
       timeout: 5s
       retries: 5
 
+  # Classifier Agent - Standalone AI classification service
+  classifier-agent:
+    build:
+      context: ./classifier-agent
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meraki-classifier.rule=Host(`classifier.merakierp.loc`)"
+      - "traefik.http.routers.meraki-classifier.entrypoints=web"
+      - "traefik.http.services.meraki-classifier.loadbalancer.server.port=8002"
+      - "traefik.docker.network=local-dev"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - default
+      - traefik
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   email-processor-v2:
     build:
       context: ./webhook_v2
@@ -88,7 +118,10 @@ services:
       - ERPNEXT_URL=http://meraki-backend:8000
       - ERPNEXT_API_KEY=${ERPNEXT_API_KEY}
       - ERPNEXT_API_SECRET=${ERPNEXT_API_SECRET}
-      # Gemini
+      # Classifier service
+      - CLASSIFIER_SERVICE_URL=http://classifier-agent:8002
+      - USE_REMOTE_CLASSIFIER=${USE_REMOTE_CLASSIFIER:-true}
+      # Gemini (fallback if remote classifier disabled)
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
       # MinIO
@@ -101,6 +134,8 @@ services:
         condition: service_healthy
       frontend:
         condition: service_started
+      classifier-agent:
+        condition: service_healthy
     networks:
       - default
       - traefik

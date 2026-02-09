@@ -1,7 +1,32 @@
-"""Email classifiers."""
+"""
+Email classifiers module.
 
-from .base import BaseClassifier
-from .gemini import GeminiClassifier
-from .expense import ExpenseClassifier
+Uses the remote classifier-agent service for all classification tasks.
+"""
 
-__all__ = ["BaseClassifier", "GeminiClassifier", "ExpenseClassifier"]
+from webhook_v2.services.classifier_client import RemoteClassifierClient
+
+
+def get_classifier() -> RemoteClassifierClient:
+    """
+    Get the classifier for lead/client email classification.
+
+    Returns a RemoteClassifierClient that connects to the classifier-agent service.
+    """
+    return RemoteClassifierClient()
+
+
+def get_expense_classifier() -> RemoteClassifierClient:
+    """
+    Get the classifier for expense/invoice email classification.
+
+    Returns a RemoteClassifierClient that connects to the classifier-agent service.
+    """
+    return RemoteClassifierClient()
+
+
+__all__ = [
+    "RemoteClassifierClient",
+    "get_classifier",
+    "get_expense_classifier",
+]

@@ -16,7 +16,7 @@ from webhook_v2.core.models import (
 from webhook_v2.handlers.base import BaseHandler
 from webhook_v2.handlers.registry import register_handler
 from webhook_v2.services.erpnext import ERPNextClient
-from webhook_v2.classifiers import GeminiClassifier
+from webhook_v2.classifiers import get_classifier
 
 log = get_logger(__name__)
 
@@ -34,7 +34,7 @@ class LeadHandler(BaseHandler):
     }
 
     def __init__(self):
-        self._classifier: GeminiClassifier | None = None
+        self._classifier = None
 
     @property
     def erpnext(self) -> ERPNextClient:
@@ -42,10 +42,10 @@ class LeadHandler(BaseHandler):
         return ERPNextClient()
 
     @property
-    def classifier(self) -> GeminiClassifier:
+    def classifier(self):
         """Lazy-load classifier (needs API key)."""
         if self._classifier is None:
-            self._classifier = GeminiClassifier()
+            self._classifier = get_classifier()
         return self._classifier
 
     def can_handle(self, classification: Classification) -> bool:
