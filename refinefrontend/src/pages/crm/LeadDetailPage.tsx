@@ -14,6 +14,7 @@ import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { EditableField } from "@/components/crm/EditableField";
 import { ConversationSection } from "@/components/crm/ConversationSection";
+import { SuggestedResponseSection } from "@/components/crm/SuggestedResponseSection";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
 
@@ -369,6 +370,18 @@ export default function LeadDetailPage() {
                 { doctype: "Lead", docName: name! },
                 ...(linkedOpportunity ? [{ doctype: "Opportunity", docName: linkedOpportunity.name }] : []),
               ]} />
+              {/* AI Suggested Response */}
+              <SuggestedResponseSection
+                leadName={lead.lead_name}
+                references={[
+                  { doctype: "Lead", docName: name! },
+                  ...(linkedOpportunity ? [{ doctype: "Opportunity", docName: linkedOpportunity.name }] : []),
+                ]}
+                weddingDate={lead.custom_wedding_date}
+                venue={lead.custom_wedding_venue}
+                budget={lead.custom_budget_raw || (lead.custom_estimated_budget ? String(lead.custom_estimated_budget) : undefined)}
+                guestCount={lead.custom_guest_count_raw || (lead.custom_guest_count ? String(lead.custom_guest_count) : undefined)}
+              />
             </TabsContent>
             <TabsContent value="activity" className="mt-4">
               <InternalNotesSection references={[

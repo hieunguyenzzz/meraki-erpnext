@@ -62,6 +62,39 @@ services:
       timeout: 5s
       retries: 5
 
+  # Wedding Planner Agent - AI-powered response suggestions
+  wedding-planner-agent:
+    build:
+      context: ./wedding-planner-agent
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meraki-planner.rule=Host(`planner.merakierp.loc`)"
+      - "traefik.http.routers.meraki-planner.entrypoints=web"
+      - "traefik.http.services.meraki-planner.loadbalancer.server.port=8003"
+      - "traefik.docker.network=local-dev"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      - ERPNEXT_URL=http://meraki-backend:8000
+      - ERPNEXT_API_KEY=${ERPNEXT_API_KEY}
+      - ERPNEXT_API_SECRET=${ERPNEXT_API_SECRET}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - default
+      - traefik
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # Classifier Agent - Standalone AI classification service
   classifier-agent:
     build:
