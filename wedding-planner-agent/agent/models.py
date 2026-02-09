@@ -23,6 +23,7 @@ class SuggestResponseRequest(BaseModel):
     venue: str | None = None
     budget: str | None = None
     guest_count: str | None = None
+    tone: str = "warm"  # professional, warm, concise, detailed
 
 
 class SuggestResponseResult(BaseModel):

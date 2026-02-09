@@ -217,6 +217,15 @@ async def suggest_response(request: SuggestResponseRequest):
 
     conversation = "\n\n".join(conversation_lines)
 
+    # Map tone to writing style instructions
+    tone_instructions = {
+        "professional": "Write in a polished, business-appropriate tone. Be formal but not cold.",
+        "warm": "Write in a warm, friendly, and personable tone. Be approachable and genuine.",
+        "concise": "Be brief and to the point. Focus on essential information only.",
+        "detailed": "Provide comprehensive information with full context and explanations.",
+    }
+    tone_style = tone_instructions.get(request.tone, tone_instructions["warm"])
+
     # Build the user prompt
     user_prompt = f"""
 Lead Information:
@@ -235,7 +244,10 @@ If they mentioned a specific venue, use the get_venue_info tool.
 Use get_wedding_history to reference past weddings if relevant.
 Use analyze_lead_gaps to identify what information is missing and what follow-up questions to ask.
 
-Generate a warm, helpful response that Mai would send.
+=== Tone ===
+{tone_style}
+
+Generate a helpful response that Mai would send.
 """
 
     # Initial request with tools
