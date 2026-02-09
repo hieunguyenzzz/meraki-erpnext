@@ -92,15 +92,27 @@ class LeadHandler(BaseHandler):
     ) -> ProcessingResult:
         """Handle new lead classification."""
         # Check by message_id first (primary deduplication)
-        if email.message_id and self.erpnext.communication_exists_by_message_id(email.message_id):
-            log.info("communication_duplicate_skipped", message_id=email.message_id)
-            return ProcessingResult(
-                success=True,
-                email_id=email.id or 0,
-                classification=classification.classification,
-                action="skipped_duplicate",
-                details={"reason": "Communication already exists for this message_id"},
-            )
+        if email.message_id:
+            exists = self.erpnext.communication_exists_by_message_id(email.message_id)
+            if exists is None:
+                # Check failed - mark for retry instead of skipping
+                log.warning("communication_exists_check_failed", message_id=email.message_id)
+                return ProcessingResult(
+                    success=False,
+                    email_id=email.id or 0,
+                    classification=classification.classification,
+                    action="dedup_check_failed",
+                    error="Failed to check if communication exists - will retry",
+                )
+            if exists:
+                log.info("communication_duplicate_skipped", message_id=email.message_id)
+                return ProcessingResult(
+                    success=True,
+                    email_id=email.id or 0,
+                    classification=classification.classification,
+                    action="skipped_duplicate",
+                    details={"reason": "Communication already exists for this message_id"},
+                )
 
         # Create lead
         lead_name = self.erpnext.create_lead(classification, timestamp)
@@ -151,15 +163,27 @@ class LeadHandler(BaseHandler):
         target_email = classification.email or self._get_target_email(email, classification)
 
         # Check by message_id first (primary deduplication)
-        if email.message_id and self.erpnext.communication_exists_by_message_id(email.message_id):
-            log.info("communication_duplicate_skipped", message_id=email.message_id)
-            return ProcessingResult(
-                success=True,
-                email_id=email.id or 0,
-                classification=classification.classification,
-                action="skipped_duplicate",
-                details={"reason": "Communication already exists for this message_id"},
-            )
+        if email.message_id:
+            exists = self.erpnext.communication_exists_by_message_id(email.message_id)
+            if exists is None:
+                # Check failed - mark for retry instead of skipping
+                log.warning("communication_exists_check_failed", message_id=email.message_id)
+                return ProcessingResult(
+                    success=False,
+                    email_id=email.id or 0,
+                    classification=classification.classification,
+                    action="dedup_check_failed",
+                    error="Failed to check if communication exists - will retry",
+                )
+            if exists:
+                log.info("communication_duplicate_skipped", message_id=email.message_id)
+                return ProcessingResult(
+                    success=True,
+                    email_id=email.id or 0,
+                    classification=classification.classification,
+                    action="skipped_duplicate",
+                    details={"reason": "Communication already exists for this message_id"},
+                )
 
         # Find existing lead
         lead_name = self.erpnext.find_lead_by_email(target_email)

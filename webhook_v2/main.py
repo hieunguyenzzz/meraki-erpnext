@@ -32,6 +32,14 @@ async def lifespan(app: FastAPI):
 
     # Start scheduler
     # Priority: full scheduler > fetch-only scheduler
+    # Warn if both are enabled (configuration mistake)
+    if settings.scheduler_enabled and settings.scheduler_fetch_enabled:
+        log.warning(
+            "both_schedulers_enabled",
+            reason="Both SCHEDULER_ENABLED and SCHEDULER_FETCH_ENABLED are true. "
+                   "Using full scheduler. Set SCHEDULER_FETCH_ENABLED=false to silence this warning."
+        )
+
     if settings.scheduler_enabled:
         start_scheduler()
         log.info("full_scheduler_enabled")

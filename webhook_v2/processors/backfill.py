@@ -179,7 +179,6 @@ class BackfillProcessor(BaseProcessor):
         deferred_followups: list[tuple[Email, ClassificationResult]] = []
 
         log.info("pass_1_new_leads", total_emails=len(emails))
-        print(f"\n[Pass 1] Processing new_lead emails from {len(emails)} unprocessed...")
 
         for email in emails:
             try:
@@ -228,7 +227,6 @@ class BackfillProcessor(BaseProcessor):
             new_count = len(deferred_followups) - len(skipped_followups)
             retry_count = len([e for e in skipped_followups if e.classification in self.FOLLOWUP_CLASSIFICATIONS])
             log.info("pass_2_followups", new=new_count, retry=retry_count)
-            print(f"[Pass 2] Processing {new_count} new + {retry_count} previously skipped follow-ups...")
 
             for email, classification in deferred_followups:
                 try:
@@ -329,9 +327,7 @@ class BackfillProcessor(BaseProcessor):
             mode = "FORCE MODE (requires --since)"
         else:
             mode = "unprocessed only"
-        print(f"\n{'='*60}")
-        print(f"DRY RUN PREVIEW - {len(emails)} emails ({mode})")
-        print(f"{'='*60}\n")
+        log.info("dry_run_preview", count=len(emails), mode=mode)
 
         for email in emails:
             stats["total"] += 1
@@ -349,50 +345,39 @@ class BackfillProcessor(BaseProcessor):
 
             except Exception as e:
                 stats["errors"] += 1
-                print(f"[ERROR] Email {email.id}: {e}\n")
+                log.error("dry_run_error", email_id=email.id, error=str(e))
 
         return stats
 
     def _print_lead_preview(self, email: Email, classification: ClassificationResult):
-        """Print formatted preview of a lead that would be created."""
-        print(f"{'─'*60}")
-        print(f"NEW LEAD #{email.id}")
-        print(f"{'─'*60}")
-        print(f"Email Date: {email.email_date}")
-        print(f"Subject: {email.subject[:80] if email.subject else '(no subject)'}")
-        print()
-        print("LEAD DETAILS:")
+        """Log preview of a lead that would be created."""
         name = classification.couple_name or f"{classification.firstname or ''} {classification.lastname or ''}".strip()
-        print(f"  Name: {name or 'N/A'}")
-        print(f"  Email: {classification.email or 'N/A'}")
-        print(f"  Phone: {classification.phone or 'N/A'}")
-        print(f"  Position: {classification.position or 'N/A'}")
-        print(f"  Source: {classification.referral_source or 'N/A'}")
-        print()
-        print("WEDDING DETAILS:")
-        print(f"  Date: {classification.wedding_date or 'N/A'}")
-        print(f"  Venue: {classification.wedding_venue or 'N/A'}")
-        print(f"  Guests: {classification.guest_count or 'N/A'}")
-        print(f"  Budget: {classification.budget or 'N/A'}")
-        print()
-        print("COMMUNICATION:")
-        print(f"  Summary: {classification.message_summary or 'N/A'}")
-        if classification.message_details:
-            msg = classification.message_details[:300]
-            if len(classification.message_details) > 300:
-                msg += "..."
-            print(f"  Message: {msg}")
-        print()
+        log.info(
+            "dry_run_new_lead",
+            email_id=email.id,
+            email_date=email.email_date.isoformat() if email.email_date else None,
+            subject=email.subject[:80] if email.subject else "(no subject)",
+            name=name or "N/A",
+            email=classification.email or "N/A",
+            phone=classification.phone or "N/A",
+            position=classification.position or "N/A",
+            source=classification.referral_source or "N/A",
+            wedding_date=classification.wedding_date or "N/A",
+            venue=classification.wedding_venue or "N/A",
+            guests=classification.guest_count or "N/A",
+            budget=classification.budget or "N/A",
+            summary=classification.message_summary or "N/A",
+        )
 
     def _print_client_message_preview(self, email: Email, classification: ClassificationResult):
-        """Print preview of a client message (follow-up)."""
-        print(f"{'─'*60}")
-        print(f"CLIENT MESSAGE #{email.id}")
-        print(f"{'─'*60}")
-        print(f"Email Date: {email.email_date}")
-        print(f"From: {classification.email or email.sender_email}")
-        print(f"Summary: {classification.message_summary or 'N/A'}")
-        print()
+        """Log preview of a client message (follow-up)."""
+        log.info(
+            "dry_run_client_message",
+            email_id=email.id,
+            email_date=email.email_date.isoformat() if email.email_date else None,
+            from_email=classification.email or email.sender_email,
+            summary=classification.message_summary or "N/A",
+        )
 
 
 def main():
@@ -458,7 +443,7 @@ def main():
 
     # Validate --force requires --since
     if args.force and not args.since:
-        print("Error: --force requires --since date to be specified")
+        log.error("force_requires_since", error="--force requires --since date to be specified")
         return
 
     # Run backfill
@@ -476,18 +461,22 @@ def main():
         stats = processor.process_pending()
 
     if args.dry_run:
-        print(f"\nDry Run Summary:")
-        print(f"  Total emails: {stats['total']}")
-        print(f"  New leads: {stats['new_leads']}")
-        print(f"  Client messages: {stats['client_messages']}")
-        print(f"  Irrelevant: {stats['irrelevant']}")
-        print(f"  Errors: {stats['errors']}")
+        log.info(
+            "dry_run_summary",
+            total=stats["total"],
+            new_leads=stats["new_leads"],
+            client_messages=stats["client_messages"],
+            irrelevant=stats["irrelevant"],
+            errors=stats["errors"],
+        )
     else:
-        print(f"\nBackfill complete:")
-        print(f"  Processed: {stats['processed']}")
-        print(f"  Retried (skipped_no_lead): {stats.get('retried', 0)}")
-        print(f"  Skipped: {stats['skipped']}")
-        print(f"  Errors: {stats['errors']}")
+        log.info(
+            "backfill_summary",
+            processed=stats["processed"],
+            retried=stats.get("retried", 0),
+            skipped=stats["skipped"],
+            errors=stats["errors"],
+        )
 
 
 if __name__ == "__main__":

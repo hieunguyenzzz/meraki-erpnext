@@ -5,6 +5,7 @@ ERPNext API client for CRM operations.
 import json
 import time
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import requests
@@ -52,16 +53,30 @@ class ERPNextClient:
         self.timeout = 30
 
     @property
+    def _site_name(self) -> str:
+        """Extract site name from URL or use configured default."""
+        if hasattr(settings, 'erpnext_site_name') and settings.erpnext_site_name:
+            return settings.erpnext_site_name
+        # Extract hostname from URL (e.g., "http://backend:8000" -> use default)
+        parsed = urlparse(self.url)
+        hostname = parsed.hostname or ""
+        # If connecting to internal service name, use the actual site name
+        if hostname in ("backend", "meraki-backend", "localhost", "127.0.0.1"):
+            return "erp.merakiwp.com"  # Default for internal connections
+        return hostname or "erp.merakiwp.com"
+
+    @property
     def _auth_headers(self) -> dict[str, str]:
         """Headers for all requests.
 
         Includes auth and site name headers required when connecting
         directly to backend (bypassing nginx).
         """
+        site_name = self._site_name
         return {
             "Authorization": f"token {self.api_key}:{self.api_secret}",
-            "X-Frappe-Site-Name": "erp.merakiwp.com",
-            "Host": "erp.merakiwp.com",
+            "X-Frappe-Site-Name": site_name,
+            "Host": site_name,
         }
 
     def _get(self, endpoint: str, params: dict | None = None) -> dict[str, Any]:
@@ -369,11 +384,16 @@ class ERPNextClient:
             return ""
         return message_id.strip().strip("<>")
 
-    def communication_exists_by_message_id(self, message_id: str) -> bool:
+    def communication_exists_by_message_id(self, message_id: str) -> bool | None:
         """Check if a communication with this message_id already exists.
 
         This is the primary deduplication method using the unique email message_id.
         Uses retry logic to handle intermittent 401 errors.
+
+        Returns:
+            True: Communication exists (skip to avoid duplicate)
+            False: Communication doesn't exist (safe to create)
+            None: Check failed after retries (caller should handle as error)
         """
         if not message_id:
             return False
@@ -384,11 +404,11 @@ class ERPNextClient:
         # Retry logic for intermittent 401 errors
         for attempt in range(MAX_RETRIES):
             try:
-                # Use 'like' to handle any encoding variations
+                # Use exact match for efficiency and correctness
                 result = self._get(
                     "/api/resource/Communication",
                     params={
-                        "filters": json.dumps([["custom_email_message_id", "like", f"%{normalized}%"]]),
+                        "filters": json.dumps([["custom_email_message_id", "=", normalized]]),
                         "fields": json.dumps(["name"]),
                         "limit_page_length": 1,
                     },
@@ -400,10 +420,9 @@ class ERPNextClient:
                     time.sleep(RETRY_DELAY)
                     continue
                 log.error("communication_exists_check_failed", error=str(e), message_id=normalized)
-                # Return True to be safe - prevents duplicates on error
-                # Better to skip than create duplicate
-                return True
-        return True  # Default to True to prevent duplicates
+                # Return None to signal error - caller should mark for retry
+                return None
+        return None  # All retries failed
 
     # Lead Stage Updates
 
