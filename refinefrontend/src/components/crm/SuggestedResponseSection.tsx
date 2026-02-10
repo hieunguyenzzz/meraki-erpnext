@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, Copy, RefreshCw, Loader2, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Sparkles, Copy, RefreshCw, Loader2, Check, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ConversationRef {
@@ -27,10 +27,13 @@ interface SuggestedResponseProps {
 }
 
 interface Communication {
+  name: string;
   direction: "Sent" | "Received";
   content: string;
   date: string;
   subject?: string;
+  custom_ai_suggestion?: string;
+  custom_ai_tone?: string;
 }
 
 interface SuggestResponseResult {
@@ -63,6 +66,7 @@ function useTimelineLinkedConversations(ref: ConversationRef) {
         fields: JSON.stringify([
           "name", "subject", "content", "communication_medium",
           "sender", "creation", "sent_or_received", "communication_date",
+          "custom_ai_suggestion", "custom_ai_tone",
         ]),
         filters: JSON.stringify([
           ["reference_doctype", "=", ref.doctype],
@@ -86,9 +90,50 @@ function useTimelineLinkedConversations(ref: ConversationRef) {
         creation: string;
         sent_or_received: string;
         communication_date?: string;
+        custom_ai_suggestion?: string;
+        custom_ai_tone?: string;
       }>;
     },
     enabled: !!ref.docName && ref.docName !== "__none__",
+  });
+}
+
+// Save suggestion to ERPNext Communication
+async function saveSuggestionToERPNext(
+  commName: string,
+  suggestion: string,
+  tone: string
+): Promise<void> {
+  // Save the suggestion text
+  await fetch("/api/method/frappe.client.set_value", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Frappe-Site-Name": "erp.merakiwp.com",
+    },
+    body: JSON.stringify({
+      doctype: "Communication",
+      name: commName,
+      fieldname: "custom_ai_suggestion",
+      value: suggestion,
+    }),
+  });
+
+  // Save the tone
+  await fetch("/api/method/frappe.client.set_value", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Frappe-Site-Name": "erp.merakiwp.com",
+    },
+    body: JSON.stringify({
+      doctype: "Communication",
+      name: commName,
+      fieldname: "custom_ai_tone",
+      value: tone,
+    }),
   });
 }
 
@@ -104,6 +149,12 @@ export function SuggestedResponseSection({
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [tone, setTone] = useState<ToneValue>("warm");
+  const [feedback, setFeedback] = useState("");
+  const [targetComm, setTargetComm] = useState<{
+    name: string;
+    content: string;
+  } | null>(null);
+  const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
 
   const ref0 = references[0];
   const ref1 = references.length > 1 ? references[1] : null;
@@ -123,10 +174,13 @@ export function SuggestedResponseSection({
       if (seen.has(c.name)) return;
       seen.add(c.name);
       all.push({
+        name: c.name,
         direction: c.sent_or_received === "Sent" ? "Sent" : "Received",
         content: c.content ?? "",
         date: c.communication_date || c.creation,
         subject: c.subject || undefined,
+        custom_ai_suggestion: c.custom_ai_suggestion || undefined,
+        custom_ai_tone: c.custom_ai_tone || undefined,
       });
     }
 
@@ -137,6 +191,25 @@ export function SuggestedResponseSection({
     all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return all;
   }, [comms0, comms1]);
+
+  // Load saved suggestion on initial render
+  useEffect(() => {
+    if (hasLoadedSaved || communications.length === 0) return;
+
+    const lastReceived = communications.find((c) => c.direction === "Received");
+    if (lastReceived?.custom_ai_suggestion) {
+      setSuggestion({
+        suggested_response: lastReceived.custom_ai_suggestion,
+        tools_used: [],
+        follow_up_questions: [],
+      });
+      setTargetComm({ name: lastReceived.name, content: lastReceived.content });
+      if (lastReceived.custom_ai_tone) {
+        setTone(lastReceived.custom_ai_tone as ToneValue);
+      }
+    }
+    setHasLoadedSaved(true);
+  }, [communications, hasLoadedSaved]);
 
   const { mutate: generateSuggestion, isPending, error } = useMutation({
     mutationFn: async (): Promise<SuggestResponseResult> => {
@@ -155,7 +228,8 @@ export function SuggestedResponseSection({
           venue,
           budget,
           guest_count: guestCount,
-          tone, // Pass tone to the API
+          tone,
+          feedback: feedback || undefined,
         }),
       });
       if (!response.ok) {
@@ -163,8 +237,24 @@ export function SuggestedResponseSection({
       }
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setSuggestion(data);
+      setFeedback("");  // Clear feedback after successful generation
+
+      // Save to ERPNext - find the most recent received communication
+      const lastReceived = communications.find((c) => c.direction === "Received");
+      if (lastReceived) {
+        setTargetComm({ name: lastReceived.name, content: lastReceived.content });
+        try {
+          await saveSuggestionToERPNext(
+            lastReceived.name,
+            data.suggested_response,
+            tone
+          );
+        } catch (err) {
+          console.error("Failed to save suggestion to ERPNext:", err);
+        }
+      }
     },
   });
 
@@ -286,6 +376,18 @@ export function SuggestedResponseSection({
             </div>
           ) : suggestion ? (
             <div className="space-y-4">
+              {/* Responding to context */}
+              {targetComm && (
+                <div className="text-xs text-muted-foreground border-b pb-2">
+                  <span className="font-medium">Responding to:</span>{" "}
+                  <span className="italic">
+                    "{targetComm.content.length > 80
+                      ? `${targetComm.content.slice(0, 80)}...`
+                      : targetComm.content}"
+                  </span>
+                </div>
+              )}
+
               {/* Tools used indicator */}
               {suggestion.tools_used.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -323,6 +425,38 @@ export function SuggestedResponseSection({
                   </ul>
                 </div>
               )}
+
+              {/* Feedback input for regeneration */}
+              <div className="relative">
+                <textarea
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  placeholder="Adjust the response..."
+                  maxLength={200}
+                  rows={1}
+                  className={cn(
+                    "w-full px-3 py-2 pl-8 text-sm resize-none",
+                    "border border-dashed border-muted-foreground/20 rounded-md",
+                    "bg-transparent placeholder:italic placeholder:text-muted-foreground/40",
+                    "focus:outline-none focus:border-muted-foreground/40 focus:shadow-sm",
+                    "transition-all duration-200 ease-out",
+                    feedback && "border-solid"
+                  )}
+                  style={{ minHeight: "36px", maxHeight: "80px" }}
+                  onInput={(e) => {
+                    // Auto-resize
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = "36px";
+                    target.style.height = `${Math.min(target.scrollHeight, 80)}px`;
+                  }}
+                />
+                <Pencil className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/40" />
+                {feedback && (
+                  <span className="absolute right-2 bottom-1.5 text-[10px] text-muted-foreground/40">
+                    {feedback.length}/200
+                  </span>
+                )}
+              </div>
 
               {/* Action buttons */}
               <div className="flex flex-wrap items-center gap-2">

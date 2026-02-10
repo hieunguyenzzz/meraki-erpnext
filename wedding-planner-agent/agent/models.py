@@ -24,6 +24,7 @@ class SuggestResponseRequest(BaseModel):
     budget: str | None = None
     guest_count: str | None = None
     tone: str = "warm"  # professional, warm, concise, detailed
+    feedback: str | None = None  # User's instruction for regeneration
 
 
 class SuggestResponseResult(BaseModel):

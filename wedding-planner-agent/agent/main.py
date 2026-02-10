@@ -246,9 +246,28 @@ Use analyze_lead_gaps to identify what information is missing and what follow-up
 
 === Tone ===
 {tone_style}
-
-Generate a helpful response that Mai would send.
 """
+
+    # Add feedback if provided (for regeneration with user guidance)
+    if request.feedback:
+        user_prompt += f"""
+
+=== User Feedback ===
+The user has provided the following feedback for this regeneration:
+"{request.feedback}"
+
+Please incorporate this feedback while maintaining the overall tone and professionalism.
+"""
+
+    user_prompt += "\nGenerate a helpful response that Mai would send."
+
+    # Log full context if debug enabled
+    if settings.debug_prompts:
+        log.info(
+            "llm_full_context",
+            system_instruction=PLANNER_PERSONA[:500] + "...",
+            user_prompt=user_prompt,
+        )
 
     # Initial request with tools
     messages = [

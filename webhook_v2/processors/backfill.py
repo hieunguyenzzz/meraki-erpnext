@@ -68,7 +68,7 @@ class BackfillProcessor(BaseProcessor):
         self.classifier = classifier or get_classifier()
         self.dry_run = dry_run
         self.force = force
-        self.limit = limit or settings.processing_batch_size
+        self.limit = limit  # None means no limit (process all)
         self.order = order
 
     def process(self, doctype: DocType = DocType.LEAD) -> dict:
@@ -413,7 +413,7 @@ def main():
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of emails to process (default: settings.processing_batch_size)",
+        help="Maximum number of emails to process (default: no limit, process all)",
     )
     parser.add_argument(
         "--order",
