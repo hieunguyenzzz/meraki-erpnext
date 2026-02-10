@@ -2,13 +2,13 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Domains (configured via Dokploy UI):
-#   - erp.merakiwp.com -> frontend:8080
 #   - app.merakiwp.com -> react-frontend:8090
-#   - email.merakiwp.com -> email-processor-v2:8001
 #
 # Internal services (no external domains):
+#   - frontend (ERPNext - accessed via React frontend nginx proxy)
 #   - wedding-planner-agent (accessed via React frontend nginx proxy at /planner-api/)
 #   - classifier-agent (used by email-processor-v2)
+#   - email-processor-v2 (fetches emails via IMAP, no external access needed)
 
 services:
   # ERPNext backend - add alias for nginx.conf compatibility
@@ -25,14 +25,15 @@ services:
         aliases:
           - meraki-websocket
 
-  # ERPNext frontend - exposed via Dokploy domain (erp.merakiwp.com)
+  # ERPNext frontend - internal only (accessed via React frontend nginx proxy)
   frontend:
     environment:
       BACKEND: meraki-backend:8000
       SOCKETIO: meraki-websocket:9000
     networks:
-      - default
-      - dokploy-network
+      default:
+        aliases:
+          - erpnext-frontend
 
   # React frontend - exposed via Dokploy domain (app.merakiwp.com)
   react-frontend:
@@ -95,7 +96,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Email Processor v2 - exposed via Dokploy domain (email.merakiwp.com)
+  # Email Processor v2 - internal only (fetches emails via IMAP, no external access needed)
   email-processor-v2:
     build:
       context: ./webhook_v2
@@ -134,9 +135,7 @@ services:
         condition: service_started
       classifier-agent:
         condition: service_healthy
-    networks:
-      - default
-      - dokploy-network
+    # No dokploy-network - internal only, fetches emails via IMAP
     logging:
       driver: "json-file"
       options:
