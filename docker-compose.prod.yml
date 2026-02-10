@@ -172,6 +172,13 @@ services:
       context: ./refinefrontend
       dockerfile: Dockerfile
     restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meraki-react.rule=Host(`app.merakiwp.com`)"
+      - "traefik.http.routers.meraki-react.entrypoints=websecure"
+      - "traefik.http.routers.meraki-react.tls.certresolver=letsencrypt"
+      - "traefik.http.services.meraki-react.loadbalancer.server.port=8090"
+      - "traefik.docker.network=dokploy-network"
     networks:
       - default
       - dokploy-network
