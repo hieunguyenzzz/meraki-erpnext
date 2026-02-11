@@ -6,6 +6,7 @@ Does NOT fetch from IMAP - use /fetch endpoint for that.
 """
 
 import argparse
+import time
 from datetime import datetime
 
 from webhook_v2.config import settings
@@ -193,6 +194,9 @@ class BackfillProcessor(BaseProcessor):
 
                 # Classify once - reuse result in second pass
                 classification = self.classifier.classify(email)
+
+                # Rate limit delay to avoid Gemini API throttling
+                time.sleep(30)
 
                 if classification.classification == Classification.IRRELEVANT:
                     self.db.mark_processed(
