@@ -16,6 +16,7 @@ from webhook_v2.core.models import (
 from webhook_v2.handlers.base import BaseHandler
 from webhook_v2.handlers.registry import register_handler
 from webhook_v2.services.erpnext import ERPNextClient
+from webhook_v2.services.summary import SummaryService
 from webhook_v2.classifiers import get_classifier
 
 log = get_logger(__name__)
@@ -35,6 +36,7 @@ class LeadHandler(BaseHandler):
 
     def __init__(self):
         self._classifier = None
+        self._summary_service = None
 
     @property
     def erpnext(self) -> ERPNextClient:
@@ -47,6 +49,13 @@ class LeadHandler(BaseHandler):
         if self._classifier is None:
             self._classifier = get_classifier()
         return self._classifier
+
+    @property
+    def summary_service(self) -> SummaryService:
+        """Lazy-load summary service."""
+        if self._summary_service is None:
+            self._summary_service = SummaryService()
+        return self._summary_service
 
     def can_handle(self, classification: Classification) -> bool:
         return classification in self.HANDLED_CLASSIFICATIONS
@@ -144,6 +153,9 @@ class LeadHandler(BaseHandler):
             communication=comm_name,
         )
 
+        # Regenerate AI summary for the lead (0 = new lead, no prior communications)
+        self._regenerate_summary(lead_name, comm_count_before=0)
+
         return ProcessingResult(
             success=True,
             email_id=email.id or 0,
@@ -213,6 +225,9 @@ class LeadHandler(BaseHandler):
         ):
             body = self.classifier.extract_new_message(body)
 
+        # Get current communication count before adding new one (for summary dedup)
+        comm_count_before = len(self.erpnext.get_lead_communications(lead_name))
+
         # Create communication with message_id for deduplication
         content = self._format_html_content(body[:3000] if body else email.subject)
         comm_name = self.erpnext.create_communication(
@@ -236,6 +251,9 @@ class LeadHandler(BaseHandler):
             classification=classification.classification.value,
         )
 
+        # Regenerate AI summary for the lead (only if new communication was added)
+        self._regenerate_summary(lead_name, comm_count_before=comm_count_before)
+
         return ProcessingResult(
             success=True,
             email_id=email.id or 0,
@@ -244,6 +262,41 @@ class LeadHandler(BaseHandler):
             result_id=lead_name,
             details={"communication": comm_name, "status_updated": new_status},
         )
+
+    def _regenerate_summary(self, lead_name: str, comm_count_before: int = 0) -> None:
+        """Regenerate AI summary for the lead.
+
+        Called after processing an email to update the lead's summary
+        with the latest communications.
+
+        Args:
+            lead_name: Lead docname
+            comm_count_before: Number of communications before this email was processed.
+                              Used to check if we actually added a new communication.
+        """
+        try:
+            lead = self.erpnext.get_lead(lead_name)
+            if not lead:
+                log.warning("summary_lead_not_found", lead=lead_name)
+                return
+
+            communications = self.erpnext.get_lead_communications(lead_name)
+            if not communications:
+                log.info("summary_skipped_no_communications", lead=lead_name)
+                return
+
+            # Skip if lead already has summary and no new communications were added
+            current_count = len(communications)
+            if lead.get("custom_ai_summary") and current_count <= comm_count_before:
+                log.info("summary_skipped_no_new_communications", lead=lead_name, count=current_count)
+                return
+
+            summary = self.summary_service.generate_summary(lead, communications)
+            self.erpnext.update_lead_summary(lead_name, summary)
+            log.info("lead_summary_updated", lead=lead_name, comm_count=current_count)
+        except Exception as e:
+            # Log but don't fail the email processing
+            log.warning("summary_generation_failed", lead=lead_name, error=str(e))
 
     def _get_target_email(self, email: Email, classification: ClassificationResult) -> str:
         """Get client email (not Meraki's email)."""

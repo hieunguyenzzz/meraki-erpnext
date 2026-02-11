@@ -154,6 +154,78 @@ class ERPNextClient:
 
     # Lead Operations
 
+    def get_lead(self, lead_name: str) -> dict | None:
+        """Fetch lead details by name.
+
+        Args:
+            lead_name: Lead docname (e.g., 'CRM-LEAD-2026-00001')
+
+        Returns:
+            Lead document dict or None if not found
+        """
+        try:
+            result = self._get(f"/api/resource/Lead/{lead_name}")
+            return result.get("data")
+        except Exception as e:
+            log.error("get_lead_error", lead=lead_name, error=str(e))
+            return None
+
+    def get_lead_communications(self, lead_name: str) -> list[dict]:
+        """Fetch all communications for a lead, oldest first.
+
+        Args:
+            lead_name: Lead docname
+
+        Returns:
+            List of Communication documents
+        """
+        try:
+            result = self._get(
+                "/api/resource/Communication",
+                params={
+                    "filters": json.dumps([
+                        ["reference_doctype", "=", "Lead"],
+                        ["reference_name", "=", lead_name],
+                        ["communication_type", "=", "Communication"],
+                    ]),
+                    "fields": json.dumps([
+                        "name", "subject", "content", "sent_or_received", "communication_date"
+                    ]),
+                    "order_by": "communication_date asc",
+                    "limit_page_length": 0,
+                },
+            )
+            return result.get("data", [])
+        except Exception as e:
+            log.error("get_lead_communications_error", lead=lead_name, error=str(e))
+            return []
+
+    def update_lead_summary(self, lead_name: str, summary: str) -> bool:
+        """Update Lead's custom_ai_summary field.
+
+        Args:
+            lead_name: Lead docname
+            summary: AI-generated summary text
+
+        Returns:
+            True on success, False on failure
+        """
+        try:
+            self._post(
+                "/api/method/frappe.client.set_value",
+                {
+                    "doctype": "Lead",
+                    "name": lead_name,
+                    "fieldname": "custom_ai_summary",
+                    "value": summary,
+                },
+            )
+            log.info("lead_summary_updated", lead=lead_name)
+            return True
+        except Exception as e:
+            log.error("update_lead_summary_error", lead=lead_name, error=str(e))
+            return False
+
     def find_lead_by_email(self, email: str) -> str | None:
         """
         Find a Lead by email address.

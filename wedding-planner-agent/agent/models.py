@@ -41,3 +41,18 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     model: str
+
+
+class GenerateRequest(BaseModel):
+    """Request for generic text generation."""
+
+    system_prompt: str
+    content: str
+    temperature: float | None = 0.7
+
+
+class GenerateResult(BaseModel):
+    """Result of generic text generation."""
+
+    result: str
+    model: str

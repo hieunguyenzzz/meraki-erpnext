@@ -19,6 +19,8 @@ from agent.models import (
     SuggestResponseRequest,
     SuggestResponseResult,
     HealthResponse,
+    GenerateRequest,
+    GenerateResult,
 )
 from agent.prompts import PLANNER_PERSONA
 from agent.tools import get_venue_info, get_wedding_history, analyze_lead_gaps
@@ -164,6 +166,48 @@ async def health_check():
         version=__version__,
         model=settings.gemini_model,
     )
+
+
+@app.post("/generate", response_model=GenerateResult)
+async def generate(request: GenerateRequest):
+    """
+    Generic text generation endpoint.
+
+    Takes a system prompt and content, returns generated text.
+    Used for generating lead summaries, etc.
+    """
+    log.info(
+        "generate_start",
+        content_length=len(request.content),
+        temperature=request.temperature,
+    )
+
+    try:
+        client = get_client()
+    except ValueError as e:
+        log.error("gemini_client_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+    try:
+        response = client.models.generate_content(
+            model=settings.gemini_model,
+            contents=[types.Content(role="user", parts=[types.Part(text=request.content)])],
+            config=types.GenerateContentConfig(
+                system_instruction=request.system_prompt,
+                temperature=request.temperature or 0.7,
+            ),
+        )
+
+        result_text = response.candidates[0].content.parts[0].text
+        log.info("generate_complete", result_length=len(result_text))
+
+        return GenerateResult(
+            result=result_text,
+            model=settings.gemini_model,
+        )
+    except Exception as e:
+        log.error("generate_error", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
 
 
 def execute_tool_call(tool_name: str, args: dict) -> str:

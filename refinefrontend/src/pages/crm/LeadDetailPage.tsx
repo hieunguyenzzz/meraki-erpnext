@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, CalendarDays, ChevronDown, ArrowLeft, Mail, Phone, MapPin } from "lucide-react";
+import { Trash2, CalendarDays, ChevronDown, ArrowLeft, Mail, Phone, MapPin, Sparkles } from "lucide-react";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { EditableField } from "@/components/crm/EditableField";
@@ -344,18 +344,19 @@ export default function LeadDetailPage() {
 
         {/* Main Content - Tabs */}
         <div className="min-w-0">
-          {/* Notes (shown above tabs if present) */}
-          {Array.isArray(lead.notes) && lead.notes.length > 0 && (
+          {/* AI Summary (shown above tabs if present) */}
+          {lead.custom_ai_summary && (
             <Card className="mb-4">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Notes</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  Summary
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  {lead.notes.map((note, idx) => (
-                    <p key={idx} className="text-sm whitespace-pre-wrap text-muted-foreground">{note.note}</p>
-                  ))}
-                </div>
+                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                  {lead.custom_ai_summary}
+                </p>
               </CardContent>
             </Card>
           )}

@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     classifier_service_url: str = "http://classifier-agent:8002"
     use_remote_classifier: bool = True  # Feature flag for gradual rollout
 
+    # Wedding Planner Agent (for AI summaries)
+    wedding_agent_url: str = "http://wedding-planner-agent:8003"
+
     # Processing
     processing_batch_size: int = 50
     max_retries: int = 3
