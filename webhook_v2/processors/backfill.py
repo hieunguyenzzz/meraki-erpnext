@@ -75,6 +75,49 @@ class BackfillProcessor(BaseProcessor):
         self.limit = limit  # None means no limit (process all)
         self.order = order
 
+    def _classify_with_retry(self, email: Email, max_retries: int = 3) -> ClassificationResult:
+        """Classify email with retry logic for rate limits.
+
+        Uses exponential backoff: 30s, 60s, 120s between retries.
+        Always waits 30s after successful classification to avoid hitting limits.
+
+        Args:
+            email: Email to classify
+            max_retries: Maximum retry attempts (default 3)
+
+        Returns:
+            ClassificationResult
+
+        Raises:
+            Exception: If all retries fail
+        """
+        base_delay = 30  # Base delay in seconds
+
+        for attempt in range(max_retries + 1):
+            try:
+                result = self.classifier.classify(email)
+                # Wait after successful classification to avoid rate limits
+                time.sleep(base_delay)
+                return result
+            except Exception as e:
+                error_str = str(e)
+                is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+
+                if is_rate_limit and attempt < max_retries:
+                    # Exponential backoff: 60s, 120s, 240s
+                    wait_time = base_delay * (2 ** (attempt + 1))
+                    log.warning(
+                        "classifier_rate_limited_retrying",
+                        email_id=email.id,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        wait_seconds=wait_time,
+                    )
+                    time.sleep(wait_time)
+                else:
+                    # Not a rate limit error, or max retries reached
+                    raise
+
     def process(self, doctype: DocType = DocType.LEAD) -> dict:
         """Process pending backfill emails."""
         return self.process_pending(doctype)
@@ -192,11 +235,8 @@ class BackfillProcessor(BaseProcessor):
             try:
                 bind_context(email_id=email.id)
 
-                # Classify once - reuse result in second pass
-                classification = self.classifier.classify(email)
-
-                # Rate limit delay to avoid Gemini API throttling
-                time.sleep(30)
+                # Classify with retry logic for rate limits
+                classification = self._classify_with_retry(email)
 
                 if classification.classification == Classification.IRRELEVANT:
                     self.db.mark_processed(
