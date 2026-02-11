@@ -1,0 +1,311 @@
+/* Mobile Theme - Wedding-Inspired Design */
+
+/* Typography - Elegant but highly readable */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Source+Sans+3:wght@400;500;600&display=swap');
+
+:root {
+  /* Warm, wedding-inspired palette */
+  --color-cream: #FDF8F3;
+  --color-blush: #F5E6E0;
+  --color-rose: #C9A9A6;
+  --color-sage: #A8B5A0;
+  --color-charcoal: #3D3D3D;
+  --color-gold: #C4A962;
+
+  /* Status colors - soft but clear */
+  --status-new: #7BA3C9;       /* Soft blue */
+  --status-pending: #E8C47C;   /* Warm gold */
+  --status-confirmed: #8FB573; /* Sage green */
+  --status-urgent: #D4837A;    /* Muted coral */
+
+  /* Typography */
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'Source Sans 3', system-ui, sans-serif;
+
+  /* Touch targets - minimum 48px for accessibility */
+  --touch-target-min: 48px;
+  --touch-target-comfortable: 56px;
+
+  /* Spacing - generous for thumb reach */
+  --spacing-card: 16px;
+  --spacing-section: 24px;
+
+  /* Safe areas */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* Base mobile styles */
+@media (max-width: 768px) {
+  body {
+    background: var(--color-cream);
+    font-family: var(--font-body);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent text selection on interactive elements */
+  button, a, .card, [role="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Overscroll behavior */
+  body {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Safe area utilities */
+.pt-safe {
+  padding-top: max(1rem, var(--safe-top));
+}
+
+.pb-safe {
+  padding-bottom: max(1rem, var(--safe-bottom));
+}
+
+.pl-safe {
+  padding-left: max(1rem, var(--safe-left));
+}
+
+.pr-safe {
+  padding-right: max(1rem, var(--safe-right));
+}
+
+.mt-safe {
+  margin-top: var(--safe-top);
+}
+
+.mb-safe {
+  margin-bottom: var(--safe-bottom);
+}
+
+/* Touch target utilities */
+.touch-target {
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+}
+
+.touch-target-lg {
+  min-height: var(--touch-target-comfortable);
+  min-width: var(--touch-target-comfortable);
+}
+
+/* Mobile-only visibility */
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
+}
+
+/* Bottom navigation spacing on mobile */
+@media (max-width: 768px) {
+  .main-content {
+    padding-bottom: calc(80px + var(--safe-bottom));
+  }
+}
+
+/* Status badge styles */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.status-new {
+  background-color: rgba(123, 163, 201, 0.15);
+  color: var(--status-new);
+}
+
+.status-pending {
+  background-color: rgba(232, 196, 124, 0.15);
+  color: var(--status-pending);
+}
+
+.status-confirmed {
+  background-color: rgba(143, 181, 115, 0.15);
+  color: var(--status-confirmed);
+}
+
+.status-urgent {
+  background-color: rgba(212, 131, 122, 0.15);
+  color: var(--status-urgent);
+}
+
+/* Card styles */
+.mobile-card {
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.mobile-card-status-bar {
+  height: 4px;
+}
+
+/* Action button styles */
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  min-height: var(--touch-target-min);
+  transition: all 0.15s ease;
+}
+
+.action-btn-call {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: rgb(5, 150, 105);
+}
+
+.action-btn-call:active {
+  background-color: rgba(16, 185, 129, 0.2);
+}
+
+.action-btn-email {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: rgb(37, 99, 235);
+}
+
+.action-btn-email:active {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+/* Frosted glass effect */
+.frosted-glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Pull to refresh indicator */
+.pull-indicator {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.pull-indicator-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 9999px;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.empty-state-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.5rem;
+  font-family: var(--font-display);
+}
+
+.empty-state-description {
+  color: #6b7280;
+  max-width: 16rem;
+}
+
+/* Skeleton loading */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 0.25rem;
+}
+
+/* Offline banner */
+.offline-banner {
+  background: var(--status-pending);
+  color: white;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Bottom sheet dialog */
+.bottom-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  border-radius: 1.5rem 1.5rem 0 0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  padding-bottom: var(--safe-bottom);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.bottom-sheet-handle {
+  width: 2.5rem;
+  height: 0.25rem;
+  background: #d1d5db;
+  border-radius: 9999px;
+  margin: 0.75rem auto;
+}
