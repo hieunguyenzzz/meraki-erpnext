@@ -86,7 +86,7 @@ Deployed via **Dokploy** on OVH server (139.99.9.132).
 | Email Processor | Internal only | Fetches via IMAP |
 
 **Production Credentials:**
-- ERPNext Admin: `Administrator` / `HNfge7nHEKBnWnKs`
+- ERPNext Admin: `Administrator` / `admin123`
 - API Key: `d781723a2d87d5140af56fd73481de8a6057f83ad378c0e9c99b51e6`
 - API Secret: `b8ce2d0a1dcf0ab87ed28cefbdc1e1895a89c65d3deb8fc78998c524`
 
