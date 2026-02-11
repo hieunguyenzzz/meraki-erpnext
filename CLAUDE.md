@@ -72,7 +72,42 @@ To enable monthly P&L reports showing historical revenue and expenses:
 - Monthly P&L shows revenue from weddings in the month they occurred
 - Monthly P&L shows salary expenses for each month based on active staff
 
-## Local Development
+## Environments
+
+### Production (OVH Server)
+
+Deployed via **Dokploy** on OVH server (139.99.9.132).
+
+| Service | URL | Notes |
+|---------|-----|-------|
+| React Frontend | https://app.merakiwp.com | Main entry point |
+| ERPNext | Internal only | Accessed via React nginx proxy |
+| Wedding Planner Agent | Internal only | Via `/planner-api/` proxy |
+| Email Processor | Internal only | Fetches via IMAP |
+
+**Production Credentials:**
+- ERPNext Admin: `Administrator` / `HNfge7nHEKBnWnKs`
+- API Key: `d781723a2d87d5140af56fd73481de8a6057f83ad378c0e9c99b51e6`
+- API Secret: `b8ce2d0a1dcf0ab87ed28cefbdc1e1895a89c65d3deb8fc78998c524`
+
+**Deployment:**
+- Dokploy project: `meraki-manager`
+- Compose app: `meraki-erp`
+- Compose file: `docker-compose.prod.yml`
+- Source: GitHub `hieunguyenzzz/meraki-erpnext` (main branch)
+
+```bash
+# SSH to OVH
+ssh debian@139.99.9.132
+
+# Check containers
+sudo docker ps --filter 'name=compose-bypass-optical-monitor'
+
+# Access backend
+sudo docker exec -it compose-bypass-optical-monitor-s28687-backend-1 bash
+```
+
+### Local Development
 
 **Docker-based deployment** accessible via `http://merakierp.loc` through the local Traefik reverse proxy.
 
@@ -84,7 +119,7 @@ To enable monthly P&L reports showing historical revenue and expenses:
 
 ```bash
 docker context use default
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 ```
 
 ## Development Methodology: Subagent-Driven Development
@@ -211,17 +246,36 @@ Key things to know:
 - **Build/deploy**: `docker compose -f docker-compose.yml -f docker-compose.local.yml up react-frontend --build -d`
 - **URL**: `http://frontend.merakierp.loc`
 
+## Wedding Planner Agent
+
+AI-powered response suggestion service in `wedding-planner-agent/`. See **[docs/wedding_planner_agent.md](./docs/wedding_planner_agent.md)** for full details.
+
+**Key commands:**
+```bash
+# View full LLM context (enable debug first)
+DEBUG_PROMPTS=true docker compose -f docker-compose.yml -f docker-compose.local.yml up wedding-planner-agent -d
+
+# After generating a response, view the prompt sent to Gemini
+docker compose logs wedding-planner-agent --tail 100 2>&1 | grep "llm_full_context" | sed 's/^[^{]*//' | jq -r '.user_prompt'
+
+# View tool calls
+docker compose logs wedding-planner-agent --tail 100 | grep "tool_call"
+```
+
 ## ERPNext Configuration
 
 See **[docs/erpnext_setup.md](./docs/erpnext_setup.md)** for the full ERPNext setup reference (company, accounts, items, settings). **Keep this file up to date** when ERPNext configuration changes.
 
 ## Key URLs
 
-| Resource | URL |
-|----------|-----|
-| ERPNext (local) | http://merakierp.loc |
-| Source DB | 14.225.210.164:5432 (meraki_nocodb) |
-| Plane | https://plane.mobelaris.com (workspace: soundboxstore, project: MWP) |
+| Resource | Local | Production |
+|----------|-------|------------|
+| React Frontend | http://frontend.merakierp.loc | https://app.merakiwp.com |
+| ERPNext | http://merakierp.loc | Internal (via proxy) |
+| Planner Agent | http://planner.merakierp.loc | Internal (via `/planner-api/`) |
+| Dokploy | - | https://ovhserver.mobelaris.com |
+| Plane | https://plane.mobelaris.com (workspace: soundboxstore, project: MWP) ||
+| Source DB | 14.225.210.164:5432 (meraki_nocodb) ||
 
 ## Database Connections
 
