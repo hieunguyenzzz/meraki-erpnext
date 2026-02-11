@@ -96,6 +96,14 @@ Deployed via **Dokploy** on OVH server (139.99.9.132).
 - Compose file: `docker-compose.prod.yml`
 - Source: GitHub `hieunguyenzzz/meraki-erpnext` (main branch)
 
+**Scheduled Tasks (Dokploy):**
+- `Email Backfill`: `*/10 * * * *` - Processes emails → creates leads/communications
+
+**Email Processing:**
+- IMAP: `contact@merakiweddingplanner.com` (Zoho)
+- Auto-fetch: Every 5 minutes (built-in)
+- Backfill: Every 10 minutes (Dokploy schedule)
+
 ```bash
 # SSH to OVH
 ssh debian@139.99.9.132
