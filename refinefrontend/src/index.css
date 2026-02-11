@@ -1,3 +1,6 @@
+/* Mobile PWA theme - must be before @tailwind for proper cascade */
+@import "./styles/mobile-theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
