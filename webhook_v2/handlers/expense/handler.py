@@ -49,6 +49,7 @@ class ExpenseHandler(BaseHandler):
         email: Email,
         classification: ClassificationResult,
         timestamp: str | None = None,
+        skip_summary: bool = False,
     ) -> ProcessingResult:
         """
         Process supplier invoice email.
@@ -57,6 +58,9 @@ class ExpenseHandler(BaseHandler):
         2. Extract invoice data using Gemini Vision
         3. Find or create Supplier in ERPNext
         4. Create Purchase Invoice
+
+        Args:
+            skip_summary: Ignored for expense handler (no AI summaries)
         """
         email_id = email.id or 0
 

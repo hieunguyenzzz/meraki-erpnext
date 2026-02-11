@@ -65,12 +65,16 @@ class LeadHandler(BaseHandler):
         email: Email,
         classification: ClassificationResult,
         timestamp: str | None = None,
+        skip_summary: bool = False,
     ) -> ProcessingResult:
         """
         Process the email based on classification.
 
         For new_lead: Create Lead + Communication
         For follow-ups: Find Lead + Create Communication + Update Stage
+
+        Args:
+            skip_summary: If True, skip AI summary generation (for batch processing)
         """
         # Get target email (client, not Meraki)
         target_email = self._get_target_email(email, classification)
@@ -89,15 +93,16 @@ class LeadHandler(BaseHandler):
             email_timestamp = email.email_date.isoformat()
 
         if classification.classification == Classification.NEW_LEAD:
-            return self._handle_new_lead(email, classification, email_timestamp)
+            return self._handle_new_lead(email, classification, email_timestamp, skip_summary)
         else:
-            return self._handle_follow_up(email, classification, email_timestamp)
+            return self._handle_follow_up(email, classification, email_timestamp, skip_summary)
 
     def _handle_new_lead(
         self,
         email: Email,
         classification: ClassificationResult,
         timestamp: str | None,
+        skip_summary: bool = False,
     ) -> ProcessingResult:
         """Handle new lead classification."""
         # Check by message_id first (primary deduplication)
@@ -154,7 +159,8 @@ class LeadHandler(BaseHandler):
         )
 
         # Regenerate AI summary for the lead (0 = new lead, no prior communications)
-        self._regenerate_summary(lead_name, comm_count_before=0)
+        if not skip_summary:
+            self._regenerate_summary(lead_name, comm_count_before=0)
 
         return ProcessingResult(
             success=True,
@@ -170,6 +176,7 @@ class LeadHandler(BaseHandler):
         email: Email,
         classification: ClassificationResult,
         timestamp: str | None,
+        skip_summary: bool = False,
     ) -> ProcessingResult:
         """Handle follow-up email classifications."""
         target_email = classification.email or self._get_target_email(email, classification)
@@ -252,7 +259,8 @@ class LeadHandler(BaseHandler):
         )
 
         # Regenerate AI summary for the lead (only if new communication was added)
-        self._regenerate_summary(lead_name, comm_count_before=comm_count_before)
+        if not skip_summary:
+            self._regenerate_summary(lead_name, comm_count_before=comm_count_before)
 
         return ProcessingResult(
             success=True,
@@ -375,3 +383,36 @@ class LeadHandler(BaseHandler):
         """Convert plain text to HTML."""
         escaped = html.escape(text)
         return escaped.replace("\n", "<br>\n")
+
+    def regenerate_summaries_batch(self, lead_names: list[str]) -> dict:
+        """Batch regenerate summaries for multiple leads.
+
+        Called at end of backfill to generate one summary per lead.
+
+        Returns:
+            dict with counts: {"success": N, "failed": N, "skipped": N}
+        """
+        stats = {"success": 0, "failed": 0, "skipped": 0}
+        total = len(lead_names)
+
+        for i, lead_name in enumerate(lead_names, 1):
+            log.info("batch_summary_progress", current=i, total=total, lead=lead_name)
+            try:
+                lead = self.erpnext.get_lead(lead_name)
+                if not lead:
+                    stats["skipped"] += 1
+                    continue
+
+                communications = self.erpnext.get_lead_communications(lead_name)
+                if not communications:
+                    stats["skipped"] += 1
+                    continue
+
+                summary = self.summary_service.generate_summary(lead, communications)
+                self.erpnext.update_lead_summary(lead_name, summary)
+                stats["success"] += 1
+            except Exception as e:
+                log.warning("batch_summary_failed", lead=lead_name, error=str(e))
+                stats["failed"] += 1
+
+        return stats

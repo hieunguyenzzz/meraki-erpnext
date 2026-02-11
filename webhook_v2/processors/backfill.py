@@ -32,11 +32,14 @@ class BackfillProcessor(BaseProcessor):
     Unlike RealtimeProcessor which handles new emails, this processes
     historical emails already stored in PostgreSQL.
 
-    Uses two-pass processing by default:
-    1. First pass: Process new_lead emails (creates leads)
-    2. Second pass: Process follow-up emails (links to existing leads)
+    Uses three-pass processing by default:
+    1. First pass: Process new_lead emails (creates leads, skips summary)
+    2. Second pass: Process follow-up emails (links to existing leads, skips summary)
+    3. Third pass: Batch generate AI summaries for all affected leads
 
-    This ensures leads exist before follow-ups try to link to them.
+    This ensures leads exist before follow-ups try to link to them,
+    and generates only one summary per lead at the end (reducing API calls
+    from ~900 to ~50 for typical backfill operations).
 
     Separation of concerns:
     - /fetch: IMAP → PostgreSQL (fetch new emails)
@@ -164,10 +167,11 @@ class BackfillProcessor(BaseProcessor):
         doctype: DocType,
         stats: dict,
     ) -> dict:
-        """Process emails in two passes: new_leads first, then follow-ups.
+        """Process emails in three passes: new_leads first, then follow-ups, then batch summaries.
 
         This ensures leads exist before follow-up emails try to link to them.
         Each email is classified once and the result is reused in the second pass.
+        AI summaries are generated once per lead at the end for efficiency.
 
         Args:
             emails: Unprocessed emails to classify and process
@@ -175,6 +179,9 @@ class BackfillProcessor(BaseProcessor):
             doctype: Document type for processing
             stats: Statistics dict to update
         """
+        # Track all leads that had communications added (for batch summary generation)
+        affected_leads: set[str] = set()
+
         # First pass: classify all and process new_leads immediately
         deferred_followups: list[tuple[Email, ClassificationResult]] = []
 
@@ -198,14 +205,16 @@ class BackfillProcessor(BaseProcessor):
 
                 # Check if this is a new_lead or follow-up
                 if classification.classification in self.LEAD_CLASSIFICATIONS:
-                    # Process immediately
-                    self._handle_email(email, classification, doctype, stats)
+                    # Process immediately (skip summary for batch generation later)
+                    result_id = self._handle_email(email, classification, doctype, stats, skip_summary=True)
+                    if result_id:
+                        affected_leads.add(result_id)
                 elif classification.classification in self.FOLLOWUP_CLASSIFICATIONS:
                     # Defer to second pass (don't re-classify)
                     deferred_followups.append((email, classification))
                 else:
                     # Other classifications (e.g., supplier_invoice) - process immediately
-                    self._handle_email(email, classification, doctype, stats)
+                    self._handle_email(email, classification, doctype, stats, skip_summary=True)
 
             except Exception as e:
                 log.error("backfill_process_error", error=str(e))
@@ -232,7 +241,9 @@ class BackfillProcessor(BaseProcessor):
                 try:
                     bind_context(email_id=email.id)
                     was_skipped = email.processed  # If already processed, it was a retry
-                    self._handle_email(email, classification, doctype, stats)
+                    result_id = self._handle_email(email, classification, doctype, stats, skip_summary=True)
+                    if result_id:
+                        affected_leads.add(result_id)
                     if was_skipped:
                         stats["retried"] += 1
                 except Exception as e:
@@ -242,6 +253,16 @@ class BackfillProcessor(BaseProcessor):
                 finally:
                     clear_context()
 
+        # Pass 3: Batch generate summaries for all affected leads
+        if affected_leads:
+            log.info("pass_3_summaries", count=len(affected_leads))
+            from webhook_v2.handlers.lead.handler import LeadHandler
+
+            lead_handler = LeadHandler()
+            summary_stats = lead_handler.regenerate_summaries_batch(list(affected_leads))
+            log.info("batch_summary_complete", **summary_stats)
+            stats["summaries"] = summary_stats
+
         return stats
 
     def _handle_email(
@@ -250,16 +271,24 @@ class BackfillProcessor(BaseProcessor):
         classification: ClassificationResult,
         doctype: DocType,
         stats: dict,
-    ) -> None:
-        """Handle a single classified email."""
+        skip_summary: bool = False,
+    ) -> str | None:
+        """Handle a single classified email.
+
+        Args:
+            skip_summary: Skip AI summary generation (for batch processing)
+
+        Returns:
+            Lead name if successful, None otherwise
+        """
         handler = get_handler(classification.classification)
         if not handler:
             stats["skipped"] += 1
-            return
+            return None
 
         # Handle with original timestamp
         timestamp = email.email_date.isoformat() if email.email_date else None
-        result = handler.handle(email, classification, timestamp)
+        result = handler.handle(email, classification, timestamp, skip_summary=skip_summary)
 
         self.db.mark_processed(
             email.id,
@@ -279,6 +308,8 @@ class BackfillProcessor(BaseProcessor):
             stats["processed"] += 1
         else:
             stats["errors"] += 1
+
+        return result.result_id if result.success else None
 
     def preview_pending(
         self,
