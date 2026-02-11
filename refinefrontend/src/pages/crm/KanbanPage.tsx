@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { Plus } from "lucide-react";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
-import { buildKanbanItems, enrichWithActivity, enrichWithMeetings } from "@/lib/kanban";
+import { KanbanFilters, type WaitingFilter, type SortOrder } from "@/components/crm/KanbanFilters";
+import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, type KanbanItem } from "@/lib/kanban";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,13 +33,19 @@ export default function KanbanPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Filter state
+  const [waitingFilter, setWaitingFilter] = useState<WaitingFilter>("all");
+  const [locationFilter, setLocationFilter] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+
   const { mutateAsync: createLead } = useCreate();
 
+  // Fetch Leads with city field for location filter
   const { result: leadsResult, query: leadsQuery } = useList({
     resource: "Lead",
     pagination: { mode: "off" },
     meta: {
-      fields: ["name", "lead_name", "status", "email_id", "phone", "creation"],
+      fields: ["name", "lead_name", "status", "email_id", "phone", "creation", "city"],
     },
   });
 
@@ -111,11 +118,64 @@ export default function KanbanPage() {
     return result;
   }, [eventsWithParticipants]);
 
+  // Build lead location map for filtering
+  const leadLocationMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const lead of leadsResult?.data ?? []) {
+      if (lead.city) {
+        map.set(lead.name, lead.city);
+      }
+    }
+    return map;
+  }, [leadsResult]);
+
+  // Extract unique locations for filter dropdown
+  const availableLocations = useMemo(() => {
+    const locations = new Set<string>();
+    for (const lead of leadsResult?.data ?? []) {
+      if (lead.city && lead.city.trim()) {
+        locations.add(lead.city.trim());
+      }
+    }
+    return Array.from(locations).sort();
+  }, [leadsResult]);
+
+  // Build and filter items
   const items = useMemo(() => {
     const base = buildKanbanItems(leadsResult?.data ?? [], oppsResult?.data ?? []);
     const withActivity = enrichWithActivity(base, commsResult?.data ?? []);
-    return enrichWithMeetings(withActivity, meetingEvents);
-  }, [leadsResult, oppsResult, commsResult, meetingEvents]);
+    const withMeetings = enrichWithMeetings(withActivity, meetingEvents);
+
+    // Apply filters
+    let filtered = withMeetings;
+
+    // Filter by waiting status
+    if (waitingFilter !== "all") {
+      filtered = filtered.filter((item) => {
+        if (!item.lastActivity) return false;
+        return item.lastActivity.waitingFor === waitingFilter;
+      });
+    }
+
+    // Filter by location
+    if (locationFilter) {
+      filtered = filtered.filter((item) => {
+        if (item.doctype !== "Lead") return false;
+        const docName = item.id.split("::")[1];
+        return leadLocationMap.get(docName) === locationFilter;
+      });
+    }
+
+    // Sort by last activity date
+    filtered.sort((a, b) => {
+      const dateA = a.lastActivity?.date || a.creation;
+      const dateB = b.lastActivity?.date || b.creation;
+      const comparison = new Date(dateB).getTime() - new Date(dateA).getTime();
+      return sortOrder === "newest" ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [leadsResult, oppsResult, commsResult, meetingEvents, waitingFilter, locationFilter, sortOrder, leadLocationMap]);
 
   // Lead Sources for dropdown
   const { result: sourcesResult } = useList({
@@ -236,6 +296,18 @@ export default function KanbanPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Filters */}
+      <KanbanFilters
+        waitingFilter={waitingFilter}
+        onWaitingFilterChange={setWaitingFilter}
+        locationFilter={locationFilter}
+        onLocationFilterChange={setLocationFilter}
+        locations={availableLocations}
+        sortOrder={sortOrder}
+        onSortOrderChange={setSortOrder}
+      />
+
       {isLoading ? (
         <>
           {/* Desktop skeleton */}
