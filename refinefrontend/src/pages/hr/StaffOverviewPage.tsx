@@ -26,6 +26,7 @@ import {
   parseStaffRoles,
   serializeStaffRoles,
   getRoleBadgeVariant,
+  syncUserRoles,
 } from "@/lib/staff-roles";
 
 interface StaffRow {
@@ -37,6 +38,7 @@ interface StaffRow {
   custom_last_review_date?: string;
   custom_review_notes?: string;
   custom_staff_roles?: string;
+  user_id?: string;
   staff_roles: StaffRole[];
   review_status: ReviewStatus;
   leave_allocated: number;
@@ -76,6 +78,7 @@ export default function StaffOverviewPage() {
         "custom_last_review_date",
         "custom_review_notes",
         "custom_staff_roles",
+        "user_id",
       ],
     },
   });
@@ -138,6 +141,7 @@ export default function StaffOverviewPage() {
         custom_last_review_date: emp.custom_last_review_date,
         custom_review_notes: emp.custom_review_notes,
         custom_staff_roles: emp.custom_staff_roles,
+        user_id: emp.user_id,
         staff_roles: parseStaffRoles(emp.custom_staff_roles),
         review_status: getReviewStatus(emp.custom_last_review_date),
         leave_allocated: allocated,
@@ -242,13 +246,22 @@ export default function StaffOverviewPage() {
     setSaving(true);
     setError(null);
     try {
+      const staffRoles = Array.from(selectedRoles) as StaffRole[];
+
+      // Save staff roles to Employee
       await updateEmployee({
         resource: "Employee",
         id: selectedEmployee.name,
         values: {
-          custom_staff_roles: serializeStaffRoles(Array.from(selectedRoles) as StaffRole[]),
+          custom_staff_roles: serializeStaffRoles(staffRoles),
         },
       });
+
+      // Sync ERPNext User roles if employee has a linked user account
+      if (selectedEmployee.user_id) {
+        await syncUserRoles(selectedEmployee.user_id, staffRoles);
+      }
+
       invalidate({ resource: "Employee", invalidates: ["list"] });
       setRolesDialogOpen(false);
       setSelectedEmployee(null);

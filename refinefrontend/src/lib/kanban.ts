@@ -103,10 +103,6 @@ export function getColumnForItem(item: KanbanItem): ColumnKey {
   return "new";
 }
 
-export function getTargetStatus(col: ColumnDef, doctype: "Lead" | "Opportunity"): string {
-  return doctype === "Lead" ? col.leadTarget : col.oppTarget;
-}
-
 /** Lead statuses that should be hidden from Kanban (none - all Leads are now shown) */
 const HIDDEN_LEAD_STATUSES = new Set<string>();
 
@@ -148,16 +144,6 @@ export function buildKanbanItems(
     });
   }
   return items;
-}
-
-/** Statuses where items should not be moved (existing Opportunities only) */
-const LOCKED_OPP_STATUSES = new Set(["Converted", "Lost", "Closed"]);
-
-export function isItemLocked(item: KanbanItem): boolean {
-  // Leads can move through all stages (simplified Lead-only CRM)
-  if (item.doctype === "Lead") return false;
-  // Lock existing Opportunities in terminal states
-  return LOCKED_OPP_STATUSES.has(item.status);
 }
 
 /** Extract ERPNext document name from KanbanItem id ("Lead::CRM-LEAD-00001" -> "CRM-LEAD-00001") */

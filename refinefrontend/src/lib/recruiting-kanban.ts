@@ -34,16 +34,6 @@ export function getPipelineColumn(item: RecruitingItem): string {
   return item.stage;
 }
 
-export function getPipelineTargetStatus(columnKey: string): string {
-  return columnKey; // column key IS the stage value
-}
-
-const LOCKED_STAGES = new Set<string>(["Hired", "Rejected"]);
-
-export function isPipelineItemLocked(item: RecruitingItem): boolean {
-  return LOCKED_STAGES.has(item.stage);
-}
-
 export function buildRecruitingItems(applicants: any[]): RecruitingItem[] {
   return applicants.map((a) => ({
     id: a.name,

@@ -76,6 +76,51 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml exec email-proc
   python -m webhook_v2.processors.backfill --since 2026-02-06 --log-level INFO
 ```
 
+## Backfill CLI Reference
+
+```bash
+python -m webhook_v2.processors.backfill [OPTIONS]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--since YYYY-MM-DD` | Start date for email processing |
+| `--until YYYY-MM-DD` | End date (optional, defaults to now) |
+| `--force` | Reprocess all emails in date range (requires --since) |
+| `--dry-run` | Preview without processing |
+| `--limit N` | Max emails to process |
+| `--log-level` | DEBUG, INFO, WARNING, ERROR (default: INFO) |
+
+### Examples
+
+```bash
+# Process unprocessed emails (default)
+python -m webhook_v2.processors.backfill
+
+# Process last 7 days
+python -m webhook_v2.processors.backfill --since 2026-02-05
+
+# Force reprocess date range (ignores processed flag)
+python -m webhook_v2.processors.backfill --since 2026-02-01 --until 2026-02-07 --force
+
+# Dry run to preview
+python -m webhook_v2.processors.backfill --since 2026-02-01 --dry-run
+
+# Process with limit
+python -m webhook_v2.processors.backfill --since 2026-02-01 --limit 10 --log-level DEBUG
+```
+
+### Batch Summary Optimization
+
+The backfill uses batch mode for AI summaries to minimize API calls:
+
+1. **Email Processing Phase**: Creates leads and communications without generating summaries
+2. **Summary Generation Phase**: Generates one summary per unique lead at the end
+
+This reduces API calls from N (per email) to M (per unique lead), typically saving 80-90% of summary API calls.
+
 ## Diagnose Duplicates and Missing Communications
 
 ```bash

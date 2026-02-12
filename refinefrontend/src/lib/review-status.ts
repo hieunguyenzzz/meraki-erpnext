@@ -30,31 +30,10 @@ export function getReviewStatus(lastReviewDate: string | null | undefined): Revi
  */
 export function getMonthsDifference(from: Date, to: Date): number {
   const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
-  // Adjust for partial months
   if (to.getDate() < from.getDate()) {
     return months - 1;
   }
   return months;
-}
-
-/**
- * Get next review due date (6 months after last review)
- */
-export function getNextReviewDate(lastReviewDate: string): Date {
-  const lastReview = new Date(lastReviewDate);
-  const nextReview = new Date(lastReview);
-  nextReview.setMonth(nextReview.getMonth() + 6);
-  return nextReview;
-}
-
-/**
- * Get days until review is due (negative if overdue)
- */
-export function getDaysUntilDue(lastReviewDate: string): number {
-  const nextReview = getNextReviewDate(lastReviewDate);
-  const now = new Date();
-  const diffTime = nextReview.getTime() - now.getTime();
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
 /**
@@ -99,9 +78,6 @@ export function getReviewStatusText(lastReviewDate: string | null | undefined): 
 
 /**
  * Get badge variant for leave balance display
- * - Green: > 50% remaining
- * - Amber: 25-50% remaining
- * - Red: < 25% remaining
  */
 export function getLeaveBalanceVariant(remaining: number, total: number): BadgeVariant {
   if (total === 0) return "secondary";

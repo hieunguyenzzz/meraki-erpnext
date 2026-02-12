@@ -22,8 +22,6 @@ interface KanbanBoardProps {
   columns?: GenericColumnDef[];
   /** Map an item to its column key. Defaults to CRM getColumnForItem. */
   getColumnForItem?: (item: any) => string;
-  /** Get the new status value when dropping into a column. No longer used (drag disabled). */
-  getTargetStatus?: (columnKey: string, item: any) => string;
   /** Custom card renderer. Defaults to CRM KanbanCard. */
   renderCard?: (item: any, isDragOverlay?: boolean) => ReactNode;
 }
