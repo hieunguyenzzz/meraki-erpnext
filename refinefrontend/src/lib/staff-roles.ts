@@ -9,7 +9,7 @@ export type BadgeVariant = "default" | "secondary" | "destructive" | "outline" |
  */
 export const STAFF_ROLE_TO_ERPNEXT_ROLES: Record<StaffRole, string[]> = {
   Sales: ["Sales User", "Inbox User", "Super Email User"],
-  HR: ["HR User"],
+  HR: ["HR User", "HR Manager"],
   Accounting: ["Accounts User"],
   Planner: ["Projects User"],
 };
