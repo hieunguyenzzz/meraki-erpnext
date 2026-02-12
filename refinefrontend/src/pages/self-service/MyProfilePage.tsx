@@ -35,7 +35,6 @@ type FormData = {
   emergency_phone_number: string;
   bank_name: string;
   bank_ac_no: string;
-  iban: string;
 };
 
 const INITIAL_FORM: FormData = {
@@ -53,7 +52,6 @@ const INITIAL_FORM: FormData = {
   emergency_phone_number: "",
   bank_name: "",
   bank_ac_no: "",
-  iban: "",
 };
 
 export default function MyProfilePage() {
@@ -80,7 +78,6 @@ export default function MyProfilePage() {
         emergency_phone_number: employee.emergency_phone_number ?? "",
         bank_name: employee.bank_name ?? "",
         bank_ac_no: employee.bank_ac_no ?? "",
-        iban: employee.iban ?? "",
       });
     }
   }, [employee]);
@@ -334,7 +331,7 @@ export default function MyProfilePage() {
           <CardTitle>Bank Details</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label htmlFor="bank_name">Bank Name *</Label>
               <Input
@@ -349,14 +346,6 @@ export default function MyProfilePage() {
                 id="bank_ac_no"
                 value={form.bank_ac_no}
                 onChange={(e) => setField("bank_ac_no", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="iban">IBAN</Label>
-              <Input
-                id="iban"
-                value={form.iban}
-                onChange={(e) => setField("iban", e.target.value)}
               />
             </div>
           </div>
