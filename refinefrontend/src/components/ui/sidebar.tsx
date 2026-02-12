@@ -79,8 +79,7 @@ export const SidebarMenuButton = React.forwardRef<HTMLButtonElement, SidebarMenu
       <button
         ref={ref}
         className={cn(
-          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-          "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm",
           isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-medium",
           className
         )}

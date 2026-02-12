@@ -101,11 +101,11 @@
   display: none;
 }
 
-/* Smooth transitions for collapsible content */
-[data-state="open"] {
+/* Smooth transitions for collapsible content only */
+[data-radix-collapsible-content][data-state="open"] {
   animation: slideDown 200ms ease-out;
 }
-[data-state="closed"] {
+[data-radix-collapsible-content][data-state="closed"] {
   animation: slideUp 200ms ease-out;
 }
 
