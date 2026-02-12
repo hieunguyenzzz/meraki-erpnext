@@ -24,15 +24,6 @@ export interface Employee {
   relieving_date?: string;
 }
 
-export interface OnboardingActivity {
-  activity_name: string;
-  user: string;
-  role?: string;
-  required_for_employee_creation?: number;
-  description?: string;
-  completed?: number;
-}
-
 export interface EmployeeProfile {
   name: string;
   employee_name: string;

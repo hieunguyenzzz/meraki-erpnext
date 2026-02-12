@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Columns3, MessageSquare,
-  UserCheck, Calendar, ClipboardList, Banknote, Users, LayoutDashboard,
+  UserCheck, Calendar, Banknote, Users, LayoutDashboard,
   FileText, Receipt, CreditCard, BookOpen, PieChart,
   FolderKanban,
 } from "lucide-react";
@@ -51,7 +51,6 @@ export const MODULES: ModuleConfig[] = [
       { label: "Employees", path: "/hr/employees", icon: UserCheck },
       { label: "Leave Management", path: "/hr/leaves", icon: Calendar },
       { label: "Payroll", path: "/hr/payroll", icon: Banknote },
-      { label: "Onboarding", path: "/hr/onboarding", icon: ClipboardList },
     ],
   },
   {

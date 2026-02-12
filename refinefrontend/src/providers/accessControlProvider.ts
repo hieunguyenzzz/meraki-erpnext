@@ -9,7 +9,6 @@ const RESOURCE_ROLE_MAP: Record<string, string[]> = {
   Employee: HR_ROLES,
   "Leave Application": HR_ROLES,
   "Leave Allocation": HR_ROLES,
-  "Employee Onboarding": HR_ROLES,
   "Sales Invoice": FINANCE_ROLES,
   "Payment Entry": FINANCE_ROLES,
   "Purchase Invoice": FINANCE_ROLES,

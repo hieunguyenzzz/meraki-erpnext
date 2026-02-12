@@ -23,8 +23,6 @@ import EmployeesPage from "@/pages/hr/EmployeesPage";
 import EmployeeDetailPage from "@/pages/hr/EmployeeDetailPage";
 import LeavesPage from "@/pages/hr/LeavesPage";
 import PayrollPage from "@/pages/hr/PayrollPage";
-import OnboardingPage from "@/pages/hr/OnboardingPage";
-import OnboardingDetailPage from "@/pages/hr/OnboardingDetailPage";
 import RecruitingScannerPage from "@/pages/hr/RecruitingScannerPage";
 import StaffOverviewPage from "@/pages/hr/StaffOverviewPage";
 import RecruitingPipelinePage from "@/pages/hr/RecruitingPipelinePage";
@@ -98,7 +96,6 @@ export default function App() {
             { name: "Leave Type" },
             { name: "Leave Allocation" },
             { name: "Attendance Request" },
-            { name: "Employee Onboarding", list: "/hr/onboarding", show: "/hr/onboarding/:id" },
             { name: "Payroll Entry", list: "/hr/payroll" },
             { name: "Salary Slip", list: "/hr/payroll" },
             { name: "Sales Invoice", list: "/finance/invoices", show: "/finance/invoices/:id" },
@@ -158,8 +155,6 @@ export default function App() {
               <Route path="/hr/employees/:name" element={<EmployeeDetailPage />} />
               <Route path="/hr/leaves" element={<LeavesPage />} />
               <Route path="/hr/payroll" element={<PayrollPage />} />
-              <Route path="/hr/onboarding" element={<OnboardingPage />} />
-              <Route path="/hr/onboarding/:name" element={<OnboardingDetailPage />} />
 
               {/* Finance */}
               <Route path="/finance/invoices" element={<InvoicesPage />} />
