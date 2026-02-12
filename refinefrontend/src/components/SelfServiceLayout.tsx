@@ -1,6 +1,6 @@
 import { Outlet, NavLink, Link } from "react-router";
-import { useGetIdentity, useLogout } from "@refinedev/core";
-import { LogOut, User, Calendar, Home } from "lucide-react";
+import { useGetIdentity, useLogout, usePermissions } from "@refinedev/core";
+import { LogOut, User, Calendar, Home, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { ThemeProvider } from "@/context/theme-context";
 import { ThemeSwitch } from "@/components/theme-switch";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { InstallPrompt, UpdatePrompt } from "@/components/pwa";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
+import { isEmployeeSelfServiceOnly } from "@/lib/roles";
 
 const navItems = [
   { to: "/my-profile", label: "My Profile", icon: User },
@@ -77,7 +78,11 @@ function MobileSelfServiceNav({ onLogout }: { onLogout: () => void }) {
 
 export function SelfServiceLayout() {
   const { data: identity } = useGetIdentity<{ email: string }>();
+  const { data: roles } = usePermissions<string[]>({});
   const { mutate: logout } = useLogout({});
+
+  // Show "Back to Dashboard" for users with admin roles
+  const hasAdminAccess = roles && !isEmployeeSelfServiceOnly(roles);
 
   return (
     <ThemeProvider>
@@ -93,6 +98,15 @@ export function SelfServiceLayout() {
           <div className="flex items-center gap-8">
             <span className="text-lg font-bold">Meraki</span>
             <nav className="flex items-center gap-1">
+              {hasAdminAccess && (
+                <Link
+                  to="/"
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Dashboard
+                </Link>
+              )}
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}
@@ -124,14 +138,21 @@ export function SelfServiceLayout() {
 
         {/* Mobile Header */}
         <header className="md:hidden flex items-center justify-between px-4 py-3 border-b bg-white/80 backdrop-blur-xl sticky top-0 z-40">
-          <Link to="/my-profile" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#C9A9A6] text-white text-sm font-bold">
-              M
-            </div>
-            <span className="text-lg font-semibold" style={{ fontFamily: "var(--font-display, Georgia, serif)" }}>
-              Meraki
-            </span>
-          </Link>
+          <div className="flex items-center gap-2">
+            {hasAdminAccess && (
+              <Link to="/" className="p-1 -ml-1 text-gray-500 hover:text-gray-700">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            )}
+            <Link to="/my-profile" className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#C9A9A6] text-white text-sm font-bold">
+                M
+              </div>
+              <span className="text-lg font-semibold" style={{ fontFamily: "var(--font-display, Georgia, serif)" }}>
+                Meraki
+              </span>
+            </Link>
+          </div>
           <span className="text-sm text-gray-500 truncate max-w-[140px]">{identity?.email}</span>
         </header>
 

@@ -109,19 +109,6 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<ThemeProvider><LoginPage /></ThemeProvider>} />
 
-            {/* Self-service routes (no sidebar) */}
-            <Route
-              element={
-                <Authenticated key="self-service" fallback={<Navigate to="/login" />}>
-                  <SelfServiceLayout />
-                </Authenticated>
-              }
-            >
-              <Route path="/my-profile" element={<MyProfilePage />} />
-              <Route path="/my-leaves" element={<MyLeavesPage />} />
-              <Route path="/my-attendance" element={<MyAttendancePage />} />
-            </Route>
-
             {/* Admin: full app with sidebar */}
             <Route
               element={
@@ -165,6 +152,19 @@ export default function App() {
               <Route path="/finance/payments/:name" element={<PaymentDetailPage />} />
               <Route path="/finance/journals" element={<JournalsPage />} />
               <Route path="/finance/overview" element={<OverviewPage />} />
+            </Route>
+
+            {/* Self-service routes (no sidebar) - for all authenticated users */}
+            <Route
+              element={
+                <Authenticated key="self-service" fallback={<Navigate to="/login" />}>
+                  <SelfServiceLayout />
+                </Authenticated>
+              }
+            >
+              <Route path="/my-profile" element={<MyProfilePage />} />
+              <Route path="/my-leaves" element={<MyLeavesPage />} />
+              <Route path="/my-attendance" element={<MyAttendancePage />} />
             </Route>
 
             {/* Catch-all: redirect unknown routes */}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router";
-import { useList, useGetIdentity } from "@refinedev/core";
+import { useList, useGetIdentity, usePermissions } from "@refinedev/core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,6 +8,7 @@ import { CalendarDays, CheckSquare, Clock, FolderKanban } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { formatTimeShort, interviewStatusVariant } from "@/lib/interview-scheduling";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
+import { CRM_ROLES, HR_ROLES, hasModuleAccess } from "@/lib/roles";
 
 function priorityVariant(priority: string) {
   switch (priority) {
@@ -42,8 +43,12 @@ function phaseBadgeVariant(phase: string) {
 
 export default function DashboardPage() {
   const { data: identity } = useGetIdentity<{ email: string; name?: string }>();
+  const { data: roles } = usePermissions<string[]>({});
   const firstName = identity?.name?.split(" ")[0] ?? identity?.email?.split("@")[0] ?? "";
   const { employee, employeeId } = useMyEmployee();
+
+  const hasCrmAccess = hasModuleAccess(roles ?? [], CRM_ROLES);
+  const hasHrAccess = hasModuleAccess(roles ?? [], HR_ROLES);
 
   const { result: leadsResult, query: leadsQuery } = useList({
     resource: "Lead",
@@ -221,32 +226,38 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">Here's an overview of your business</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-[60px]" />
-            ) : (
-              <div className="text-2xl font-bold">{activeLeadCount}</div>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Active Employees</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-[60px]" />
-            ) : (
-              <div className="text-2xl font-bold">{activeEmployeeCount}</div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {(hasCrmAccess || hasHrAccess) && (
+        <div className="grid gap-4 md:grid-cols-3">
+          {hasCrmAccess && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-[60px]" />
+                ) : (
+                  <div className="text-2xl font-bold">{activeLeadCount}</div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          {hasHrAccess && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Active Employees</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-[60px]" />
+                ) : (
+                  <div className="text-2xl font-bold">{activeEmployeeCount}</div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* My Upcoming Interviews */}
       {showInterviewsCard && (
