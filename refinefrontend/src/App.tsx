@@ -21,7 +21,6 @@ import ProjectKanbanPage from "@/pages/projects/ProjectKanbanPage";
 import ProjectDetailPage from "@/pages/projects/ProjectDetailPage";
 import EmployeesPage from "@/pages/hr/EmployeesPage";
 import EmployeeDetailPage from "@/pages/hr/EmployeeDetailPage";
-import LeavesPage from "@/pages/hr/LeavesPage";
 import PayrollPage from "@/pages/hr/PayrollPage";
 import RecruitingScannerPage from "@/pages/hr/RecruitingScannerPage";
 import StaffOverviewPage from "@/pages/hr/StaffOverviewPage";
@@ -92,7 +91,7 @@ export default function App() {
             { name: "Interview Round" },
             { name: "Interview Detail" },
             { name: "Employee", list: "/hr/employees", show: "/hr/employees/:id" },
-            { name: "Leave Application", list: "/hr/leaves" },
+            { name: "Leave Application" },
             { name: "Leave Type" },
             { name: "Leave Allocation" },
             { name: "Attendance Request" },
@@ -140,7 +139,6 @@ export default function App() {
               <Route path="/hr/recruiting/:name" element={<ApplicantDetailPage />} />
               <Route path="/hr/employees" element={<EmployeesPage />} />
               <Route path="/hr/employees/:name" element={<EmployeeDetailPage />} />
-              <Route path="/hr/leaves" element={<LeavesPage />} />
               <Route path="/hr/payroll" element={<PayrollPage />} />
 
               {/* Finance */}
