@@ -1,15 +1,20 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useList } from "@refinedev/core";
+import { Plus } from "lucide-react";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { ProjectKanbanCard } from "@/components/projects/ProjectKanbanCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import {
   PROJECT_COLUMNS,
   getProjectColumnKey,
   type ProjectKanbanItem,
 } from "@/lib/projectKanban";
+import { CreateWeddingDialog } from "./CreateWeddingDialog";
 
 export default function ProjectKanbanPage() {
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+
   // Fetch Projects
   const { result: projectsResult, query: projectsQuery } = useList({
     resource: "Project",
@@ -92,7 +97,16 @@ export default function ProjectKanbanPage() {
             Manage wedding projects by stage
           </p>
         </div>
+        <Button onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          New Wedding
+        </Button>
       </div>
+
+      <CreateWeddingDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+      />
 
       {isLoading ? (
         <>

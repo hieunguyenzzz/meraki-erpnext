@@ -34,6 +34,9 @@ class LeadHandler(BaseHandler):
         Classification.QUOTE_SENT,
     }
 
+    # Class-level flag to skip summaries during batch processing
+    batch_mode = False
+
     def __init__(self):
         self._classifier = None
         self._summary_service = None
@@ -65,16 +68,12 @@ class LeadHandler(BaseHandler):
         email: Email,
         classification: ClassificationResult,
         timestamp: str | None = None,
-        skip_summary: bool = False,
     ) -> ProcessingResult:
         """
         Process the email based on classification.
 
         For new_lead: Create Lead + Communication
         For follow-ups: Find Lead + Create Communication + Update Stage
-
-        Args:
-            skip_summary: If True, skip AI summary generation (for batch processing)
         """
         # Get target email (client, not Meraki)
         target_email = self._get_target_email(email, classification)
@@ -93,16 +92,15 @@ class LeadHandler(BaseHandler):
             email_timestamp = email.email_date.isoformat()
 
         if classification.classification == Classification.NEW_LEAD:
-            return self._handle_new_lead(email, classification, email_timestamp, skip_summary)
+            return self._handle_new_lead(email, classification, email_timestamp)
         else:
-            return self._handle_follow_up(email, classification, email_timestamp, skip_summary)
+            return self._handle_follow_up(email, classification, email_timestamp)
 
     def _handle_new_lead(
         self,
         email: Email,
         classification: ClassificationResult,
         timestamp: str | None,
-        skip_summary: bool = False,
     ) -> ProcessingResult:
         """Handle new lead classification."""
         # Check by message_id first (primary deduplication)
@@ -159,8 +157,7 @@ class LeadHandler(BaseHandler):
         )
 
         # Regenerate AI summary for the lead (0 = new lead, no prior communications)
-        if not skip_summary:
-            self._regenerate_summary(lead_name, comm_count_before=0)
+        self._regenerate_summary(lead_name, comm_count_before=0)
 
         return ProcessingResult(
             success=True,
@@ -176,7 +173,6 @@ class LeadHandler(BaseHandler):
         email: Email,
         classification: ClassificationResult,
         timestamp: str | None,
-        skip_summary: bool = False,
     ) -> ProcessingResult:
         """Handle follow-up email classifications."""
         target_email = classification.email or self._get_target_email(email, classification)
@@ -259,8 +255,7 @@ class LeadHandler(BaseHandler):
         )
 
         # Regenerate AI summary for the lead (only if new communication was added)
-        if not skip_summary:
-            self._regenerate_summary(lead_name, comm_count_before=comm_count_before)
+        self._regenerate_summary(lead_name, comm_count_before=comm_count_before)
 
         return ProcessingResult(
             success=True,
@@ -282,6 +277,10 @@ class LeadHandler(BaseHandler):
             comm_count_before: Number of communications before this email was processed.
                               Used to check if we actually added a new communication.
         """
+        # Skip in batch mode (summaries generated at end of backfill)
+        if LeadHandler.batch_mode:
+            return
+
         try:
             lead = self.erpnext.get_lead(lead_name)
             if not lead:
@@ -384,19 +383,13 @@ class LeadHandler(BaseHandler):
         escaped = html.escape(text)
         return escaped.replace("\n", "<br>\n")
 
-    def regenerate_summaries_batch(self, lead_names: list[str]) -> dict:
-        """Batch regenerate summaries for multiple leads.
-
-        Called at end of backfill to generate one summary per lead.
-
-        Returns:
-            dict with counts: {"success": N, "failed": N, "skipped": N}
-        """
+    def generate_summaries_for_leads(self, lead_names: list[str]) -> dict:
+        """Generate summaries for a list of leads (used after batch processing)."""
         stats = {"success": 0, "failed": 0, "skipped": 0}
         total = len(lead_names)
 
         for i, lead_name in enumerate(lead_names, 1):
-            log.info("batch_summary_progress", current=i, total=total, lead=lead_name)
+            log.info("batch_summary", current=i, total=total, lead=lead_name)
             try:
                 lead = self.erpnext.get_lead(lead_name)
                 if not lead:

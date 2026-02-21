@@ -187,7 +187,7 @@ export default function LeavesPage() {
       await customMutation({
         url: "/api/method/frappe.client.set_value",
         method: "post",
-        values: { doctype: "Leave Allocation", name: allocName, fieldname: "total_leaves_allocated", value: newAllocated },
+        values: { doctype: "Leave Allocation", name: allocName, fieldname: "new_leaves_allocated", value: newAllocated },
       });
       setEdits((prev) => { const next = { ...prev }; delete next[allocName]; return next; });
       invalidate({ resource: "Leave Allocation", invalidates: ["list"] });

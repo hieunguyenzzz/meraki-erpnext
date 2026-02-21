@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     json_logs: bool = True  # False for colored dev output
+    debug_prompts: bool = False  # Set to True to log full LLM prompts
 
 
 settings = Settings()

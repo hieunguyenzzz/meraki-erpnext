@@ -29,7 +29,6 @@ class BaseHandler(ABC):
         email: Email,
         classification: ClassificationResult,
         timestamp: str | None = None,
-        skip_summary: bool = False,
     ) -> ProcessingResult:
         """
         Process the email based on its classification.
@@ -38,7 +37,6 @@ class BaseHandler(ABC):
             email: Email object to process
             classification: Classification result with extracted data
             timestamp: Optional timestamp for backfill
-            skip_summary: Skip AI summary generation (for batch processing)
 
         Returns:
             ProcessingResult with success status and details

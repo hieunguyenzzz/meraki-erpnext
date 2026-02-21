@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useList, useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useState, useEffect } from "react";
+import { useList, useCustomMutation, useInvalidate, useApiUrl } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,14 +19,31 @@ function endOfMonth(d: Date) {
 function docstatusLabel(ds: number) { return ds === 0 ? "Draft" : ds === 1 ? "Submitted" : ds === 2 ? "Cancelled" : "Unknown"; }
 function docstatusBadge(ds: number) { return ds === 1 ? "success" as const : ds === 2 ? "destructive" as const : "secondary" as const; }
 
+interface SalarySlipEarning {
+  salary_component: string;
+  amount: number;
+}
+
 interface SalarySlip {
   name: string;
   employee: string;
   employee_name: string;
   gross_pay: number;
+  total_deduction: number;
   net_pay: number;
   posting_date: string;
   docstatus: number;
+  earnings: SalarySlipEarning[];
+}
+
+function getEarningAmount(earnings: SalarySlipEarning[] | undefined, component: string): number {
+  return earnings?.find(e => e.salary_component === component)?.amount ?? 0;
+}
+
+function getTotalCommission(earnings: SalarySlipEarning[] | undefined): number {
+  const commissionComponents = ["Assistant Commission", "Support Planner Commission", "Lead Planner Commission"];
+  return earnings?.filter(e => commissionComponents.includes(e.salary_component))
+    .reduce((sum, e) => sum + e.amount, 0) ?? 0;
 }
 
 interface PayrollEntry {
@@ -47,9 +64,29 @@ const slipColumns: ColumnDef<SalarySlip, unknown>[] = [
     filterFn: "includesString",
   },
   {
+    id: "base",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Base" className="text-right" />,
+    cell: ({ row }) => <div className="text-right">{formatVND(getEarningAmount(row.original.earnings, "Basic Salary"))}</div>,
+  },
+  {
+    id: "commission",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Commission" className="text-right" />,
+    cell: ({ row }) => <div className="text-right">{formatVND(getTotalCommission(row.original.earnings))}</div>,
+  },
+  {
+    id: "bonus",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Bonus" className="text-right" />,
+    cell: ({ row }) => <div className="text-right">{formatVND(getEarningAmount(row.original.earnings, "Bonus"))}</div>,
+  },
+  {
     accessorKey: "gross_pay",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Gross Pay" className="text-right" />,
     cell: ({ row }) => <div className="text-right">{formatVND(row.original.gross_pay)}</div>,
+  },
+  {
+    accessorKey: "total_deduction",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Deductions" className="text-right" />,
+    cell: ({ row }) => <div className="text-right">{formatVND(row.original.total_deduction)}</div>,
   },
   {
     accessorKey: "net_pay",
@@ -102,7 +139,10 @@ export default function PayrollPage() {
   const [generating, setGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailedSlips, setDetailedSlips] = useState<SalarySlip[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
+  const apiUrl = useApiUrl();
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
 
@@ -127,11 +167,48 @@ export default function PayrollPage() {
       ? [{ field: "payroll_entry", operator: "eq", value: currentPE.name }]
       : [{ field: "name", operator: "eq", value: "__never__" }],
     sorters: [{ field: "employee_name", order: "asc" }],
-    meta: { fields: ["name", "employee", "employee_name", "gross_pay", "net_pay", "posting_date", "docstatus"] },
+    meta: { fields: ["name", "employee", "employee_name", "gross_pay", "total_deduction", "net_pay", "posting_date", "docstatus"] },
     queryOptions: { enabled: !!currentPE },
   });
 
-  const salarySlips = (slipsResult?.data ?? []) as SalarySlip[];
+  const basicSlips = (slipsResult?.data ?? []) as SalarySlip[];
+
+  // Fetch detailed salary slips with earnings child table
+  useEffect(() => {
+    async function fetchDetails() {
+      if (basicSlips.length === 0) {
+        setDetailedSlips([]);
+        return;
+      }
+
+      setLoadingDetails(true);
+      try {
+        const detailed = await Promise.all(
+          basicSlips.map(async (slip) => {
+            const res = await fetch(`${apiUrl}/resource/Salary Slip/${slip.name}`, {
+              credentials: "include",
+            });
+            const data = await res.json();
+            return {
+              ...slip,
+              earnings: data.data?.earnings ?? [],
+              total_deduction: data.data?.total_deduction ?? slip.total_deduction ?? 0,
+            };
+          })
+        );
+        setDetailedSlips(detailed);
+      } catch (err) {
+        console.error("Failed to fetch salary slip details:", err);
+        setDetailedSlips(basicSlips);
+      } finally {
+        setLoadingDetails(false);
+      }
+    }
+
+    fetchDetails();
+  }, [basicSlips.map(s => s.name).join(","), apiUrl]);
+
+  const salarySlips = detailedSlips.length > 0 ? detailedSlips : basicSlips;
   const hasDraftSlips = salarySlips.some((s) => s.docstatus === 0);
 
   const { result: histResult } = useList({
@@ -187,7 +264,7 @@ export default function PayrollPage() {
     } finally { setSubmitting(false); }
   }
 
-  const isLoading = peQuery?.isLoading || slipsQuery?.isLoading;
+  const isLoading = peQuery?.isLoading || slipsQuery?.isLoading || loadingDetails;
 
   return (
     <div className="space-y-4">
