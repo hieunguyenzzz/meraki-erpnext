@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router";
-import { useList, useUpdate, useInvalidate } from "@refinedev/core";
+import { useList, useUpdate, useCreate, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check } from "lucide-react";
+import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { extractErrorMessage } from "@/lib/errors";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -61,6 +63,23 @@ export default function StaffOverviewPage() {
 
   const invalidate = useInvalidate();
   const { mutateAsync: updateEmployee } = useUpdate();
+  const { mutateAsync: createDoc } = useCreate();
+
+  // Invite staff dialog state
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({
+    email: "",
+    fullName: "",
+    gender: "Female",
+    dateOfBirth: "2000-01-01",
+    designation: "",
+    department: "",
+    dateOfJoining: new Date().toISOString().split("T")[0],
+  });
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState<{ password: string; name: string } | null>(null);
+  const [copiedPassword, setCopiedPassword] = useState(false);
 
   // Fetch employees
   const { result: employeesResult, query: employeesQuery } = useList({
@@ -79,6 +98,7 @@ export default function StaffOverviewPage() {
         "custom_review_notes",
         "custom_staff_roles",
         "user_id",
+        "custom_meraki_id",
       ],
     },
   });
@@ -272,6 +292,100 @@ export default function StaffOverviewPage() {
     }
   }
 
+  // Reset invite form when dialog closes
+  useEffect(() => {
+    if (!inviteDialogOpen) {
+      setInviteForm({
+        email: "",
+        fullName: "",
+        gender: "Female",
+        dateOfBirth: "2000-01-01",
+        designation: "",
+        department: "",
+        dateOfJoining: new Date().toISOString().split("T")[0],
+      });
+      setInviteError(null);
+      setInviteSuccess(null);
+      setCopiedPassword(false);
+    }
+  }, [inviteDialogOpen]);
+
+  async function handleInviteStaff() {
+    if (!inviteForm.email.trim() || !inviteForm.fullName.trim()) return;
+    setInviteSubmitting(true);
+    setInviteError(null);
+
+    try {
+      // Generate password
+      const password = `Meraki-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      // Step 1: Create User via fetch (need roles array)
+      const userRes = await fetch("/api/resource/User", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Frappe-Site-Name": "erp.merakiwp.com",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          email: inviteForm.email.trim(),
+          first_name: inviteForm.fullName.trim().split(" ")[0],
+          last_name: inviteForm.fullName.trim().split(" ").slice(1).join(" ") || undefined,
+          enabled: 1,
+          new_password: password,
+          send_welcome_email: 0,
+          roles: [{ role: "Employee Self Service" }],
+        }),
+      });
+
+      if (!userRes.ok) {
+        const errData = await userRes.json().catch(() => null);
+        const msg = errData?._server_messages
+          ? extractErrorMessage(errData, "Failed to create user")
+          : errData?.message || `Failed to create user (${userRes.status})`;
+        throw new Error(msg);
+      }
+
+      // Step 2: Compute next custom_meraki_id
+      const nextMerakiId = Math.max(0, ...employees.map((e: any) => parseInt(e.custom_meraki_id) || 0)) + 1;
+
+      // Step 3: Create Employee
+      await createDoc({
+        resource: "Employee",
+        values: {
+          first_name: inviteForm.fullName.trim().split(" ")[0],
+          employee_name: inviteForm.fullName.trim(),
+          company: "Meraki Wedding Planner",
+          user_id: inviteForm.email.trim(),
+          date_of_joining: inviteForm.dateOfJoining,
+          gender: inviteForm.gender,
+          date_of_birth: inviteForm.dateOfBirth,
+          status: "Active",
+          leave_approver: "Administrator",
+          custom_meraki_id: nextMerakiId,
+          designation: inviteForm.designation || undefined,
+          department: inviteForm.department || undefined,
+        },
+      });
+
+      // Success
+      invalidate({ resource: "Employee", invalidates: ["list"] });
+      setInviteSuccess({ password, name: inviteForm.fullName.trim() });
+    } catch (err: unknown) {
+      setInviteError(extractErrorMessage(err, "Failed to invite staff member"));
+    } finally {
+      setInviteSubmitting(false);
+    }
+  }
+
+  function copyPassword() {
+    if (inviteSuccess?.password) {
+      navigator.clipboard.writeText(inviteSuccess.password);
+      setCopiedPassword(true);
+      setTimeout(() => setCopiedPassword(false), 2000);
+    }
+  }
+
   // Table columns
   const columns: ColumnDef<StaffRow, unknown>[] = [
     {
@@ -372,9 +486,15 @@ export default function StaffOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Staff Overview</h1>
-        <p className="text-muted-foreground">Employee status, reviews, and leave balances at a glance</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Staff Overview</h1>
+          <p className="text-muted-foreground">Employee status, reviews, and leave balances at a glance</p>
+        </div>
+        <Button onClick={() => setInviteDialogOpen(true)}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Invite Staff
+        </Button>
       </div>
 
       {/* Summary Cards */}
@@ -550,6 +670,148 @@ export default function StaffOverviewPage() {
               {saving ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite Staff Dialog */}
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Invite Staff</DialogTitle>
+            <DialogDescription>
+              Create a new employee account. They'll complete their profile on first login.
+            </DialogDescription>
+          </DialogHeader>
+
+          {inviteSuccess ? (
+            <div className="space-y-4 py-4">
+              <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-green-700">
+                  <CheckCircle className="h-5 w-5" />
+                  <p className="font-medium">{inviteSuccess.name} has been added</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Share these login credentials:</p>
+                  <div className="flex items-center gap-2 bg-white rounded border px-3 py-2">
+                    <code className="flex-1 text-sm font-mono">{inviteSuccess.password}</code>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={copyPassword}>
+                      {copiedPassword ? <CheckCheck className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setInviteDialogOpen(false)}>Done</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="invite-email">Email <span className="text-destructive">*</span></Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  placeholder="staff@example.com"
+                  value={inviteForm.email}
+                  onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="invite-name">Full Name <span className="text-destructive">*</span></Label>
+                <Input
+                  id="invite-name"
+                  placeholder="e.g. Nguyen Thi Mai"
+                  value={inviteForm.fullName}
+                  onChange={(e) => setInviteForm(prev => ({ ...prev, fullName: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="invite-gender">Gender <span className="text-destructive">*</span></Label>
+                  <Select
+                    value={inviteForm.gender}
+                    onValueChange={(value) => setInviteForm(prev => ({ ...prev, gender: value }))}
+                  >
+                    <SelectTrigger id="invite-gender">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="invite-dob">Date of Birth <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="invite-dob"
+                    type="date"
+                    value={inviteForm.dateOfBirth}
+                    onChange={(e) => setInviteForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="invite-designation">Designation</Label>
+                  <Input
+                    id="invite-designation"
+                    placeholder="e.g. Wedding Planner"
+                    value={inviteForm.designation}
+                    onChange={(e) => setInviteForm(prev => ({ ...prev, designation: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="invite-department">Department</Label>
+                  <Select
+                    value={inviteForm.department}
+                    onValueChange={(value) => setInviteForm(prev => ({ ...prev, department: value }))}
+                  >
+                    <SelectTrigger id="invite-department">
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Operations">Operations</SelectItem>
+                      <SelectItem value="Management">Management</SelectItem>
+                      <SelectItem value="Administration">Administration</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="invite-doj">Date of Joining</Label>
+                <Input
+                  id="invite-doj"
+                  type="date"
+                  value={inviteForm.dateOfJoining}
+                  onChange={(e) => setInviteForm(prev => ({ ...prev, dateOfJoining: e.target.value }))}
+                />
+              </div>
+
+              {inviteError && (
+                <p className="text-sm text-red-600">{inviteError}</p>
+              )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setInviteDialogOpen(false)} disabled={inviteSubmitting}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleInviteStaff}
+                  disabled={inviteSubmitting || !inviteForm.email.trim() || !inviteForm.fullName.trim()}
+                >
+                  {inviteSubmitting ? "Creating..." : "Create Account"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
