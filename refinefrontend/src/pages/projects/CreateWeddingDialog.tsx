@@ -217,7 +217,7 @@ export function CreateWeddingDialog({
           values: {
             customer_name: formData.coupleName.trim(),
             customer_type: "Individual",
-            customer_group: "Individual",
+            customer_group: "Wedding Clients",
             territory: "Vietnam",
             email_id: formData.email.trim() || undefined,
             mobile_no: formData.phone.trim() || undefined,
@@ -248,7 +248,15 @@ export function CreateWeddingDialog({
       const salesOrderName = salesOrderResult?.data?.name;
       if (!salesOrderName) throw new Error("Failed to create sales order");
 
-      // 3. Submit Sales Order
+      // 3. Submit Sales Order (fetch full doc first to avoid TimestampMismatchError)
+      const fullDocRes = await fetch(
+        `/api/resource/Sales Order/${encodeURIComponent(salesOrderName)}`,
+        {
+          headers: { "X-Frappe-Site-Name": SITE_NAME },
+          credentials: "include",
+        }
+      );
+      const fullDocData = await fullDocRes.json();
       const submitRes = await fetch("/api/method/frappe.client.submit", {
         method: "POST",
         headers: {
@@ -256,9 +264,7 @@ export function CreateWeddingDialog({
           "X-Frappe-Site-Name": SITE_NAME,
         },
         credentials: "include",
-        body: JSON.stringify({
-          doc: { doctype: "Sales Order", name: salesOrderName },
-        }),
+        body: JSON.stringify({ doc: fullDocData.data }),
       });
       if (!submitRes.ok) {
         const errorText = await submitRes.text();
@@ -276,9 +282,9 @@ export function CreateWeddingDialog({
           customer: customerId,
           custom_project_stage: "Onboarding",
           custom_lead_planner: formData.leadPlanner || null,
-          custom_support_planner: formData.supportPlanner || null,
-          custom_assistant_1: formData.assistant1 || null,
-          custom_assistant_2: formData.assistant2 || null,
+          custom_support_planner: formData.supportPlanner && formData.supportPlanner !== "__none__" ? formData.supportPlanner : null,
+          custom_assistant_1: formData.assistant1 && formData.assistant1 !== "__none__" ? formData.assistant1 : null,
+          custom_assistant_2: formData.assistant2 && formData.assistant2 !== "__none__" ? formData.assistant2 : null,
         },
       });
       const projectName = projectResult?.data?.name;
@@ -657,7 +663,7 @@ export function CreateWeddingDialog({
                     <SelectValue placeholder="Select support planner (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {employees
                       .filter((emp) => emp.name !== formData.leadPlanner)
                       .map((emp) => (
@@ -687,7 +693,7 @@ export function CreateWeddingDialog({
                       <SelectValue placeholder="Optional" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="__none__">None</SelectItem>
                       {employees
                         .filter(
                           (emp) =>
@@ -720,7 +726,7 @@ export function CreateWeddingDialog({
                       <SelectValue placeholder="Optional" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="__none__">None</SelectItem>
                       {employees
                         .filter(
                           (emp) =>
@@ -839,7 +845,7 @@ export function CreateWeddingDialog({
                 <div className="font-medium">
                   {getEmployeeName(formData.leadPlanner)}
                 </div>
-                {formData.supportPlanner && (
+                {formData.supportPlanner && formData.supportPlanner !== "__none__" && (
                   <>
                     <div>
                       <span className="text-muted-foreground">Support:</span>
@@ -847,7 +853,7 @@ export function CreateWeddingDialog({
                     <div>{getEmployeeName(formData.supportPlanner)}</div>
                   </>
                 )}
-                {formData.assistant1 && (
+                {formData.assistant1 && formData.assistant1 !== "__none__" && (
                   <>
                     <div>
                       <span className="text-muted-foreground">Assistant 1:</span>
@@ -855,7 +861,7 @@ export function CreateWeddingDialog({
                     <div>{getEmployeeName(formData.assistant1)}</div>
                   </>
                 )}
-                {formData.assistant2 && (
+                {formData.assistant2 && formData.assistant2 !== "__none__" && (
                   <>
                     <div>
                       <span className="text-muted-foreground">Assistant 2:</span>
