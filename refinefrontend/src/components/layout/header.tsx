@@ -5,6 +5,7 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { useSearch } from "@/context/search-context";
 import { useBreadcrumbs } from "@/hooks/useBreadcrumbs";
 import { ThemeSwitch } from "@/components/theme-switch";
+import { NotificationCenter } from "@/components/layout/notification-center";
 import { UserNav } from "@/components/layout/user-nav";
 import { Button } from "@/components/ui/button";
 import {
@@ -84,6 +85,7 @@ export function Header() {
             <span className="text-xs">Ctrl</span>K
           </kbd>
         </Button>
+        <NotificationCenter />
         <ThemeSwitch />
         <UserNav />
       </div>
