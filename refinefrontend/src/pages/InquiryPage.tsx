@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { GoogleReCaptchaProvider, useGoogleReCaptcha } from "react-google-recaptcha-v3";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -695,6 +695,28 @@ function InquiryForm() {
 // ─── Export ──────────────────────────────────────────────────────────────────
 
 export default function InquiryPage() {
+  useEffect(() => {
+    const prevTitle = document.title;
+    document.title = "Wedding Inquiry | Meraki Wedding Planner";
+
+    let metaDesc = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    if (!metaDesc) {
+      metaDesc = document.createElement("meta");
+      metaDesc.setAttribute("name", "description");
+      document.head.appendChild(metaDesc);
+    }
+    const prevDesc = metaDesc.getAttribute("content") ?? "";
+    metaDesc.setAttribute(
+      "content",
+      "Tell us about your love story and the wedding day you've been dreaming of. Meraki Wedding Planner will craft an unforgettable experience tailored just for you."
+    );
+
+    return () => {
+      document.title = prevTitle;
+      metaDesc!.setAttribute("content", prevDesc);
+    };
+  }, []);
+
   return (
     <GoogleReCaptchaProvider reCaptchaKey={RECAPTCHA_SITE_KEY}>
       <InquiryForm />
