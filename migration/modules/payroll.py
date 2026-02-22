@@ -30,7 +30,29 @@ def setup(erp: ERPNextClient) -> bool:
             print("    Failed to create Salary Component: Basic Salary")
             return False
 
-    # 2. Salary Structure: Monthly Salary
+    # 2-4. Commission Salary Components
+    commission_components = [
+        {"salary_component": "Lead Planner Commission",    "salary_component_abbr": "LPC"},
+        {"salary_component": "Support Planner Commission", "salary_component_abbr": "SPC"},
+        {"salary_component": "Assistant Commission",       "salary_component_abbr": "AC"},
+    ]
+    for comp in commission_components:
+        if erp.exists('Salary Component', {'name': comp['salary_component']}):
+            print(f"    Salary Component exists: {comp['salary_component']}")
+        else:
+            result = erp.create('Salary Component', {
+                **comp,
+                'type': 'Earning',
+                'is_tax_applicable': 0,
+                'depends_on_payment_days': 0,
+            })
+            if result:
+                print(f"    Created Salary Component: {comp['salary_component']}")
+            else:
+                print(f"    Failed to create Salary Component: {comp['salary_component']}")
+                return False
+
+    # 3. Salary Structure: Monthly Salary
     existing_ss = erp.find_one('Salary Structure', {'name': 'Monthly Salary'})
     if existing_ss:
         print("    Salary Structure exists: Monthly Salary")

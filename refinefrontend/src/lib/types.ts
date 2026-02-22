@@ -21,6 +21,7 @@ export interface Employee {
   custom_support_commission_pct?: number;
   custom_assistant_commission_pct?: number;
   custom_sales_commission_pct?: number;
+  custom_insurance_salary?: number;
   relieving_date?: string;
 }
 

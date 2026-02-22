@@ -26,6 +26,7 @@ interface SalarySlipEarning {
 
 interface SalarySlip {
   name: string;
+  modified?: string;
   employee: string;
   employee_name: string;
   gross_pay: number;
@@ -34,6 +35,7 @@ interface SalarySlip {
   posting_date: string;
   docstatus: number;
   earnings: SalarySlipEarning[];
+  deductions: SalarySlipEarning[];
 }
 
 function getEarningAmount(earnings: SalarySlipEarning[] | undefined, component: string): number {
@@ -44,6 +46,19 @@ function getTotalCommission(earnings: SalarySlipEarning[] | undefined): number {
   const commissionComponents = ["Assistant Commission", "Support Planner Commission", "Lead Planner Commission"];
   return earnings?.filter(e => commissionComponents.includes(e.salary_component))
     .reduce((sum, e) => sum + e.amount, 0) ?? 0;
+}
+
+function getDeductionAmount(deductions: SalarySlipEarning[] | undefined, component: string): number {
+  return deductions?.find(e => e.salary_component === component)?.amount ?? 0;
+}
+
+function getEmployerBHXH(deductions: SalarySlipEarning[] | undefined): number {
+  const bhxh = getDeductionAmount(deductions, "BHXH (Employee)");
+  const bhyt = getDeductionAmount(deductions, "BHYT (Employee)");
+  const bhtn = getDeductionAmount(deductions, "BHTN (Employee)");
+  const employeeTotal = bhxh + bhyt + bhtn;
+  // Employee pays 10.5%, employer pays 21.5%
+  return employeeTotal > 0 ? Math.round(employeeTotal / 10.5 * 21.5) : 0;
 }
 
 interface PayrollEntry {
@@ -87,6 +102,26 @@ const slipColumns: ColumnDef<SalarySlip, unknown>[] = [
     accessorKey: "total_deduction",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Deductions" className="text-right" />,
     cell: ({ row }) => <div className="text-right">{formatVND(row.original.total_deduction)}</div>,
+  },
+  {
+    id: "bhxh",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="BHXH 8%" className="text-right" />,
+    cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHXH (Employee)"))}</div>,
+  },
+  {
+    id: "bhyt",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="BHYT 1.5%" className="text-right" />,
+    cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHYT (Employee)"))}</div>,
+  },
+  {
+    id: "bhtn",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="BHTN 1%" className="text-right" />,
+    cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHTN (Employee)"))}</div>,
+  },
+  {
+    id: "employer_bhxh",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Employer BHXH" className="text-right" />,
+    cell: ({ row }) => <div className="text-right text-amber-600 dark:text-amber-400">{formatVND(getEmployerBHXH(row.original.deductions))}</div>,
   },
   {
     accessorKey: "net_pay",
@@ -138,9 +173,11 @@ export default function PayrollPage() {
 
   const [generating, setGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [calculatingCommissions, setCalculatingCommissions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailedSlips, setDetailedSlips] = useState<SalarySlip[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
 
   const apiUrl = useApiUrl();
   const invalidate = useInvalidate();
@@ -191,7 +228,9 @@ export default function PayrollPage() {
             const data = await res.json();
             return {
               ...slip,
+              modified: data.data?.modified ?? slip.modified,
               earnings: data.data?.earnings ?? [],
+              deductions: data.data?.deductions ?? [],
               total_deduction: data.data?.total_deduction ?? slip.total_deduction ?? 0,
             };
           })
@@ -206,7 +245,7 @@ export default function PayrollPage() {
     }
 
     fetchDetails();
-  }, [basicSlips.map(s => s.name).join(","), apiUrl]);
+  }, [basicSlips.map(s => s.name).join(","), apiUrl, detailRefreshKey]);
 
   const salarySlips = detailedSlips.length > 0 ? detailedSlips : basicSlips;
   const hasDraftSlips = salarySlips.some((s) => s.docstatus === 0);
@@ -229,26 +268,144 @@ export default function PayrollPage() {
 
   const activeCount = empResult?.data?.length ?? 0;
 
+  const COMMISSION_COMPONENTS = ["Lead Planner Commission", "Support Planner Commission", "Assistant Commission"];
+
+  async function calculateAndApplyCommissions(peId: string) {
+    // Step 1: Fetch submitted Sales Orders with delivery_date in this period
+    const soFilters = JSON.stringify([["delivery_date", "between", [start, end]], ["docstatus", "=", 1]]);
+    const soFields = JSON.stringify(["name", "net_total"]);
+    const soRes = await fetch(`${apiUrl}/resource/Sales%20Order?filters=${encodeURIComponent(soFilters)}&fields=${encodeURIComponent(soFields)}&limit_page_length=500`, { credentials: "include" });
+    const soData = await soRes.json();
+    const salesOrders: { name: string; net_total: number }[] = soData.data ?? [];
+
+    // Step 2: Fetch Projects linked to those SOs
+    const soNames = salesOrders.map(so => so.name);
+    let projects: { name: string; sales_order: string; custom_lead_planner: string; custom_support_planner: string; custom_assistant_1: string; custom_assistant_2: string }[] = [];
+    if (soNames.length > 0) {
+      const projFilters = JSON.stringify([["sales_order", "in", soNames]]);
+      const projFields = JSON.stringify(["name", "sales_order", "custom_lead_planner", "custom_support_planner", "custom_assistant_1", "custom_assistant_2"]);
+      const projRes = await fetch(`${apiUrl}/resource/Project?filters=${encodeURIComponent(projFilters)}&fields=${encodeURIComponent(projFields)}&limit_page_length=500`, { credentials: "include" });
+      const projData = await projRes.json();
+      projects = projData.data ?? [];
+    }
+
+    // Step 3: Fetch draft salary slips for this payroll entry
+    const slipFilters = JSON.stringify([["payroll_entry", "=", peId], ["docstatus", "=", 0]]);
+    const slipFields = JSON.stringify(["name", "employee"]);
+    const slipsRes = await fetch(`${apiUrl}/resource/Salary%20Slip?filters=${encodeURIComponent(slipFilters)}&fields=${encodeURIComponent(slipFields)}&limit_page_length=200`, { credentials: "include" });
+    const slipsData = await slipsRes.json();
+    const slips: { name: string; employee: string }[] = slipsData.data ?? [];
+
+    if (slips.length === 0) return;
+
+    // Step 4: Fetch employee commission percentages
+    const employeeIds = slips.map(s => s.employee);
+    const empFilters = JSON.stringify([["name", "in", employeeIds]]);
+    const empFields = JSON.stringify(["name", "custom_lead_commission_pct", "custom_support_commission_pct", "custom_assistant_commission_pct"]);
+    const empRes = await fetch(`${apiUrl}/resource/Employee?filters=${encodeURIComponent(empFilters)}&fields=${encodeURIComponent(empFields)}&limit_page_length=200`, { credentials: "include" });
+    const empData = await empRes.json();
+    const employees: { name: string; custom_lead_commission_pct: number; custom_support_commission_pct: number; custom_assistant_commission_pct: number }[] = empData.data ?? [];
+
+    const empCommMap: Record<string, { lead: number; support: number; assistant: number }> = {};
+    for (const emp of employees) {
+      empCommMap[emp.name] = {
+        lead: emp.custom_lead_commission_pct ?? 0,
+        support: emp.custom_support_commission_pct ?? 0,
+        assistant: emp.custom_assistant_commission_pct ?? 0,
+      };
+    }
+
+    // Step 5: Build commission totals per employee
+    const soNetMap: Record<string, number> = {};
+    for (const so of salesOrders) soNetMap[so.name] = so.net_total ?? 0;
+
+    const commTotals: Record<string, { lead: number; support: number; assistant: number }> = {};
+    const addComm = (empId: string, type: "lead" | "support" | "assistant", netTotal: number) => {
+      if (!empId) return;
+      if (!commTotals[empId]) commTotals[empId] = { lead: 0, support: 0, assistant: 0 };
+      const pct = empCommMap[empId]?.[type] ?? 0;
+      commTotals[empId][type] += netTotal * pct / 100;
+    };
+    for (const proj of projects) {
+      const netTotal = soNetMap[proj.sales_order] ?? 0;
+      if (netTotal === 0) continue;
+      addComm(proj.custom_lead_planner, "lead", netTotal);
+      addComm(proj.custom_support_planner, "support", netTotal);
+      addComm(proj.custom_assistant_1, "assistant", netTotal);
+      addComm(proj.custom_assistant_2, "assistant", netTotal);
+    }
+
+    // Step 6: Update each draft salary slip with commission rows
+    for (const slip of slips) {
+      const fullSlipRes = await fetch(`${apiUrl}/resource/Salary%20Slip/${slip.name}`, { credentials: "include" });
+      const fullSlipData = await fullSlipRes.json();
+      const currentEarnings: SalarySlipEarning[] = fullSlipData.data?.earnings ?? [];
+      const currentDeductions: SalarySlipEarning[] = fullSlipData.data?.deductions ?? [];
+
+      const nonCommEarnings = currentEarnings.filter(e => !COMMISSION_COMPONENTS.includes(e.salary_component));
+      const totals = commTotals[slip.employee];
+      const newEarnings = [...nonCommEarnings];
+      if (totals) {
+        if (totals.lead > 0) newEarnings.push({ salary_component: "Lead Planner Commission", amount: Math.round(totals.lead) });
+        if (totals.support > 0) newEarnings.push({ salary_component: "Support Planner Commission", amount: Math.round(totals.support) });
+        if (totals.assistant > 0) newEarnings.push({ salary_component: "Assistant Commission", amount: Math.round(totals.assistant) });
+      }
+
+      await fetch(`${apiUrl}/resource/Salary%20Slip/${slip.name}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ earnings: newEarnings, deductions: currentDeductions }),
+      });
+    }
+  }
+
   async function handleGenerate() {
     setGenerating(true);
     setError(null);
     try {
+      // Step 1: Create Payroll Entry
       const createRes = await customMutation({
         url: "/api/resource/Payroll Entry", method: "post",
         values: { payroll_frequency: "Monthly", posting_date: end, start_date: start, end_date: end, company: "Meraki Wedding Planner", currency: "VND", exchange_rate: 1, cost_center: "Main - MWP", payment_account: "Cash - MWP", payroll_payable_account: "Payroll Payable - MWP" },
       });
       const peId = (createRes as any)?.data?.data?.name;
       if (!peId) throw new Error("Failed to create Payroll Entry");
+
+      // Step 2: Fill Employee Details
       const fillRes = await customMutation({ url: "/api/method/run_doc_method", method: "post", values: { dt: "Payroll Entry", dn: peId, method: "fill_employee_details" } });
       const updatedDoc = (fillRes as any)?.data?.docs?.[0];
       if (!updatedDoc) throw new Error("Failed to fill employee details");
       await customMutation({ url: `/api/resource/Payroll Entry/${peId}`, method: "put", values: updatedDoc });
+
+      // Step 3: Create Salary Slips
       await customMutation({ url: "/api/method/run_doc_method", method: "post", values: { dt: "Payroll Entry", dn: peId, method: "create_salary_slips" } });
+
+      // Step 4: Calculate Commissions
+      setCalculatingCommissions(true);
+      await calculateAndApplyCommissions(peId);
+      setCalculatingCommissions(false);
+      setDetailRefreshKey(k => k + 1);
+
       invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
       invalidate({ resource: "Salary Slip", invalidates: ["list"] });
     } catch (err) {
       setError(extractErrorMessage(err, "Failed to generate payroll"));
+      setCalculatingCommissions(false);
     } finally { setGenerating(false); }
+  }
+
+  async function handleRecalculate() {
+    if (!currentPE) return;
+    setCalculatingCommissions(true);
+    setError(null);
+    try {
+      await calculateAndApplyCommissions(currentPE.name);
+      invalidate({ resource: "Salary Slip", invalidates: ["list"] });
+      setDetailRefreshKey(k => k + 1);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to recalculate commissions"));
+    } finally { setCalculatingCommissions(false); }
   }
 
   async function handleSubmitAll() {
@@ -256,15 +413,26 @@ export default function PayrollPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await customMutation({ url: "/api/method/run_doc_method", method: "post", values: { dt: "Payroll Entry", dn: currentPE.name, method: "submit_salary_slips" } });
+      const draftSlips = salarySlips.filter(s => s.docstatus === 0);
+      for (const slip of draftSlips) {
+        const fullDocRes = await fetch(`${apiUrl}/resource/Salary Slip/${encodeURIComponent(slip.name)}`, { credentials: "include" });
+        const fullDocData = await fullDocRes.json();
+        await customMutation({
+          url: "/api/method/frappe.client.submit",
+          method: "post",
+          values: { doc: fullDocData.data },
+        });
+      }
       invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
       invalidate({ resource: "Salary Slip", invalidates: ["list"] });
+      setDetailRefreshKey(k => k + 1);
     } catch (err) {
       setError(extractErrorMessage(err, "Failed to submit salary slips"));
     } finally { setSubmitting(false); }
   }
 
   const isLoading = peQuery?.isLoading || slipsQuery?.isLoading || loadingDetails;
+  const isWorking = generating || calculatingCommissions;
 
   return (
     <div className="space-y-4">
@@ -275,14 +443,19 @@ export default function PayrollPage() {
         </div>
         <div className="flex gap-2">
           {!currentPE && !isLoading && (
-            <Button onClick={handleGenerate} disabled={generating}>
-              {generating ? "Generating..." : `Generate for ${monthLabel(today)}`}
+            <Button onClick={handleGenerate} disabled={isWorking}>
+              {generating ? (calculatingCommissions ? "Calculating commissions..." : "Generating...") : `Generate for ${monthLabel(today)}`}
             </Button>
           )}
           {currentPE && hasDraftSlips && (
-            <Button onClick={handleSubmitAll} disabled={submitting}>
-              {submitting ? "Submitting..." : "Submit All"}
-            </Button>
+            <>
+              <Button variant="outline" onClick={handleRecalculate} disabled={calculatingCommissions || submitting}>
+                {calculatingCommissions ? "Recalculating..." : "Recalculate Commissions"}
+              </Button>
+              <Button onClick={handleSubmitAll} disabled={submitting || calculatingCommissions}>
+                {submitting ? "Submitting..." : "Submit All"}
+              </Button>
+            </>
           )}
         </div>
       </div>

@@ -54,7 +54,7 @@ export default function EmployeeDetailPage() {
   const [leaveSaving, setLeaveSaving] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
-  type EditSection = "personal" | "contact" | "employment";
+  type EditSection = "personal" | "contact" | "employment" | "commission";
   const [editSection, setEditSection] = useState<EditSection | null>(null);
   const [editValues, setEditValues] = useState<Record<string, any>>({});
   const [editSaving, setEditSaving] = useState(false);
@@ -200,6 +200,13 @@ export default function EmployeeDetailPage() {
         company_email: employee.company_email || "",
         cell_phone: employee.cell_phone || "",
       });
+    } else if (section === "commission") {
+      setEditValues({
+        custom_lead_commission_pct: employee.custom_lead_commission_pct ?? 0,
+        custom_support_commission_pct: employee.custom_support_commission_pct ?? 0,
+        custom_assistant_commission_pct: employee.custom_assistant_commission_pct ?? 0,
+        custom_sales_commission_pct: employee.custom_sales_commission_pct ?? 0,
+      });
     } else {
       setEditValues({
         designation: employee.designation || "",
@@ -207,6 +214,7 @@ export default function EmployeeDetailPage() {
         date_of_joining: employee.date_of_joining || "",
         custom_staff_roles: employee.custom_staff_roles || "",
         ctc: employee.ctc ?? "",
+        custom_insurance_salary: employee.custom_insurance_salary ?? "",
       });
     }
     setEditSection(section);
@@ -221,6 +229,15 @@ export default function EmployeeDetailPage() {
       // Convert ctc to number if present
       if ("ctc" in values && values.ctc !== "") {
         values.ctc = Number(values.ctc);
+      }
+      if ("custom_insurance_salary" in values && values.custom_insurance_salary !== "") {
+        values.custom_insurance_salary = Number(values.custom_insurance_salary);
+      }
+      const commissionFields = ["custom_lead_commission_pct", "custom_support_commission_pct", "custom_assistant_commission_pct", "custom_sales_commission_pct"];
+      for (const field of commissionFields) {
+        if (field in values && values[field] !== "") {
+          values[field] = Number(values[field]);
+        }
       }
       await updateEmployee({
         resource: "Employee",
@@ -379,6 +396,12 @@ export default function EmployeeDetailPage() {
                 <span>{formatVND(employee.ctc)}</span>
               </div>
             )}
+            {employee.custom_insurance_salary != null && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Insurance Salary (BHXH)</span>
+                <span>{formatVND(employee.custom_insurance_salary)}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -451,40 +474,48 @@ export default function EmployeeDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Commission Structure (only if any commission > 0) */}
-        {hasCommission && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Commission Structure</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {(employee.custom_lead_commission_pct ?? 0) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Lead Commission</span>
-                  <span className="font-medium">{employee.custom_lead_commission_pct}%</span>
-                </div>
-              )}
-              {(employee.custom_support_commission_pct ?? 0) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Support Commission</span>
-                  <span className="font-medium">{employee.custom_support_commission_pct}%</span>
-                </div>
-              )}
-              {(employee.custom_assistant_commission_pct ?? 0) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Assistant Commission</span>
-                  <span className="font-medium">{employee.custom_assistant_commission_pct}%</span>
-                </div>
-              )}
-              {(employee.custom_sales_commission_pct ?? 0) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Sales Commission</span>
-                  <span className="font-medium">{employee.custom_sales_commission_pct}%</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        {/* Commission Structure */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Commission Structure</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => openEdit("commission")}>
+              <Pencil className="h-3 w-3 mr-1" />
+              Edit
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {hasCommission ? (
+              <>
+                {(employee.custom_lead_commission_pct ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Lead Commission</span>
+                    <span className="font-medium">{employee.custom_lead_commission_pct}%</span>
+                  </div>
+                )}
+                {(employee.custom_support_commission_pct ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Support Commission</span>
+                    <span className="font-medium">{employee.custom_support_commission_pct}%</span>
+                  </div>
+                )}
+                {(employee.custom_assistant_commission_pct ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Assistant Commission</span>
+                    <span className="font-medium">{employee.custom_assistant_commission_pct}%</span>
+                  </div>
+                )}
+                {(employee.custom_sales_commission_pct ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Sales Commission</span>
+                    <span className="font-medium">{employee.custom_sales_commission_pct}%</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-muted-foreground text-sm">No commissions set</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Review Sheet */}
@@ -580,7 +611,7 @@ export default function EmployeeDetailPage() {
         <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>
-              {editSection === "personal" ? "Edit Personal Information" : editSection === "contact" ? "Edit Contact" : "Edit Employment"}
+              {editSection === "personal" ? "Edit Personal Information" : editSection === "contact" ? "Edit Contact" : editSection === "commission" ? "Edit Commission Structure" : "Edit Employment"}
             </SheetTitle>
             <p className="text-sm text-muted-foreground">{employee.employee_name}</p>
           </SheetHeader>
@@ -659,6 +690,30 @@ export default function EmployeeDetailPage() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-ctc">CTC (VND)</Label>
                   <Input id="edit-ctc" type="number" value={editValues.ctc} onChange={(e) => setEditValues((prev) => ({ ...prev, ctc: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-insurance-salary">Insurance Salary / BHXH (VND)</Label>
+                  <Input id="edit-insurance-salary" type="number" value={editValues.custom_insurance_salary} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_insurance_salary: e.target.value }))} />
+                </div>
+              </>
+            )}
+            {editSection === "commission" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-lead-pct">Lead Commission (%)</Label>
+                  <Input id="edit-lead-pct" type="number" min={0} max={100} step={0.1} value={editValues.custom_lead_commission_pct} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_lead_commission_pct: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-support-pct">Support Commission (%)</Label>
+                  <Input id="edit-support-pct" type="number" min={0} max={100} step={0.1} value={editValues.custom_support_commission_pct} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_support_commission_pct: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-assistant-pct">Assistant Commission (%)</Label>
+                  <Input id="edit-assistant-pct" type="number" min={0} max={100} step={0.1} value={editValues.custom_assistant_commission_pct} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_assistant_commission_pct: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-sales-pct">Sales Commission (%)</Label>
+                  <Input id="edit-sales-pct" type="number" min={0} max={100} step={0.1} value={editValues.custom_sales_commission_pct} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_sales_commission_pct: e.target.value }))} />
                 </div>
               </>
             )}
