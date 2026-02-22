@@ -22,7 +22,7 @@ from erpnext_client import ERPNextClient
 COMPANY = "Meraki Wedding Planner"
 PARENT_ACCOUNT = "Duties and Taxes - MWP"
 ACCOUNT_NAME = "Output Tax - MWP"
-TEMPLATE_NAME = "VAT 10% - MWP"
+TEMPLATE_NAME = "VAT 8% Inclusive - MWP"
 VAT_RATE = 8
 
 
@@ -62,7 +62,7 @@ def setup_vat_tax(client: ERPNextClient):
             print(f"  [fix]  Updated template tax rate to {VAT_RATE}%")
     else:
         result = client.create("Sales Taxes and Charges Template", {
-            "title": "VAT 10%",  # ERPNext appends ' - MWP' → 'VAT 10% - MWP'
+            "title": "VAT 8% Inclusive",  # ERPNext appends ' - MWP' → 'VAT 8% Inclusive - MWP'
             "company": COMPANY,
             "taxes": [{
                 "charge_type": "On Net Total",

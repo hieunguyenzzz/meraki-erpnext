@@ -276,7 +276,6 @@ export function CreateWeddingDialog({
         ],
       };
       if (formData.taxType === "vat_included") {
-        salesOrderValues.taxes_and_charges = "VAT 10% - MWP";
         salesOrderValues.taxes = [
           {
             charge_type: "On Net Total",
