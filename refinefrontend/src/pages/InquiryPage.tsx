@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const RECAPTCHA_SITE_KEY = "6LddGHQsAAAAAFhiFECWxyGeM_2Skr9VZA8XYCzn";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface FormData {
   couple_names: string;
@@ -27,164 +27,163 @@ interface FormData {
 }
 
 const INITIAL_FORM: FormData = {
-  couple_names: "",
-  preferred_name: "",
-  nationalities: "",
-  bride_email: "",
-  groom_email: "",
-  phone: "",
-  wedding_date: "",
-  location: "",
-  location_reason: "",
-  guest_count: "",
-  out_of_town_guests: "",
-  three_words: "",
-  must_haves: "",
-  pinterest: "",
-  budget: "",
-  referral_source: "",
-  personal_story: "",
+  couple_names: "", preferred_name: "", nationalities: "",
+  bride_email: "", groom_email: "", phone: "",
+  wedding_date: "", location: "", location_reason: "",
+  guest_count: "", out_of_town_guests: "",
+  three_words: "", must_haves: "", pinterest: "",
+  budget: "", referral_source: "", personal_story: "",
 };
 
-const REFERRAL_OPTIONS = [
-  "Facebook",
-  "Instagram",
-  "A dear friend",
-  "Website",
-  "Other",
-];
-
+const REFERRAL_OPTIONS = ["Facebook", "Instagram", "A dear friend", "Website", "Other"];
 const BUDGET_OPTIONS = [
-  "Under $10,000",
-  "$10,000 – $20,000",
-  "$20,000 – $35,000",
-  "$35,000 – $50,000",
-  "Above $50,000",
+  "Under $10,000", "$10,000 – $20,000", "$20,000 – $35,000",
+  "$35,000 – $50,000", "Above $50,000",
 ];
 
-// ─── Animation variants ────────────────────────────────────────────────────
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
-const EASE_OUT = [0.22, 1, 0.36, 1] as [number, number, number, number];
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 28 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.65, ease: EASE_OUT, delay: i * 0.08 },
-  }),
-};
-
-const stagger = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.06 } },
-};
-
-// ─── Ornament SVG ─────────────────────────────────────────────────────────
-
-function Ornament() {
+function SectionCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <svg
-      viewBox="0 0 320 20"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="ornament"
-      aria-hidden="true"
-    >
-      <line x1="0" y1="10" x2="130" y2="10" stroke="#C4A962" strokeWidth="0.75" />
-      <path
-        d="M140 10 L148 4 L156 10 L148 16 Z"
-        fill="none"
-        stroke="#C4A962"
-        strokeWidth="0.75"
-      />
-      <circle cx="160" cy="10" r="3" fill="#C4A962" />
-      <path
-        d="M164 10 L172 4 L180 10 L172 16 Z"
-        fill="none"
-        stroke="#C4A962"
-        strokeWidth="0.75"
-      />
-      <line x1="190" y1="10" x2="320" y2="10" stroke="#C4A962" strokeWidth="0.75" />
-    </svg>
-  );
-}
-
-// ─── Success Screen ────────────────────────────────────────────────────────
-
-function SuccessScreen({ coupleName }: { coupleName: string }) {
-  return (
-    <motion.div
-      className="success-screen"
-      initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-    >
-      <div className="success-ring-container">
-        <svg viewBox="0 0 80 80" className="success-ring" aria-hidden="true">
-          <circle cx="40" cy="40" r="36" fill="none" stroke="#C4A962" strokeWidth="1.5" />
-          <motion.circle
-            cx="40"
-            cy="40"
-            r="36"
-            fill="none"
-            stroke="#C4A962"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeDasharray="226"
-            initial={{ strokeDashoffset: 226 }}
-            animate={{ strokeDashoffset: 0 }}
-            transition={{ duration: 1.4, ease: "easeOut", delay: 0.2 }}
-          />
-          <motion.path
-            d="M26 40 L36 50 L54 32"
-            fill="none"
-            stroke="#C4A962"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            initial={{ pathLength: 0, opacity: 0 }}
-            animate={{ pathLength: 1, opacity: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut", delay: 1.4 }}
-          />
-        </svg>
-      </div>
-      <h2 className="success-title">Thank You</h2>
-      <p className="success-couple">{coupleName}</p>
-      <p className="success-message">
-        Your inquiry has been received. We will be in touch within 48 hours to
-        begin crafting the day you have always imagined.
-      </p>
-      <div className="success-ornament">
-        <Ornament />
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── Field Component ───────────────────────────────────────────────────────
-
-interface FieldProps {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-  hint?: string;
-}
-
-function Field({ label, required, children, hint }: FieldProps) {
-  return (
-    <div className="field">
-      <label className="field-label">
-        {label}
-        {required && <span className="required-mark" aria-hidden="true"> *</span>}
-      </label>
-      {hint && <p className="field-hint">{hint}</p>}
+    <div className={`gf-card ${className}`}>
       {children}
     </div>
   );
 }
 
-// ─── Inner form (needs reCAPTCHA context) ─────────────────────────────────
+function QuestionLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <label className="gf-label">
+      {children}
+      {required && <span className="gf-required" aria-label="required"> *</span>}
+    </label>
+  );
+}
+
+function TextInput({
+  value, onChange, placeholder, type = "text", required
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <input
+      className="gf-input"
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+    />
+  );
+}
+
+function TextArea({
+  value, onChange, placeholder, rows = 3, required
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  rows?: number;
+  required?: boolean;
+}) {
+  return (
+    <textarea
+      className="gf-textarea"
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      rows={rows}
+      required={required}
+    />
+  );
+}
+
+function SelectInput({
+  value, onChange, options, required
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  required?: boolean;
+}) {
+  return (
+    <select
+      className="gf-select"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      required={required}
+    >
+      <option value="">Choose</option>
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+
+function RadioGroup({
+  value, onChange, options
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  return (
+    <div className="gf-radio-group">
+      {options.map(opt => (
+        <label key={opt} className={`gf-radio-item ${value === opt ? "checked" : ""}`}>
+          <span className={`gf-radio-dot ${value === opt ? "active" : ""}`} />
+          <input
+            type="radio"
+            name="referral_source"
+            value={opt}
+            checked={value === opt}
+            onChange={() => onChange(opt)}
+            className="gf-radio-hidden"
+          />
+          <span className="gf-radio-text">{opt}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function SuccessScreen({ coupleName }: { coupleName: string }) {
+  return (
+    <motion.div
+      className="gf-success-wrap"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+    >
+      <SectionCard className="gf-success-card">
+        <div className="gf-success-icon">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="24" fill="#E8F5E9" />
+            <motion.path
+              d="M14 24l8 8 12-14"
+              stroke="#34A853"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+            />
+          </svg>
+        </div>
+        <h2 className="gf-success-title">Your response has been recorded.</h2>
+        <p className="gf-success-sub">
+          Thank you, <strong>{coupleName}</strong>. We'll be in touch within 48 hours.
+        </p>
+      </SectionCard>
+    </motion.div>
+  );
+}
+
+// ─── Main Form ───────────────────────────────────────────────────────────────
 
 function InquiryForm() {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
@@ -194,50 +193,36 @@ function InquiryForm() {
   const { executeRecaptcha } = useGoogleReCaptcha();
 
   function set(field: keyof FormData) {
-    return (
-      e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-    ) => setForm((f) => ({ ...f, [field]: e.target.value }));
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setForm(f => ({ ...f, [field]: e.target.value }));
   }
 
   const requiredFilled =
-    form.couple_names.trim() &&
-    form.preferred_name.trim() &&
-    form.nationalities.trim() &&
-    form.bride_email.trim() &&
-    form.groom_email.trim() &&
-    form.phone.trim() &&
-    form.wedding_date.trim() &&
-    form.location.trim() &&
-    form.location_reason.trim() &&
-    form.three_words.trim() &&
-    form.budget.trim() &&
-    form.referral_source.trim();
+    form.couple_names.trim() && form.preferred_name.trim() && form.nationalities.trim() &&
+    form.bride_email.trim() && form.groom_email.trim() && form.phone.trim() &&
+    form.wedding_date.trim() && form.location.trim() && form.location_reason.trim() &&
+    form.three_words.trim() && form.budget.trim() && form.referral_source.trim();
 
   const canSubmit = !!requiredFilled && !submitting;
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-
     setSubmitting(true);
     setError(null);
-
     try {
       const token = executeRecaptcha
         ? await executeRecaptcha("inquiry_submit")
         : "dev-bypass";
-
       const res = await fetch("/inquiry-api/inquiry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, recaptcha_token: token }),
       });
-
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Error ${res.status}`);
       }
-
       setSubmitted(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -249,588 +234,456 @@ function InquiryForm() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Lato:wght@300;400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        .inquiry-root {
+        :root {
+          --purple: #673AB7;
+          --purple-light: #EDE7F6;
+          --purple-mid: #9575CD;
+          --red: #D93025;
+          --text: #202124;
+          --text-mid: #444746;
+          --text-muted: #70757A;
+          --border: #DADCE0;
+          --bg: #F0EBF8;
+          --card: #FFFFFF;
+          --input-focus: #673AB7;
+          --radius: 8px;
+        }
+
+        .gf-root {
           min-height: 100vh;
-          background-color: #FDFAF5;
-          font-family: 'Lato', sans-serif;
-          color: #2C2416;
-          padding: 0 1rem 5rem;
+          background: var(--bg);
+          font-family: 'DM Sans', sans-serif;
+          color: var(--text);
+          padding: 0 0 4rem;
         }
 
-        /* Hero */
-        .hero {
-          text-align: center;
-          padding: 4rem 1rem 2rem;
-          max-width: 640px;
-          margin: 0 auto;
+        /* Progress bar at very top */
+        .gf-progress {
+          height: 8px;
+          background: var(--purple-light);
         }
-        .hero-eyebrow {
-          font-family: 'Lato', sans-serif;
-          font-size: 0.65rem;
-          font-weight: 700;
-          letter-spacing: 0.25em;
-          text-transform: uppercase;
-          color: #C4A962;
-          margin-bottom: 1.25rem;
+        .gf-progress-fill {
+          height: 100%;
+          background: var(--purple);
+          transition: width 0.4s ease;
+          border-radius: 0 4px 4px 0;
         }
-        .hero-title {
-          font-family: 'Cormorant Garamond', serif;
-          font-weight: 300;
-          font-size: clamp(2.4rem, 6vw, 3.6rem);
-          line-height: 1.12;
-          color: #2C2416;
-          margin-bottom: 1.25rem;
+
+        /* Cards */
+        .gf-card {
+          background: var(--card);
+          border-radius: var(--radius);
+          border: 1px solid var(--border);
+          box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+          padding: 1.5rem;
+          margin-bottom: 0.75rem;
         }
-        .hero-title em {
-          font-style: italic;
-          color: #8B7355;
+
+        /* Header card */
+        .gf-header-card {
+          border-top: 10px solid var(--purple);
+          padding: 1.5rem 1.5rem 1.25rem;
         }
-        .hero-subtitle {
-          font-family: 'Lato', sans-serif;
+        .gf-header-card .gf-form-title {
+          font-size: 1.75rem;
+          font-weight: 400;
+          color: var(--text);
+          margin-bottom: 0.5rem;
+          line-height: 1.2;
+        }
+        .gf-header-card .gf-form-desc {
           font-size: 0.9rem;
-          font-weight: 300;
-          line-height: 1.8;
-          color: #8B7355;
-          max-width: 460px;
-          margin: 0 auto 2rem;
+          color: var(--text-mid);
+          line-height: 1.6;
         }
+        .gf-required-note {
+          font-size: 0.8rem;
+          color: var(--text-muted);
+          margin-top: 0.75rem;
+        }
+        .gf-required-note span { color: var(--red); }
 
-        /* Form wrapper */
-        .form-wrap {
-          max-width: 640px;
-          margin: 0 auto;
+        /* Section header card */
+        .gf-section-card {
+          border-top: 6px solid var(--purple-mid);
+          padding: 1.25rem 1.5rem 1rem;
         }
-
-        /* Sections */
-        .section {
-          margin-bottom: 3rem;
-        }
-        .section-header {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          margin-bottom: 2rem;
-        }
-        .section-number {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 0.75rem;
-          font-weight: 300;
-          letter-spacing: 0.15em;
-          color: #C4A962;
-          min-width: 1.5rem;
-        }
-        .section-title {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 1.35rem;
+        .gf-section-title {
+          font-size: 1.1rem;
           font-weight: 500;
-          letter-spacing: 0.04em;
-          color: #2C2416;
-        }
-        .section-line {
-          flex: 1;
-          height: 1px;
-          background: linear-gradient(90deg, #C4A962 0%, transparent 100%);
-          opacity: 0.4;
+          color: var(--text);
         }
 
-        .ornament {
+        /* Question cards */
+        .gf-question {
+          padding: 1.25rem 1.5rem 1.5rem;
+          transition: border-left 0.15s;
+        }
+        .gf-question:focus-within {
+          border-left: 6px solid var(--purple);
+          padding-left: calc(1.5rem - 5px);
+        }
+
+        /* Labels */
+        .gf-label {
           display: block;
-          width: 100%;
-          max-width: 320px;
-          margin: 2.5rem auto;
-          opacity: 0.7;
+          font-size: 0.875rem;
+          font-weight: 400;
+          color: var(--text);
+          margin-bottom: 0.75rem;
+          line-height: 1.5;
+          cursor: default;
         }
+        .gf-required { color: var(--red); margin-left: 2px; }
 
-        /* Grid */
-        .grid-2 {
+        /* Inputs */
+        .gf-input, .gf-textarea, .gf-select {
+          width: 100%;
+          border: none;
+          border-bottom: 1px solid var(--border);
+          background: transparent;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.9rem;
+          color: var(--text);
+          padding: 0.3rem 0 0.5rem;
+          outline: none;
+          transition: border-color 0.15s;
+          -webkit-appearance: none;
+          border-radius: 0;
+        }
+        .gf-input:focus, .gf-textarea:focus, .gf-select:focus {
+          border-bottom: 2px solid var(--input-focus);
+        }
+        .gf-input::placeholder, .gf-textarea::placeholder {
+          color: var(--text-muted);
+        }
+        .gf-textarea {
+          resize: none;
+          display: block;
+        }
+        .gf-select {
+          cursor: pointer;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2370757A' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 0.25rem center;
+          padding-right: 1.5rem;
+        }
+        .gf-select option { color: var(--text); background: var(--card); }
+
+        /* 2-col grid */
+        .gf-grid-2 {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 1.25rem;
+          gap: 0;
         }
-        @media (max-width: 520px) {
-          .grid-2 { grid-template-columns: 1fr; }
+        @media (max-width: 560px) {
+          .gf-grid-2 { grid-template-columns: 1fr; }
         }
-        .grid-1 { display: grid; gap: 1.25rem; }
+        .gf-grid-2 .gf-question:first-child { border-radius: 0; }
 
-        /* Fields */
-        .field { display: flex; flex-direction: column; gap: 0.45rem; }
-        .field-label {
-          font-family: 'Lato', sans-serif;
-          font-size: 0.7rem;
-          font-weight: 700;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: #8B7355;
-        }
-        .field-hint {
-          font-size: 0.78rem;
-          color: #B0996E;
-          font-weight: 300;
-          font-style: italic;
-          margin-top: -0.2rem;
-        }
-        .required-mark { color: #C4A962; }
-
-        input[type="text"],
-        input[type="email"],
-        input[type="tel"],
-        input[type="url"],
-        input[type="date"],
-        textarea {
-          width: 100%;
-          background: #FAF7F0;
-          border: 1px solid #E2D9C8;
-          border-radius: 2px;
-          padding: 0.75rem 1rem;
-          font-family: 'Lato', sans-serif;
-          font-size: 0.9rem;
-          font-weight: 300;
-          color: #2C2416;
-          outline: none;
-          transition: border-color 0.2s, box-shadow 0.2s;
-          -webkit-appearance: none;
-        }
-        input:focus,
-        textarea:focus {
-          border-color: #C4A962;
-          box-shadow: 0 0 0 3px rgba(196, 169, 98, 0.12);
-        }
-        input::placeholder,
-        textarea::placeholder {
-          color: #C5B99B;
-          font-weight: 300;
-        }
-        textarea {
-          resize: vertical;
-          min-height: 100px;
-        }
-
-        /* Pill buttons (referral source) */
-        .pills {
+        /* Radio group */
+        .gf-radio-group { display: flex; flex-direction: column; gap: 0.1rem; }
+        .gf-radio-item {
           display: flex;
-          flex-wrap: wrap;
-          gap: 0.6rem;
-        }
-        .pill {
-          padding: 0.45rem 1.1rem;
-          border-radius: 99px;
-          border: 1px solid #E2D9C8;
-          background: #FAF7F0;
-          font-family: 'Lato', sans-serif;
-          font-size: 0.8rem;
-          font-weight: 400;
-          color: #8B7355;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.6rem 0.5rem;
+          border-radius: 4px;
           cursor: pointer;
-          transition: all 0.18s;
-          letter-spacing: 0.02em;
+          transition: background 0.12s;
         }
-        .pill:hover {
-          border-color: #C4A962;
-          color: #C4A962;
-        }
-        .pill.active {
-          background: #C4A962;
-          border-color: #C4A962;
-          color: #fff;
-        }
-
-        /* reCAPTCHA wrapper */
-        .recaptcha-wrap {
+        .gf-radio-item:hover { background: var(--purple-light); }
+        .gf-radio-item.checked { background: transparent; }
+        .gf-radio-hidden { display: none; }
+        .gf-radio-dot {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          border: 2px solid var(--text-muted);
+          flex-shrink: 0;
           display: flex;
+          align-items: center;
           justify-content: center;
-          margin: 2rem 0 1.5rem;
-          padding: 1.5rem;
-          border: 1px solid #E2D9C8;
-          border-radius: 2px;
-          background: #FAF7F0;
+          transition: border-color 0.15s;
+        }
+        .gf-radio-dot.active {
+          border-color: var(--purple);
+          border-width: 5px;
+        }
+        .gf-radio-text {
+          font-size: 0.9rem;
+          color: var(--text);
         }
 
-        /* Submit */
-        .submit-btn {
-          display: block;
-          width: 100%;
-          padding: 1.05rem 2rem;
-          background: linear-gradient(135deg, #C4A962 0%, #B08D3C 100%);
-          border: none;
-          border-radius: 2px;
-          font-family: 'Lato', sans-serif;
-          font-size: 0.75rem;
-          font-weight: 700;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
+        /* Actions row */
+        .gf-actions {
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
+          padding: 0.5rem 0 0;
+        }
+        .gf-submit {
+          background: var(--purple);
           color: #fff;
+          border: none;
+          border-radius: 4px;
+          padding: 0.65rem 1.5rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.9rem;
+          font-weight: 500;
           cursor: pointer;
-          position: relative;
-          overflow: hidden;
-          transition: opacity 0.2s, transform 0.15s;
+          transition: background 0.15s, box-shadow 0.15s;
+          letter-spacing: 0.01em;
         }
-        .submit-btn:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-          transform: none;
+        .gf-submit:hover:not(:disabled) {
+          background: #5E35B1;
+          box-shadow: 0 1px 3px rgba(0,0,0,.2);
         }
-        .submit-btn:not(:disabled):hover {
-          transform: translateY(-1px);
-          box-shadow: 0 8px 24px rgba(196, 169, 98, 0.35);
+        .gf-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+        .gf-clear {
+          font-size: 0.875rem;
+          color: var(--purple);
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 0.65rem 0.75rem;
+          border-radius: 4px;
+          font-family: 'DM Sans', sans-serif;
+          transition: background 0.12s;
         }
-        .submit-btn:not(:disabled):active {
-          transform: translateY(0);
-        }
-        .submit-btn::after {
-          content: '';
-          position: absolute;
-          top: 0; left: -100%;
-          width: 60%;
-          height: 100%;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
-          transform: skewX(-20deg);
-          transition: left 0.5s;
-        }
-        .submit-btn:not(:disabled):hover::after {
-          left: 160%;
-        }
+        .gf-clear:hover { background: var(--purple-light); }
 
         /* Error */
-        .error-msg {
-          margin-top: 1rem;
-          padding: 0.85rem 1rem;
-          background: #FDF2F0;
-          border: 1px solid #E8C4BC;
-          border-radius: 2px;
+        .gf-error {
+          background: #FDECEA;
+          border: 1px solid #F5C6CB;
+          border-radius: 4px;
+          padding: 0.75rem 1rem;
           font-size: 0.85rem;
-          color: #A0402E;
-          text-align: center;
+          color: #B71C1C;
         }
 
         /* Success */
-        .success-screen {
-          max-width: 520px;
-          margin: 5rem auto;
-          text-align: center;
-          padding: 0 1.5rem;
-        }
-        .success-ring-container {
-          width: 80px;
-          height: 80px;
-          margin: 0 auto 2rem;
-        }
-        .success-ring { width: 100%; height: 100%; }
-        .success-title {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 2.8rem;
-          font-weight: 300;
-          color: #2C2416;
-          margin-bottom: 0.5rem;
-        }
-        .success-couple {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 1.25rem;
-          font-style: italic;
-          color: #C4A962;
-          margin-bottom: 1.5rem;
-        }
-        .success-message {
-          font-family: 'Lato', sans-serif;
-          font-size: 0.9rem;
-          font-weight: 300;
-          line-height: 1.85;
-          color: #8B7355;
-        }
-        .success-ornament { margin-top: 2.5rem; }
+        .gf-success-wrap { max-width: 640px; margin: 3rem auto; padding: 0 1rem; }
+        .gf-success-card { text-align: left; padding: 2rem 1.5rem; }
+        .gf-success-icon { margin-bottom: 1.25rem; }
+        .gf-success-icon svg { width: 48px; height: 48px; }
+        .gf-success-title { font-size: 1.4rem; font-weight: 400; color: var(--text); margin-bottom: 0.6rem; }
+        .gf-success-sub { font-size: 0.9rem; color: var(--text-mid); line-height: 1.6; }
 
-        /* Footer note */
-        .footer-note {
+        /* Wrapper */
+        .gf-body { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem; }
+
+        /* Powered by note */
+        .gf-footer {
+          font-size: 0.75rem;
+          color: var(--text-muted);
           text-align: center;
-          font-size: 0.72rem;
-          color: #B0996E;
-          font-weight: 300;
           margin-top: 1.5rem;
-          letter-spacing: 0.04em;
         }
+        .gf-footer a { color: var(--purple); text-decoration: none; }
       `}</style>
 
-      <div className="inquiry-root">
+      <div className="gf-root">
         <AnimatePresence mode="wait">
           {submitted ? (
             <SuccessScreen key="success" coupleName={form.couple_names} />
           ) : (
             <motion.div
               key="form"
-              initial="hidden"
-              animate="visible"
-              variants={stagger}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.25 }}
             >
-              {/* Hero */}
-              <motion.header className="hero" variants={fadeUp} custom={0}>
-                <p className="hero-eyebrow">Meraki Wedding Planner</p>
-                <h1 className="hero-title">
-                  Begin Your <em>Story</em> With Us
-                </h1>
-                <p className="hero-subtitle">
-                  Every love story is unique. Tell us about yours and we will
-                  design a day that is unmistakably, beautifully yours.
-                </p>
-                <Ornament />
-              </motion.header>
+              {/* Progress bar */}
+              <div className="gf-progress">
+                <div
+                  className="gf-progress-fill"
+                  style={{ width: `${Math.round(
+                    ([
+                      form.couple_names, form.preferred_name, form.nationalities,
+                      form.bride_email, form.groom_email, form.phone,
+                      form.wedding_date, form.location, form.location_reason,
+                      form.three_words, form.budget, form.referral_source,
+                    ].filter(Boolean).length / 12) * 100
+                  )}%` }}
+                />
+              </div>
 
-              {/* Form */}
-              <form className="form-wrap" onSubmit={handleSubmit} noValidate>
-                {/* Section 1: About You Two */}
-                <motion.div className="section" variants={fadeUp} custom={1}>
-                  <div className="section-header">
-                    <span className="section-number">01</span>
-                    <h2 className="section-title">About You Two</h2>
-                    <div className="section-line" />
-                  </div>
-                  <div className="grid-2">
-                    <Field label="Couple Names" required>
-                      <input
-                        type="text"
-                        placeholder="e.g. Sophie & James"
-                        value={form.couple_names}
-                        onChange={set("couple_names")}
-                        required
-                      />
-                    </Field>
-                    <Field label="Preferred Name" required hint="How should we address you?">
-                      <input
-                        type="text"
-                        placeholder="e.g. Sophie"
-                        value={form.preferred_name}
-                        onChange={set("preferred_name")}
-                        required
-                      />
-                    </Field>
-                    <Field label="Nationalities" required>
-                      <input
-                        type="text"
-                        placeholder="e.g. Australian & French"
-                        value={form.nationalities}
-                        onChange={set("nationalities")}
-                        required
-                      />
-                    </Field>
-                    <Field label="Phone" required>
-                      <input
-                        type="tel"
-                        placeholder="+84 or international"
-                        value={form.phone}
-                        onChange={set("phone")}
-                        required
-                      />
-                    </Field>
-                    <Field label="Bride's Email" required>
-                      <input
-                        type="email"
-                        placeholder="bride@example.com"
-                        value={form.bride_email}
-                        onChange={set("bride_email")}
-                        required
-                      />
-                    </Field>
-                    <Field label="Groom's Email" required>
-                      <input
-                        type="email"
-                        placeholder="groom@example.com"
-                        value={form.groom_email}
-                        onChange={set("groom_email")}
-                        required
-                      />
-                    </Field>
-                  </div>
-                </motion.div>
-
-                <Ornament />
-
-                {/* Section 2: Your Wedding Day */}
-                <motion.div className="section" variants={fadeUp} custom={2}>
-                  <div className="section-header">
-                    <span className="section-number">02</span>
-                    <h2 className="section-title">Your Wedding Day</h2>
-                    <div className="section-line" />
-                  </div>
-                  <div className="grid-1">
-                    <div className="grid-2">
-                      <Field label="Wedding Date" required>
-                        <input
-                          type="date"
-                          value={form.wedding_date}
-                          onChange={set("wedding_date")}
-                          required
-                        />
-                      </Field>
-                      <Field label="Location / City" required>
-                        <input
-                          type="text"
-                          placeholder="e.g. Hoi An, Vietnam"
-                          value={form.location}
-                          onChange={set("location")}
-                          required
-                        />
-                      </Field>
-                    </div>
-                    <Field label="Why this location?" required>
-                      <textarea
-                        placeholder="What draws you to this place for your wedding day?"
-                        value={form.location_reason}
-                        onChange={set("location_reason")}
-                        required
-                        rows={3}
-                      />
-                    </Field>
-                    <div className="grid-2">
-                      <Field label="Estimated Guest Count">
-                        <input
-                          type="text"
-                          placeholder="e.g. 80"
-                          value={form.guest_count}
-                          onChange={set("guest_count")}
-                        />
-                      </Field>
-                      <Field label="Out-of-town Guests">
-                        <input
-                          type="text"
-                          placeholder="e.g. 30 flying in from Australia"
-                          value={form.out_of_town_guests}
-                          onChange={set("out_of_town_guests")}
-                        />
-                      </Field>
-                    </div>
-                  </div>
-                </motion.div>
-
-                <Ornament />
-
-                {/* Section 3: Your Vision */}
-                <motion.div className="section" variants={fadeUp} custom={3}>
-                  <div className="section-header">
-                    <span className="section-number">03</span>
-                    <h2 className="section-title">Your Vision</h2>
-                    <div className="section-line" />
-                  </div>
-                  <div className="grid-1">
-                    <Field label="Describe your day in 3 words" required>
-                      <input
-                        type="text"
-                        placeholder="e.g. Intimate, Romantic, Timeless"
-                        value={form.three_words}
-                        onChange={set("three_words")}
-                        required
-                      />
-                    </Field>
-                    <Field label="Must-haves for your wedding">
-                      <textarea
-                        placeholder="Flowers, music, moments — what is non-negotiable for you?"
-                        value={form.must_haves}
-                        onChange={set("must_haves")}
-                        rows={3}
-                      />
-                    </Field>
-                    <div className="grid-2">
-                      <Field label="Pinterest or Inspiration Board">
-                        <input
-                          type="url"
-                          placeholder="https://pinterest.com/..."
-                          value={form.pinterest}
-                          onChange={set("pinterest")}
-                        />
-                      </Field>
-                      <Field label="Approximate Budget" required>
-                        <select
-                          className="select-field"
-                          value={form.budget}
-                          onChange={(e) =>
-                            setForm((f) => ({ ...f, budget: e.target.value }))
-                          }
-                          required
-                          style={{
-                            width: "100%",
-                            background: "#FAF7F0",
-                            border: "1px solid #E2D9C8",
-                            borderRadius: "2px",
-                            padding: "0.75rem 1rem",
-                            fontFamily: "'Lato', sans-serif",
-                            fontSize: "0.9rem",
-                            fontWeight: 300,
-                            color: form.budget ? "#2C2416" : "#C5B99B",
-                            outline: "none",
-                            WebkitAppearance: "none",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <option value="" disabled>
-                            Select a range
-                          </option>
-                          {BUDGET_OPTIONS.map((b) => (
-                            <option key={b} value={b}>
-                              {b}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                    </div>
-                  </div>
-                </motion.div>
-
-                <Ornament />
-
-                {/* Section 4: Getting to Know You */}
-                <motion.div className="section" variants={fadeUp} custom={4}>
-                  <div className="section-header">
-                    <span className="section-number">04</span>
-                    <h2 className="section-title">Getting to Know You</h2>
-                    <div className="section-line" />
-                  </div>
-                  <div className="grid-1">
-                    <Field label="How did you hear about us?" required>
-                      <div className="pills">
-                        {REFERRAL_OPTIONS.map((opt) => (
-                          <button
-                            key={opt}
-                            type="button"
-                            className={`pill${form.referral_source === opt ? " active" : ""}`}
-                            onClick={() =>
-                              setForm((f) => ({ ...f, referral_source: opt }))
-                            }
-                          >
-                            {opt}
-                          </button>
-                        ))}
-                      </div>
-                    </Field>
-                    <Field label="Your love story" hint="Optional — share anything you'd like us to know">
-                      <textarea
-                        placeholder="How did you meet? What makes your relationship special? Any meaningful details about the journey so far..."
-                        value={form.personal_story}
-                        onChange={set("personal_story")}
-                        rows={5}
-                      />
-                    </Field>
-                  </div>
-                </motion.div>
-
-                {/* Submit */}
-                <motion.div variants={fadeUp} custom={5}>
-                  <button
-                    type="submit"
-                    className="submit-btn"
-                    disabled={!canSubmit}
-                  >
-                    {submitting ? "Sending your inquiry…" : "Send My Inquiry"}
-                  </button>
-
-                  {error && <p className="error-msg">{error}</p>}
-
-                  <p className="footer-note">
-                    We respect your privacy. Your details are used solely to
-                    respond to your inquiry.
+              <div className="gf-body">
+                {/* Header */}
+                <SectionCard className="gf-header-card">
+                  <h1 className="gf-form-title">Wedding Inquiry Form</h1>
+                  <p className="gf-form-desc">
+                    Tell us about yourselves and the day you've been dreaming of.
+                    We'll get back to you within 48 hours.
                   </p>
-                </motion.div>
-              </form>
+                  <p className="gf-required-note"><span>*</span> Indicates required question</p>
+                </SectionCard>
+
+                <form onSubmit={handleSubmit} noValidate>
+
+                  {/* ── Section 1: About You ── */}
+                  <SectionCard className="gf-section-card">
+                    <h2 className="gf-section-title">About You Two</h2>
+                  </SectionCard>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel required>Couple names</QuestionLabel>
+                    <TextInput value={form.couple_names} onChange={set("couple_names")}
+                      placeholder="e.g. Sophie & James" required />
+                  </SectionCard>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel required>How should we address you?</QuestionLabel>
+                    <TextInput value={form.preferred_name} onChange={set("preferred_name")}
+                      placeholder="Your preferred first name" required />
+                  </SectionCard>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel required>Nationalities</QuestionLabel>
+                    <TextInput value={form.nationalities} onChange={set("nationalities")}
+                      placeholder="e.g. Australian & Vietnamese" required />
+                  </SectionCard>
+
+                  <div className="gf-grid-2">
+                    <SectionCard className="gf-question">
+                      <QuestionLabel required>Bride's email</QuestionLabel>
+                      <TextInput type="email" value={form.bride_email} onChange={set("bride_email")}
+                        placeholder="bride@example.com" required />
+                    </SectionCard>
+                    <SectionCard className="gf-question">
+                      <QuestionLabel required>Groom's email</QuestionLabel>
+                      <TextInput type="email" value={form.groom_email} onChange={set("groom_email")}
+                        placeholder="groom@example.com" required />
+                    </SectionCard>
+                  </div>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel required>Phone number</QuestionLabel>
+                    <TextInput type="tel" value={form.phone} onChange={set("phone")}
+                      placeholder="Include country code" required />
+                  </SectionCard>
+
+                  {/* ── Section 2: Wedding Day ── */}
+                  <SectionCard className="gf-section-card">
+                    <h2 className="gf-section-title">Your Wedding Day</h2>
+                  </SectionCard>
+
+                  <div className="gf-grid-2">
+                    <SectionCard className="gf-question">
+                      <QuestionLabel required>Wedding date</QuestionLabel>
+                      <TextInput type="date" value={form.wedding_date} onChange={set("wedding_date")} required />
+                    </SectionCard>
+                    <SectionCard className="gf-question">
+                      <QuestionLabel required>Location / city</QuestionLabel>
+                      <TextInput value={form.location} onChange={set("location")}
+                        placeholder="e.g. Hoi An, Vietnam" required />
+                    </SectionCard>
+                  </div>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel required>Why this location?</QuestionLabel>
+                    <TextArea value={form.location_reason} onChange={set("location_reason")}
+                      placeholder="What draws you to this place?" required />
+                  </SectionCard>
+
+                  <div className="gf-grid-2">
+                    <SectionCard className="gf-question">
+                      <QuestionLabel>Estimated guest count</QuestionLabel>
+                      <TextInput value={form.guest_count} onChange={set("guest_count")}
+                        placeholder="e.g. 80" />
+                    </SectionCard>
+                    <SectionCard className="gf-question">
+                      <QuestionLabel>Out-of-town guests</QuestionLabel>
+                      <TextInput value={form.out_of_town_guests} onChange={set("out_of_town_guests")}
+                        placeholder="e.g. 30 from Australia" />
+                    </SectionCard>
+                  </div>
+
+                  {/* ── Section 3: Your Vision ── */}
+                  <SectionCard className="gf-section-card">
+                    <h2 className="gf-section-title">Your Vision</h2>
+                  </SectionCard>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel required>Describe your day in 3 words</QuestionLabel>
+                    <TextInput value={form.three_words} onChange={set("three_words")}
+                      placeholder="e.g. Intimate, Romantic, Timeless" required />
+                  </SectionCard>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel>Must-haves for your wedding</QuestionLabel>
+                    <TextArea value={form.must_haves} onChange={set("must_haves")}
+                      placeholder="Flowers, music, moments — what is non-negotiable?" />
+                  </SectionCard>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel>Pinterest or inspiration board link</QuestionLabel>
+                    <TextInput type="url" value={form.pinterest} onChange={set("pinterest")}
+                      placeholder="https://pinterest.com/..." />
+                  </SectionCard>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel required>Approximate budget</QuestionLabel>
+                    <SelectInput
+                      value={form.budget}
+                      onChange={v => setForm(f => ({ ...f, budget: v }))}
+                      options={BUDGET_OPTIONS}
+                      required
+                    />
+                  </SectionCard>
+
+                  {/* ── Section 4: Getting to Know You ── */}
+                  <SectionCard className="gf-section-card">
+                    <h2 className="gf-section-title">Getting to Know You</h2>
+                  </SectionCard>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel required>How did you hear about us?</QuestionLabel>
+                    <RadioGroup
+                      value={form.referral_source}
+                      onChange={v => setForm(f => ({ ...f, referral_source: v }))}
+                      options={REFERRAL_OPTIONS}
+                    />
+                  </SectionCard>
+
+                  <SectionCard className="gf-question">
+                    <QuestionLabel>Your love story</QuestionLabel>
+                    <TextArea value={form.personal_story} onChange={set("personal_story")}
+                      placeholder="How did you meet? What makes your relationship special?"
+                      rows={4} />
+                  </SectionCard>
+
+                  {/* ── Submit ── */}
+                  <div className="gf-actions">
+                    <button type="submit" className="gf-submit" disabled={!canSubmit}>
+                      {submitting ? "Submitting…" : "Submit"}
+                    </button>
+                    <button
+                      type="button"
+                      className="gf-clear"
+                      onClick={() => setForm(INITIAL_FORM)}
+                    >
+                      Clear form
+                    </button>
+                  </div>
+
+                  {error && <p className="gf-error" style={{ marginTop: "1rem" }}>{error}</p>}
+
+                  <p className="gf-footer" style={{ marginTop: "1.5rem" }}>
+                    This form is protected by reCAPTCHA and the Google{" "}
+                    <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>{" "}
+                    and{" "}
+                    <a href="https://policies.google.com/terms" target="_blank" rel="noreferrer">Terms of Service</a>{" "}
+                    apply.
+                  </p>
+                </form>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -839,7 +692,7 @@ function InquiryForm() {
   );
 }
 
-// ─── Public export wrapped with reCAPTCHA v3 provider ─────────────────────
+// ─── Export ──────────────────────────────────────────────────────────────────
 
 export default function InquiryPage() {
   return (
