@@ -60,6 +60,8 @@ services:
   frontend:
     <<: *backend_defaults
     restart: unless-stopped
+    labels:
+      - "traefik.enable=false"
     command:
       - nginx-entrypoint.sh
     environment:
