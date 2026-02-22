@@ -11,6 +11,8 @@ export interface ProjectKanbanItem {
   sales_order?: string;
   // Custom fields from linked data
   venue_name?: string;
+  lead_planner_name?: string;
+  support_planner_name?: string;
 }
 
 export interface ProjectColumnDef {

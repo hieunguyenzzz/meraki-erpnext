@@ -31,6 +31,8 @@ export default function ProjectKanbanPage() {
         "customer",
         "expected_end_date",
         "sales_order",
+        "custom_lead_planner",
+        "custom_support_planner",
       ],
     },
   });
@@ -43,6 +45,14 @@ export default function ProjectKanbanPage() {
     meta: {
       fields: ["name", "customer_name", "custom_venue"],
     },
+  });
+
+  // Fetch Employees for planner names
+  const { result: employeesResult } = useList({
+    resource: "Employee",
+    pagination: { mode: "off" },
+    filters: [{ field: "status", operator: "eq", value: "Active" }],
+    meta: { fields: ["name", "employee_name"] },
   });
 
   // Fetch Customers for customer names
@@ -59,6 +69,7 @@ export default function ProjectKanbanPage() {
     const projects = projectsResult?.data ?? [];
     const salesOrders = salesOrdersResult?.data ?? [];
     const customers = customersResult?.data ?? [];
+    const employees = employeesResult?.data ?? [];
 
     // Build lookup maps
     const soByName = new Map(
@@ -66,6 +77,9 @@ export default function ProjectKanbanPage() {
     );
     const customerByName = new Map(
       customers.map((c: any) => [c.name, c])
+    );
+    const employeeByName = new Map(
+      employees.map((e: any) => [e.name, e.employee_name])
     );
 
     return projects.map((p: any) => {
@@ -82,9 +96,11 @@ export default function ProjectKanbanPage() {
         expected_end_date: p.expected_end_date,
         sales_order: p.sales_order,
         venue_name: linkedSO?.custom_venue,
+        lead_planner_name: p.custom_lead_planner ? employeeByName.get(p.custom_lead_planner) : undefined,
+        support_planner_name: p.custom_support_planner ? employeeByName.get(p.custom_support_planner) : undefined,
       };
     });
-  }, [projectsResult, salesOrdersResult, customersResult]);
+  }, [projectsResult, salesOrdersResult, customersResult, employeesResult]);
 
   const isLoading = projectsQuery?.isLoading;
 

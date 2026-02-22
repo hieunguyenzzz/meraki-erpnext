@@ -1,9 +1,16 @@
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MapPin, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProjectKanbanItem } from "@/lib/projectKanban";
 import { formatDaysUntilWedding } from "@/lib/projectKanban";
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 interface ProjectKanbanCardProps {
   item: ProjectKanbanItem;
@@ -93,6 +100,36 @@ export function ProjectKanbanCard({ item }: ProjectKanbanCardProps) {
           </div>
         )}
       </div>
+
+      {/* Planner chips */}
+      {(item.lead_planner_name || item.support_planner_name) && (
+        <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+          {item.lead_planner_name && (
+            <div className="flex items-center gap-1" title={`Lead: ${item.lead_planner_name}`}>
+              <Avatar className="h-4 w-4 ring-1 ring-[#C4A962]">
+                <AvatarFallback className="text-[7px] font-semibold bg-[#C4A962]/20 text-[#C4A962]">
+                  {getInitials(item.lead_planner_name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-[10px] text-muted-foreground truncate max-w-[55px]">
+                {item.lead_planner_name.split(" ")[0]}
+              </span>
+            </div>
+          )}
+          {item.support_planner_name && (
+            <div className="flex items-center gap-1" title={`Support: ${item.support_planner_name}`}>
+              <Avatar className="h-4 w-4 ring-1 ring-[#A8B5A0]">
+                <AvatarFallback className="text-[7px] font-semibold bg-[#A8B5A0]/20 text-[#6b8f62]">
+                  {getInitials(item.support_planner_name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-[10px] text-muted-foreground truncate max-w-[55px]">
+                {item.support_planner_name.split(" ")[0]}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

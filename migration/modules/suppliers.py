@@ -20,7 +20,6 @@ def setup_supplier_group(erp: ERPNextClient) -> bool:
 
     data = {
         'supplier_group_name': group_name,
-        'parent_supplier_group': 'All Supplier Groups',
     }
 
     result = erp.create_supplier_group(data)

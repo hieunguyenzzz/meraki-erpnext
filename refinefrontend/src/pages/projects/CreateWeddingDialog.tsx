@@ -9,6 +9,8 @@ import {
   AlertCircle,
   Loader2,
   Check,
+  ChevronsUpDown,
+  Plus,
 } from "lucide-react";
 import {
   Sheet,
@@ -29,6 +31,19 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { formatVND, formatDate } from "@/lib/format";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 // Wedding theme colors
 const THEME = {
@@ -107,12 +122,26 @@ export function CreateWeddingDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Venue combobox state
+  const [venueOpen, setVenueOpen] = useState(false);
+  const [venueSearch, setVenueSearch] = useState("");
+  const [isCreatingVenue, setIsCreatingVenue] = useState(false);
+
   // Customer duplicate detection
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [foundCustomer, setFoundCustomer] = useState<{
     name: string;
     customer_name: string;
   } | null>(null);
+
+  // Fetch venues (Supplier with group "Wedding Venues")
+  const { result: venuesResult } = useList({
+    resource: "Supplier",
+    pagination: { mode: "off" },
+    filters: [{ field: "supplier_group", operator: "eq", value: "Wedding Venues" }],
+    meta: { fields: ["name", "supplier_name"] },
+  });
+  const venues = (venuesResult?.data ?? []) as { name: string; supplier_name: string }[];
 
   // Fetch active employees for team selection
   const { result: employeesResult } = useList({
@@ -145,6 +174,8 @@ export function CreateWeddingDialog({
       setCurrentStep("client");
       setError(null);
       setFoundCustomer(null);
+      setVenueSearch("");
+      setVenueOpen(false);
     }
   }, [open]);
 
@@ -321,6 +352,28 @@ export function CreateWeddingDialog({
 
   const updateFormData = (updates: Partial<FormData>) => {
     setFormData((prev) => ({ ...prev, ...updates }));
+  };
+
+  const handleCreateVenue = async (venueName: string) => {
+    setIsCreatingVenue(true);
+    try {
+      const result = await createDoc({
+        resource: "Supplier",
+        values: {
+          supplier_name: venueName,
+          supplier_group: "Wedding Venues",
+          supplier_type: "Company",
+        },
+      });
+      const created = result?.data?.supplier_name ?? venueName;
+      updateFormData({ venue: created });
+      setVenueOpen(false);
+    } catch {
+      updateFormData({ venue: venueName });
+      setVenueOpen(false);
+    } finally {
+      setIsCreatingVenue(false);
+    }
   };
 
   const handleLinkExistingCustomer = () => {
@@ -571,16 +624,74 @@ export function CreateWeddingDialog({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="venue" className="text-muted-foreground">
-                  Venue
-                </Label>
-                <Input
-                  id="venue"
-                  placeholder="e.g. The Grand Ballroom"
-                  value={formData.venue}
-                  onChange={(e) => updateFormData({ venue: e.target.value })}
-                  className="focus-visible:ring-[#C4A962]"
-                />
+                <Label className="text-muted-foreground">Venue</Label>
+                <Popover open={venueOpen} onOpenChange={setVenueOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      role="combobox"
+                      aria-expanded={venueOpen}
+                      className={cn(
+                        "w-full flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors",
+                        "border-input bg-background hover:border-[#C4A962]/50 focus:outline-none",
+                        !formData.venue && "text-muted-foreground"
+                      )}
+                    >
+                      {formData.venue || "Search or create venue..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search venues..."
+                        value={venueSearch}
+                        onValueChange={setVenueSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No venues found.</CommandEmpty>
+                        <CommandGroup>
+                          {venues.map((v) => (
+                            <CommandItem
+                              key={v.name}
+                              value={v.supplier_name}
+                              onSelect={(val) => {
+                                updateFormData({ venue: val });
+                                setVenueOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.venue === v.supplier_name ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {v.supplier_name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                        {venueSearch.length > 1 && !venues.some(
+                          (v) => v.supplier_name.toLowerCase() === venueSearch.toLowerCase()
+                        ) && (
+                          <CommandGroup>
+                            <CommandItem
+                              value={`__create__${venueSearch}`}
+                              onSelect={() => handleCreateVenue(venueSearch)}
+                              disabled={isCreatingVenue}
+                            >
+                              {isCreatingVenue ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Plus className="mr-2 h-4 w-4" />
+                              )}
+                              Create "{venueSearch}"
+                            </CommandItem>
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
