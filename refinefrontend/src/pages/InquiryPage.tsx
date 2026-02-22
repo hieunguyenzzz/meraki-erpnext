@@ -1,6 +1,8 @@
-import { useState, useRef } from "react";
-import ReCAPTCHA from "react-google-recaptcha";
+import { useState, useCallback } from "react";
+import { GoogleReCaptchaProvider, useGoogleReCaptcha } from "react-google-recaptcha-v3";
 import { motion, AnimatePresence } from "framer-motion";
+
+const RECAPTCHA_SITE_KEY = "6LddGHQsAAAAAFhiFECWxyGeM_2Skr9VZA8XYCzn";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -182,17 +184,14 @@ function Field({ label, required, children, hint }: FieldProps) {
   );
 }
 
-// ─── Main Component ────────────────────────────────────────────────────────
+// ─── Inner form (needs reCAPTCHA context) ─────────────────────────────────
 
-export default function InquiryPage() {
+function InquiryForm() {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const recaptchaRef = useRef<ReCAPTCHA>(null);
-
-  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   function set(field: keyof FormData) {
     return (
@@ -214,9 +213,9 @@ export default function InquiryPage() {
     form.budget.trim() &&
     form.referral_source.trim();
 
-  const canSubmit = requiredFilled && (captchaToken || !siteKey) && !submitting;
+  const canSubmit = !!requiredFilled && !submitting;
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
 
@@ -224,13 +223,14 @@ export default function InquiryPage() {
     setError(null);
 
     try {
+      const token = executeRecaptcha
+        ? await executeRecaptcha("inquiry_submit")
+        : "dev-bypass";
+
       const res = await fetch("/inquiry-api/inquiry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          recaptcha_token: captchaToken ?? "dev-bypass",
-        }),
+        body: JSON.stringify({ ...form, recaptcha_token: token }),
       });
 
       if (!res.ok) {
@@ -241,12 +241,10 @@ export default function InquiryPage() {
       setSubmitted(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-      recaptchaRef.current?.reset();
-      setCaptchaToken(null);
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [canSubmit, executeRecaptcha, form]);
 
   return (
     <>
@@ -815,26 +813,8 @@ export default function InquiryPage() {
                   </div>
                 </motion.div>
 
-                {/* reCAPTCHA */}
+                {/* Submit */}
                 <motion.div variants={fadeUp} custom={5}>
-                  {siteKey ? (
-                    <div className="recaptcha-wrap">
-                      <ReCAPTCHA
-                        ref={recaptchaRef}
-                        sitekey={siteKey}
-                        onChange={(token) => setCaptchaToken(token)}
-                        onExpired={() => setCaptchaToken(null)}
-                        theme="light"
-                      />
-                    </div>
-                  ) : (
-                    <div className="recaptcha-wrap">
-                      <p style={{ fontSize: "0.78rem", color: "#B0996E", fontStyle: "italic" }}>
-                        reCAPTCHA not configured (development mode)
-                      </p>
-                    </div>
-                  )}
-
                   <button
                     type="submit"
                     className="submit-btn"
@@ -856,5 +836,15 @@ export default function InquiryPage() {
         </AnimatePresence>
       </div>
     </>
+  );
+}
+
+// ─── Public export wrapped with reCAPTCHA v3 provider ─────────────────────
+
+export default function InquiryPage() {
+  return (
+    <GoogleReCaptchaProvider reCaptchaKey={RECAPTCHA_SITE_KEY}>
+      <InquiryForm />
+    </GoogleReCaptchaProvider>
   );
 }

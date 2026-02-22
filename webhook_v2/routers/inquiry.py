@@ -40,7 +40,7 @@ class InquiryForm(BaseModel):
 
 
 async def verify_recaptcha(token: str) -> bool:
-    """Verify reCAPTCHA v2 token with Google."""
+    """Verify reCAPTCHA v3 token with Google (score >= 0.5)."""
     if not settings.recaptcha_secret_key:
         log.warning("recaptcha_skip", reason="RECAPTCHA_SECRET_KEY not configured")
         return True  # Allow in development when key not set
@@ -50,8 +50,10 @@ async def verify_recaptcha(token: str) -> bool:
             data={"secret": settings.recaptcha_secret_key, "response": token},
         )
         result = r.json()
-        log.info("recaptcha_result", success=result.get("success"), scores=result)
-        return result.get("success", False)
+        score = result.get("score", 0)
+        success = result.get("success", False) and score >= 0.5
+        log.info("recaptcha_result", success=success, score=score, action=result.get("action"))
+        return success
 
 
 @router.post("/inquiry")
