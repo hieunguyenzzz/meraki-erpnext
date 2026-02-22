@@ -5,6 +5,7 @@ FastAPI application for email processing webhooks.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from webhook_v2.config import settings
@@ -15,6 +16,7 @@ from webhook_v2.processors.realtime import RealtimeProcessor
 from webhook_v2.processors.backfill import BackfillProcessor
 from webhook_v2.processors.expense import ExpenseProcessor
 from webhook_v2.scheduler import start_scheduler, start_fetch_scheduler, stop_scheduler
+from webhook_v2.routers.inquiry import router as inquiry_router
 
 log = get_logger(__name__)
 
@@ -63,6 +65,15 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+app.include_router(inquiry_router)
 
 
 # Request/Response Models

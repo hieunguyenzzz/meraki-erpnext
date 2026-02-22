@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     scheduler_fetch_interval_minutes: int = 5
     scheduler_fetch_days: int = 7  # How many days back to fetch from IMAP
 
+    # reCAPTCHA (for public inquiry form)
+    recaptcha_secret_key: str = ""
+
     # Meraki domains (for detecting outgoing emails)
     meraki_domains: list[str] = ["merakiweddingplanner.com", "merakiwp.com"]
 

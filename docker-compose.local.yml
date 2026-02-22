@@ -158,6 +158,8 @@ services:
       # Gemini (fallback if remote classifier disabled)
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      # reCAPTCHA (public inquiry form)
+      - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY:-}
       # MinIO
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio-api.hieunguyen.dev}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
