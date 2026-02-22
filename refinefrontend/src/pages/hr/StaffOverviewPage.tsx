@@ -6,7 +6,7 @@ import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -587,16 +587,16 @@ export default function StaffOverviewPage() {
         ]}
       />
 
-      {/* Review Dialog */}
-      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Review</DialogTitle>
-            <DialogDescription>
-              {selectedEmployee?.employee_name}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
+      {/* Review Sheet */}
+      <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Review</SheetTitle>
+            {selectedEmployee && (
+              <p className="text-sm text-muted-foreground">{selectedEmployee.employee_name}</p>
+            )}
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="review-date">Review Date</Label>
               <Input
@@ -620,27 +620,27 @@ export default function StaffOverviewPage() {
               <p className="text-sm text-red-600">{error}</p>
             )}
           </div>
-          <DialogFooter>
+          <SheetFooter className="px-6 py-4 border-t shrink-0">
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)} disabled={saving}>
               Cancel
             </Button>
             <Button onClick={handleSaveReview} disabled={saving || !reviewDate}>
               {saving ? "Saving..." : "Save"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-      {/* Roles Dialog */}
-      <Dialog open={rolesDialogOpen} onOpenChange={setRolesDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Assign Staff Roles</DialogTitle>
-            <DialogDescription>
-              {selectedEmployee?.employee_name}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-4">
+      {/* Roles Sheet */}
+      <Sheet open={rolesDialogOpen} onOpenChange={setRolesDialogOpen}>
+        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Assign Staff Roles</SheetTitle>
+            {selectedEmployee && (
+              <p className="text-sm text-muted-foreground">{selectedEmployee.employee_name}</p>
+            )}
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
             {STAFF_ROLES.map(role => (
               <div
                 key={role}
@@ -662,144 +662,147 @@ export default function StaffOverviewPage() {
               <p className="text-sm text-red-600">{error}</p>
             )}
           </div>
-          <DialogFooter>
+          <SheetFooter className="px-6 py-4 border-t shrink-0">
             <Button variant="outline" onClick={() => setRolesDialogOpen(false)} disabled={saving}>
               Cancel
             </Button>
             <Button onClick={handleSaveRoles} disabled={saving}>
               {saving ? "Saving..." : "Save"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-      {/* Invite Staff Dialog */}
-      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Invite Staff</DialogTitle>
-            <DialogDescription>
+      {/* Invite Staff Sheet */}
+      <Sheet open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Invite Staff</SheetTitle>
+            <p className="text-sm text-muted-foreground">
               Create a new employee account. They'll complete their profile on first login.
-            </DialogDescription>
-          </DialogHeader>
+            </p>
+          </SheetHeader>
 
           {inviteSuccess ? (
-            <div className="space-y-4 py-4">
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-3">
-                <div className="flex items-center gap-2 text-green-700">
-                  <CheckCircle className="h-5 w-5" />
-                  <p className="font-medium">{inviteSuccess.name} has been added</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Share these login credentials:</p>
-                  <div className="flex items-center gap-2 bg-white rounded border px-3 py-2">
-                    <code className="flex-1 text-sm font-mono">{inviteSuccess.password}</code>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={copyPassword}>
-                      {copiedPassword ? <CheckCheck className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                    </Button>
+            <>
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-green-700">
+                    <CheckCircle className="h-5 w-5" />
+                    <p className="font-medium">{inviteSuccess.name} has been added</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Share these login credentials:</p>
+                    <div className="flex items-center gap-2 bg-white rounded border px-3 py-2">
+                      <code className="flex-1 text-sm font-mono">{inviteSuccess.password}</code>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={copyPassword}>
+                        {copiedPassword ? <CheckCheck className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
-              <DialogFooter>
+              <SheetFooter className="px-6 py-4 border-t shrink-0">
                 <Button onClick={() => setInviteDialogOpen(false)}>Done</Button>
-              </DialogFooter>
-            </div>
+              </SheetFooter>
+            </>
           ) : (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="invite-email">Email <span className="text-destructive">*</span></Label>
-                <Input
-                  id="invite-email"
-                  type="email"
-                  placeholder="staff@example.com"
-                  value={inviteForm.email}
-                  onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="invite-name">Full Name <span className="text-destructive">*</span></Label>
-                <Input
-                  id="invite-name"
-                  placeholder="e.g. Nguyen Thi Mai"
-                  value={inviteForm.fullName}
-                  onChange={(e) => setInviteForm(prev => ({ ...prev, fullName: e.target.value }))}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            <>
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="invite-gender">Gender <span className="text-destructive">*</span></Label>
-                  <Select
-                    value={inviteForm.gender}
-                    onValueChange={(value) => setInviteForm(prev => ({ ...prev, gender: value }))}
-                  >
-                    <SelectTrigger id="invite-gender">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Female">Female</SelectItem>
-                      <SelectItem value="Male">Male</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="invite-email">Email <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="invite-email"
+                    type="email"
+                    placeholder="staff@example.com"
+                    value={inviteForm.email}
+                    onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="invite-dob">Date of Birth <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="invite-name">Full Name <span className="text-destructive">*</span></Label>
                   <Input
-                    id="invite-dob"
+                    id="invite-name"
+                    placeholder="e.g. Nguyen Thi Mai"
+                    value={inviteForm.fullName}
+                    onChange={(e) => setInviteForm(prev => ({ ...prev, fullName: e.target.value }))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-gender">Gender <span className="text-destructive">*</span></Label>
+                    <Select
+                      value={inviteForm.gender}
+                      onValueChange={(value) => setInviteForm(prev => ({ ...prev, gender: value }))}
+                    >
+                      <SelectTrigger id="invite-gender">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Female">Female</SelectItem>
+                        <SelectItem value="Male">Male</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-dob">Date of Birth <span className="text-destructive">*</span></Label>
+                    <Input
+                      id="invite-dob"
+                      type="date"
+                      value={inviteForm.dateOfBirth}
+                      onChange={(e) => setInviteForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-designation">Designation</Label>
+                    <Input
+                      id="invite-designation"
+                      placeholder="e.g. Wedding Planner"
+                      value={inviteForm.designation}
+                      onChange={(e) => setInviteForm(prev => ({ ...prev, designation: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-department">Department</Label>
+                    <Select
+                      value={inviteForm.department}
+                      onValueChange={(value) => setInviteForm(prev => ({ ...prev, department: value }))}
+                    >
+                      <SelectTrigger id="invite-department">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Operations">Operations</SelectItem>
+                        <SelectItem value="Management">Management</SelectItem>
+                        <SelectItem value="Administration">Administration</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="invite-doj">Date of Joining</Label>
+                  <Input
+                    id="invite-doj"
                     type="date"
-                    value={inviteForm.dateOfBirth}
-                    onChange={(e) => setInviteForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="invite-designation">Designation</Label>
-                  <Input
-                    id="invite-designation"
-                    placeholder="e.g. Wedding Planner"
-                    value={inviteForm.designation}
-                    onChange={(e) => setInviteForm(prev => ({ ...prev, designation: e.target.value }))}
+                    value={inviteForm.dateOfJoining}
+                    onChange={(e) => setInviteForm(prev => ({ ...prev, dateOfJoining: e.target.value }))}
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="invite-department">Department</Label>
-                  <Select
-                    value={inviteForm.department}
-                    onValueChange={(value) => setInviteForm(prev => ({ ...prev, department: value }))}
-                  >
-                    <SelectTrigger id="invite-department">
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Operations">Operations</SelectItem>
-                      <SelectItem value="Management">Management</SelectItem>
-                      <SelectItem value="Administration">Administration</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {inviteError && (
+                  <p className="text-sm text-red-600">{inviteError}</p>
+                )}
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="invite-doj">Date of Joining</Label>
-                <Input
-                  id="invite-doj"
-                  type="date"
-                  value={inviteForm.dateOfJoining}
-                  onChange={(e) => setInviteForm(prev => ({ ...prev, dateOfJoining: e.target.value }))}
-                />
-              </div>
-
-              {inviteError && (
-                <p className="text-sm text-red-600">{inviteError}</p>
-              )}
-
-              <DialogFooter>
+              <SheetFooter className="px-6 py-4 border-t shrink-0">
                 <Button variant="outline" onClick={() => setInviteDialogOpen(false)} disabled={inviteSubmitting}>
                   Cancel
                 </Button>
@@ -809,11 +812,11 @@ export default function StaffOverviewPage() {
                 >
                   {inviteSubmitting ? "Creating..." : "Create Account"}
                 </Button>
-              </DialogFooter>
-            </div>
+              </SheetFooter>
+            </>
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

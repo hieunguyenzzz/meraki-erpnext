@@ -12,13 +12,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetFooter,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 
 interface AttendanceRequest {
@@ -275,68 +274,67 @@ export default function MyAttendancePage() {
         </CardContent>
       </Card>
 
-      {/* Request WFH Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Request Work From Home</DialogTitle>
-            <DialogDescription>
-              Submit a request to work from home for approval
-            </DialogDescription>
-          </DialogHeader>
+      {/* Request WFH Sheet */}
+      <Sheet open={dialogOpen} onOpenChange={handleDialogOpenChange}>
+        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Request Work From Home</SheetTitle>
+          </SheetHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-                {error}
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {error && (
+                <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+                  {error}
+                </div>
+              )}
+
+              {success && (
+                <div className="rounded-md border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 text-sm text-green-700 dark:text-green-400">
+                  {success}
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="from_date">From Date *</Label>
+                  <Input
+                    id="from_date"
+                    type="date"
+                    value={form.from_date}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, from_date: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="to_date">To Date *</Label>
+                  <Input
+                    id="to_date"
+                    type="date"
+                    value={form.to_date}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, to_date: e.target.value }))
+                    }
+                  />
+                </div>
               </div>
-            )}
 
-            {success && (
-              <div className="rounded-md border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 text-sm text-green-700 dark:text-green-400">
-                {success}
-              </div>
-            )}
-
-            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <Label htmlFor="from_date">From Date *</Label>
-                <Input
-                  id="from_date"
-                  type="date"
-                  value={form.from_date}
+                <Label htmlFor="explanation">Notes</Label>
+                <Textarea
+                  id="explanation"
+                  value={form.explanation}
                   onChange={(e) =>
-                    setForm((prev) => ({ ...prev, from_date: e.target.value }))
+                    setForm((prev) => ({ ...prev, explanation: e.target.value }))
                   }
-                />
-              </div>
-              <div>
-                <Label htmlFor="to_date">To Date *</Label>
-                <Input
-                  id="to_date"
-                  type="date"
-                  value={form.to_date}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, to_date: e.target.value }))
-                  }
+                  placeholder="Optional: Add any notes or explanation"
+                  rows={3}
                 />
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="explanation">Notes</Label>
-              <Textarea
-                id="explanation"
-                value={form.explanation}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, explanation: e.target.value }))
-                }
-                placeholder="Optional: Add any notes or explanation"
-                rows={3}
-              />
-            </div>
-
-            <DialogFooter>
+            <SheetFooter className="px-6 py-4 border-t shrink-0">
               <Button
                 type="button"
                 variant="outline"
@@ -348,10 +346,10 @@ export default function MyAttendancePage() {
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? "Submitting..." : "Submit Request"}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

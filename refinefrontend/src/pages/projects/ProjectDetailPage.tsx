@@ -10,15 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import {
-  Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -500,34 +492,32 @@ export default function ProjectDetailPage() {
 
       {/* Actions */}
       <div className="space-y-2 pt-2 border-t">
-        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-          <DialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
-            >
-              <Trash2 className="h-4 w-4 mr-2" /> Delete Project
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Project</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete this project? This action cannot
-                be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={() => setDeleteOpen(true)}
+        >
+          <Trash2 className="h-4 w-4 mr-2" /> Delete Project
+        </Button>
+        <Sheet open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <SheetContent side="right" className="sm:max-w-sm flex flex-col p-0">
+            <SheetHeader className="px-6 py-4 border-b shrink-0">
+              <SheetTitle>Delete Project</SheetTitle>
+            </SheetHeader>
+            <div className="px-6 py-4">
+              <p className="text-sm text-muted-foreground">Are you sure you want to delete this project? This action cannot be undone.</p>
+            </div>
+            <SheetFooter className="px-6 py-4 border-t shrink-0">
               <Button variant="outline" onClick={() => setDeleteOpen(false)}>
                 Cancel
               </Button>
               <Button variant="destructive" onClick={handleDelete}>
                 Delete
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
   );
@@ -643,175 +633,172 @@ export default function ProjectDetailPage() {
                     <Users className="h-5 w-5" />
                     Project Tasks
                   </CardTitle>
-                  <Dialog open={createTaskOpen} onOpenChange={setCreateTaskOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <Plus className="h-4 w-4 mr-1.5" />
-                        Add Task
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[500px]">
-                      <DialogHeader>
-                        <DialogTitle>Create Task</DialogTitle>
-                        <DialogDescription>
-                          Add a new task to this wedding project.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <form onSubmit={handleCreateTask} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="task-subject">Subject *</Label>
-                          <Input
-                            id="task-subject"
-                            placeholder="e.g. Send vendor contracts"
-                            value={taskForm.subject}
-                            onChange={(e) =>
-                              setTaskForm({ ...taskForm, subject: e.target.value })
-                            }
-                            required
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
+                  <Button size="sm" onClick={() => setCreateTaskOpen(true)}>
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Add Task
+                  </Button>
+                  <Sheet open={createTaskOpen} onOpenChange={setCreateTaskOpen}>
+                    <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
+                      <SheetHeader className="px-6 py-4 border-b shrink-0">
+                        <SheetTitle>Create Task</SheetTitle>
+                      </SheetHeader>
+                      <form onSubmit={handleCreateTask} className="flex flex-col flex-1 overflow-hidden">
+                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="task-phase">Phase *</Label>
-                            <Select
-                              value={taskForm.phase}
-                              onValueChange={(value) =>
-                                setTaskForm({ ...taskForm, phase: value })
-                              }
-                              required
-                            >
-                              <SelectTrigger id="task-phase">
-                                <SelectValue placeholder="Select phase" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {WEDDING_PHASES.map((phase) => (
-                                  <SelectItem key={phase} value={phase}>
-                                    {phase}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="task-deadline">Deadline *</Label>
+                            <Label htmlFor="task-subject">Subject *</Label>
                             <Input
-                              id="task-deadline"
-                              type="date"
-                              value={taskForm.deadline}
+                              id="task-subject"
+                              placeholder="e.g. Send vendor contracts"
+                              value={taskForm.subject}
                               onChange={(e) =>
-                                setTaskForm({ ...taskForm, deadline: e.target.value })
+                                setTaskForm({ ...taskForm, subject: e.target.value })
                               }
                               required
                             />
                           </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="task-assignee">Assign To</Label>
-                            <Select
-                              value={taskForm.assignee}
-                              onValueChange={(value) =>
-                                setTaskForm({ ...taskForm, assignee: value })
-                              }
-                            >
-                              <SelectTrigger id="task-assignee">
-                                <SelectValue placeholder="Select employee" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {employees.map((emp) => (
-                                  <SelectItem key={emp.id} value={emp.id}>
-                                    {emp.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="task-phase">Phase *</Label>
+                              <Select
+                                value={taskForm.phase}
+                                onValueChange={(value) =>
+                                  setTaskForm({ ...taskForm, phase: value })
+                                }
+                                required
+                              >
+                                <SelectTrigger id="task-phase">
+                                  <SelectValue placeholder="Select phase" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {WEDDING_PHASES.map((phase) => (
+                                    <SelectItem key={phase} value={phase}>
+                                      {phase}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="task-deadline">Deadline *</Label>
+                              <Input
+                                id="task-deadline"
+                                type="date"
+                                value={taskForm.deadline}
+                                onChange={(e) =>
+                                  setTaskForm({ ...taskForm, deadline: e.target.value })
+                                }
+                                required
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="task-assignee">Assign To</Label>
+                              <Select
+                                value={taskForm.assignee}
+                                onValueChange={(value) =>
+                                  setTaskForm({ ...taskForm, assignee: value })
+                                }
+                              >
+                                <SelectTrigger id="task-assignee">
+                                  <SelectValue placeholder="Select employee" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {employees.map((emp) => (
+                                    <SelectItem key={emp.id} value={emp.id}>
+                                      {emp.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="task-priority">Priority</Label>
+                              <Select
+                                value={taskForm.priority}
+                                onValueChange={(value) =>
+                                  setTaskForm({ ...taskForm, priority: value })
+                                }
+                              >
+                                <SelectTrigger id="task-priority">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PRIORITY_OPTIONS.map((priority) => (
+                                    <SelectItem key={priority} value={priority}>
+                                      {priority}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="task-priority">Priority</Label>
-                            <Select
-                              value={taskForm.priority}
-                              onValueChange={(value) =>
-                                setTaskForm({ ...taskForm, priority: value })
-                              }
-                            >
-                              <SelectTrigger id="task-priority">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {PRIORITY_OPTIONS.map((priority) => (
-                                  <SelectItem key={priority} value={priority}>
-                                    {priority}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Share With</Label>
-                          <Popover.Root>
-                            <Popover.Trigger asChild>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="w-full justify-start"
-                              >
-                                {sharedWith.size > 0
-                                  ? `${sharedWith.size} employee(s) selected`
-                                  : "Select employees to share with..."}
-                              </Button>
-                            </Popover.Trigger>
-                            <Popover.Portal>
-                              <Popover.Content
-                                className="z-50 w-[260px] max-h-[300px] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
-                                align="start"
-                                sideOffset={4}
-                              >
-                                {employees
-                                  .filter((emp) => emp.id !== taskForm.assignee)
-                                  .map((emp) => {
-                                    const isSelected = sharedWith.has(emp.id);
-                                    return (
+                            <Label>Share With</Label>
+                            <Popover.Root>
+                              <Popover.Trigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full justify-start"
+                                >
+                                  {sharedWith.size > 0
+                                    ? `${sharedWith.size} employee(s) selected`
+                                    : "Select employees to share with..."}
+                                </Button>
+                              </Popover.Trigger>
+                              <Popover.Portal>
+                                <Popover.Content
+                                  className="z-50 w-[260px] max-h-[300px] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+                                  align="start"
+                                  sideOffset={4}
+                                >
+                                  {employees
+                                    .filter((emp) => emp.id !== taskForm.assignee)
+                                    .map((emp) => {
+                                      const isSelected = sharedWith.has(emp.id);
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={emp.id}
+                                          onClick={() => toggleSharedWith(emp.id)}
+                                          className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                                        >
+                                          <div
+                                            className={cn(
+                                              "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                              isSelected
+                                                ? "bg-primary text-primary-foreground"
+                                                : "opacity-50"
+                                            )}
+                                          >
+                                            {isSelected && <Check className="h-4 w-4" />}
+                                          </div>
+                                          <span>{emp.name}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  {sharedWith.size > 0 && (
+                                    <>
+                                      <div className="-mx-1 my-1 h-px bg-muted" />
                                       <button
                                         type="button"
-                                        key={emp.id}
-                                        onClick={() => toggleSharedWith(emp.id)}
-                                        className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => setSharedWith(new Set())}
+                                        className="flex w-full cursor-default select-none items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
                                       >
-                                        <div
-                                          className={cn(
-                                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                                            isSelected
-                                              ? "bg-primary text-primary-foreground"
-                                              : "opacity-50"
-                                          )}
-                                        >
-                                          {isSelected && <Check className="h-4 w-4" />}
-                                        </div>
-                                        <span>{emp.name}</span>
+                                        Clear all
                                       </button>
-                                    );
-                                  })}
-                                {sharedWith.size > 0 && (
-                                  <>
-                                    <div className="-mx-1 my-1 h-px bg-muted" />
-                                    <button
-                                      type="button"
-                                      onClick={() => setSharedWith(new Set())}
-                                      className="flex w-full cursor-default select-none items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-                                    >
-                                      Clear all
-                                    </button>
-                                  </>
-                                )}
-                              </Popover.Content>
-                            </Popover.Portal>
-                          </Popover.Root>
-                          <p className="text-xs text-muted-foreground">
-                            Additional employees who can see this task
-                          </p>
+                                    </>
+                                  )}
+                                </Popover.Content>
+                              </Popover.Portal>
+                            </Popover.Root>
+                            <p className="text-xs text-muted-foreground">
+                              Additional employees who can see this task
+                            </p>
+                          </div>
                         </div>
-                        <DialogFooter>
+                        <SheetFooter className="px-6 py-4 border-t shrink-0">
                           <Button
                             type="button"
                             variant="outline"
@@ -833,10 +820,10 @@ export default function ProjectDetailPage() {
                           >
                             {isSubmittingTask ? "Creating..." : "Create Task"}
                           </Button>
-                        </DialogFooter>
+                        </SheetFooter>
                       </form>
-                    </DialogContent>
-                  </Dialog>
+                    </SheetContent>
+                  </Sheet>
                 </CardHeader>
                 <CardContent>
                   {tasks.length === 0 ? (

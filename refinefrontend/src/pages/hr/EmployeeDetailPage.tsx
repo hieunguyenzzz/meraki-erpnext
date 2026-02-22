@@ -6,7 +6,7 @@ import { formatDate, formatVND } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -487,14 +487,14 @@ export default function EmployeeDetailPage() {
         )}
       </div>
 
-      {/* Review Dialog */}
-      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Performance Review</DialogTitle>
-            <DialogDescription>{employee.employee_name}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
+      {/* Review Sheet */}
+      <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Performance Review</SheetTitle>
+            <p className="text-sm text-muted-foreground">{employee.employee_name}</p>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="review-date">Review Date</Label>
               <Input
@@ -516,73 +516,75 @@ export default function EmployeeDetailPage() {
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
-          <DialogFooter>
+          <SheetFooter className="px-6 py-4 border-t shrink-0">
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)} disabled={saving}>
               Cancel
             </Button>
             <Button onClick={handleSaveReview} disabled={saving || !reviewDate}>
               {saving ? "Saving..." : "Save"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-      {/* Leave Balance Dialog */}
-      <Dialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Leave Balance</DialogTitle>
-            <DialogDescription>{employee.employee_name}</DialogDescription>
-          </DialogHeader>
-          {leaveAllocEdit && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="leave-allocated">Allocated Days</Label>
-                <Input
-                  id="leave-allocated"
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={leaveAllocEdit.allocated}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (!isNaN(v)) setLeaveAllocEdit((prev) => prev ? { ...prev, allocated: v } : prev);
-                  }}
-                  disabled={leaveSaving}
-                />
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Taken Days</span>
-                <span>{leaveAllocEdit.taken}</span>
-              </div>
-              <div className="flex justify-between font-medium">
-                <span>Remaining</span>
-                <span>{leaveAllocEdit.allocated - leaveAllocEdit.taken}</span>
-              </div>
-              {leaveError && <p className="text-sm text-red-600">{leaveError}</p>}
-            </div>
-          )}
-          <DialogFooter>
+      {/* Leave Balance Sheet */}
+      <Sheet open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
+        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Edit Leave Balance</SheetTitle>
+            <p className="text-sm text-muted-foreground">{employee.employee_name}</p>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            {leaveAllocEdit && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="leave-allocated">Allocated Days</Label>
+                  <Input
+                    id="leave-allocated"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={leaveAllocEdit.allocated}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v)) setLeaveAllocEdit((prev) => prev ? { ...prev, allocated: v } : prev);
+                    }}
+                    disabled={leaveSaving}
+                  />
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Taken Days</span>
+                  <span>{leaveAllocEdit.taken}</span>
+                </div>
+                <div className="flex justify-between font-medium">
+                  <span>Remaining</span>
+                  <span>{leaveAllocEdit.allocated - leaveAllocEdit.taken}</span>
+                </div>
+                {leaveError && <p className="text-sm text-red-600">{leaveError}</p>}
+              </>
+            )}
+          </div>
+          <SheetFooter className="px-6 py-4 border-t shrink-0">
             <Button variant="outline" onClick={() => setLeaveDialogOpen(false)} disabled={leaveSaving}>
               Cancel
             </Button>
             <Button onClick={handleSaveLeave} disabled={leaveSaving}>
               {leaveSaving ? "Saving..." : "Save"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-      {/* Edit Section Dialog */}
-      <Dialog open={editSection !== null} onOpenChange={(open) => { if (!open) setEditSection(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+      {/* Edit Section Sheet */}
+      <Sheet open={editSection !== null} onOpenChange={(open) => { if (!open) setEditSection(null); }}>
+        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>
               {editSection === "personal" ? "Edit Personal Information" : editSection === "contact" ? "Edit Contact" : "Edit Employment"}
-            </DialogTitle>
-            <DialogDescription>{employee.employee_name}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
+            </SheetTitle>
+            <p className="text-sm text-muted-foreground">{employee.employee_name}</p>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {editSection === "personal" && (
               <>
                 <div className="space-y-2">
@@ -662,16 +664,16 @@ export default function EmployeeDetailPage() {
             )}
             {editError && <p className="text-sm text-red-600">{editError}</p>}
           </div>
-          <DialogFooter>
+          <SheetFooter className="px-6 py-4 border-t shrink-0">
             <Button variant="outline" onClick={() => setEditSection(null)} disabled={editSaving}>
               Cancel
             </Button>
             <Button onClick={handleSaveEdit} disabled={editSaving}>
               {editSaving ? "Saving..." : "Save"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

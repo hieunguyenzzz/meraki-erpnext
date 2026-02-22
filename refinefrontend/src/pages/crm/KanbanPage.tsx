@@ -11,9 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogTrigger, DialogContent, DialogHeader,
-  DialogFooter, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter,
+} from "@/components/ui/sheet";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -222,79 +221,79 @@ export default function KanbanPage() {
           <h1 className="text-2xl font-semibold tracking-tight">CRM Pipeline</h1>
           <p className="text-sm text-muted-foreground">View leads by stage</p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-1.5" />
-              Create Lead
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New Lead</DialogTitle>
-              <DialogDescription>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4 mr-1.5" />
+          Create Lead
+        </Button>
+        <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+          <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+            <SheetHeader className="px-6 py-4 border-b shrink-0">
+              <SheetTitle>Create New Lead</SheetTitle>
+              <p className="text-sm text-muted-foreground">
                 Add a new lead to your CRM pipeline.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleCreateLead} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="lead_name">Lead Name *</Label>
-                <Input
-                  id="lead_name"
-                  placeholder="e.g. John & Jane Smith"
-                  value={formData.lead_name}
-                  onChange={(e) => setFormData({ ...formData, lead_name: e.target.value })}
-                  required
-                />
+              </p>
+            </SheetHeader>
+            <form onSubmit={handleCreateLead} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="lead_name">Lead Name *</Label>
+                  <Input
+                    id="lead_name"
+                    placeholder="e.g. John & Jane Smith"
+                    value={formData.lead_name}
+                    onChange={(e) => setFormData({ ...formData, lead_name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email_id">Email</Label>
+                  <Input
+                    id="email_id"
+                    type="email"
+                    placeholder="email@example.com"
+                    value={formData.email_id}
+                    onChange={(e) => setFormData({ ...formData, email_id: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    placeholder="+84 123 456 789"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="source">Source</Label>
+                  <Select
+                    value={formData.source}
+                    onValueChange={(value) => setFormData({ ...formData, source: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select source" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {leadSources.map((source) => (
+                        <SelectItem key={source} value={source}>
+                          {source}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="email_id">Email</Label>
-                <Input
-                  id="email_id"
-                  type="email"
-                  placeholder="email@example.com"
-                  value={formData.email_id}
-                  onChange={(e) => setFormData({ ...formData, email_id: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  placeholder="+84 123 456 789"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source">Source</Label>
-                <Select
-                  value={formData.source}
-                  onValueChange={(value) => setFormData({ ...formData, source: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leadSources.map((source) => (
-                      <SelectItem key={source} value={source}>
-                        {source}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <DialogFooter>
+              <SheetFooter className="px-6 py-4 border-t shrink-0">
                 <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={isSubmitting || !formData.lead_name.trim()}>
                   {isSubmitting ? "Creating..." : "Create Lead"}
                 </Button>
-              </DialogFooter>
+              </SheetFooter>
             </form>
-          </DialogContent>
-        </Dialog>
+          </SheetContent>
+        </Sheet>
       </div>
 
       {/* Filters */}

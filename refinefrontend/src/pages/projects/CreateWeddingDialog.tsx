@@ -11,12 +11,12 @@ import {
   Check,
 } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +63,7 @@ interface FormData {
   venue: string;
   guestCount: string;
   packageAmount: string;
+  taxType: "tax_free" | "vat_included";
   // Team
   leadPlanner: string;
   supportPlanner: string;
@@ -81,6 +82,7 @@ const initialFormData: FormData = {
   venue: "",
   guestCount: "",
   packageAmount: "",
+  taxType: "tax_free",
   leadPlanner: "",
   supportPlanner: "",
   assistant1: "",
@@ -229,21 +231,34 @@ export function CreateWeddingDialog({
 
       // 2. Create Sales Order (wedding booking)
       const today = new Date().toISOString().slice(0, 10);
+      const salesOrderValues: Record<string, unknown> = {
+        customer: customerId,
+        transaction_date: today,
+        delivery_date: formData.weddingDate,
+        custom_venue: formData.venue.trim() || undefined,
+        items: [
+          {
+            item_code: "Wedding Planning Service",
+            qty: 1,
+            rate: parseFloat(formData.packageAmount) || 0,
+          },
+        ],
+      };
+      if (formData.taxType === "vat_included") {
+        salesOrderValues.taxes_and_charges = "VAT 10% - MWP";
+        salesOrderValues.taxes = [
+          {
+            charge_type: "On Net Total",
+            account_head: "Output Tax - MWP",
+            rate: 8,
+            included_in_print_rate: 1,
+            description: "VAT 8%",
+          },
+        ];
+      }
       const salesOrderResult = await createDoc({
         resource: "Sales Order",
-        values: {
-          customer: customerId,
-          transaction_date: today,
-          delivery_date: formData.weddingDate,
-          custom_venue: formData.venue.trim() || undefined,
-          items: [
-            {
-              item_code: "Wedding Planning Service",
-              qty: 1,
-              rate: parseFloat(formData.packageAmount) || 0,
-            },
-          ],
-        },
+        values: salesOrderValues,
       });
       const salesOrderName = salesOrderResult?.data?.name;
       if (!salesOrderName) throw new Error("Failed to create sales order");
@@ -333,83 +348,79 @@ export function CreateWeddingDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="pb-2">
-          <DialogTitle
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="sm:max-w-2xl flex flex-col p-0">
+        <SheetHeader className="px-6 py-4 border-b shrink-0">
+          <SheetTitle
             className="text-2xl"
             style={{ fontFamily: "Georgia, serif" }}
           >
             Create New Wedding
-          </DialogTitle>
-          <DialogDescription>
-            Add a new wedding client and booking to the system
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
 
-        {/* Step Indicator */}
-        <div className="flex items-center justify-center py-6">
-          {STEPS.map((step, index) => {
-            const isCompleted = index < currentStepIndex;
-            const isCurrent = step.id === currentStep;
-            const Icon = step.icon;
+          {/* Step Indicator */}
+          <div className="flex items-center justify-center py-4">
+            {STEPS.map((step, index) => {
+              const isCompleted = index < currentStepIndex;
+              const isCurrent = step.id === currentStep;
+              const Icon = step.icon;
 
-            return (
-              <div key={step.id} className="flex items-center">
-                {/* Step circle */}
-                <div className="flex flex-col items-center">
-                  <div
-                    className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all",
-                      isCompleted && "bg-[#C4A962] border-[#C4A962] text-white",
-                      isCurrent && "border-[#C4A962] text-[#C4A962]",
-                      !isCompleted &&
-                        !isCurrent &&
-                        "border-muted-foreground/30 text-muted-foreground/50"
-                    )}
-                  >
-                    {isCompleted ? (
-                      <Check className="h-5 w-5" />
-                    ) : (
-                      <Icon className="h-5 w-5" />
-                    )}
+              return (
+                <div key={step.id} className="flex items-center">
+                  {/* Step circle */}
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={cn(
+                        "w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all",
+                        isCompleted && "bg-[#C4A962] border-[#C4A962] text-white",
+                        isCurrent && "border-[#C4A962] text-[#C4A962]",
+                        !isCompleted &&
+                          !isCurrent &&
+                          "border-muted-foreground/30 text-muted-foreground/50"
+                      )}
+                    >
+                      {isCompleted ? (
+                        <Check className="h-5 w-5" />
+                      ) : (
+                        <Icon className="h-5 w-5" />
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        "text-xs mt-1.5 font-medium",
+                        isCurrent ? "text-foreground" : "text-muted-foreground"
+                      )}
+                    >
+                      {step.title}
+                    </span>
                   </div>
-                  <span
-                    className={cn(
-                      "text-xs mt-1.5 font-medium",
-                      isCurrent ? "text-foreground" : "text-muted-foreground"
-                    )}
-                  >
-                    {step.title}
-                  </span>
+
+                  {/* Connector line */}
+                  {index < STEPS.length - 1 && (
+                    <div
+                      className={cn(
+                        "w-12 h-0.5 mx-2 mb-6",
+                        index < currentStepIndex
+                          ? "bg-[#C4A962]"
+                          : "bg-muted-foreground/20"
+                      )}
+                    />
+                  )}
                 </div>
-
-                {/* Connector line */}
-                {index < STEPS.length - 1 && (
-                  <div
-                    className={cn(
-                      "w-12 h-0.5 mx-2 mb-6",
-                      index < currentStepIndex
-                        ? "bg-[#C4A962]"
-                        : "bg-muted-foreground/20"
-                    )}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Error message */}
-        {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {error}
+              );
+            })}
           </div>
-        )}
+        </SheetHeader>
 
-        {/* Step Content */}
-        <div className="min-h-[280px]">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Error message */}
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {error}
+            </div>
+          )}
+
           {/* Step 1: Client */}
           {currentStep === "client" && (
             <div className="space-y-4">
@@ -609,6 +620,34 @@ export function CreateWeddingDialog({
                     }
                     className="focus-visible:ring-[#C4A962]"
                   />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Tax</Label>
+                <div className="flex gap-3">
+                  {[
+                    { value: "tax_free", label: "Tax Free" },
+                    { value: "vat_included", label: "VAT Included (8%)" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() =>
+                        updateFormData({
+                          taxType: opt.value as FormData["taxType"],
+                        })
+                      }
+                      className={cn(
+                        "flex-1 py-2 px-3 rounded-md border text-sm font-medium transition-all",
+                        formData.taxType === opt.value
+                          ? "border-[#C4A962] bg-[#C4A962]/10 text-[#C4A962]"
+                          : "border-border text-muted-foreground hover:border-[#C4A962]/50"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -832,6 +871,14 @@ export function CreateWeddingDialog({
                     <div>{formatVND(parseFloat(formData.packageAmount))}</div>
                   </>
                 )}
+                <div>
+                  <span className="text-muted-foreground">Tax:</span>
+                </div>
+                <div>
+                  {formData.taxType === "vat_included"
+                    ? "VAT Included (8%)"
+                    : "Tax Free"}
+                </div>
 
                 {/* Team */}
                 <div className="col-span-2 pt-3 border-t mt-2">
@@ -874,8 +921,7 @@ export function CreateWeddingDialog({
           )}
         </div>
 
-        {/* Footer Buttons */}
-        <div className="flex justify-between pt-4 border-t">
+        <SheetFooter className="px-6 py-4 border-t shrink-0 flex justify-between">
           <Button
             type="button"
             variant="outline"
@@ -911,8 +957,8 @@ export function CreateWeddingDialog({
               Next
             </Button>
           )}
-        </div>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

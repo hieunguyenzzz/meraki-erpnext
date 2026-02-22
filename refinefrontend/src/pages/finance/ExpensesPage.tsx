@@ -9,10 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import {
-  Dialog, DialogContent, DialogHeader,
-  DialogFooter, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
@@ -398,80 +395,79 @@ export default function ExpensesPage() {
         </DropdownMenu>
       </div>
 
-      {/* Quick Expense Dialog */}
-      <Dialog open={quickExpenseOpen} onOpenChange={handleQuickExpenseOpenChange}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Quick Expense</DialogTitle>
-            <DialogDescription>
-              Record a simple expense like petty cash or miscellaneous costs.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleQuickExpenseSubmit} className="space-y-4">
-            {quickError && (
-              <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
-                <AlertCircle className="h-4 w-4" />
-                {quickError}
+      {/* Quick Expense Sheet */}
+      <Sheet open={quickExpenseOpen} onOpenChange={handleQuickExpenseOpenChange}>
+        <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Add Quick Expense</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleQuickExpenseSubmit} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {quickError && (
+                <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                  <AlertCircle className="h-4 w-4" />
+                  {quickError}
+                </div>
+              )}
+              {quickSuccess && (
+                <div className="flex items-center gap-2 p-3 text-sm text-green-600 bg-green-50 rounded-md">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {quickSuccess}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="quick-date">Date *</Label>
+                <Input
+                  id="quick-date"
+                  type="date"
+                  value={quickForm.date}
+                  onChange={(e) => setQuickForm({ ...quickForm, date: e.target.value })}
+                  required
+                />
               </div>
-            )}
-            {quickSuccess && (
-              <div className="flex items-center gap-2 p-3 text-sm text-green-600 bg-green-50 rounded-md">
-                <CheckCircle2 className="h-4 w-4" />
-                {quickSuccess}
+              <div className="space-y-2">
+                <Label htmlFor="quick-description">Description *</Label>
+                <Input
+                  id="quick-description"
+                  placeholder="e.g. Office supplies"
+                  value={quickForm.description}
+                  onChange={(e) => setQuickForm({ ...quickForm, description: e.target.value })}
+                  required
+                />
               </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="quick-date">Date *</Label>
-              <Input
-                id="quick-date"
-                type="date"
-                value={quickForm.date}
-                onChange={(e) => setQuickForm({ ...quickForm, date: e.target.value })}
-                required
-              />
+              <div className="space-y-2">
+                <Label htmlFor="quick-amount">Amount (VND) *</Label>
+                <Input
+                  id="quick-amount"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="500000"
+                  value={quickForm.amount}
+                  onChange={(e) => setQuickForm({ ...quickForm, amount: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quick-category">Category *</Label>
+                <Select
+                  value={quickForm.category}
+                  onValueChange={(value) => setQuickForm({ ...quickForm, category: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {expenseAccounts.map((acc) => (
+                      <SelectItem key={acc.name} value={acc.name}>
+                        {acc.account_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="quick-description">Description *</Label>
-              <Input
-                id="quick-description"
-                placeholder="e.g. Office supplies"
-                value={quickForm.description}
-                onChange={(e) => setQuickForm({ ...quickForm, description: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="quick-amount">Amount (VND) *</Label>
-              <Input
-                id="quick-amount"
-                type="number"
-                min="1"
-                step="1"
-                placeholder="500000"
-                value={quickForm.amount}
-                onChange={(e) => setQuickForm({ ...quickForm, amount: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="quick-category">Category *</Label>
-              <Select
-                value={quickForm.category}
-                onValueChange={(value) => setQuickForm({ ...quickForm, category: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {expenseAccounts.map((acc) => (
-                    <SelectItem key={acc.name} value={acc.name}>
-                      {acc.account_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DialogFooter>
+            <SheetFooter className="px-6 py-4 border-t shrink-0">
               <Button type="button" variant="outline" onClick={() => setQuickExpenseOpen(false)}>
                 Cancel
               </Button>
@@ -481,138 +477,136 @@ export default function ExpensesPage() {
               >
                 {isSubmitting ? "Creating..." : "Create Expense"}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      {/* Supplier Invoice Dialog */}
-      <Dialog open={supplierInvoiceOpen} onOpenChange={handleSupplierInvoiceOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Add Supplier Invoice</DialogTitle>
-            <DialogDescription>
-              Record a vendor invoice with line items.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSupplierInvoiceSubmit} className="space-y-4">
-            {invoiceError && (
-              <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
-                <AlertCircle className="h-4 w-4" />
-                {invoiceError}
+      {/* Supplier Invoice Sheet */}
+      <Sheet open={supplierInvoiceOpen} onOpenChange={handleSupplierInvoiceOpenChange}>
+        <SheetContent side="right" className="sm:max-w-xl flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Add Supplier Invoice</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleSupplierInvoiceSubmit} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {invoiceError && (
+                <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                  <AlertCircle className="h-4 w-4" />
+                  {invoiceError}
+                </div>
+              )}
+              {invoiceSuccess && (
+                <div className="flex items-center gap-2 p-3 text-sm text-green-600 bg-green-50 rounded-md">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {invoiceSuccess}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="invoice-supplier">Supplier *</Label>
+                  <Select
+                    value={invoiceForm.supplier}
+                    onValueChange={(value) => setInvoiceForm({ ...invoiceForm, supplier: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select supplier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s.name} value={s.name}>
+                          {s.supplier_name || s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="invoice-date">Date *</Label>
+                  <Input
+                    id="invoice-date"
+                    type="date"
+                    value={invoiceForm.date}
+                    onChange={(e) => setInvoiceForm({ ...invoiceForm, date: e.target.value })}
+                    required
+                  />
+                </div>
               </div>
-            )}
-            {invoiceSuccess && (
-              <div className="flex items-center gap-2 p-3 text-sm text-green-600 bg-green-50 rounded-md">
-                <CheckCircle2 className="h-4 w-4" />
-                {invoiceSuccess}
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
+
               <div className="space-y-2">
-                <Label htmlFor="invoice-supplier">Supplier *</Label>
-                <Select
-                  value={invoiceForm.supplier}
-                  onValueChange={(value) => setInvoiceForm({ ...invoiceForm, supplier: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select supplier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {suppliers.map((s) => (
-                      <SelectItem key={s.name} value={s.name}>
-                        {s.supplier_name || s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label>Line Items *</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addInvoiceItem}>
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Item
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {invoiceForm.items.map((item, index) => (
+                    <div key={index} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
+                      <div>
+                        {index === 0 && <Label className="text-xs text-muted-foreground">Description</Label>}
+                        <Input
+                          placeholder="Item description"
+                          value={item.description}
+                          onChange={(e) => updateInvoiceItem(index, "description", e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div>
+                        {index === 0 && <Label className="text-xs text-muted-foreground">Category</Label>}
+                        <Select
+                          value={item.category}
+                          onValueChange={(value) => updateInvoiceItem(index, "category", value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {expenseAccounts.map((acc) => (
+                              <SelectItem key={acc.name} value={acc.name}>
+                                {acc.account_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        {index === 0 && <Label className="text-xs text-muted-foreground">Amount</Label>}
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          placeholder="Amount"
+                          className="w-32"
+                          value={item.amount}
+                          onChange={(e) => updateInvoiceItem(index, "amount", e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div>
+                        {index === 0 && <Label className="text-xs text-muted-foreground">&nbsp;</Label>}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeInvoiceItem(index)}
+                          disabled={invoiceForm.items.length <= 1}
+                          className="h-10 w-10"
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="invoice-date">Date *</Label>
-                <Input
-                  id="invoice-date"
-                  type="date"
-                  value={invoiceForm.date}
-                  onChange={(e) => setInvoiceForm({ ...invoiceForm, date: e.target.value })}
-                  required
-                />
+
+              <div className="flex justify-end text-sm">
+                <span className="font-medium">Total: {formatVND(invoiceTotal)}</span>
               </div>
             </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Line Items *</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addInvoiceItem}>
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add Item
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {invoiceForm.items.map((item, index) => (
-                  <div key={index} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
-                    <div>
-                      {index === 0 && <Label className="text-xs text-muted-foreground">Description</Label>}
-                      <Input
-                        placeholder="Item description"
-                        value={item.description}
-                        onChange={(e) => updateInvoiceItem(index, "description", e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div>
-                      {index === 0 && <Label className="text-xs text-muted-foreground">Category</Label>}
-                      <Select
-                        value={item.category}
-                        onValueChange={(value) => updateInvoiceItem(index, "category", value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {expenseAccounts.map((acc) => (
-                            <SelectItem key={acc.name} value={acc.name}>
-                              {acc.account_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      {index === 0 && <Label className="text-xs text-muted-foreground">Amount</Label>}
-                      <Input
-                        type="number"
-                        min="1"
-                        step="1"
-                        placeholder="Amount"
-                        className="w-32"
-                        value={item.amount}
-                        onChange={(e) => updateInvoiceItem(index, "amount", e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div>
-                      {index === 0 && <Label className="text-xs text-muted-foreground">&nbsp;</Label>}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeInvoiceItem(index)}
-                        disabled={invoiceForm.items.length <= 1}
-                        className="h-10 w-10"
-                      >
-                        <Trash2 className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex justify-end text-sm">
-              <span className="font-medium">Total: {formatVND(invoiceTotal)}</span>
-            </div>
-
-            <DialogFooter>
+            <SheetFooter className="px-6 py-4 border-t shrink-0">
               <Button type="button" variant="outline" onClick={() => setSupplierInvoiceOpen(false)}>
                 Cancel
               </Button>
@@ -627,10 +621,10 @@ export default function ExpensesPage() {
               >
                 {isSubmitting ? "Creating..." : "Create Invoice"}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <DataTable
         columns={columns}

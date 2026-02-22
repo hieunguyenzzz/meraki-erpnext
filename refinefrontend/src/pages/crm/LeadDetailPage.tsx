@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Trash2, CalendarDays, ChevronDown, ArrowLeft, Mail, Phone, MapPin, Sparkles } from "lucide-react";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
@@ -238,25 +238,23 @@ export default function LeadDetailPage() {
 
       {/* Actions */}
       <div className="space-y-2 pt-2 border-t">
-        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10">
-              <Trash2 className="h-4 w-4 mr-2" /> Delete Lead
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Lead</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete this lead? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
+        <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteOpen(true)}>
+          <Trash2 className="h-4 w-4 mr-2" /> Delete Lead
+        </Button>
+        <Sheet open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <SheetContent side="right" className="sm:max-w-sm flex flex-col p-0">
+            <SheetHeader className="px-6 py-4 border-b shrink-0">
+              <SheetTitle>Delete Lead</SheetTitle>
+            </SheetHeader>
+            <div className="px-6 py-4">
+              <p className="text-sm text-muted-foreground">Are you sure you want to delete this lead? This action cannot be undone.</p>
+            </div>
+            <SheetFooter className="px-6 py-4 border-t shrink-0">
               <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
               <Button variant="destructive" onClick={handleDelete}>Delete</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
   );

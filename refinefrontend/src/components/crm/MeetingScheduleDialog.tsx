@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,25 +56,25 @@ export function MeetingScheduleDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && handleCancel()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Schedule Meeting</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={(v) => !v && handleCancel()}>
+      <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+        <SheetHeader className="px-6 py-4 border-b shrink-0">
+          <SheetTitle>Schedule Meeting</SheetTitle>
+          <p className="text-sm text-muted-foreground">
             Set the meeting date and time for {itemName}
-          </DialogDescription>
-        </DialogHeader>
-        {error && (
-          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-            {onErrorDismiss && (
-              <button className="ml-2 underline text-xs" onClick={onErrorDismiss}>
-                dismiss
-              </button>
-            )}
-          </div>
-        )}
-        <div className="space-y-4 py-4">
+          </p>
+        </SheetHeader>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {error && (
+            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+              {onErrorDismiss && (
+                <button className="ml-2 underline text-xs" onClick={onErrorDismiss}>
+                  dismiss
+                </button>
+              )}
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="meeting-datetime">Date & Time</Label>
             <Input
@@ -98,15 +97,15 @@ export function MeetingScheduleDialog({
             />
           </div>
         </div>
-        <DialogFooter>
+        <SheetFooter className="px-6 py-4 border-t shrink-0">
           <Button variant="outline" onClick={handleCancel}>
             Cancel
           </Button>
           <Button onClick={handleConfirm} disabled={!datetime || !subject.trim()}>
             Schedule
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
