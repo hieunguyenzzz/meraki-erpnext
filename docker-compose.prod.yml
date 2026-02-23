@@ -168,6 +168,25 @@ services:
     profiles:
       - setup
 
+  # Seed data migrator — runs on every deploy, exits when done
+  data-migrator:
+    build:
+      context: ./migration
+    restart: "no"
+    command: ["python", "migrate_auto.py"]
+    environment:
+      ERPNEXT_URL: http://meraki-backend:8000
+      ERPNEXT_API_KEY: ${ERPNEXT_API_KEY}
+      ERPNEXT_API_SECRET: ${ERPNEXT_API_SECRET}
+      STATE_FILE: /home/frappe/frappe-bench/sites/meraki_seed_state.json
+    volumes:
+      - meraki-sites:/home/frappe/frappe-bench/sites
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - dokploy-network
+
   # React frontend - exposed via Dokploy domain (app.merakiwp.com)
   react-frontend:
     build:
