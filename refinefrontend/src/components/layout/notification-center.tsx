@@ -82,24 +82,36 @@ function NotificationBell() {
     invalidate({ resource: "PWA Notification", invalidates: ["list"] });
   }
 
+  async function submitLeaveApplication(appName: string, status: "Approved" | "Rejected") {
+    await customMutation({
+      url: "/api/method/frappe.client.set_value",
+      method: "post",
+      values: { doctype: "Leave Application", name: appName, fieldname: "status", value: status },
+    });
+    // Fetch full doc before submitting (frappe.client.submit requires the full doc object)
+    const SITE_NAME = "erp.merakiwp.com";
+    const fullDocRes = await fetch(
+      `/api/resource/Leave Application/${encodeURIComponent(appName)}`,
+      { headers: { "X-Frappe-Site-Name": SITE_NAME }, credentials: "include" }
+    );
+    const fullDocData = await fullDocRes.json();
+    await fetch("/api/method/frappe.client.submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
+      credentials: "include",
+      body: JSON.stringify({ doc: fullDocData.data }),
+    });
+  }
+
   async function handleApprove(appName: string, notifName: string) {
     setProcessingId(notifName);
     try {
-      await customMutation({
-        url: "/api/method/frappe.client.set_value",
-        method: "post",
-        values: { doctype: "Leave Application", name: appName, fieldname: "status", value: "Approved" },
-      });
-      await customMutation({
-        url: "/api/method/frappe.client.submit",
-        method: "post",
-        values: { doctype: "Leave Application", name: appName },
-      });
-      markRead(notifName);
+      await submitLeaveApplication(appName, "Approved");
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
     } catch {
       // silently fail — user can retry
     } finally {
+      markRead(notifName);
       setProcessingId(null);
     }
   }
@@ -107,21 +119,12 @@ function NotificationBell() {
   async function handleReject(appName: string, notifName: string) {
     setProcessingId(notifName);
     try {
-      await customMutation({
-        url: "/api/method/frappe.client.set_value",
-        method: "post",
-        values: { doctype: "Leave Application", name: appName, fieldname: "status", value: "Rejected" },
-      });
-      await customMutation({
-        url: "/api/method/frappe.client.submit",
-        method: "post",
-        values: { doctype: "Leave Application", name: appName },
-      });
-      markRead(notifName);
+      await submitLeaveApplication(appName, "Rejected");
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
     } catch {
       // silently fail
     } finally {
+      markRead(notifName);
       setProcessingId(null);
     }
   }
