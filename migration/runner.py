@@ -4,6 +4,7 @@ from pathlib import Path
 # Append-only — never reorder or remove entries
 ORDERED_PHASES = [
     "v001_wedding_venues",
+    "v002_wedding_service_item",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -33,10 +34,11 @@ def save_state(state_file: Path, applied: list) -> None:
 
 
 def run_pending(client) -> int:
-    from phases import v001_wedding_venues
+    from phases import v001_wedding_venues, v002_wedding_service_item
 
     phase_fns = {
         "v001_wedding_venues": v001_wedding_venues.run,
+        "v002_wedding_service_item": v002_wedding_service_item.run,
     }
 
     state_file = get_state_file()
