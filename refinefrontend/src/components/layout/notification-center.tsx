@@ -84,22 +84,9 @@ function NotificationBell() {
 
   async function submitLeaveApplication(appName: string, status: "Approved" | "Rejected") {
     await customMutation({
-      url: "/api/method/frappe.client.set_value",
+      url: "/api/method/update_leave_status",
       method: "post",
-      values: { doctype: "Leave Application", name: appName, fieldname: "status", value: status },
-    });
-    // Fetch full doc before submitting (frappe.client.submit requires the full doc object)
-    const SITE_NAME = "erp.merakiwp.com";
-    const fullDocRes = await fetch(
-      `/api/resource/Leave Application/${encodeURIComponent(appName)}`,
-      { headers: { "X-Frappe-Site-Name": SITE_NAME }, credentials: "include" }
-    );
-    const fullDocData = await fullDocRes.json();
-    await fetch("/api/method/frappe.client.submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
-      credentials: "include",
-      body: JSON.stringify({ doc: fullDocData.data }),
+      values: { name: appName, status },
     });
   }
 
