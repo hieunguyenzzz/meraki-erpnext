@@ -1,10 +1,8 @@
 import { useState } from "react";
 import {
-  useGetIdentity,
-  useList,
   usePermissions,
+  useCustom,
   useCustomMutation,
-  useUpdate,
   useInvalidate,
 } from "@refinedev/core";
 import { Bell, Check, X, Trash2 } from "lucide-react";
@@ -21,7 +19,6 @@ import { formatDate } from "@/lib/format";
 
 interface PwaNotification {
   name: string;
-  to_user: string;
   from_user: string;
   message: string;
   read: number;
@@ -40,77 +37,34 @@ export function NotificationCenter() {
 }
 
 function NotificationBell() {
-  const { data: identity } = useGetIdentity<{ email: string }>();
-  const email = identity?.email ?? "";
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
-  const { mutate: updateNotification } = useUpdate();
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const { result } = useList<PwaNotification>({
-    resource: "PWA Notification",
-    filters: [
-      { field: "to_user", operator: "eq", value: email },
-      { field: "read", operator: "eq", value: 0 },
-    ],
-    sorters: [{ field: "creation", order: "desc" }],
-    pagination: { pageSize: 20 },
-    meta: {
-      fields: [
-        "name",
-        "to_user",
-        "from_user",
-        "message",
-        "read",
-        "reference_document_type",
-        "reference_document_name",
-        "creation",
-      ],
-    },
-    queryOptions: { enabled: !!email, refetchInterval: 60000 },
+  const { query, result: notifResult } = useCustom({
+    url: "/api/method/get_my_notifications",
+    method: "get",
+    queryOptions: { refetchInterval: 30_000 },
   });
 
-  const notifications = result?.data ?? [];
-  const count = notifications.length;
+  const notifications: PwaNotification[] = (notifResult?.data as any)?.message?.notifications ?? [];
+  const count: number = (notifResult?.data as any)?.message?.total ?? 0;
+  const refetch = query.refetch;
 
-  function markRead(notifName: string) {
-    updateNotification({
-      resource: "PWA Notification",
-      id: notifName,
-      values: { read: 1 },
-    });
-    invalidate({ resource: "PWA Notification", invalidates: ["list"] });
-  }
-
-  async function submitLeaveApplication(appName: string, status: "Approved" | "Rejected") {
-    await customMutation({
-      url: "/api/method/update_leave_status",
-      method: "post",
-      values: { name: appName, status },
-    });
-  }
-
-  async function handleApprove(appName: string, notifName: string) {
+  async function handleAction(notifName: string, action: "read" | "approve" | "reject") {
     setProcessingId(notifName);
     try {
-      await submitLeaveApplication(appName, "Approved");
-      invalidate({ resource: "Leave Application", invalidates: ["list"] });
-      markRead(notifName);
+      await customMutation({
+        url: "/api/method/handle_notification_action",
+        method: "post",
+        values: { notif_name: notifName, action },
+      });
+      if (action === "approve" || action === "reject") {
+        invalidate({ resource: "Leave Application", invalidates: ["list"] });
+      }
+      refetch();
     } catch {
-      // silently fail — user can retry
-    } finally {
-      setProcessingId(null);
-    }
-  }
-
-  async function handleReject(appName: string, notifName: string) {
-    setProcessingId(notifName);
-    try {
-      await submitLeaveApplication(appName, "Rejected");
-      invalidate({ resource: "Leave Application", invalidates: ["list"] });
-      markRead(notifName);
-    } catch {
-      // silently fail
+      // user can retry
     } finally {
       setProcessingId(null);
     }
@@ -162,7 +116,7 @@ function NotificationBell() {
                           variant="default"
                           className="h-7 px-2.5 text-xs"
                           disabled={isProcessing}
-                          onClick={() => handleApprove(notif.reference_document_name, notif.name)}
+                          onClick={() => handleAction(notif.name, "approve")}
                         >
                           <Check className="mr-1 h-3 w-3" />
                           {isProcessing ? "..." : "Approve"}
@@ -172,7 +126,7 @@ function NotificationBell() {
                           variant="destructive"
                           className="h-7 px-2.5 text-xs"
                           disabled={isProcessing}
-                          onClick={() => handleReject(notif.reference_document_name, notif.name)}
+                          onClick={() => handleAction(notif.name, "reject")}
                         >
                           <X className="mr-1 h-3 w-3" />
                           Reject
@@ -184,7 +138,7 @@ function NotificationBell() {
                       variant="ghost"
                       className="h-7 px-2 text-xs ml-auto"
                       disabled={isProcessing}
-                      onClick={() => markRead(notif.name)}
+                      onClick={() => handleAction(notif.name, "read")}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>

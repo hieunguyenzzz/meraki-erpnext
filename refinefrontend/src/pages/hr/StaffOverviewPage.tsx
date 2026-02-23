@@ -361,7 +361,7 @@ export default function StaffOverviewPage() {
           gender: inviteForm.gender,
           date_of_birth: inviteForm.dateOfBirth,
           status: "Active",
-          leave_approver: "Administrator",
+          leave_approver: "xuanhoang@merakiwp.com",
           custom_meraki_id: nextMerakiId,
           designation: inviteForm.designation || undefined,
           department: inviteForm.department || undefined,

@@ -23,6 +23,7 @@ export interface Employee {
   custom_sales_commission_pct?: number;
   custom_insurance_salary?: number;
   relieving_date?: string;
+  leave_approver?: string;
 }
 
 export interface EmployeeProfile {

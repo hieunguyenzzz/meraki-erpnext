@@ -66,6 +66,15 @@ export default function EmployeeDetailPage() {
 
   const { result: employee } = useOne<Employee>({ resource: "Employee", id: name! });
 
+  // Active users for leave approver dropdown
+  const { result: usersResult } = useList({
+    resource: "User",
+    pagination: { mode: "off" },
+    filters: [{ field: "enabled", operator: "eq", value: 1 }],
+    meta: { fields: ["name", "full_name", "email"] },
+  });
+  const users = (usersResult?.data ?? []) as any[];
+
   // Leave allocations for this employee (submitted)
   const { result: allocsResult } = useList({
     resource: "Leave Allocation",
@@ -215,6 +224,7 @@ export default function EmployeeDetailPage() {
         custom_staff_roles: employee.custom_staff_roles || "",
         ctc: employee.ctc ?? "",
         custom_insurance_salary: employee.custom_insurance_salary ?? "",
+        leave_approver: employee.leave_approver || "",
       });
     }
     setEditSection(section);
@@ -400,6 +410,12 @@ export default function EmployeeDetailPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Insurance Salary (BHXH)</span>
                 <span>{formatVND(employee.custom_insurance_salary)}</span>
+              </div>
+            )}
+            {employee.leave_approver && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Leave Approver</span>
+                <span>{employee.leave_approver}</span>
               </div>
             )}
           </CardContent>
@@ -694,6 +710,20 @@ export default function EmployeeDetailPage() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-insurance-salary">Insurance Salary / BHXH (VND)</Label>
                   <Input id="edit-insurance-salary" type="number" value={editValues.custom_insurance_salary} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_insurance_salary: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Leave Approver</Label>
+                  <Select
+                    value={editValues.leave_approver}
+                    onValueChange={(v) => setEditValues((prev) => ({ ...prev, leave_approver: v }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select approver" /></SelectTrigger>
+                    <SelectContent>
+                      {users.map((u) => (
+                        <SelectItem key={u.name} value={u.name}>{u.full_name || u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </>
             )}
