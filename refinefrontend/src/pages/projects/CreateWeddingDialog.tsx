@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useList, useCreate, useInvalidate } from "@refinedev/core";
 import { useNavigate } from "react-router";
 import {
@@ -11,6 +11,7 @@ import {
   Check,
   ChevronsUpDown,
   Plus,
+  X,
 } from "lucide-react";
 import {
   Sheet,
@@ -79,6 +80,8 @@ interface FormData {
   guestCount: string;
   packageAmount: string;
   taxType: "tax_free" | "vat_included";
+  weddingType: "HCM" | "Destination" | "";
+  extraEmails: string[];
   // Team
   leadPlanner: string;
   supportPlanner: string;
@@ -93,11 +96,13 @@ const initialFormData: FormData = {
   useExistingCustomer: false,
   existingCustomerId: null,
   existingCustomerName: null,
+  extraEmails: [],
   weddingDate: "",
   venue: "",
   guestCount: "",
   packageAmount: "",
   taxType: "tax_free",
+  weddingType: "",
   leadPlanner: "",
   supportPlanner: "",
   assistant1: "",
@@ -211,7 +216,7 @@ export function CreateWeddingDialog({
       case "client":
         return formData.coupleName.trim().length > 0;
       case "wedding":
-        return formData.weddingDate.length > 0;
+        return formData.weddingDate.length > 0 && formData.weddingType !== "";
       case "team":
         return formData.leadPlanner.length > 0;
       case "review":
@@ -260,6 +265,25 @@ export function CreateWeddingDialog({
         if (!customerId) throw new Error("Failed to create customer");
       }
 
+      // 1b. Create Contact records for extra emails (non-blocking)
+      const validExtraEmails = formData.extraEmails.filter((e) => e.trim());
+      for (const extraEmail of validExtraEmails) {
+        try {
+          await createDoc({
+            resource: "Contact",
+            values: {
+              first_name: formData.useExistingCustomer
+                ? formData.existingCustomerName
+                : formData.coupleName.trim(),
+              email_ids: [{ email_id: extraEmail.trim(), is_primary: 0 }],
+              links: [{ link_doctype: "Customer", link_name: customerId }],
+            },
+          });
+        } catch {
+          // Extra email contact creation is best-effort
+        }
+      }
+
       // 2. Create Sales Order (wedding booking)
       const today = new Date().toISOString().slice(0, 10);
       const salesOrderValues: Record<string, unknown> = {
@@ -267,6 +291,7 @@ export function CreateWeddingDialog({
         transaction_date: today,
         delivery_date: formData.weddingDate,
         custom_venue: formData.venue.trim() || undefined,
+        custom_wedding_type: formData.weddingType || undefined,
         items: [
           {
             item_code: "Wedding Planning Service",
@@ -325,7 +350,7 @@ export function CreateWeddingDialog({
           expected_end_date: formData.weddingDate,
           sales_order: salesOrderName,
           customer: customerId,
-          custom_project_stage: "Onboarding",
+          custom_project_stage: formData.weddingDate < new Date().toISOString().slice(0, 10) ? "Completed" : "Onboarding",
           custom_lead_planner: formData.leadPlanner || null,
           custom_support_planner: formData.supportPlanner && formData.supportPlanner !== "__none__" ? formData.supportPlanner : null,
           custom_assistant_1: formData.assistant1 && formData.assistant1 !== "__none__" ? formData.assistant1 : null,
@@ -601,6 +626,47 @@ export function CreateWeddingDialog({
                   className="focus-visible:ring-[#C4A962]"
                 />
               </div>
+
+              {/* Extra email rows */}
+              {formData.extraEmails.map((email, i) => (
+                <div key={i} className="space-y-2">
+                  <Label className="text-muted-foreground">Email {i + 2}</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="email"
+                      placeholder="Additional email"
+                      value={email}
+                      onChange={(e) => {
+                        const updated = [...formData.extraEmails];
+                        updated[i] = e.target.value;
+                        updateFormData({ extraEmails: updated });
+                      }}
+                      className="focus-visible:ring-[#C4A962]"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        updateFormData({
+                          extraEmails: formData.extraEmails.filter((_, idx) => idx !== i),
+                        })
+                      }
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => updateFormData({ extraEmails: [...formData.extraEmails, ""] })}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors pt-1"
+              >
+                <Plus className="h-4 w-4" />
+                Add another email
+              </button>
             </div>
           )}
 
@@ -751,6 +817,36 @@ export function CreateWeddingDialog({
                       className={cn(
                         "flex-1 py-2 px-3 rounded-md border text-sm font-medium transition-all",
                         formData.taxType === opt.value
+                          ? "border-[#C4A962] bg-[#C4A962]/10 text-[#C4A962]"
+                          : "border-border text-muted-foreground hover:border-[#C4A962]/50"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">
+                  Wedding Type <span className="text-destructive">*</span>
+                </Label>
+                <div className="flex gap-3">
+                  {[
+                    { value: "HCM", label: "HCM" },
+                    { value: "Destination", label: "Destination" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() =>
+                        updateFormData({
+                          weddingType: opt.value as FormData["weddingType"],
+                        })
+                      }
+                      className={cn(
+                        "flex-1 py-2 px-3 rounded-md border text-sm font-medium transition-all",
+                        formData.weddingType === opt.value
                           ? "border-[#C4A962] bg-[#C4A962]/10 text-[#C4A962]"
                           : "border-border text-muted-foreground hover:border-[#C4A962]/50"
                       )}
@@ -936,6 +1032,12 @@ export function CreateWeddingDialog({
                     <div>{formData.email}</div>
                   </>
                 )}
+                {formData.extraEmails.filter(Boolean).map((e, i) => (
+                  <React.Fragment key={i}>
+                    <div><span className="text-muted-foreground">Email {i + 2}:</span></div>
+                    <div>{e}</div>
+                  </React.Fragment>
+                ))}
                 {formData.phone && (
                   <>
                     <div>
@@ -989,6 +1091,10 @@ export function CreateWeddingDialog({
                     ? "VAT Included (8%)"
                     : "Tax Free"}
                 </div>
+                <div>
+                  <span className="text-muted-foreground">Type:</span>
+                </div>
+                <div>{formData.weddingType || "—"}</div>
 
                 {/* Team */}
                 <div className="col-span-2 pt-3 border-t mt-2">
