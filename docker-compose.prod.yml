@@ -185,6 +185,7 @@ services:
       backend:
         condition: service_started
     networks:
+      - default
       - dokploy-network
 
   # React frontend - exposed via Dokploy domain (app.merakiwp.com)
