@@ -5,6 +5,7 @@ from pathlib import Path
 ORDERED_PHASES = [
     "v001_wedding_venues",
     "v002_wedding_service_item",
+    "v003_wedding_service_item_fix",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -34,11 +35,12 @@ def save_state(state_file: Path, applied: list) -> None:
 
 
 def run_pending(client) -> int:
-    from phases import v001_wedding_venues, v002_wedding_service_item
+    from phases import v001_wedding_venues, v002_wedding_service_item, v003_wedding_service_item_fix
 
     phase_fns = {
         "v001_wedding_venues": v001_wedding_venues.run,
         "v002_wedding_service_item": v002_wedding_service_item.run,
+        "v003_wedding_service_item_fix": v003_wedding_service_item_fix.run,
     }
 
     state_file = get_state_file()
