@@ -95,10 +95,10 @@ function NotificationBell() {
     try {
       await submitLeaveApplication(appName, "Approved");
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
+      markRead(notifName);
     } catch {
       // silently fail — user can retry
     } finally {
-      markRead(notifName);
       setProcessingId(null);
     }
   }
@@ -108,10 +108,10 @@ function NotificationBell() {
     try {
       await submitLeaveApplication(appName, "Rejected");
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
+      markRead(notifName);
     } catch {
       // silently fail
     } finally {
-      markRead(notifName);
       setProcessingId(null);
     }
   }
