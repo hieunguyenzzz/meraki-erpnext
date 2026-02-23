@@ -613,20 +613,6 @@ export function CreateWeddingDialog({
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-muted-foreground">
-                  Phone
-                </Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+84 123 456 789"
-                  value={formData.phone}
-                  onChange={(e) => updateFormData({ phone: e.target.value })}
-                  className="focus-visible:ring-[#C4A962]"
-                />
-              </div>
-
               {/* Extra email rows */}
               {formData.extraEmails.map((email, i) => (
                 <div key={i} className="space-y-2">
@@ -667,6 +653,20 @@ export function CreateWeddingDialog({
                 <Plus className="h-4 w-4" />
                 Add another email
               </button>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-muted-foreground">
+                  Phone
+                </Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="+84 123 456 789"
+                  value={formData.phone}
+                  onChange={(e) => updateFormData({ phone: e.target.value })}
+                  className="focus-visible:ring-[#C4A962]"
+                />
+              </div>
             </div>
           )}
 
