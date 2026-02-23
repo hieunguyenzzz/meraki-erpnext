@@ -19,11 +19,12 @@ def run(client):
     created = 0
     for name in VENUES:
         if not client.exists("Supplier", {"supplier_name": name.strip(), "supplier_group": "Wedding Venues"}):
-            client.create("Supplier", {
+            result = client.create("Supplier", {
                 "supplier_name": name.strip(),
                 "supplier_group": "Wedding Venues",
                 "supplier_type": "Company",
             })
-            created += 1
+            if result:
+                created += 1
 
     print(f"  Venues: {created} created, {len(VENUES) - created} already existed")
