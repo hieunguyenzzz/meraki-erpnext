@@ -10,6 +10,12 @@ VENUES = [
 
 
 def run(client):
+    # Remove unique constraint from custom_meraki_venue_id so seed suppliers
+    # (which have no Meraki ID) don't collide with the INT default value of 0.
+    if client.exists("Custom Field", {"dt": "Supplier", "fieldname": "custom_meraki_venue_id"}):
+        client.update("Custom Field", "Supplier-custom_meraki_venue_id", {"unique": 0})
+        print("  Removed unique constraint from custom_meraki_venue_id")
+
     if not client.exists("Supplier Group", {"supplier_group_name": "Wedding Venues"}):
         client.create("Supplier Group", {
             "supplier_group_name": "Wedding Venues",
