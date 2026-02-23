@@ -346,7 +346,6 @@ export function CreateWeddingDialog({
         resource: "Project",
         values: {
           project_name: `${formData.coupleName.trim()} Wedding`,
-          project_type: "External",
           expected_end_date: formData.weddingDate,
           sales_order: salesOrderName,
           customer: customerId,
