@@ -246,7 +246,6 @@ export default function PayrollPage() {
   const salarySlips = detailedSlips.length > 0 ? detailedSlips : basicSlips;
   const hasDraftSlips = salarySlips.some((s) => s.docstatus === 0);
   const allSlipsSubmitted = currentPE && salarySlips.length > 0 && salarySlips.every((s) => s.docstatus === 1);
-  const peHasNoSlips = currentPE && salarySlips.length === 0 && !isLoading;
 
   const { result: histResult } = useList({
     resource: "Payroll Entry",
@@ -466,6 +465,7 @@ export default function PayrollPage() {
 
   const isLoading = peQuery?.isLoading || slipsQuery?.isLoading || loadingDetails;
   const isWorking = generating || calculatingCommissions;
+  const peHasNoSlips = currentPE && salarySlips.length === 0 && !isLoading;
 
   return (
     <div className="space-y-4">
