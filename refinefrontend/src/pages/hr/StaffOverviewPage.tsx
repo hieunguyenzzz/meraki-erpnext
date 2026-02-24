@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -60,6 +61,17 @@ export default function StaffOverviewPage() {
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Unsaved-changes guard
+  const [pendingClose, setPendingClose] = useState<(() => void) | null>(null);
+  const [initialReviewDate, setInitialReviewDate] = useState("");
+  const [initialReviewNotes, setInitialReviewNotes] = useState("");
+  const [initialRoles, setInitialRoles] = useState<Set<string>>(new Set());
+
+  function tryClose(isDirty: boolean, closeFn: () => void) {
+    if (isDirty) setPendingClose(() => closeFn);
+    else closeFn();
+  }
 
   const invalidate = useInvalidate();
   const { mutateAsync: updateEmployee } = useUpdate();
@@ -212,9 +224,13 @@ export default function StaffOverviewPage() {
 
   // Handle adding review
   function openReviewDialog(employee: StaffRow) {
+    const date = employee.custom_last_review_date || new Date().toISOString().split("T")[0];
+    const notes = employee.custom_review_notes || "";
     setSelectedEmployee(employee);
-    setReviewDate(employee.custom_last_review_date || new Date().toISOString().split("T")[0]);
-    setReviewNotes(employee.custom_review_notes || "");
+    setReviewDate(date);
+    setReviewNotes(notes);
+    setInitialReviewDate(date);
+    setInitialReviewNotes(notes);
     setError(null);
     setReviewDialogOpen(true);
   }
@@ -244,8 +260,10 @@ export default function StaffOverviewPage() {
 
   // Handle roles dialog
   function openRolesDialog(employee: StaffRow) {
+    const roles = new Set<string>(employee.staff_roles);
     setSelectedEmployee(employee);
-    setSelectedRoles(new Set(employee.staff_roles));
+    setSelectedRoles(roles);
+    setInitialRoles(roles);
     setError(null);
     setRolesDialogOpen(true);
   }
@@ -477,6 +495,10 @@ export default function StaffOverviewPage() {
 
   const isLoading = employeesQuery.isLoading;
 
+  const isReviewDirty = reviewDate !== initialReviewDate || reviewNotes !== initialReviewNotes;
+  const isRolesDirty = [...selectedRoles].sort().join(",") !== [...initialRoles].sort().join(",");
+  const isInviteDirty = !inviteSuccess && (inviteForm.email.trim() !== "" || inviteForm.fullName.trim() !== "");
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -581,7 +603,7 @@ export default function StaffOverviewPage() {
       />
 
       {/* Review Sheet */}
-      <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+      <Sheet open={reviewDialogOpen} onOpenChange={(open) => { if (!open) tryClose(isReviewDirty, () => setReviewDialogOpen(false)); }}>
         <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>Review</SheetTitle>
@@ -625,7 +647,7 @@ export default function StaffOverviewPage() {
       </Sheet>
 
       {/* Roles Sheet */}
-      <Sheet open={rolesDialogOpen} onOpenChange={setRolesDialogOpen}>
+      <Sheet open={rolesDialogOpen} onOpenChange={(open) => { if (!open) tryClose(isRolesDirty, () => setRolesDialogOpen(false)); }}>
         <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>Assign Staff Roles</SheetTitle>
@@ -666,8 +688,22 @@ export default function StaffOverviewPage() {
         </SheetContent>
       </Sheet>
 
+      {/* Unsaved Changes Confirmation */}
+      <Dialog open={pendingClose !== null} onOpenChange={(open) => { if (!open) setPendingClose(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Discard changes?</DialogTitle>
+            <DialogDescription>You have unsaved changes. If you leave now they will be lost.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingClose(null)}>Keep editing</Button>
+            <Button variant="destructive" onClick={() => { pendingClose?.(); setPendingClose(null); }}>Discard</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Invite Staff Sheet */}
-      <Sheet open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+      <Sheet open={inviteDialogOpen} onOpenChange={(open) => { if (!open) tryClose(isInviteDirty, () => setInviteDialogOpen(false)); }}>
         <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>Invite Staff</SheetTitle>
