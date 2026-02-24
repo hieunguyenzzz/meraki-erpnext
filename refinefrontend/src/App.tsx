@@ -84,25 +84,25 @@ export default function App() {
           accessControlProvider={accessControlProvider}
           routerProvider={routerProvider}
           resources={[
-            { name: "Lead", list: "/crm", show: "/crm/leads/:id" },
-            { name: "Opportunity", list: "/crm", show: "/crm/opportunities/:id" },
-            { name: "Job Applicant", list: "/hr/recruiting", show: "/hr/recruiting/:id" },
+            { name: "Lead", list: "/crm", show: "/crm/leads/:name" },
+            { name: "Opportunity", list: "/crm", show: "/crm/opportunities/:name" },
+            { name: "Job Applicant", list: "/hr/recruiting", show: "/hr/recruiting/:name" },
             { name: "Job Opening" },
             { name: "Interview", list: "/hr/recruiting/interviews" },
             { name: "Interview Round" },
             { name: "Interview Detail" },
-            { name: "Employee", list: "/hr/employees", show: "/hr/employees/:id" },
+            { name: "Employee", list: "/hr/employees", show: "/hr/employees/:name" },
             { name: "Leave Application" },
             { name: "Leave Type" },
             { name: "Leave Allocation" },
             { name: "Attendance Request" },
             { name: "Payroll Entry", list: "/hr/payroll" },
             { name: "Salary Slip", list: "/hr/payroll" },
-            { name: "Sales Invoice", list: "/finance/invoices", show: "/finance/invoices/:id" },
-            { name: "Payment Entry", list: "/finance/payments", show: "/finance/payments/:id" },
-            { name: "Purchase Invoice", list: "/finance/expenses", show: "/finance/expenses/:id" },
+            { name: "Sales Invoice", list: "/finance/invoices", show: "/finance/invoices/:name" },
+            { name: "Payment Entry", list: "/finance/payments", show: "/finance/payments/:name" },
+            { name: "Purchase Invoice", list: "/finance/expenses", show: "/finance/expenses/:name" },
             { name: "Journal Entry", list: "/finance/journals" },
-            { name: "Project", list: "/projects", show: "/projects/:id" },
+            { name: "Project", list: "/projects", show: "/projects/:name" },
           ]}
           options={{ syncWithLocation: true, disableTelemetry: true }}
         >
