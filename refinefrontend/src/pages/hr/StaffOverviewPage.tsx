@@ -72,8 +72,6 @@ export default function StaffOverviewPage() {
     fullName: "",
     gender: "Female",
     dateOfBirth: "2000-01-01",
-    designation: "",
-    department: "",
     dateOfJoining: new Date().toISOString().split("T")[0],
   });
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
@@ -300,8 +298,6 @@ export default function StaffOverviewPage() {
         fullName: "",
         gender: "Female",
         dateOfBirth: "2000-01-01",
-        designation: "",
-        department: "",
         dateOfJoining: new Date().toISOString().split("T")[0],
       });
       setInviteError(null);
@@ -361,10 +357,7 @@ export default function StaffOverviewPage() {
           gender: inviteForm.gender,
           date_of_birth: inviteForm.dateOfBirth,
           status: "Active",
-          leave_approver: "xuanhoang@merakiwp.com",
           custom_meraki_id: nextMerakiId,
-          designation: inviteForm.designation || undefined,
-          department: inviteForm.department || undefined,
         },
       });
 
@@ -756,35 +749,6 @@ export default function StaffOverviewPage() {
                       value={inviteForm.dateOfBirth}
                       onChange={(e) => setInviteForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
                     />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-designation">Designation</Label>
-                    <Input
-                      id="invite-designation"
-                      placeholder="e.g. Wedding Planner"
-                      value={inviteForm.designation}
-                      onChange={(e) => setInviteForm(prev => ({ ...prev, designation: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-department">Department</Label>
-                    <Select
-                      value={inviteForm.department}
-                      onValueChange={(value) => setInviteForm(prev => ({ ...prev, department: value }))}
-                    >
-                      <SelectTrigger id="invite-department">
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Operations">Operations</SelectItem>
-                        <SelectItem value="Management">Management</SelectItem>
-                        <SelectItem value="Administration">Administration</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
 
