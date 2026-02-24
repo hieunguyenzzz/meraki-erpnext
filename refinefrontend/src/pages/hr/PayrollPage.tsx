@@ -245,6 +245,8 @@ export default function PayrollPage() {
 
   const salarySlips = detailedSlips.length > 0 ? detailedSlips : basicSlips;
   const hasDraftSlips = salarySlips.some((s) => s.docstatus === 0);
+  const allSlipsSubmitted = currentPE && salarySlips.length > 0 && salarySlips.every((s) => s.docstatus === 1);
+  const peHasNoSlips = currentPE && salarySlips.length === 0 && !isLoading;
 
   const { result: histResult } = useList({
     resource: "Payroll Entry",
@@ -473,7 +475,7 @@ export default function PayrollPage() {
           <p className="text-muted-foreground">Salary processing and history</p>
         </div>
         <div className="flex gap-2">
-          {!currentPE && !isLoading && (
+          {(!currentPE || peHasNoSlips) && !isLoading && (
             <Button onClick={handleGenerate} disabled={isWorking}>
               {generating ? (calculatingCommissions ? "Calculating commissions..." : "Generating...") : `Generate for ${monthLabel(today)}`}
             </Button>
@@ -487,6 +489,9 @@ export default function PayrollPage() {
                 {submitting ? "Submitting..." : "Submit All"}
               </Button>
             </>
+          )}
+          {allSlipsSubmitted && (
+            <Badge variant="success" className="px-3 py-1.5 text-sm">Payroll Submitted</Badge>
           )}
         </div>
       </div>
