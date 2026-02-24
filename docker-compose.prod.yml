@@ -175,7 +175,7 @@ services:
     restart: "no"
     command: ["python", "migrate_auto.py"]
     environment:
-      ERPNEXT_URL: http://frontend:8080
+      ERPNEXT_URL: https://app.merakiwp.com
       ERPNEXT_API_KEY: ${ERPNEXT_API_KEY}
       ERPNEXT_API_SECRET: ${ERPNEXT_API_SECRET}
       STATE_FILE: /home/frappe/frappe-bench/sites/meraki_seed_state.json
