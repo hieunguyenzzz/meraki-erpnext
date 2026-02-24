@@ -442,19 +442,15 @@ export default function PayrollPage() {
       if (errors.length > 0) {
         setError(errors.join(" | "));
       } else {
-        // All slips submitted — submit the Payroll Entry to post GL entries
+        // All slips submitted — create accrual JV to post GL entries
         try {
-          const peDocRes = await fetch(`${apiUrl}/resource/Payroll Entry/${encodeURIComponent(currentPE.name)}`, { credentials: "include" });
-          const peDocData = await peDocRes.json();
-          if (peDocData.data?.docstatus === 0) {
-            await customMutation({
-              url: "/api/method/frappe.client.submit",
-              method: "post",
-              values: { doc: peDocData.data },
-            });
-          }
+          await customMutation({
+            url: "/api/method/run_doc_method",
+            method: "post",
+            values: { dt: "Payroll Entry", dn: currentPE.name, method: "make_accrual_jv_entry" },
+          });
         } catch (peErr) {
-          setError(`Slips submitted but payroll posting failed: ${extractErrorMessage(peErr, "")}`);
+          setError(`Slips submitted but GL posting failed: ${extractErrorMessage(peErr, "")}`);
         }
       }
     } finally {
