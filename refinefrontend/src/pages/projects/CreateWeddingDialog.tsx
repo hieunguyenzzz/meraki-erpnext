@@ -71,9 +71,6 @@ interface FormData {
   coupleName: string;
   email: string;
   phone: string;
-  useExistingCustomer: boolean;
-  existingCustomerId: string | null;
-  existingCustomerName: string | null;
   // Wedding
   weddingDate: string;
   venue: string;
@@ -92,9 +89,6 @@ const initialFormData: FormData = {
   coupleName: "",
   email: "",
   phone: "",
-  useExistingCustomer: false,
-  existingCustomerId: null,
-  existingCustomerName: null,
   extraEmails: [],
   weddingDate: "",
   venue: "",
@@ -217,7 +211,7 @@ export function CreateWeddingDialog({
   const canProceed = () => {
     switch (currentStep) {
       case "client":
-        return formData.coupleName.trim().length > 0;
+        return formData.coupleName.trim().length > 0 && !foundCustomer;
       case "wedding":
         return formData.weddingDate.length > 0 && formData.weddingType !== "";
       case "team":
@@ -248,25 +242,20 @@ export function CreateWeddingDialog({
     setError(null);
 
     try {
-      // 1. Create or use existing customer
-      let customerId: string;
-      if (formData.useExistingCustomer && formData.existingCustomerId) {
-        customerId = formData.existingCustomerId;
-      } else {
-        const customerResult = await createDoc({
-          resource: "Customer",
-          values: {
-            customer_name: formData.coupleName.trim(),
-            customer_type: "Individual",
-            customer_group: "Wedding Clients",
-            territory: "Vietnam",
-            email_id: formData.email.trim() || undefined,
-            mobile_no: formData.phone.trim() || undefined,
-          },
-        });
-        customerId = customerResult?.data?.name;
-        if (!customerId) throw new Error("Failed to create customer");
-      }
+      // 1. Create customer
+      const customerResult = await createDoc({
+        resource: "Customer",
+        values: {
+          customer_name: formData.coupleName.trim(),
+          customer_type: "Individual",
+          customer_group: "Wedding Clients",
+          territory: "Vietnam",
+          email_id: formData.email.trim() || undefined,
+          mobile_no: formData.phone.trim() || undefined,
+        },
+      });
+      const customerId = customerResult?.data?.name;
+      if (!customerId) throw new Error("Failed to create customer");
 
       // 1b. Create Contact records for extra emails (non-blocking)
       const validExtraEmails = formData.extraEmails.filter((e) => e.trim());
@@ -275,9 +264,7 @@ export function CreateWeddingDialog({
           await createDoc({
             resource: "Contact",
             values: {
-              first_name: formData.useExistingCustomer
-                ? formData.existingCustomerName
-                : formData.coupleName.trim(),
+              first_name: formData.coupleName.trim(),
               email_ids: [{ email_id: extraEmail.trim(), is_primary: 0 }],
               links: [{ link_doctype: "Customer", link_name: customerId }],
             },
@@ -416,25 +403,6 @@ export function CreateWeddingDialog({
     }
   };
 
-  const handleLinkExistingCustomer = () => {
-    if (foundCustomer) {
-      updateFormData({
-        useExistingCustomer: true,
-        existingCustomerId: foundCustomer.name,
-        existingCustomerName: foundCustomer.customer_name,
-      });
-    }
-  };
-
-  const handleCreateNewAnyway = () => {
-    setFoundCustomer(null);
-    updateFormData({
-      useExistingCustomer: false,
-      existingCustomerId: null,
-      existingCustomerName: null,
-    });
-  };
-
   const getEmployeeName = (employeeId: string) => {
     const emp = employees.find((e) => e.name === employeeId);
     return emp?.employee_name || employeeId;
@@ -552,81 +520,11 @@ export function CreateWeddingDialog({
                 </div>
               </div>
 
-              {/* Duplicate customer warning */}
-              {foundCustomer && !formData.useExistingCustomer && (
-                <div
-                  className="p-4 rounded-lg border"
-                  style={{ backgroundColor: THEME.cream }}
-                >
-                  <div className="flex items-start gap-3">
-                    <AlertCircle
-                      className="h-5 w-5 shrink-0 mt-0.5"
-                      style={{ color: THEME.gold }}
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">
-                        Existing customer found
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        "{foundCustomer.customer_name}" already exists with this
-                        email.
-                      </p>
-                      <div className="flex gap-2 mt-3">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={handleLinkExistingCustomer}
-                          style={{
-                            backgroundColor: THEME.gold,
-                            color: "white",
-                          }}
-                          className="hover:opacity-90"
-                        >
-                          Link to existing
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={handleCreateNewAnyway}
-                        >
-                          Create new anyway
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Linked customer confirmation */}
-              {formData.useExistingCustomer && formData.existingCustomerName && (
-                <div
-                  className="p-4 rounded-lg border"
-                  style={{ backgroundColor: THEME.cream }}
-                >
-                  <div className="flex items-center gap-3">
-                    <Check
-                      className="h-5 w-5 shrink-0"
-                      style={{ color: THEME.sage }}
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">
-                        Linking to existing customer
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {formData.existingCustomerName}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={handleCreateNewAnyway}
-                    >
-                      Change
-                    </Button>
-                  </div>
-                </div>
+              {/* Duplicate email error */}
+              {foundCustomer && (
+                <p className="text-sm text-destructive">
+                  This email is already used by <strong>{foundCustomer.customer_name}</strong>. Please use a different email.
+                </p>
               )}
 
               {/* Extra email rows */}
@@ -1023,14 +921,7 @@ export function CreateWeddingDialog({
                   <span className="text-muted-foreground">Name:</span>
                 </div>
                 <div className="font-medium">
-                  {formData.useExistingCustomer
-                    ? formData.existingCustomerName
-                    : formData.coupleName}
-                  {formData.useExistingCustomer && (
-                    <span className="text-xs text-muted-foreground ml-1">
-                      (existing)
-                    </span>
-                  )}
+                  {formData.coupleName}
                 </div>
                 {formData.email && (
                   <>
