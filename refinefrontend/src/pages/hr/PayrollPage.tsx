@@ -420,23 +420,32 @@ export default function PayrollPage() {
     if (!currentPE) return;
     setSubmitting(true);
     setError(null);
+    const errors: string[] = [];
     try {
       const draftSlips = salarySlips.filter(s => s.docstatus === 0);
       for (const slip of draftSlips) {
-        const fullDocRes = await fetch(`${apiUrl}/resource/Salary Slip/${encodeURIComponent(slip.name)}`, { credentials: "include" });
-        const fullDocData = await fullDocRes.json();
-        await customMutation({
-          url: "/api/method/frappe.client.submit",
-          method: "post",
-          values: { doc: fullDocData.data },
-        });
+        try {
+          const fullDocRes = await fetch(`${apiUrl}/resource/Salary Slip/${encodeURIComponent(slip.name)}`, { credentials: "include" });
+          const fullDocData = await fullDocRes.json();
+          // Skip if already submitted (stale local state)
+          if (fullDocData.data?.docstatus !== 0) continue;
+          await customMutation({
+            url: "/api/method/frappe.client.submit",
+            method: "post",
+            values: { doc: fullDocData.data },
+          });
+        } catch (slipErr) {
+          errors.push(`${slip.employee_name}: ${extractErrorMessage(slipErr, "submission failed")}`);
+        }
       }
+      if (errors.length > 0) setError(errors.join(" | "));
+    } finally {
+      // Always refresh UI regardless of errors
+      setSubmitting(false);
       invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
       invalidate({ resource: "Salary Slip", invalidates: ["list"] });
       setDetailRefreshKey(k => k + 1);
-    } catch (err) {
-      setError(extractErrorMessage(err, "Failed to submit salary slips"));
-    } finally { setSubmitting(false); }
+    }
   }
 
   const isLoading = peQuery?.isLoading || slipsQuery?.isLoading || loadingDetails;
