@@ -9,5 +9,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy migration scripts
 COPY . .
 
-# Run migration
-CMD ["python", "run.py", "--all"]
+# Run full migration then seed phases
+CMD ["sh", "-c", "python run.py --all && python migrate_auto.py"]
