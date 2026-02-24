@@ -445,9 +445,9 @@ export default function PayrollPage() {
         // All slips submitted — create accrual JV to post GL entries
         try {
           await customMutation({
-            url: "/api/method/run_doc_method",
+            url: "/api/method/create_payroll_accrual_jv",
             method: "post",
-            values: { dt: "Payroll Entry", dn: currentPE.name, method: "make_accrual_jv_entry" },
+            values: { payroll_entry: currentPE.name },
           });
         } catch (peErr) {
           setError(`Slips submitted but GL posting failed: ${extractErrorMessage(peErr, "")}`);
