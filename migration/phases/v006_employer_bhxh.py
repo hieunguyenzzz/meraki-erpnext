@@ -207,19 +207,60 @@ def _set_employee_component_account(erp, component_name: str, gl_account: str) -
 
 
 def _get_db_connection():
-    """Connect to MariaDB using credentials from Frappe site_config.json."""
+    """Connect to MariaDB using credentials from Frappe site_config.json.
+
+    On Dokploy, the DB user is initially granted only for the backend container IP.
+    We first connect as root to grant subnet access, then connect as the app user.
+    """
     import pymysql
 
     with open(SITE_CONFIG_PATH) as f:
-        config = json.load(f)
+        site_config = json.load(f)
+
+    # Also read common_site_config for db_host
+    common_config_path = os.path.join(os.path.dirname(SITE_CONFIG_PATH), "..", "common_site_config.json")
+    db_host = "db"
+    try:
+        with open(common_config_path) as f:
+            common = json.load(f)
+            db_host = common.get("db_host", "db")
+    except Exception:
+        pass
+
+    db_name = site_config["db_name"]
+    db_password = site_config["db_password"]
+
+    # Try connecting directly first (works if grants already in place)
+    try:
+        conn = pymysql.connect(
+            host=db_host, user=db_name, password=db_password,
+            database=db_name, charset="utf8mb4", autocommit=True,
+        )
+        return conn
+    except pymysql.err.OperationalError:
+        pass
+
+    # Fallback: grant subnet access via root (Dokploy default root password pattern)
+    root_password = os.getenv("DB_ROOT_PASSWORD", os.getenv("DB_PASSWORD", ""))
+    if root_password:
+        try:
+            root_conn = pymysql.connect(
+                host=db_host, user="root", password=root_password,
+                charset="utf8mb4", autocommit=True,
+            )
+            with root_conn.cursor() as cur:
+                cur.execute(
+                    f"GRANT ALL PRIVILEGES ON `{db_name}`.* TO %s@'172.28.0.%%' IDENTIFIED BY %s",
+                    (db_name, db_password),
+                )
+                cur.execute("FLUSH PRIVILEGES")
+            root_conn.close()
+        except Exception as e:
+            print(f"    Warning: could not grant subnet access: {e}")
 
     return pymysql.connect(
-        host="db",
-        user=config["db_name"],
-        password=config["db_password"],
-        database=config["db_name"],
-        charset="utf8mb4",
-        autocommit=True,
+        host=db_host, user=db_name, password=db_password,
+        database=db_name, charset="utf8mb4", autocommit=True,
     )
 
 
