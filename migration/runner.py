@@ -9,6 +9,7 @@ ORDERED_PHASES = [
     "v004_remove_meraki_id_unique_constraint",
     "v005_bhxh_insurance_setup",
     "v006_employer_bhxh",
+    "v007_fix_jv_and_bh_accounts",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -38,7 +39,7 @@ def save_state(state_file: Path, applied: list) -> None:
 
 
 def run_pending(client) -> int:
-    from phases import v001_wedding_venues, v002_wedding_service_item, v003_wedding_service_item_fix, v004_remove_meraki_id_unique_constraint, v005_bhxh_insurance_setup, v006_employer_bhxh
+    from phases import v001_wedding_venues, v002_wedding_service_item, v003_wedding_service_item_fix, v004_remove_meraki_id_unique_constraint, v005_bhxh_insurance_setup, v006_employer_bhxh, v007_fix_jv_and_bh_accounts
 
     phase_fns = {
         "v001_wedding_venues": v001_wedding_venues.run,
@@ -47,6 +48,7 @@ def run_pending(client) -> int:
         "v004_remove_meraki_id_unique_constraint": v004_remove_meraki_id_unique_constraint.run,
         "v005_bhxh_insurance_setup": v005_bhxh_insurance_setup.run,
         "v006_employer_bhxh": v006_employer_bhxh.run,
+        "v007_fix_jv_and_bh_accounts": v007_fix_jv_and_bh_accounts.run,
     }
 
     state_file = get_state_file()
