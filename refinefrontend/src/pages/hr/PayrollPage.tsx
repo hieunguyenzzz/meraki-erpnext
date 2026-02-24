@@ -301,17 +301,18 @@ export default function PayrollPage() {
     // Step 4: Fetch employee commission percentages
     const employeeIds = slips.map(s => s.employee);
     const empFilters = JSON.stringify([["name", "in", employeeIds]]);
-    const empFields = JSON.stringify(["name", "custom_lead_commission_pct", "custom_support_commission_pct", "custom_assistant_commission_pct"]);
+    const empFields = JSON.stringify(["name", "custom_lead_commission_pct", "custom_support_commission_pct", "custom_assistant_commission_pct", "custom_insurance_salary"]);
     const empRes = await fetch(`${apiUrl}/resource/Employee?filters=${encodeURIComponent(empFilters)}&fields=${encodeURIComponent(empFields)}&limit_page_length=200`, { credentials: "include" });
     const empData = await empRes.json();
-    const employees: { name: string; custom_lead_commission_pct: number; custom_support_commission_pct: number; custom_assistant_commission_pct: number }[] = empData.data ?? [];
+    const employees: { name: string; custom_lead_commission_pct: number; custom_support_commission_pct: number; custom_assistant_commission_pct: number; custom_insurance_salary: number }[] = empData.data ?? [];
 
-    const empCommMap: Record<string, { lead: number; support: number; assistant: number }> = {};
+    const empCommMap: Record<string, { lead: number; support: number; assistant: number; insuranceSalary: number }> = {};
     for (const emp of employees) {
       empCommMap[emp.name] = {
         lead: emp.custom_lead_commission_pct ?? 0,
         support: emp.custom_support_commission_pct ?? 0,
         assistant: emp.custom_assistant_commission_pct ?? 0,
+        insuranceSalary: emp.custom_insurance_salary ?? 0,
       };
     }
 
@@ -351,11 +352,21 @@ export default function PayrollPage() {
         if (totals.assistant > 0) newEarnings.push({ salary_component: "Assistant Commission", amount: Math.round(totals.assistant) });
       }
 
+      const INSURANCE_COMPONENTS = ["BHXH (Employee)", "BHYT (Employee)", "BHTN (Employee)"];
+      const insuranceSalary = empCommMap[slip.employee]?.insuranceSalary ?? 0;
+      const nonInsuranceDeductions = currentDeductions.filter(d => !INSURANCE_COMPONENTS.includes(d.salary_component));
+      const newDeductions = [...nonInsuranceDeductions];
+      if (insuranceSalary > 0) {
+        newDeductions.push({ salary_component: "BHXH (Employee)", amount: Math.round(insuranceSalary * 0.08) });
+        newDeductions.push({ salary_component: "BHYT (Employee)", amount: Math.round(insuranceSalary * 0.015) });
+        newDeductions.push({ salary_component: "BHTN (Employee)", amount: Math.round(insuranceSalary * 0.01) });
+      }
+
       await fetch(`${apiUrl}/resource/Salary%20Slip/${slip.name}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ earnings: newEarnings, deductions: currentDeductions }),
+        body: JSON.stringify({ earnings: newEarnings, deductions: newDeductions }),
       });
     }
   }
