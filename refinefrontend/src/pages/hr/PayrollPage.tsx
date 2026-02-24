@@ -223,6 +223,7 @@ export default function PayrollPage() {
             const data = await res.json();
             return {
               ...slip,
+              docstatus: data.data?.docstatus ?? slip.docstatus,
               modified: data.data?.modified ?? slip.modified,
               earnings: data.data?.earnings ?? [],
               deductions: data.data?.deductions ?? [],
@@ -438,7 +439,24 @@ export default function PayrollPage() {
           errors.push(`${slip.employee_name}: ${extractErrorMessage(slipErr, "submission failed")}`);
         }
       }
-      if (errors.length > 0) setError(errors.join(" | "));
+      if (errors.length > 0) {
+        setError(errors.join(" | "));
+      } else {
+        // All slips submitted — submit the Payroll Entry to post GL entries
+        try {
+          const peDocRes = await fetch(`${apiUrl}/resource/Payroll Entry/${encodeURIComponent(currentPE.name)}`, { credentials: "include" });
+          const peDocData = await peDocRes.json();
+          if (peDocData.data?.docstatus === 0) {
+            await customMutation({
+              url: "/api/method/frappe.client.submit",
+              method: "post",
+              values: { doc: peDocData.data },
+            });
+          }
+        } catch (peErr) {
+          setError(`Slips submitted but payroll posting failed: ${extractErrorMessage(peErr, "")}`);
+        }
+      }
     } finally {
       // Always refresh UI regardless of errors
       setSubmitting(false);
