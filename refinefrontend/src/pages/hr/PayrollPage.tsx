@@ -296,18 +296,17 @@ export default function PayrollPage() {
     // Step 4: Fetch employee commission percentages
     const employeeIds = slips.map(s => s.employee);
     const empFilters = JSON.stringify([["name", "in", employeeIds]]);
-    const empFields = JSON.stringify(["name", "custom_lead_commission_pct", "custom_support_commission_pct", "custom_assistant_commission_pct", "custom_insurance_salary"]);
+    const empFields = JSON.stringify(["name", "custom_lead_commission_pct", "custom_support_commission_pct", "custom_assistant_commission_pct"]);
     const empRes = await fetch(`${apiUrl}/resource/Employee?filters=${encodeURIComponent(empFilters)}&fields=${encodeURIComponent(empFields)}&limit_page_length=200`, { credentials: "include" });
     const empData = await empRes.json();
-    const employees: { name: string; custom_lead_commission_pct: number; custom_support_commission_pct: number; custom_assistant_commission_pct: number; custom_insurance_salary: number }[] = empData.data ?? [];
+    const employees: { name: string; custom_lead_commission_pct: number; custom_support_commission_pct: number; custom_assistant_commission_pct: number }[] = empData.data ?? [];
 
-    const empCommMap: Record<string, { lead: number; support: number; assistant: number; insuranceSalary: number }> = {};
+    const empCommMap: Record<string, { lead: number; support: number; assistant: number }> = {};
     for (const emp of employees) {
       empCommMap[emp.name] = {
         lead: emp.custom_lead_commission_pct ?? 0,
         support: emp.custom_support_commission_pct ?? 0,
         assistant: emp.custom_assistant_commission_pct ?? 0,
-        insuranceSalary: emp.custom_insurance_salary ?? 0,
       };
     }
 
@@ -347,21 +346,11 @@ export default function PayrollPage() {
         if (totals.assistant > 0) newEarnings.push({ salary_component: "Assistant Commission", amount: Math.round(totals.assistant) });
       }
 
-      const INSURANCE_COMPONENTS = ["BHXH (Employee)", "BHYT (Employee)", "BHTN (Employee)"];
-      const insuranceSalary = empCommMap[slip.employee]?.insuranceSalary ?? 0;
-      const nonInsuranceDeductions = currentDeductions.filter(d => !INSURANCE_COMPONENTS.includes(d.salary_component));
-      const newDeductions = [...nonInsuranceDeductions];
-      if (insuranceSalary > 0) {
-        newDeductions.push({ salary_component: "BHXH (Employee)", amount: Math.round(insuranceSalary * 0.08) });
-        newDeductions.push({ salary_component: "BHYT (Employee)", amount: Math.round(insuranceSalary * 0.015) });
-        newDeductions.push({ salary_component: "BHTN (Employee)", amount: Math.round(insuranceSalary * 0.01) });
-      }
-
       await fetch(`${apiUrl}/resource/Salary%20Slip/${slip.name}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ earnings: newEarnings, deductions: newDeductions }),
+        body: JSON.stringify({ earnings: newEarnings, deductions: currentDeductions }),
       });
     }
   }
@@ -406,6 +395,19 @@ export default function PayrollPage() {
     setCalculatingCommissions(true);
     setError(null);
     try {
+      // Delete all draft salary slips so ERPNext regenerates them fresh,
+      // picking up the latest custom_insurance_salary from each Employee.
+      const slipFilters = JSON.stringify([["payroll_entry", "=", currentPE.name], ["docstatus", "=", 0]]);
+      const existingRes = await fetch(`${apiUrl}/resource/Salary%20Slip?filters=${encodeURIComponent(slipFilters)}&fields=%5B%22name%22%5D&limit_page_length=200`, { credentials: "include" });
+      const existingData = await existingRes.json();
+      for (const slip of (existingData.data ?? [])) {
+        await fetch(`${apiUrl}/resource/Salary%20Slip/${encodeURIComponent(slip.name)}`, { method: "DELETE", credentials: "include" });
+      }
+
+      // Regenerate salary slips — ERPNext evaluates BHXH formulas against Employee data
+      await customMutation({ url: "/api/method/run_doc_method", method: "post", values: { dt: "Payroll Entry", dn: currentPE.name, method: "create_salary_slips" } });
+
+      // Apply commission earnings on top
       await calculateAndApplyCommissions(currentPE.name);
       invalidate({ resource: "Salary Slip", invalidates: ["list"] });
       setDetailRefreshKey(k => k + 1);
