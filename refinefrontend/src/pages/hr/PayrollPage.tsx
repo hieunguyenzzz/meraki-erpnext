@@ -99,11 +99,6 @@ const slipColumns: ColumnDef<SalarySlip, unknown>[] = [
     cell: ({ row }) => <div className="text-right">{formatVND(row.original.gross_pay)}</div>,
   },
   {
-    accessorKey: "total_deduction",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Deductions" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(row.original.total_deduction)}</div>,
-  },
-  {
     id: "bhxh",
     header: ({ column }) => <DataTableColumnHeader column={column} title="BHXH 8%" className="text-right" />,
     cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHXH (Employee)"))}</div>,
