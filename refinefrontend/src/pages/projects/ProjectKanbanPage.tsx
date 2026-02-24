@@ -24,6 +24,7 @@ export default function ProjectKanbanPage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">(() =>
     (localStorage.getItem("wedding-view-mode") as "kanban" | "list") || "list"
   );
+  const [yearFilter, setYearFilter] = useState<string | null>(null);
 
   const handleViewChange = (mode: "kanban" | "list") => {
     setViewMode(mode);
@@ -119,6 +120,20 @@ export default function ProjectKanbanPage() {
   }, [projectsResult, salesOrdersResult, customersResult, employeesResult]);
 
   const isLoading = projectsQuery?.isLoading;
+
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    for (const item of items) {
+      const year = item.expected_end_date?.slice(0, 4);
+      if (year) years.add(year);
+    }
+    return [...years].sort().reverse();
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    if (!yearFilter) return items;
+    return items.filter((p) => p.expected_end_date?.startsWith(yearFilter));
+  }, [items, yearFilter]);
 
   const columns = useMemo<ColumnDef<ProjectKanbanItem>[]>(() => [
     {
@@ -226,10 +241,30 @@ export default function ProjectKanbanPage() {
         onOpenChange={setCreateDialogOpen}
       />
 
+      {availableYears.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button
+            variant={yearFilter === null ? "default" : "outline"}
+            size="sm"
+            className="h-7 px-3 text-xs"
+            onClick={() => setYearFilter(null)}
+          >All</Button>
+          {availableYears.map((year) => (
+            <Button
+              key={year}
+              variant={yearFilter === year ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-3 text-xs"
+              onClick={() => setYearFilter(year === yearFilter ? null : year)}
+            >{year}</Button>
+          ))}
+        </div>
+      )}
+
       {viewMode === "list" ? (
         <DataTable
           columns={columns}
-          data={items}
+          data={filteredItems}
           isLoading={isLoading}
           searchKey="customer_name"
           searchPlaceholder="Search couple..."
@@ -268,7 +303,7 @@ export default function ProjectKanbanPage() {
       ) : (
         <>
           <KanbanBoard
-            items={items}
+            items={filteredItems}
             columns={PROJECT_COLUMNS}
             getColumnForItem={(item: ProjectKanbanItem) =>
               getProjectColumnKey(item)

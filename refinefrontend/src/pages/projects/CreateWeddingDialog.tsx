@@ -85,8 +85,7 @@ interface FormData {
   // Team
   leadPlanner: string;
   supportPlanner: string;
-  assistant1: string;
-  assistant2: string;
+  assistants: string[];
 }
 
 const initialFormData: FormData = {
@@ -105,8 +104,7 @@ const initialFormData: FormData = {
   weddingType: "",
   leadPlanner: "",
   supportPlanner: "",
-  assistant1: "",
-  assistant2: "",
+  assistants: [],
 };
 
 interface CreateWeddingDialogProps {
@@ -131,6 +129,9 @@ export function CreateWeddingDialog({
   const [venueOpen, setVenueOpen] = useState(false);
   const [venueSearch, setVenueSearch] = useState("");
   const [isCreatingVenue, setIsCreatingVenue] = useState(false);
+  const [venueError, setVenueError] = useState<string | null>(null);
+  // venueDisplayName is the human-readable label; formData.venue is the Supplier document name (ID)
+  const [venueDisplayName, setVenueDisplayName] = useState("");
 
   // Customer duplicate detection
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
@@ -181,6 +182,8 @@ export function CreateWeddingDialog({
       setFoundCustomer(null);
       setVenueSearch("");
       setVenueOpen(false);
+      setVenueError(null);
+      setVenueDisplayName("");
     }
   }, [open]);
 
@@ -352,8 +355,16 @@ export function CreateWeddingDialog({
           custom_project_stage: formData.weddingDate < new Date().toISOString().slice(0, 10) ? "Completed" : "Onboarding",
           custom_lead_planner: formData.leadPlanner || null,
           custom_support_planner: formData.supportPlanner && formData.supportPlanner !== "__none__" ? formData.supportPlanner : null,
-          custom_assistant_1: formData.assistant1 && formData.assistant1 !== "__none__" ? formData.assistant1 : null,
-          custom_assistant_2: formData.assistant2 && formData.assistant2 !== "__none__" ? formData.assistant2 : null,
+          ...(() => {
+            const validAssistants = formData.assistants.filter((a) => a && a !== "__none__");
+            return {
+              custom_assistant_1: validAssistants[0] ?? null,
+              custom_assistant_2: validAssistants[1] ?? null,
+              custom_assistant_3: validAssistants[2] ?? null,
+              custom_assistant_4: validAssistants[3] ?? null,
+              custom_assistant_5: validAssistants[4] ?? null,
+            };
+          })(),
         },
       });
       const projectName = projectResult?.data?.name;
@@ -379,6 +390,7 @@ export function CreateWeddingDialog({
 
   const handleCreateVenue = async (venueName: string) => {
     setIsCreatingVenue(true);
+    setVenueError(null);
     try {
       const result = await createDoc({
         resource: "Supplier",
@@ -388,12 +400,17 @@ export function CreateWeddingDialog({
           supplier_type: "Company",
         },
       });
-      const created = result?.data?.supplier_name ?? venueName;
-      updateFormData({ venue: created });
+      // Store document name (ID) for the Link field, display supplier_name for UI
+      const supplierId = result?.data?.name ?? venueName;
+      const displayName = result?.data?.supplier_name ?? venueName;
+      updateFormData({ venue: supplierId });
+      setVenueDisplayName(displayName);
       setVenueOpen(false);
-    } catch {
-      updateFormData({ venue: venueName });
-      setVenueOpen(false);
+      setVenueSearch("");
+    } catch (err: any) {
+      const msg = err?.message || "Failed to create venue";
+      setVenueError(`Could not create venue: ${msg}`);
+      // Do NOT set venue — leave it empty so Sales Order won't fail
     } finally {
       setIsCreatingVenue(false);
     }
@@ -701,7 +718,7 @@ export function CreateWeddingDialog({
                         !formData.venue && "text-muted-foreground"
                       )}
                     >
-                      {formData.venue || "Search or create venue..."}
+                      {venueDisplayName || formData.venue || "Search or create venue..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </button>
                   </PopoverTrigger>
@@ -710,7 +727,7 @@ export function CreateWeddingDialog({
                       <CommandInput
                         placeholder="Search venues..."
                         value={venueSearch}
-                        onValueChange={setVenueSearch}
+                        onValueChange={(v) => { setVenueSearch(v); setVenueError(null); }}
                       />
                       <CommandList>
                         <CommandEmpty>No venues found.</CommandEmpty>
@@ -719,15 +736,16 @@ export function CreateWeddingDialog({
                             <CommandItem
                               key={v.name}
                               value={v.supplier_name}
-                              onSelect={(val) => {
-                                updateFormData({ venue: val });
+                              onSelect={() => {
+                                updateFormData({ venue: v.name });
+                                setVenueDisplayName(v.supplier_name);
                                 setVenueOpen(false);
                               }}
                             >
                               <Check
                                 className={cn(
                                   "mr-2 h-4 w-4",
-                                  formData.venue === v.supplier_name ? "opacity-100" : "opacity-0"
+                                  formData.venue === v.name ? "opacity-100" : "opacity-0"
                                 )}
                               />
                               {v.supplier_name}
@@ -756,6 +774,9 @@ export function CreateWeddingDialog({
                     </Command>
                   </PopoverContent>
                 </Popover>
+              {venueError && (
+                <p className="text-xs text-destructive mt-1">{venueError}</p>
+              )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -919,73 +940,61 @@ export function CreateWeddingDialog({
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="assistant1" className="text-muted-foreground">
-                    Assistant 1
-                  </Label>
-                  <Select
-                    value={formData.assistant1}
-                    onValueChange={(value) =>
-                      updateFormData({ assistant1: value })
-                    }
-                  >
-                    <SelectTrigger
-                      id="assistant1"
-                      className="focus:ring-[#C4A962]"
+              {/* Assistants — dynamic */}
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Assistants</Label>
+                {formData.assistants.map((asst, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <Select
+                      value={asst}
+                      onValueChange={(v) => {
+                        const updated = [...formData.assistants];
+                        updated[i] = v;
+                        updateFormData({ assistants: updated });
+                      }}
                     >
-                      <SelectValue placeholder="Optional" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {employees
-                        .filter(
-                          (emp) =>
-                            emp.name !== formData.leadPlanner &&
-                            emp.name !== formData.supportPlanner
-                        )
-                        .map((emp) => (
-                          <SelectItem key={emp.name} value={emp.name}>
-                            {emp.employee_name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="assistant2" className="text-muted-foreground">
-                    Assistant 2
-                  </Label>
-                  <Select
-                    value={formData.assistant2}
-                    onValueChange={(value) =>
-                      updateFormData({ assistant2: value })
-                    }
-                  >
-                    <SelectTrigger
-                      id="assistant2"
-                      className="focus:ring-[#C4A962]"
+                      <SelectTrigger className="focus:ring-[#C4A962]">
+                        <SelectValue placeholder="Select assistant" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {employees
+                          .filter(
+                            (emp) =>
+                              emp.name !== formData.leadPlanner &&
+                              emp.name !== formData.supportPlanner &&
+                              !formData.assistants.some((a, j) => j !== i && a === emp.name)
+                          )
+                          .map((emp) => (
+                            <SelectItem key={emp.name} value={emp.name}>
+                              {emp.employee_name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        updateFormData({
+                          assistants: formData.assistants.filter((_, j) => j !== i),
+                        })
+                      }
                     >
-                      <SelectValue placeholder="Optional" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {employees
-                        .filter(
-                          (emp) =>
-                            emp.name !== formData.leadPlanner &&
-                            emp.name !== formData.supportPlanner &&
-                            emp.name !== formData.assistant1
-                        )
-                        .map((emp) => (
-                          <SelectItem key={emp.name} value={emp.name}>
-                            {emp.employee_name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                {formData.assistants.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={() => updateFormData({ assistants: [...formData.assistants, ""] })}
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors pt-1"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add assistant
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1063,7 +1072,7 @@ export function CreateWeddingDialog({
                     <div>
                       <span className="text-muted-foreground">Venue:</span>
                     </div>
-                    <div>{formData.venue}</div>
+                    <div>{venueDisplayName || formData.venue}</div>
                   </>
                 )}
                 {formData.guestCount && (
@@ -1115,22 +1124,12 @@ export function CreateWeddingDialog({
                     <div>{getEmployeeName(formData.supportPlanner)}</div>
                   </>
                 )}
-                {formData.assistant1 && formData.assistant1 !== "__none__" && (
-                  <>
-                    <div>
-                      <span className="text-muted-foreground">Assistant 1:</span>
-                    </div>
-                    <div>{getEmployeeName(formData.assistant1)}</div>
-                  </>
-                )}
-                {formData.assistant2 && formData.assistant2 !== "__none__" && (
-                  <>
-                    <div>
-                      <span className="text-muted-foreground">Assistant 2:</span>
-                    </div>
-                    <div>{getEmployeeName(formData.assistant2)}</div>
-                  </>
-                )}
+                {formData.assistants.filter(Boolean).map((asst, i) => (
+                  <React.Fragment key={i}>
+                    <div><span className="text-muted-foreground">Assistant {i + 1}:</span></div>
+                    <div>{getEmployeeName(asst)}</div>
+                  </React.Fragment>
+                ))}
               </div>
             </div>
           )}
