@@ -57,18 +57,24 @@ export default function ProjectKanbanPage() {
   const { result: salesOrdersResult } = useList({
     resource: "Sales Order",
     pagination: { mode: "off" },
-    filters: [{ field: "docstatus", operator: "eq", value: 1 }],
+    filters: [{ field: "docstatus", operator: "in", value: [0, 1] }],
     meta: {
       fields: ["name", "customer_name", "custom_venue", "grand_total"],
     },
   });
 
-  // Fetch Employees for planner names
+  // Fetch Employees for planner names (all statuses, not just Active)
   const { result: employeesResult } = useList({
     resource: "Employee",
     pagination: { mode: "off" },
-    filters: [{ field: "status", operator: "eq", value: "Active" }],
     meta: { fields: ["name", "employee_name"] },
+  });
+
+  // Fetch Suppliers for venue names
+  const { result: suppliersResult } = useList({
+    resource: "Supplier",
+    pagination: { mode: "off" },
+    meta: { fields: ["name", "supplier_name"] },
   });
 
   // Fetch Customers for customer names
@@ -86,6 +92,7 @@ export default function ProjectKanbanPage() {
     const salesOrders = salesOrdersResult?.data ?? [];
     const customers = customersResult?.data ?? [];
     const employees = employeesResult?.data ?? [];
+    const suppliers = suppliersResult?.data ?? [];
 
     // Build lookup maps
     const soByName = new Map(
@@ -96,6 +103,9 @@ export default function ProjectKanbanPage() {
     );
     const employeeByName = new Map(
       employees.map((e: any) => [e.name, e.employee_name])
+    );
+    const supplierByName = new Map(
+      suppliers.map((s: any) => [s.name, s.supplier_name])
     );
 
     return projects.map((p: any) => {
@@ -111,13 +121,15 @@ export default function ProjectKanbanPage() {
         customer_name: linkedCustomer?.customer_name || linkedSO?.customer_name || p.project_name,
         expected_end_date: p.expected_end_date,
         sales_order: p.sales_order,
-        venue_name: linkedSO?.custom_venue,
+        venue_name: linkedSO?.custom_venue
+          ? (supplierByName.get(linkedSO.custom_venue) ?? linkedSO.custom_venue)
+          : undefined,
         lead_planner_name: p.custom_lead_planner ? employeeByName.get(p.custom_lead_planner) : undefined,
         support_planner_name: p.custom_support_planner ? employeeByName.get(p.custom_support_planner) : undefined,
         package_amount: linkedSO?.grand_total,
       };
     });
-  }, [projectsResult, salesOrdersResult, customersResult, employeesResult]);
+  }, [projectsResult, salesOrdersResult, customersResult, employeesResult, suppliersResult]);
 
   const isLoading = projectsQuery?.isLoading;
 
