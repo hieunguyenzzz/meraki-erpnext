@@ -180,6 +180,11 @@ services:
       ERPNEXT_API_SECRET: ${ERPNEXT_API_SECRET}
       DB_ROOT_PASSWORD: ${DB_PASSWORD}
       STATE_FILE: /home/frappe/frappe-bench/sites/meraki_seed_state.json
+      MERAKI_PG_HOST: ${MERAKI_PG_HOST}
+      MERAKI_PG_PORT: ${MERAKI_PG_PORT:-5432}
+      MERAKI_PG_USER: ${MERAKI_PG_USER}
+      MERAKI_PG_PASSWORD: ${MERAKI_PG_PASSWORD}
+      MERAKI_PG_DATABASE: ${MERAKI_PG_DATABASE}
     volumes:
       - meraki-sites:/home/frappe/frappe-bench/sites
     depends_on:
