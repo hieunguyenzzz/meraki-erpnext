@@ -13,6 +13,7 @@ export interface ProjectKanbanItem {
   venue_name?: string;
   lead_planner_name?: string;
   support_planner_name?: string;
+  package_amount?: number;      // from Sales Order grand_total
 }
 
 export interface ProjectColumnDef {
