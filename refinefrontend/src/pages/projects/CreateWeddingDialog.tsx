@@ -140,6 +140,7 @@ export function CreateWeddingDialog({
   const [addonSearchText, setAddonSearchText] = useState<string[]>([]);
   const [addonDropdownOpen, setAddonDropdownOpen] = useState<boolean[]>([]);
   const [isCreatingAddon, setIsCreatingAddon] = useState(false);
+  const [addonCreateError, setAddonCreateError] = useState<string | null>(null);
 
   // Customer duplicate detection
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
@@ -207,6 +208,7 @@ export function CreateWeddingDialog({
       setVenueDisplayName("");
       setAddonSearchText([]);
       setAddonDropdownOpen([]);
+      setAddonCreateError(null);
     }
   }, [open]);
 
@@ -462,20 +464,27 @@ export function CreateWeddingDialog({
   };
 
   const handleCreateAddon = async (rowIndex: number, name: string, includeInCommission: boolean) => {
+    if (!name.trim()) return;
     setIsCreatingAddon(true);
+    setAddonCreateError(null);
     try {
-      const result = await createDoc({
-        resource: "Item",
-        values: {
-          item_name: name,
-          item_code: name,
-          item_group: "Add-on Services",
-          is_sales_item: 1,
-          custom_include_in_commission: includeInCommission ? 1 : 0,
-        },
+      const resp = await fetch("/inquiry-api/wedding/addon-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ item_name: name.trim() }),
       });
-      const itemCode = result?.data?.name ?? name;
-      const itemName = result?.data?.item_name ?? name;
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        const detail = err.detail;
+        const msg = Array.isArray(detail)
+          ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
+          : detail || "Failed to create add-on";
+        throw new Error(msg);
+      }
+      const item = await resp.json();
+      const itemCode = item.name ?? name;
+      const itemName = item.item_name ?? name;
       const updated = formData.addOns.map((a, i) =>
         i === rowIndex ? { ...a, itemCode, itemName, includeInCommission } : a
       );
@@ -486,8 +495,8 @@ export function CreateWeddingDialog({
       const newOpen = [...addonDropdownOpen];
       newOpen[rowIndex] = false;
       setAddonDropdownOpen(newOpen);
-    } catch {
-      // silently fail - user can retry
+    } catch (err: any) {
+      setAddonCreateError(err?.message || "Failed to create add-on");
     } finally {
       setIsCreatingAddon(false);
     }
@@ -1010,6 +1019,9 @@ export function CreateWeddingDialog({
                     </Button>
                   </div>
                 ))}
+                {addonCreateError && (
+                  <p className="text-xs text-destructive">{addonCreateError}</p>
+                )}
                 <button
                   type="button"
                   onClick={() => {

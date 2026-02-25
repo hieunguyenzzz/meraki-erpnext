@@ -288,3 +288,21 @@ def update_addons(project_name: str, req: AddonsRequest):
 
     log.info("addons_updated", project=project_name, old_so=so_name, new_so=new_so_name)
     return {"success": True, "sales_order": new_so_name}
+
+
+class AddonItemCreateRequest(BaseModel):
+    item_name: str
+
+@router.post("/wedding/addon-item")
+def create_addon_item(req: AddonItemCreateRequest):
+    """Create a new add-on Item in ERPNext using server-side API key auth."""
+    client = ERPNextClient()
+    result = client._post("/api/resource/Item", {
+        "item_name": req.item_name.strip(),
+        "item_code": req.item_name.strip(),
+        "item_group": "Add-on Services",
+        "is_sales_item": 1,
+        "stock_uom": "Nos",
+    })
+    item = result.get("data", {})
+    return {"name": item.get("name"), "item_name": item.get("item_name")}
