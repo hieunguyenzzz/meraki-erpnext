@@ -214,15 +214,26 @@ export default function ProjectDetailPage() {
   });
   const customer = customerResult;
 
-  // Fetch Sales Order items (add-ons)
-  const { result: soItemsResult } = useList({
-    resource: "Sales Order Item",
-    pagination: { mode: "off" as const },
-    filters: [{ field: "parent", operator: "eq", value: project?.sales_order! }],
-    meta: { fields: ["name", "item_code", "item_name", "qty", "rate", "amount"] },
-    queryOptions: { enabled: !!project?.sales_order },
-  });
-  const soItems = (soItemsResult?.data ?? []) as { name: string; item_code: string; item_name: string; qty: number; rate: number; amount: number }[];
+  // Fetch Sales Order items via the parent SO doc (Sales Order Item direct list returns 403)
+  const [soItems, setSOItems] = useState<{ name: string; item_code: string; item_name: string; qty: number; rate: number; amount: number }[]>([]);
+
+  const fetchSOItems = useCallback(async (soName: string) => {
+    try {
+      const res = await fetch(
+        `/api/resource/Sales Order/${encodeURIComponent(soName)}`,
+        { credentials: "include" }
+      );
+      const data = await res.json();
+      setSOItems(data.data?.items ?? []);
+    } catch {
+      setSOItems([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (project?.sales_order) fetchSOItems(project.sales_order);
+  }, [project?.sales_order, fetchSOItems]);
+
   const addOnItems = useMemo(
     () => soItems.filter((i) => i.item_code !== "Wedding Planning Service"),
     [soItems]
@@ -370,20 +381,34 @@ export default function ProjectDetailPage() {
           }),
         });
       }
-      // 3. Update add-ons via server API
+      // 3. Update add-ons via server API (map camelCase → snake_case for Pydantic)
       const resp = await fetch(`/inquiry-api/wedding/${name}/addons`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ items: editForm.addOns }),
+        body: JSON.stringify({
+          items: editForm.addOns.map((a) => ({
+            item_code: a.itemCode,
+            item_name: a.itemName,
+            qty: a.qty,
+            rate: a.rate,
+          })),
+        }),
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to update add-ons");
+        const detail = err.detail;
+        const msg = Array.isArray(detail)
+          ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
+          : detail || "Failed to update add-ons";
+        throw new Error(msg);
       }
       invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
       invalidate({ resource: "Sales Order", invalidates: ["detail"], id: project?.sales_order! });
-      invalidate({ resource: "Sales Order Item", invalidates: ["list"] });
+      // Refetch SO items after save (the SO name may have changed due to amendment)
+      const updatedProject = await fetch(`/api/resource/Project/${name}`, { credentials: "include" }).then(r => r.json());
+      const newSOName = updatedProject?.data?.sales_order;
+      if (newSOName) fetchSOItems(newSOName);
       setEditOpen(false);
     } catch (err: any) {
       setEditError(err?.message || "Failed to save changes");
