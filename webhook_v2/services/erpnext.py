@@ -152,6 +152,16 @@ class ERPNextClient:
                 raise
         raise last_error
 
+    def _delete(self, endpoint: str) -> dict[str, Any]:
+        """Make DELETE request to ERPNext API."""
+        response = requests.delete(
+            f"{self.url}{endpoint}",
+            headers=self._auth_headers,
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+
     # Lead Operations
 
     def get_lead(self, lead_name: str) -> dict | None:

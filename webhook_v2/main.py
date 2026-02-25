@@ -17,6 +17,7 @@ from webhook_v2.processors.backfill import BackfillProcessor
 from webhook_v2.processors.expense import ExpenseProcessor
 from webhook_v2.scheduler import start_scheduler, start_fetch_scheduler, stop_scheduler
 from webhook_v2.routers.inquiry import router as inquiry_router
+from webhook_v2.routers.wedding import router as wedding_router
 
 log = get_logger(__name__)
 
@@ -74,6 +75,7 @@ app.add_middleware(
 )
 
 app.include_router(inquiry_router)
+app.include_router(wedding_router)
 
 
 # Request/Response Models

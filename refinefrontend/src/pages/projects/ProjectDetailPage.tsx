@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useOne, useList, useDelete, useUpdate, useInvalidate, useNavigation, useCreate, useApiUrl } from "@refinedev/core";
+import { useOne, useList, useUpdate, useInvalidate, useNavigation, useCreate } from "@refinedev/core";
 import * as Popover from "@radix-ui/react-popover";
 import { formatDate, formatVND } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -115,11 +115,9 @@ export default function ProjectDetailPage() {
   });
 
   const invalidate = useInvalidate();
-  const { mutateAsync: deleteRecord } = useDelete();
   const { mutateAsync: updateRecord } = useUpdate();
   const { mutateAsync: createDoc } = useCreate();
   const { list } = useNavigation();
-  const apiUrl = useApiUrl();
 
   // Fetch Project
   const { result: project } = useOne({
@@ -254,43 +252,14 @@ export default function ProjectDetailPage() {
   }
 
   async function handleDelete() {
-    const soName = project?.sales_order;
-
-    if (soName) {
-      // 1. Find linked Sales Invoices (linked via `project` field)
-      const invRes = await fetch(
-        `${apiUrl}/resource/Sales Invoice` +
-        `?filters=${encodeURIComponent(JSON.stringify([["project", "=", name]]))}` +
-        `&fields=${encodeURIComponent(JSON.stringify(["name", "docstatus"]))}`,
-        { credentials: "include" }
-      );
-      const invData = await invRes.json();
-
-      // Cancel submitted invoices then delete via Refine (handles CSRF)
-      for (const inv of (invData.data ?? [])) {
-        if (inv.docstatus === 1) {
-          await fetch("/api/method/frappe.client.cancel", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
-            credentials: "include",
-            body: JSON.stringify({ doctype: "Sales Invoice", name: inv.name }),
-          });
-        }
-        await deleteRecord({ resource: "Sales Invoice", id: inv.name });
-      }
-
-      // 2. Cancel and delete the Sales Order via Refine
-      await fetch("/api/method/frappe.client.cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
-        credentials: "include",
-        body: JSON.stringify({ doctype: "Sales Order", name: soName }),
-      });
-      await deleteRecord({ resource: "Sales Order", id: soName });
+    const res = await fetch(`/inquiry-api/wedding/${name}/delete`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Delete failed");
     }
-
-    // 3. Delete Project (no docstatus, direct delete)
-    await deleteRecord({ resource: "Project", id: name! });
     list("Project");
   }
 
