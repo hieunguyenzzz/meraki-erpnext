@@ -26,13 +26,10 @@ import {
   MapPin,
   Users,
   DollarSign,
-  FileText,
-  ExternalLink,
   Plus,
   Check,
   User,
   Clock,
-  Pencil,
 } from "lucide-react";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
@@ -120,14 +117,6 @@ export default function ProjectDetailPage() {
   });
   const [sharedWith, setSharedWith] = useState<Set<string>>(new Set());
 
-  // Edit wedding details state
-  const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ weddingDate: "", venue: "", leadPlanner: "", supportPlanner: "" });
-  const [editInitial, setEditInitial] = useState({ weddingDate: "", venue: "", leadPlanner: "", supportPlanner: "" });
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [pendingEditClose, setPendingEditClose] = useState<boolean>(false);
-
   const invalidate = useInvalidate();
   const { mutateAsync: deleteRecord } = useDelete();
   const { mutateAsync: updateRecord } = useUpdate();
@@ -184,6 +173,17 @@ export default function ProjectDetailPage() {
     queryOptions: { enabled: !!project?.customer },
   });
   const customer = customerResult;
+
+  // Fetch Sales Order items (add-ons)
+  const { result: soItemsResult } = useList({
+    resource: "Sales Order Item",
+    pagination: { mode: "off" as const },
+    filters: [{ field: "parent", operator: "eq", value: project?.sales_order! }],
+    meta: { fields: ["name", "item_code", "item_name", "qty", "rate", "amount"] },
+    queryOptions: { enabled: !!project?.sales_order },
+  });
+  const soItems = (soItemsResult?.data ?? []) as { name: string; item_code: string; item_name: string; qty: number; rate: number; amount: number }[];
+  const addOnItems = soItems.filter((i) => i.item_code !== "Wedding Planning Service");
 
   // Fetch Sales Invoices linked to Sales Order
   const { result: invoicesResult } = useList({
@@ -251,67 +251,6 @@ export default function ProjectDetailPage() {
       values: { custom_project_stage: newStage },
     });
     invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
-  }
-
-  function openEdit() {
-    const form = {
-      weddingDate: project?.expected_end_date || salesOrder?.delivery_date || "",
-      venue: salesOrder?.custom_venue || "",
-      leadPlanner: project?.custom_lead_planner || "",
-      supportPlanner: project?.custom_support_planner || "",
-    };
-    setEditForm(form);
-    setEditInitial(form);
-    setEditError(null);
-    setPendingEditClose(false);
-    setEditOpen(true);
-  }
-
-  function isEditDirty() {
-    return (
-      editForm.weddingDate !== editInitial.weddingDate ||
-      editForm.venue !== editInitial.venue ||
-      editForm.leadPlanner !== editInitial.leadPlanner ||
-      editForm.supportPlanner !== editInitial.supportPlanner
-    );
-  }
-
-  function tryCloseEdit() {
-    if (isEditDirty()) {
-      setPendingEditClose(true);
-    } else {
-      setEditOpen(false);
-    }
-  }
-
-  async function handleEditSave() {
-    setEditSaving(true);
-    setEditError(null);
-    try {
-      await updateRecord({
-        resource: "Project",
-        id: name!,
-        values: {
-          expected_end_date: editForm.weddingDate,
-          custom_lead_planner: editForm.leadPlanner,
-          custom_support_planner: editForm.supportPlanner || null,
-        },
-      });
-      if (salesOrder && editForm.venue !== editInitial.venue) {
-        await updateRecord({
-          resource: "Sales Order",
-          id: salesOrder.name,
-          values: { custom_venue: editForm.venue },
-        });
-        invalidate({ resource: "Sales Order", invalidates: ["detail"], id: salesOrder.name });
-      }
-      invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
-      setEditOpen(false);
-    } catch (err: any) {
-      setEditError(err?.message || "Failed to save changes");
-    } finally {
-      setEditSaving(false);
-    }
   }
 
   function toggleSharedWith(employeeId: string) {
@@ -418,6 +357,7 @@ export default function ProjectDetailPage() {
   const customerName = customer?.customer_name || salesOrder?.customer_name || project.project_name;
 
   // Calculate payments summary
+  // If no invoices exist (manually created wedding), the full amount is treated as paid
   const totalInvoiced = invoices.reduce(
     (sum: number, inv: any) => sum + (inv.grand_total || 0),
     0
@@ -426,19 +366,14 @@ export default function ProjectDetailPage() {
     (sum: number, inv: any) => sum + (inv.outstanding_amount || 0),
     0
   );
-  const totalPaid = totalInvoiced - totalOutstanding;
+  const totalPaid = invoices.length > 0 ? totalInvoiced - totalOutstanding : (totalValue || 0);
 
   // Sidebar content
   const SidebarContent = () => (
     <div className="space-y-6">
       {/* Wedding Info */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Wedding</h3>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={openEdit}>
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Wedding</h3>
         <div className="space-y-2">
           {weddingDate && (
             <div className="flex items-center gap-2 text-sm">
@@ -456,6 +391,16 @@ export default function ProjectDetailPage() {
             <div className="flex items-center gap-2 text-sm">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               <span>{formatVND(totalValue)}</span>
+            </div>
+          )}
+          {addOnItems.length > 0 && (
+            <div className="pl-6 space-y-1">
+              {addOnItems.map((item) => (
+                <div key={item.name} className="flex justify-between text-xs text-muted-foreground">
+                  <span>{item.item_name}</span>
+                  <span>{formatVND(item.amount)}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -501,34 +446,6 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Linked Documents */}
-      <div className="space-y-3">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Linked Docs
-        </h3>
-        <div className="space-y-2">
-          {project.sales_order && (
-            <a
-              href={`/app/sales-order/${project.sales_order}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
-            >
-              <FileText className="h-4 w-4" />
-              Sales Order
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          )}
-          {invoices.length > 0 && (
-            <div className="text-sm">
-              <span className="text-muted-foreground">
-                {invoices.length} Invoice(s)
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Payment Summary */}
       {totalValue && (
         <div className="space-y-3">
@@ -544,26 +461,15 @@ export default function ProjectDetailPage() {
               <span className="text-muted-foreground">Paid</span>
               <span className="text-green-600">{formatVND(totalPaid)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Outstanding</span>
-              <span className={totalOutstanding > 0 ? "text-amber-600" : ""}>
-                {formatVND(totalOutstanding)}
-              </span>
-            </div>
+            {invoices.length > 0 && totalOutstanding > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Outstanding</span>
+                <span className="text-amber-600">{formatVND(totalOutstanding)}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
-
-      {/* Meta */}
-      <div className="space-y-3">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Meta
-        </h3>
-        <div className="space-y-2">
-          <ReadOnlyField label="Project ID" value={project.name} />
-          <ReadOnlyField label="Status" value={project.status} />
-        </div>
-      </div>
 
       {/* Actions */}
       <div className="space-y-2 pt-2 border-t">
@@ -595,94 +501,6 @@ export default function ProjectDetailPage() {
         </Sheet>
       </div>
 
-      {/* Edit Wedding Sheet */}
-      <Sheet open={editOpen} onOpenChange={(open) => { if (!open) tryCloseEdit(); }}>
-        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
-          <SheetHeader className="px-6 py-4 border-b shrink-0">
-            <SheetTitle>Edit Wedding</SheetTitle>
-            {customerName && (
-              <p className="text-sm text-muted-foreground">{customerName}</p>
-            )}
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-wedding-date">Wedding Date</Label>
-              <Input
-                id="edit-wedding-date"
-                type="date"
-                value={editForm.weddingDate}
-                onChange={(e) => setEditForm({ ...editForm, weddingDate: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-venue">Venue</Label>
-              <Input
-                id="edit-venue"
-                type="text"
-                placeholder="Venue name"
-                value={editForm.venue}
-                onChange={(e) => setEditForm({ ...editForm, venue: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-lead-planner">Lead Planner</Label>
-              <Select
-                value={editForm.leadPlanner}
-                onValueChange={(v) => setEditForm({ ...editForm, leadPlanner: v })}
-              >
-                <SelectTrigger id="edit-lead-planner">
-                  <SelectValue placeholder="Select planner" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-support-planner">Support Planner</Label>
-              <Select
-                value={editForm.supportPlanner || "__none__"}
-                onValueChange={(v) => setEditForm({ ...editForm, supportPlanner: v === "__none__" ? "" : v })}
-              >
-                <SelectTrigger id="edit-support-planner">
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {editError && (
-              <p className="text-sm text-destructive">{editError}</p>
-            )}
-          </div>
-          <SheetFooter className="px-6 py-4 border-t shrink-0">
-            <Button variant="outline" onClick={tryCloseEdit} disabled={editSaving}>Cancel</Button>
-            <Button onClick={handleEditSave} disabled={editSaving}>
-              {editSaving ? "Saving..." : "Save"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
-
-      {/* Discard changes confirmation */}
-      {pendingEditClose && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
-          <div className="bg-background rounded-lg border shadow-lg p-6 max-w-sm w-full mx-4 space-y-4">
-            <p className="text-sm font-medium">Discard changes?</p>
-            <p className="text-sm text-muted-foreground">You have unsaved changes. Are you sure you want to discard them?</p>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={() => setPendingEditClose(false)}>Keep editing</Button>
-              <Button variant="destructive" size="sm" onClick={() => { setPendingEditClose(false); setEditOpen(false); }}>Discard</Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 
