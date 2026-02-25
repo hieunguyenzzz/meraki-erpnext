@@ -1216,6 +1216,18 @@ export default function ProjectDetailPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="milestone-amount">Amount (VND) *</Label>
+                <div className="flex gap-1.5">
+                  {[25, 30, 50, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+                      onClick={() => setMilestoneForm({ ...milestoneForm, amount: String(Math.round(totalValue * pct / 100)) })}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
                 <Input
                   id="milestone-amount"
                   type="number"
