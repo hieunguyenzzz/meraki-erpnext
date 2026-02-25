@@ -66,6 +66,13 @@ const STEPS = [
 
 type StepId = (typeof STEPS)[number]["id"];
 
+interface AddOnRow {
+  itemCode: string;
+  itemName: string;
+  price: string;
+  includeInCommission: boolean;
+}
+
 interface FormData {
   // Client
   coupleName: string;
@@ -79,6 +86,7 @@ interface FormData {
   taxType: "tax_free" | "vat_included";
   weddingType: "HCM" | "Destination" | "";
   extraEmails: string[];
+  addOns: AddOnRow[];
   // Team
   leadPlanner: string;
   supportPlanner: string;
@@ -96,6 +104,7 @@ const initialFormData: FormData = {
   packageAmount: "",
   taxType: "tax_free",
   weddingType: "",
+  addOns: [],
   leadPlanner: "",
   supportPlanner: "",
   assistants: [],
@@ -127,6 +136,11 @@ export function CreateWeddingDialog({
   // venueDisplayName is the human-readable label; formData.venue is the Supplier document name (ID)
   const [venueDisplayName, setVenueDisplayName] = useState("");
 
+  // Add-on row state: per-row search text and dropdown open flag
+  const [addonSearchText, setAddonSearchText] = useState<string[]>([]);
+  const [addonDropdownOpen, setAddonDropdownOpen] = useState<boolean[]>([]);
+  const [isCreatingAddon, setIsCreatingAddon] = useState(false);
+
   // Customer duplicate detection
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [foundCustomer, setFoundCustomer] = useState<{
@@ -142,6 +156,19 @@ export function CreateWeddingDialog({
     meta: { fields: ["name", "supplier_name"] },
   });
   const venues = (venuesResult?.data ?? []) as { name: string; supplier_name: string }[];
+
+  // Fetch add-on items from ERPNext
+  const { result: addOnItemsResult } = useList({
+    resource: "Item",
+    pagination: { mode: "off" },
+    filters: [{ field: "item_group", operator: "eq", value: "Add-on Services" }],
+    meta: { fields: ["name", "item_name", "custom_include_in_commission"] },
+  });
+  const addOnItems = (addOnItemsResult?.data ?? []) as {
+    name: string;
+    item_name: string;
+    custom_include_in_commission: 0 | 1;
+  }[];
 
   // Fetch active employees for team selection
   const { result: employeesResult } = useList({
@@ -178,6 +205,8 @@ export function CreateWeddingDialog({
       setVenueOpen(false);
       setVenueError(null);
       setVenueDisplayName("");
+      setAddonSearchText([]);
+      setAddonDropdownOpen([]);
     }
   }, [open]);
 
@@ -276,18 +305,31 @@ export function CreateWeddingDialog({
 
       // 2. Create Sales Order (wedding booking)
       const today = new Date().toISOString().slice(0, 10);
+      const commissionBase =
+        parseFloat(formData.packageAmount || "0") +
+        formData.addOns
+          .filter((a) => a.itemCode && a.price && a.includeInCommission)
+          .reduce((s, a) => s + parseFloat(a.price), 0);
       const salesOrderValues: Record<string, unknown> = {
         customer: customerId,
         transaction_date: today,
         delivery_date: formData.weddingDate,
         custom_venue: formData.venue.trim() || undefined,
         custom_wedding_type: formData.weddingType || undefined,
+        custom_commission_base: commissionBase,
         items: [
           {
             item_code: "Wedding Planning Service",
             qty: 1,
             rate: parseFloat(formData.packageAmount) || 0,
           },
+          ...formData.addOns
+            .filter((a) => a.itemCode && a.price)
+            .map((a) => ({
+              item_code: a.itemCode,
+              qty: 1,
+              rate: parseFloat(a.price),
+            })),
         ],
       };
       if (formData.taxType === "vat_included") {
@@ -330,6 +372,22 @@ export function CreateWeddingDialog({
         const errorText = await submitRes.text();
         throw new Error(`Failed to submit sales order: ${errorText}`);
       }
+
+      // 3b. Mark sales order as fully delivered
+      await fetch("/api/method/frappe.client.set_value", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Frappe-Site-Name": SITE_NAME,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          doctype: "Sales Order",
+          name: salesOrderName,
+          fieldname: "per_delivered",
+          value: 100,
+        }),
+      });
 
       // 4. Create Project linked to Sales Order with team assignment
       const projectResult = await createDoc({
@@ -401,6 +459,69 @@ export function CreateWeddingDialog({
     } finally {
       setIsCreatingVenue(false);
     }
+  };
+
+  const handleCreateAddon = async (rowIndex: number, name: string, includeInCommission: boolean) => {
+    setIsCreatingAddon(true);
+    try {
+      const result = await createDoc({
+        resource: "Item",
+        values: {
+          item_name: name,
+          item_code: name,
+          item_group: "Add-on Services",
+          is_sales_item: 1,
+          custom_include_in_commission: includeInCommission ? 1 : 0,
+        },
+      });
+      const itemCode = result?.data?.name ?? name;
+      const itemName = result?.data?.item_name ?? name;
+      const updated = formData.addOns.map((a, i) =>
+        i === rowIndex ? { ...a, itemCode, itemName, includeInCommission } : a
+      );
+      updateFormData({ addOns: updated });
+      const newSearch = [...addonSearchText];
+      newSearch[rowIndex] = itemName;
+      setAddonSearchText(newSearch);
+      const newOpen = [...addonDropdownOpen];
+      newOpen[rowIndex] = false;
+      setAddonDropdownOpen(newOpen);
+    } catch {
+      // silently fail - user can retry
+    } finally {
+      setIsCreatingAddon(false);
+    }
+  };
+
+  const selectAddonItem = (rowIndex: number, item: { name: string; item_name: string; custom_include_in_commission: 0 | 1 }) => {
+    const updated = formData.addOns.map((a, i) =>
+      i === rowIndex
+        ? { ...a, itemCode: item.name, itemName: item.item_name, includeInCommission: item.custom_include_in_commission === 1 }
+        : a
+    );
+    updateFormData({ addOns: updated });
+    const newSearch = [...addonSearchText];
+    newSearch[rowIndex] = item.item_name;
+    setAddonSearchText(newSearch);
+    const newOpen = [...addonDropdownOpen];
+    newOpen[rowIndex] = false;
+    setAddonDropdownOpen(newOpen);
+  };
+
+  const getFilteredAddons = (rowIndex: number) => {
+    const search = (addonSearchText[rowIndex] ?? "").toLowerCase();
+    if (!search) return addOnItems;
+    return addOnItems.filter((item) =>
+      item.item_name.toLowerCase().includes(search)
+    );
+  };
+
+  const getAddonCommissionBase = () => {
+    const pkg = parseFloat(formData.packageAmount || "0");
+    const addOnSum = formData.addOns
+      .filter((a) => a.itemCode && a.price && a.includeInCommission)
+      .reduce((s, a) => s + parseFloat(a.price || "0"), 0);
+    return pkg + addOnSum;
   };
 
   const getEmployeeName = (employeeId: string) => {
@@ -774,6 +895,146 @@ export function CreateWeddingDialog({
                   ))}
                 </div>
               </div>
+
+              {/* Add-ons */}
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Add-ons</Label>
+                {formData.addOns.map((addon, i) => (
+                  <div key={i} className="flex gap-2 items-start">
+                    {/* Name input + dropdown */}
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Add-on name..."
+                        value={addonSearchText[i] ?? addon.itemName}
+                        onChange={(e) => {
+                          const newSearch = [...addonSearchText];
+                          newSearch[i] = e.target.value;
+                          setAddonSearchText(newSearch);
+                          // Clear selection if user edits text
+                          const updated = formData.addOns.map((a, j) =>
+                            j === i ? { ...a, itemCode: "", itemName: e.target.value } : a
+                          );
+                          updateFormData({ addOns: updated });
+                        }}
+                        onFocus={() => {
+                          const newOpen = [...addonDropdownOpen];
+                          newOpen[i] = true;
+                          setAddonDropdownOpen(newOpen);
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            const newOpen = [...addonDropdownOpen];
+                            newOpen[i] = false;
+                            setAddonDropdownOpen(newOpen);
+                          }, 200);
+                        }}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C4A962]"
+                      />
+                      {addonDropdownOpen[i] && (
+                        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {getFilteredAddons(i).map((item) => (
+                            <div
+                              key={item.name}
+                              onMouseDown={(e) => { e.preventDefault(); selectAddonItem(i, item); }}
+                              className="px-3 py-2 text-sm cursor-pointer hover:bg-muted flex items-center gap-2"
+                            >
+                              {item.name === addon.itemCode && <Check className="h-3 w-3 text-[#C4A962]" />}
+                              {item.item_name}
+                            </div>
+                          ))}
+                          {(addonSearchText[i] ?? "").length > 0 &&
+                            !addOnItems.some((item) => item.item_name.toLowerCase() === (addonSearchText[i] ?? "").toLowerCase()) && (
+                            <div
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleCreateAddon(i, addonSearchText[i] ?? "", addon.includeInCommission);
+                              }}
+                              className="px-3 py-2 text-sm cursor-pointer hover:bg-muted flex items-center gap-2 text-[#C4A962]"
+                            >
+                              {isCreatingAddon ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Plus className="h-3 w-3" />
+                              )}
+                              Create "{addonSearchText[i]}"
+                            </div>
+                          )}
+                          {addOnItems.length === 0 && (addonSearchText[i] ?? "").length === 0 && (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">No add-ons yet. Type to create.</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {/* Price */}
+                    <input
+                      type="number"
+                      placeholder="Price VND"
+                      value={addon.price}
+                      onChange={(e) => {
+                        const updated = formData.addOns.map((a, j) =>
+                          j === i ? { ...a, price: e.target.value } : a
+                        );
+                        updateFormData({ addOns: updated });
+                      }}
+                      className="w-32 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C4A962]"
+                    />
+                    {/* Commission checkbox */}
+                    <label className="flex items-center gap-1.5 py-2 text-sm text-muted-foreground whitespace-nowrap cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={addon.includeInCommission}
+                        onChange={(e) => {
+                          const updated = formData.addOns.map((a, j) =>
+                            j === i ? { ...a, includeInCommission: e.target.checked } : a
+                          );
+                          updateFormData({ addOns: updated });
+                        }}
+                        className="accent-[#C4A962]"
+                      />
+                      Commission
+                    </label>
+                    {/* Remove */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => {
+                        updateFormData({ addOns: formData.addOns.filter((_, j) => j !== i) });
+                        setAddonSearchText((prev) => prev.filter((_, j) => j !== i));
+                        setAddonDropdownOpen((prev) => prev.filter((_, j) => j !== i));
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateFormData({ addOns: [...formData.addOns, { itemCode: "", itemName: "", price: "", includeInCommission: false }] });
+                    setAddonSearchText((prev) => [...prev, ""]);
+                    setAddonDropdownOpen((prev) => [...prev, false]);
+                  }}
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors pt-1"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Add-on
+                </button>
+                {/* Commission base summary */}
+                {formData.addOns.length > 0 && formData.packageAmount && (
+                  <div className="text-xs text-muted-foreground pt-1 border-t">
+                    Commission base:{" "}
+                    {formatVND(parseFloat(formData.packageAmount || "0"))}
+                    {formData.addOns.filter((a) => a.includeInCommission && a.price).map((a, i) => (
+                      <span key={i}> + {formatVND(parseFloat(a.price || "0"))}</span>
+                    ))}
+                    {" = "}
+                    <span className="font-medium text-foreground">{formatVND(getAddonCommissionBase())}</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -994,6 +1255,37 @@ export function CreateWeddingDialog({
                   <span className="text-muted-foreground">Type:</span>
                 </div>
                 <div>{formData.weddingType || "—"}</div>
+
+                {/* Add-ons */}
+                {formData.addOns.filter((a) => a.itemName).length > 0 && (
+                  <>
+                    <div className="col-span-2 pt-1">
+                      <span className="text-muted-foreground">Add-ons:</span>
+                    </div>
+                    <div className="col-span-2">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-muted-foreground">
+                            <th className="text-left font-normal pb-1">Name</th>
+                            <th className="text-right font-normal pb-1">Price</th>
+                            <th className="text-right font-normal pb-1">Commission</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {formData.addOns.filter((a) => a.itemName).map((a, i) => (
+                            <tr key={i}>
+                              <td>{a.itemName}</td>
+                              <td className="text-right">{a.price ? formatVND(parseFloat(a.price)) : "—"}</td>
+                              <td className="text-right">{a.includeInCommission ? "✓" : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div><span className="text-muted-foreground">Commission Base:</span></div>
+                    <div className="font-medium" style={{ color: THEME.gold }}>{formatVND(getAddonCommissionBase())}</div>
+                  </>
+                )}
 
                 {/* Team */}
                 <div className="col-span-2 pt-3 border-t mt-2">

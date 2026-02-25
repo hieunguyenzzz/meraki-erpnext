@@ -270,10 +270,10 @@ export default function PayrollPage() {
   async function calculateAndApplyCommissions(peId: string) {
     // Step 1: Fetch submitted Sales Orders with delivery_date in this period
     const soFilters = JSON.stringify([["delivery_date", "between", [start, end]], ["docstatus", "=", 1]]);
-    const soFields = JSON.stringify(["name", "net_total"]);
+    const soFields = JSON.stringify(["name", "net_total", "custom_commission_base"]);
     const soRes = await fetch(`${apiUrl}/resource/Sales%20Order?filters=${encodeURIComponent(soFilters)}&fields=${encodeURIComponent(soFields)}&limit_page_length=500`, { credentials: "include" });
     const soData = await soRes.json();
-    const salesOrders: { name: string; net_total: number }[] = soData.data ?? [];
+    const salesOrders: { name: string; net_total: number; custom_commission_base?: number }[] = soData.data ?? [];
 
     // Step 2: Fetch Projects linked to those SOs
     const soNames = salesOrders.map(so => so.name);
@@ -314,7 +314,7 @@ export default function PayrollPage() {
 
     // Step 5: Build commission totals per employee
     const soNetMap: Record<string, number> = {};
-    for (const so of salesOrders) soNetMap[so.name] = so.net_total ?? 0;
+    for (const so of salesOrders) soNetMap[so.name] = so.custom_commission_base ?? so.net_total ?? 0;
 
     const commTotals: Record<string, { lead: number; support: number; assistant: number }> = {};
     const addComm = (empId: string, type: "lead" | "support" | "assistant", netTotal: number) => {
