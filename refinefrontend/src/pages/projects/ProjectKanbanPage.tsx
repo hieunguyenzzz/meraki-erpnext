@@ -151,6 +151,14 @@ export default function ProjectKanbanPage() {
     {
       accessorKey: "customer_name",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Couple" />,
+      cell: ({ row }) => (
+        <Link
+          to={`/projects/${row.original.id}`}
+          className="font-medium hover:underline"
+        >
+          {row.getValue("customer_name")}
+        </Link>
+      ),
     },
     {
       accessorKey: "expected_end_date",
