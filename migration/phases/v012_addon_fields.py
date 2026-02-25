@@ -18,11 +18,10 @@ def run(client):
         "insert_after": "description",
         "default": "0",
     }
-    try:
-        existing = client.get_doc("Custom Field", "Item-custom_include_in_commission")
+    if client.get("Custom Field", "Item-custom_include_in_commission"):
         print("  custom_include_in_commission already exists on Item, skipping")
-    except Exception:
-        client.create_doc("Custom Field", item_field)
+    else:
+        client.create("Custom Field", item_field)
         print("  Created custom_include_in_commission on Item")
 
     # Add custom_commission_base currency field on Sales Order doctype
@@ -36,11 +35,10 @@ def run(client):
         "insert_after": "base_net_total",
         "options": "currency",
     }
-    try:
-        existing = client.get_doc("Custom Field", "Sales Order-custom_commission_base")
+    if client.get("Custom Field", "Sales Order-custom_commission_base"):
         print("  custom_commission_base already exists on Sales Order, skipping")
-    except Exception:
-        client.create_doc("Custom Field", so_field)
+    else:
+        client.create("Custom Field", so_field)
         print("  Created custom_commission_base on Sales Order")
 
     print("v012: Done.")
