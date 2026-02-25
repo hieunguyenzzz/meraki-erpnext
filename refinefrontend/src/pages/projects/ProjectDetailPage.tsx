@@ -595,24 +595,6 @@ export default function ProjectDetailPage() {
         >
           <Trash2 className="h-4 w-4 mr-2" /> Delete Project
         </Button>
-        <Sheet open={deleteOpen} onOpenChange={setDeleteOpen}>
-          <SheetContent side="right" className="sm:max-w-sm flex flex-col p-0">
-            <SheetHeader className="px-6 py-4 border-b shrink-0">
-              <SheetTitle>Delete Project</SheetTitle>
-            </SheetHeader>
-            <div className="px-6 py-4">
-              <p className="text-sm text-muted-foreground">Are you sure you want to delete this project? This action cannot be undone.</p>
-            </div>
-            <SheetFooter className="px-6 py-4 border-t shrink-0">
-              <Button variant="outline" onClick={() => setDeleteOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDelete}>
-                Delete
-              </Button>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
       </div>
     </div>
   );
@@ -1312,6 +1294,26 @@ export default function ProjectDetailPage() {
               </Button>
             </SheetFooter>
           </form>
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Project Sheet - kept at root level to avoid remount flashing */}
+      <Sheet open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <SheetContent side="right" className="sm:max-w-sm flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Delete Project</SheetTitle>
+          </SheetHeader>
+          <div className="px-6 py-4">
+            <p className="text-sm text-muted-foreground">Are you sure you want to delete this project? This action cannot be undone.</p>
+          </div>
+          <SheetFooter className="px-6 py-4 border-t shrink-0">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              Delete
+            </Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
     </div>
