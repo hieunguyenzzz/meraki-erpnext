@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { useOne, useList, useDelete, useUpdate, useInvalidate, useNavigation, useCreate, useApiUrl } from "@refinedev/core";
 import * as Popover from "@radix-ui/react-popover";
@@ -187,23 +187,28 @@ export default function ProjectDetailPage() {
   const soItems = (soItemsResult?.data ?? []) as { name: string; item_code: string; item_name: string; qty: number; rate: number; amount: number }[];
   const addOnItems = soItems.filter((i) => i.item_code !== "Wedding Planning Service");
 
-  // Fetch Sales Invoices linked to Sales Order
-  const { result: invoicesResult } = useList({
-    resource: "Sales Invoice",
-    pagination: { mode: "off" as const },
-    filters: [
-      {
-        field: "sales_order",
-        operator: "contains",
-        value: project?.sales_order!,
-      },
-    ],
-    meta: {
-      fields: ["name", "grand_total", "outstanding_amount", "status", "due_date", "posting_date"],
-    },
-    queryOptions: { enabled: !!project?.sales_order },
-  });
-  const invoices = invoicesResult?.data ?? [];
+  // Fetch Sales Invoices linked to this Project via the `project` field
+  // (sales_order is not a writable/filterable doc-level field on Sales Invoice)
+  const [invoices, setInvoices] = useState<any[]>([]);
+
+  const fetchInvoices = useCallback(async (projectName: string) => {
+    try {
+      const fields = JSON.stringify(["name", "grand_total", "outstanding_amount", "status", "due_date", "posting_date"]);
+      const filters = JSON.stringify([["project", "=", projectName]]);
+      const res = await fetch(
+        `/api/resource/Sales Invoice?filters=${encodeURIComponent(filters)}&fields=${encodeURIComponent(fields)}&limit=100`,
+        { credentials: "include" }
+      );
+      const data = await res.json();
+      setInvoices(data.data ?? []);
+    } catch {
+      setInvoices([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (name) fetchInvoices(name);
+  }, [name, fetchInvoices]);
 
   // Fetch Tasks linked to this Project
   const { result: tasksResult } = useList({
@@ -251,10 +256,10 @@ export default function ProjectDetailPage() {
     const soName = project?.sales_order;
 
     if (soName) {
-      // 1. Find linked Sales Invoices
+      // 1. Find linked Sales Invoices (linked via `project` field)
       const invRes = await fetch(
         `${apiUrl}/resource/Sales Invoice` +
-        `?filters=${encodeURIComponent(JSON.stringify([["sales_order", "=", soName]]))}` +
+        `?filters=${encodeURIComponent(JSON.stringify([["project", "=", name]]))}` +
         `&fields=${encodeURIComponent(JSON.stringify(["name", "docstatus"]))}`,
         { credentials: "include" }
       );
@@ -384,7 +389,7 @@ export default function ProjectDetailPage() {
           due_date: milestoneForm.invoiceDate,
           currency: "VND",
           selling_price_list: "Standard Selling VND",
-          sales_order: project?.sales_order,
+          project: name,
           items: [{
             item_code: "Wedding Planning Service",
             item_name: itemName,
@@ -415,7 +420,7 @@ export default function ProjectDetailPage() {
         amount: "",
         invoiceDate: new Date().toISOString().slice(0, 10),
       });
-      invalidate({ resource: "Sales Invoice", invalidates: ["list"] });
+      if (name) fetchInvoices(name);
     } catch (err) {
       setMilestoneError(err instanceof Error ? err.message : "Failed to create milestone");
     } finally {
