@@ -781,30 +781,6 @@ export default function ProjectDetailPage() {
           )}
         </div>
 
-        <Collapsible open={mobileInfoOpen} onOpenChange={setMobileInfoOpen}>
-          <CollapsibleTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full justify-between mb-4"
-            >
-              {mobileInfoOpen ? "Hide details" : "Show all details"}
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  mobileInfoOpen && "rotate-180"
-                )}
-              />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <Card className="mb-4">
-              <CardContent className="pt-4">
-                {SidebarContent()}
-              </CardContent>
-            </Card>
-          </CollapsibleContent>
-        </Collapsible>
       </div>
 
       {/* Desktop Header */}
@@ -841,21 +817,8 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Two-column layout (desktop) */}
-      <div className="lg:grid lg:grid-cols-[280px_1fr] lg:gap-6">
-        {/* Desktop Sidebar */}
-        <div className="hidden lg:block">
-          <div className="sticky top-4">
-            <Card>
-              <CardContent className="pt-4">
-                {SidebarContent()}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Main Content - 3 Tabs */}
-        <div className="min-w-0">
+      {/* Main Content - 3 Tabs */}
+      <div className="min-w-0">
           <Tabs defaultValue="overview" className="w-full">
             <TabsList className="w-full lg:w-auto">
               <TabsTrigger value="overview" className="flex-1 lg:flex-none">
@@ -871,6 +834,57 @@ export default function ProjectDetailPage() {
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="mt-4 space-y-4">
+              {/* Wedding Details */}
+              {(weddingDate || venueName || totalValue > 0 || addOnItems.length > 0) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Wedding Details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {weddingDate && (
+                      <div className="flex items-start gap-3 text-sm">
+                        <Calendar className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Date</p>
+                          <p className="font-medium">{formatDate(weddingDate)}</p>
+                        </div>
+                      </div>
+                    )}
+                    {venueName && (
+                      <div className="flex items-start gap-3 text-sm">
+                        <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Venue</p>
+                          <p className="font-medium">{venueName}</p>
+                        </div>
+                      </div>
+                    )}
+                    {totalValue > 0 && (
+                      <div className="flex items-start gap-3 text-sm">
+                        <DollarSign className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Total Package</p>
+                          <p className="font-medium">{formatVND(totalValue)}</p>
+                        </div>
+                      </div>
+                    )}
+                    {addOnItems.length > 0 && (
+                      <div className="pt-2 border-t">
+                        <p className="text-xs text-muted-foreground mb-2">Add-ons</p>
+                        <div className="space-y-1">
+                          {addOnItems.map((item) => (
+                            <div key={item.name} className="flex justify-between text-sm">
+                              <span>{item.item_name}</span>
+                              <span className="text-muted-foreground">{formatVND(item.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Payment Milestones */}
               <Card>
                 <CardHeader>
@@ -989,57 +1003,6 @@ export default function ProjectDetailPage() {
                   </Button>
                 </CardContent>
               </Card>
-
-              {/* Wedding Details */}
-              {(weddingDate || venueName || totalValue > 0 || addOnItems.length > 0) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Wedding Details</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {weddingDate && (
-                      <div className="flex items-start gap-3 text-sm">
-                        <Calendar className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Date</p>
-                          <p className="font-medium">{formatDate(weddingDate)}</p>
-                        </div>
-                      </div>
-                    )}
-                    {venueName && (
-                      <div className="flex items-start gap-3 text-sm">
-                        <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Venue</p>
-                          <p className="font-medium">{venueName}</p>
-                        </div>
-                      </div>
-                    )}
-                    {totalValue > 0 && (
-                      <div className="flex items-start gap-3 text-sm">
-                        <DollarSign className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Total Package</p>
-                          <p className="font-medium">{formatVND(totalValue)}</p>
-                        </div>
-                      </div>
-                    )}
-                    {addOnItems.length > 0 && (
-                      <div className="pt-2 border-t">
-                        <p className="text-xs text-muted-foreground mb-2">Add-ons</p>
-                        <div className="space-y-1">
-                          {addOnItems.map((item) => (
-                            <div key={item.name} className="flex justify-between text-sm">
-                              <span>{item.item_name}</span>
-                              <span className="text-muted-foreground">{formatVND(item.amount)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
 
               {/* Team */}
               {(project.custom_lead_planner || project.custom_support_planner || assistants.length > 0) && (
@@ -1365,7 +1328,6 @@ export default function ProjectDetailPage() {
               />
             </TabsContent>
           </Tabs>
-        </div>
       </div>
 
       {/* Add Payment Milestone Sheet */}
