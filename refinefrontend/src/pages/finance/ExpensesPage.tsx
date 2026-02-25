@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { useList, useCreate, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
 
 // Constants
 const SITE_NAME = "erp.merakiwp.com";
@@ -74,6 +79,7 @@ const initialQuickForm = {
   description: "",
   amount: "",
   category: "",
+  wedding: "",
 };
 
 const initialInvoiceForm = {
@@ -143,6 +149,10 @@ export default function ExpensesPage() {
   // Quick Expense form state
   const [quickForm, setQuickForm] = useState(initialQuickForm);
 
+  // Wedding combobox state
+  const [weddingOpen, setWeddingOpen] = useState(false);
+  const [weddingSearch, setWeddingSearch] = useState("");
+
   // Supplier Invoice form state
   const [invoiceForm, setInvoiceForm] = useState(initialInvoiceForm);
 
@@ -165,14 +175,27 @@ export default function ExpensesPage() {
     meta: { fields: ["name", "supplier_name"] },
   });
 
+  // Fetch projects (weddings) for autocomplete
+  const { result: projectsResult } = useList({
+    resource: "Project",
+    pagination: { mode: "off" },
+    meta: { fields: ["name", "project_name", "customer", "expected_end_date"] },
+  });
+
   const expenses = (result?.data ?? []) as Expense[];
   const expenseAccounts = EXPENSE_ACCOUNTS;
   const suppliers = (suppliersResult?.data ?? []) as Supplier[];
+  const projects = (projectsResult?.data ?? []) as { name: string; project_name: string; customer: string; expected_end_date: string }[];
   const isLoading = query.isLoading;
+
+  const filteredProjects = weddingSearch
+    ? projects.filter(p => p.project_name.toLowerCase().includes(weddingSearch.toLowerCase()))
+    : projects;
 
   // Reset quick expense form
   function resetQuickForm() {
     setQuickForm({ ...initialQuickForm, date: new Date().toISOString().slice(0, 10) });
+    setWeddingSearch("");
     setQuickError(null);
     setQuickSuccess(null);
   }
@@ -223,6 +246,7 @@ export default function ExpensesPage() {
           voucher_type: "Journal Entry",
           company: COMPANY_NAME,
           user_remark: quickForm.description,
+          ...(quickForm.wedding ? { project: quickForm.wedding } : {}),
           accounts: [
             {
               account: quickForm.category,
@@ -465,6 +489,68 @@ export default function ExpensesPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Wedding (optional)</Label>
+                <Popover open={weddingOpen} onOpenChange={setWeddingOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span className={quickForm.wedding ? "" : "text-muted-foreground"}>
+                        {quickForm.wedding
+                          ? (projects.find(p => p.name === quickForm.wedding)?.project_name ?? quickForm.wedding)
+                          : "Link to a wedding..."}
+                      </span>
+                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search weddings..."
+                        value={weddingSearch}
+                        onValueChange={setWeddingSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No weddings found.</CommandEmpty>
+                        <CommandGroup>
+                          {quickForm.wedding && (
+                            <CommandItem
+                              value="__clear__"
+                              onSelect={() => {
+                                setQuickForm({ ...quickForm, wedding: "" });
+                                setWeddingOpen(false);
+                              }}
+                            >
+                              <X className="mr-2 h-4 w-4" />
+                              Clear
+                            </CommandItem>
+                          )}
+                          {filteredProjects.map(p => (
+                            <CommandItem
+                              key={p.name}
+                              value={p.project_name}
+                              onSelect={() => {
+                                setQuickForm({ ...quickForm, wedding: p.name });
+                                setWeddingOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", quickForm.wedding === p.name ? "opacity-100" : "opacity-0")} />
+                              <div>
+                                <p>{p.project_name}</p>
+                                {p.expected_end_date && (
+                                  <p className="text-xs text-muted-foreground">{formatDate(p.expected_end_date)}</p>
+                                )}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
             <SheetFooter className="px-6 py-4 border-t shrink-0">
