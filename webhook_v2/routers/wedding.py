@@ -22,7 +22,7 @@ def _cancel(client: ERPNextClient, doctype: str, name: str) -> None:
     try:
         client._post(
             "/api/method/frappe.client.cancel",
-            {"doc": {"doctype": doctype, "name": name}},
+            {"doctype": doctype, "name": name},
         )
     except Exception as e:
         log.warning("cancel_error", doctype=doctype, name=name, error=str(e))
