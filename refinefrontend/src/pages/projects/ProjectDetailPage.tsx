@@ -32,7 +32,23 @@ import {
   Clock,
   AlertCircle,
   Loader2,
+  Pencil,
+  ChevronsUpDown,
+  X,
 } from "lucide-react";
+import {
+  Popover as ShadcnPopover,
+  PopoverContent as ShadcnPopoverContent,
+  PopoverTrigger as ShadcnPopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
@@ -115,6 +131,27 @@ export default function ProjectDetailPage() {
     amount: "",
     invoiceDate: new Date().toISOString().slice(0, 10),
   });
+
+  // Edit state
+  const [editOpen, setEditOpen] = useState(false);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editVenueOpen, setEditVenueOpen] = useState(false);
+  const [editVenueSearch, setEditVenueSearch] = useState("");
+  const [editVenueDisplayName, setEditVenueDisplayName] = useState("");
+  const [editForm, setEditForm] = useState({
+    venue: "",
+    leadPlanner: "",
+    supportPlanner: "",
+    assistant1: "",
+    assistant2: "",
+    assistant3: "",
+    assistant4: "",
+    assistant5: "",
+    addOns: [] as { itemCode: string; itemName: string; qty: number; rate: number }[],
+  });
+  const [editAddonSearch, setEditAddonSearch] = useState<string[]>([]);
+  const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
 
   const invalidate = useInvalidate();
   const { mutateAsync: updateRecord } = useUpdate();
@@ -247,10 +284,109 @@ export default function ProjectDetailPage() {
     userId: e.user_id,
   }));
 
+  // Fetch Venues (Suppliers in Wedding Venues group)
+  const { result: venuesResult } = useList({
+    resource: "Supplier",
+    pagination: { mode: "off" as const },
+    filters: [{ field: "supplier_group", operator: "eq", value: "Wedding Venues" }],
+    meta: { fields: ["name", "supplier_name"] },
+  });
+  const venues = (venuesResult?.data ?? []) as { name: string; supplier_name: string }[];
+
+  // Fetch available add-on items
+  const { result: addOnItemsListResult } = useList({
+    resource: "Item",
+    pagination: { mode: "off" as const },
+    filters: [{ field: "item_group", operator: "eq", value: "Add-on Services" }],
+    meta: { fields: ["name", "item_name"] },
+  });
+  const availableAddOns = (addOnItemsListResult?.data ?? []) as { name: string; item_name: string }[];
+
   function getEmployeeNameById(id: string | null | undefined): string | null {
     if (!id) return null;
     const emp = employees.find((e) => e.id === id);
     return emp?.name || id;
+  }
+
+  // Populate edit form when data loads
+  useEffect(() => {
+    if (!project || !editOpen) return;
+    const currentAddOns = addOnItems.map((i) => ({
+      itemCode: i.item_code,
+      itemName: i.item_name,
+      qty: i.qty,
+      rate: i.rate,
+    }));
+    setEditForm({
+      venue: salesOrder?.custom_venue || "",
+      leadPlanner: project.custom_lead_planner || "",
+      supportPlanner: project.custom_support_planner || "",
+      assistant1: project.custom_assistant_1 || "",
+      assistant2: project.custom_assistant_2 || "",
+      assistant3: project.custom_assistant_3 || "",
+      assistant4: project.custom_assistant_4 || "",
+      assistant5: project.custom_assistant_5 || "",
+      addOns: currentAddOns,
+    });
+    setEditAddonSearch(currentAddOns.map((a) => a.itemName));
+    setEditAddonDropdownOpen(currentAddOns.map(() => false));
+    const v = venues.find((v) => v.name === salesOrder?.custom_venue);
+    setEditVenueDisplayName(v?.supplier_name || salesOrder?.custom_venue || "");
+  }, [project, salesOrder, addOnItems, editOpen]);
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSubmittingEdit(true);
+    setEditError(null);
+    try {
+      // 1. Update Project staff fields
+      await updateRecord({
+        resource: "Project",
+        id: name!,
+        values: {
+          custom_lead_planner: editForm.leadPlanner || null,
+          custom_support_planner: editForm.supportPlanner || null,
+          custom_assistant_1: editForm.assistant1 || null,
+          custom_assistant_2: editForm.assistant2 || null,
+          custom_assistant_3: editForm.assistant3 || null,
+          custom_assistant_4: editForm.assistant4 || null,
+          custom_assistant_5: editForm.assistant5 || null,
+        },
+      });
+      // 2. Update venue on Sales Order if changed
+      if (project?.sales_order && editForm.venue !== (salesOrder?.custom_venue || "")) {
+        await fetch("/api/method/frappe.client.set_value", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            doctype: "Sales Order",
+            name: project.sales_order,
+            fieldname: "custom_venue",
+            value: editForm.venue,
+          }),
+        });
+      }
+      // 3. Update add-ons via server API
+      const resp = await fetch(`/inquiry-api/wedding/${name}/addons`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ items: editForm.addOns }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to update add-ons");
+      }
+      invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
+      invalidate({ resource: "Sales Order", invalidates: ["detail"], id: project?.sales_order! });
+      invalidate({ resource: "Sales Order Item", invalidates: ["list"] });
+      setEditOpen(false);
+    } catch (err: any) {
+      setEditError(err?.message || "Failed to save changes");
+    } finally {
+      setIsSubmittingEdit(false);
+    }
   }
 
   async function handleDelete() {
@@ -565,17 +701,6 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Actions */}
-      <div className="space-y-2 pt-2 border-t">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={() => setDeleteOpen(true)}
-        >
-          <Trash2 className="h-4 w-4 mr-2" /> Delete Project
-        </Button>
-      </div>
     </div>
   );
 
@@ -600,6 +725,17 @@ export default function ProjectDetailPage() {
           <Badge variant={statusVariant(project.status)} className="shrink-0">
             {project.status}
           </Badge>
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setEditOpen(true)}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mb-3">
@@ -661,6 +797,19 @@ export default function ProjectDetailPage() {
           <Badge variant={stageBadgeVariant(project.custom_project_stage || "Planning")}>
             {project.custom_project_stage || "Planning"}
           </Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil className="h-4 w-4 mr-2" /> Edit
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" /> Delete
+          </Button>
         </div>
       </div>
 
@@ -1282,6 +1431,230 @@ export default function ProjectDetailPage() {
                   </>
                 ) : (
                   "Create Milestone"
+                )}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      {/* Edit Wedding Sheet */}
+      <Sheet open={editOpen} onOpenChange={(open) => { if (!isSubmittingEdit) { setEditOpen(open); setEditError(null); } }}>
+        <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Edit Wedding Details</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleEditSubmit} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+              {editError && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {editError}
+                </div>
+              )}
+
+              {/* Venue */}
+              <div className="space-y-2">
+                <Label>Venue</Label>
+                <ShadcnPopover open={editVenueOpen} onOpenChange={setEditVenueOpen}>
+                  <ShadcnPopoverTrigger asChild>
+                    <button
+                      type="button"
+                      role="combobox"
+                      className="w-full flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors border-input bg-background hover:border-primary/50 focus:outline-none"
+                    >
+                      {editVenueDisplayName || editForm.venue || <span className="text-muted-foreground">Select venue...</span>}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </button>
+                  </ShadcnPopoverTrigger>
+                  <ShadcnPopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search venues..."
+                        value={editVenueSearch}
+                        onValueChange={setEditVenueSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No venues found.</CommandEmpty>
+                        <CommandGroup>
+                          {venues.map((v) => (
+                            <CommandItem
+                              key={v.name}
+                              value={v.supplier_name}
+                              onSelect={() => {
+                                setEditForm({ ...editForm, venue: v.name });
+                                setEditVenueDisplayName(v.supplier_name);
+                                setEditVenueOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", editForm.venue === v.name ? "opacity-100" : "opacity-0")} />
+                              {v.supplier_name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </ShadcnPopoverContent>
+                </ShadcnPopover>
+              </div>
+
+              {/* Staff */}
+              <div className="space-y-3">
+                <Label>Staff</Label>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Lead Planner</Label>
+                    <Select value={editForm.leadPlanner} onValueChange={(v) => setEditForm({ ...editForm, leadPlanner: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {employees.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Support Planner</Label>
+                    <Select value={editForm.supportPlanner} onValueChange={(v) => setEditForm({ ...editForm, supportPlanner: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {employees.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {(["assistant1", "assistant2", "assistant3", "assistant4", "assistant5"] as const).map((field, i) => (
+                    <div key={field} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Assistant {i + 1}</Label>
+                      <Select value={editForm[field]} onValueChange={(v) => setEditForm({ ...editForm, [field]: v })}>
+                        <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {employees.map((emp) => (
+                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add-ons */}
+              <div className="space-y-2">
+                <Label>Add-ons</Label>
+                {editForm.addOns.map((addon, i) => (
+                  <div key={i} className="flex gap-2 items-start">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Add-on name..."
+                        value={editAddonSearch[i] ?? addon.itemName}
+                        onChange={(e) => {
+                          const newSearch = [...editAddonSearch];
+                          newSearch[i] = e.target.value;
+                          setEditAddonSearch(newSearch);
+                          const updated = editForm.addOns.map((a, j) =>
+                            j === i ? { ...a, itemCode: "", itemName: e.target.value } : a
+                          );
+                          setEditForm({ ...editForm, addOns: updated });
+                        }}
+                        onFocus={() => {
+                          const newOpen = [...editAddonDropdownOpen];
+                          newOpen[i] = true;
+                          setEditAddonDropdownOpen(newOpen);
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            const newOpen = [...editAddonDropdownOpen];
+                            newOpen[i] = false;
+                            setEditAddonDropdownOpen(newOpen);
+                          }, 200);
+                        }}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      {editAddonDropdownOpen[i] && (
+                        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {availableAddOns
+                            .filter((item) => !editAddonSearch[i] || item.item_name.toLowerCase().includes((editAddonSearch[i] ?? "").toLowerCase()))
+                            .map((item) => (
+                              <div
+                                key={item.name}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  const newSearch = [...editAddonSearch];
+                                  newSearch[i] = item.item_name;
+                                  setEditAddonSearch(newSearch);
+                                  const updated = editForm.addOns.map((a, j) =>
+                                    j === i ? { ...a, itemCode: item.name, itemName: item.item_name } : a
+                                  );
+                                  setEditForm({ ...editForm, addOns: updated });
+                                  const newOpen = [...editAddonDropdownOpen];
+                                  newOpen[i] = false;
+                                  setEditAddonDropdownOpen(newOpen);
+                                }}
+                                className="px-3 py-2 text-sm cursor-pointer hover:bg-muted flex items-center gap-2"
+                              >
+                                {item.name === addon.itemCode && <Check className="h-3 w-3" />}
+                                {item.item_name}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      placeholder="Rate (VND)"
+                      value={addon.rate || ""}
+                      onChange={(e) => {
+                        const updated = editForm.addOns.map((a, j) =>
+                          j === i ? { ...a, rate: parseFloat(e.target.value) || 0 } : a
+                        );
+                        setEditForm({ ...editForm, addOns: updated });
+                      }}
+                      className="w-28 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => {
+                        setEditForm({ ...editForm, addOns: editForm.addOns.filter((_, j) => j !== i) });
+                        setEditAddonSearch((prev) => prev.filter((_, j) => j !== i));
+                        setEditAddonDropdownOpen((prev) => prev.filter((_, j) => j !== i));
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditForm({ ...editForm, addOns: [...editForm.addOns, { itemCode: "", itemName: "", qty: 1, rate: 0 }] });
+                    setEditAddonSearch((prev) => [...prev, ""]);
+                    setEditAddonDropdownOpen((prev) => [...prev, false]);
+                  }}
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors pt-1"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add item
+                </button>
+              </div>
+            </div>
+            <SheetFooter className="px-6 py-4 border-t shrink-0">
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={isSubmittingEdit}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmittingEdit}>
+                {isSubmittingEdit ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+                ) : (
+                  "Save Changes"
                 )}
               </Button>
             </SheetFooter>

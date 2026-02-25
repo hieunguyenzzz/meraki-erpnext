@@ -200,3 +200,91 @@ def create_milestone(project_name: str, req: MilestoneRequest):
 
     log.info("milestone_created", project=project_name, invoice=inv_name, payment_entry=pe_name)
     return {"success": True, "invoice": inv_name, "payment_entry": pe_name}
+
+
+class AddonItem(BaseModel):
+    item_code: str
+    item_name: str
+    qty: float = 1
+    rate: float
+
+
+class AddonsRequest(BaseModel):
+    items: list[AddonItem]
+
+
+@router.put("/wedding/{project_name}/addons")
+def update_addons(project_name: str, req: AddonsRequest):
+    """Update add-on items on a wedding's Sales Order by cancel+amend+resubmit."""
+    client = ERPNextClient()
+
+    # 1. Get project → sales_order name
+    project = client._get(f"/api/resource/Project/{project_name}").get("data", {})
+    so_name = project.get("sales_order")
+    if not so_name:
+        raise HTTPException(status_code=404, detail="No Sales Order linked to this project")
+
+    # 2. Get current SO and its items
+    so = client._get(f"/api/resource/Sales Order/{so_name}").get("data", {})
+    if so.get("docstatus") == 2:
+        raise HTTPException(status_code=400, detail="Sales Order is already cancelled")
+
+    # 3. Cancel current SO
+    if so.get("docstatus") == 1:
+        _cancel(client, "Sales Order", so_name)
+
+    # 4. Build items for new SO: keep all "Wedding Planning Service" items + new add-ons
+    original_items = so.get("items", [])
+    planning_service_items = [
+        {
+            "item_code": item["item_code"],
+            "item_name": item["item_name"],
+            "qty": item["qty"],
+            "rate": item["rate"],
+        }
+        for item in original_items
+        if item.get("item_code") == "Wedding Planning Service"
+    ]
+    addon_items = [
+        {
+            "item_code": addon.item_code,
+            "item_name": addon.item_name,
+            "qty": addon.qty,
+            "rate": addon.rate,
+        }
+        for addon in req.items
+    ]
+    new_items = planning_service_items + addon_items
+
+    # 5. Create new SO (amendment)
+    new_so_data = {
+        "customer": so.get("customer"),
+        "company": so.get("company"),
+        "delivery_date": so.get("delivery_date"),
+        "currency": so.get("currency"),
+        "selling_price_list": so.get("selling_price_list"),
+        "custom_venue": so.get("custom_venue"),
+        "amended_from": so_name,
+        "items": new_items,
+    }
+    # Preserve tax template if present
+    if so.get("taxes_and_charges"):
+        new_so_data["taxes_and_charges"] = so.get("taxes_and_charges")
+    if so.get("taxes"):
+        new_so_data["taxes"] = [
+            {"charge_type": t.get("charge_type"), "account_head": t.get("account_head"), "rate": t.get("rate"), "description": t.get("description")}
+            for t in so.get("taxes", [])
+        ]
+
+    new_so = client._post("/api/resource/Sales Order", new_so_data).get("data", {})
+    new_so_name = new_so["name"]
+
+    # 6. Submit the new SO
+    full_so = client._get(f"/api/resource/Sales Order/{new_so_name}").get("data", {})
+    client._post("/api/method/frappe.client.submit", {"doc": full_so})
+
+    # 7. Update project.sales_order to new SO name
+    client._put(f"/api/resource/Project/{project_name}", {"sales_order": new_so_name})
+
+    log.info("addons_updated", project=project_name, old_so=so_name, new_so=new_so_name)
+    return {"success": True, "sales_order": new_so_name}
