@@ -111,7 +111,6 @@ export default function ProjectDetailPage() {
     label: "",
     amount: "",
     invoiceDate: new Date().toISOString().slice(0, 10),
-    dueDate: "",
   });
 
   const invalidate = useInvalidate();
@@ -382,7 +381,7 @@ export default function ProjectDetailPage() {
           company: "Meraki Wedding Planner",
           set_posting_time: 1,
           posting_date: milestoneForm.invoiceDate,
-          due_date: milestoneForm.dueDate || milestoneForm.invoiceDate,
+          due_date: milestoneForm.invoiceDate,
           currency: "VND",
           selling_price_list: "Standard Selling VND",
           sales_order: project?.sales_order,
@@ -415,7 +414,6 @@ export default function ProjectDetailPage() {
         label: "",
         amount: "",
         invoiceDate: new Date().toISOString().slice(0, 10),
-        dueDate: weddingDate || "",
       });
       invalidate({ resource: "Sales Invoice", invalidates: ["list"] });
     } catch (err) {
@@ -802,7 +800,6 @@ export default function ProjectDetailPage() {
                         label: "",
                         amount: "",
                         invoiceDate: new Date().toISOString().slice(0, 10),
-                        dueDate: weddingDate || "",
                       });
                       setMilestoneError(null);
                       setAddMilestoneOpen(true);
@@ -1242,25 +1239,14 @@ export default function ProjectDetailPage() {
                     </p>
                   )}
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="milestone-invoice-date">Invoice Date</Label>
-                  <Input
-                    id="milestone-invoice-date"
-                    type="date"
-                    value={milestoneForm.invoiceDate}
-                    onChange={(e) => setMilestoneForm({ ...milestoneForm, invoiceDate: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="milestone-due-date">Due Date</Label>
-                  <Input
-                    id="milestone-due-date"
-                    type="date"
-                    value={milestoneForm.dueDate}
-                    onChange={(e) => setMilestoneForm({ ...milestoneForm, dueDate: e.target.value })}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="milestone-invoice-date">Payment Date</Label>
+                <Input
+                  id="milestone-invoice-date"
+                  type="date"
+                  value={milestoneForm.invoiceDate}
+                  onChange={(e) => setMilestoneForm({ ...milestoneForm, invoiceDate: e.target.value })}
+                />
               </div>
             </div>
             <SheetFooter className="px-6 py-4 border-t shrink-0">
