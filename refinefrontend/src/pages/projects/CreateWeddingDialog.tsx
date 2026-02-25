@@ -389,54 +389,6 @@ export function CreateWeddingDialog({
         }),
       });
 
-      // 3c. Create Sales Invoice from SO items
-      const invoiceItems = (fullDocData.data?.items ?? []).map((item: any) => ({
-        item_code: item.item_code,
-        qty: item.qty,
-        rate: item.rate,
-        sales_order: salesOrderName,
-        so_detail: item.name,
-      }));
-      const invoiceValues: Record<string, unknown> = {
-        customer: customerId,
-        company: "Meraki Wedding Planner",
-        set_posting_time: 1,
-        posting_date: formData.weddingDate,
-        due_date: formData.weddingDate,
-        currency: "VND",
-        selling_price_list: "Standard Selling VND",
-        items: invoiceItems,
-      };
-      if (formData.taxType === "vat_included") {
-        invoiceValues.taxes = [
-          {
-            charge_type: "On Net Total",
-            account_head: "Output Tax - MWP",
-            rate: 8,
-            included_in_print_rate: 1,
-            description: "VAT 8%",
-          },
-        ];
-      }
-      const invoiceResult = await createDoc({
-        resource: "Sales Invoice",
-        values: invoiceValues,
-      });
-      const invoiceName = invoiceResult?.data?.name;
-      if (invoiceName) {
-        const fullInvRes = await fetch(
-          `/api/resource/Sales Invoice/${encodeURIComponent(invoiceName)}`,
-          { headers: { "X-Frappe-Site-Name": SITE_NAME }, credentials: "include" }
-        );
-        const fullInvData = await fullInvRes.json();
-        await fetch("/api/method/frappe.client.submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
-          credentials: "include",
-          body: JSON.stringify({ doc: fullInvData.data }),
-        });
-      }
-
       // 4. Create Project linked to Sales Order with team assignment
       const projectResult = await createDoc({
         resource: "Project",
@@ -467,7 +419,6 @@ export function CreateWeddingDialog({
       invalidate({ resource: "Project", invalidates: ["list"] });
       invalidate({ resource: "Sales Order", invalidates: ["list"] });
       invalidate({ resource: "Customer", invalidates: ["list"] });
-      invalidate({ resource: "Sales Invoice", invalidates: ["list"] });
 
       onOpenChange(false);
       navigate(`/projects/${projectName}`);
