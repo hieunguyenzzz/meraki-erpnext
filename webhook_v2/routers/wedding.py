@@ -10,7 +10,7 @@ Full deletion order:
 
 import json
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
@@ -158,27 +158,42 @@ def create_milestone(project_name: str, req: MilestoneRequest):
     full_inv = client._get(f"/api/resource/Sales Invoice/{inv_name}").get("data", {})
     client._post("/api/method/frappe.client.submit", {"doc": full_inv})
 
-    # 3. Create + submit Payment Entry
-    pe = client._post("/api/resource/Payment Entry", {
-        "payment_type": "Receive",
-        "party_type": "Customer",
-        "party": customer,
-        "paid_from": "Debtors - MWP",
-        "paid_to": "Cash - MWP",
-        "paid_from_account_currency": "VND",
-        "paid_to_account_currency": "VND",
-        "paid_amount": req.amount,
-        "received_amount": req.amount,
-        "posting_date": req.invoice_date,
-        "company": "Meraki Wedding Planner",
-        "references": [{
-            "reference_doctype": "Sales Invoice",
-            "reference_name": inv_name,
-            "allocated_amount": req.amount,
-            "total_amount": req.amount,
-            "outstanding_amount": req.amount,
-        }],
-    }).get("data", {})
+    # Refetch submitted invoice to get actual outstanding_amount after ERPNext rounding
+    submitted_inv = client._get(f"/api/resource/Sales Invoice/{inv_name}").get("data", {})
+    actual_amount = submitted_inv.get("outstanding_amount") or req.amount
+
+    # 3. Create + submit Payment Entry using actual_amount (avoids 417 when ERPNext rounds)
+    try:
+        pe = client._post("/api/resource/Payment Entry", {
+            "payment_type": "Receive",
+            "party_type": "Customer",
+            "party": customer,
+            "paid_from": "Debtors - MWP",
+            "paid_to": "Cash - MWP",
+            "paid_from_account_currency": "VND",
+            "paid_to_account_currency": "VND",
+            "paid_amount": actual_amount,
+            "received_amount": actual_amount,
+            "posting_date": req.invoice_date,
+            "company": "Meraki Wedding Planner",
+            "references": [{
+                "reference_doctype": "Sales Invoice",
+                "reference_name": inv_name,
+                "allocated_amount": actual_amount,
+                "total_amount": actual_amount,
+                "outstanding_amount": actual_amount,
+            }],
+        }).get("data", {})
+    except Exception as e:
+        # Rollback: cancel + delete the orphaned invoice
+        _cancel(client, "Sales Invoice", inv_name)
+        _delete_gl_entries(client, inv_name)
+        _delete_payment_ledger_entries(client, inv_name)
+        try:
+            client._delete(f"/api/resource/Sales Invoice/{inv_name}")
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=f"Payment Entry creation failed: {str(e)}")
     pe_name = pe["name"]
     full_pe = client._get(f"/api/resource/Payment Entry/{pe_name}").get("data", {})
     client._post("/api/method/frappe.client.submit", {"doc": full_pe})

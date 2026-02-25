@@ -115,11 +115,12 @@ class ERPNextClient:
                 response.raise_for_status()
                 return response.json()
             except requests.HTTPError as e:
-                # Log detailed error for 500s
-                if e.response is not None and e.response.status_code == 500:
+                # Log detailed error for 417s and 500s
+                if e.response is not None and e.response.status_code in (417, 500):
                     log.error(
-                        "erpnext_500_error",
+                        "erpnext_error",
                         endpoint=endpoint,
+                        status=e.response.status_code,
                         response_body=e.response.text[:500],
                     )
                 if e.response is not None and e.response.status_code == 401:
