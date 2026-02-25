@@ -402,52 +402,22 @@ export default function ProjectDetailPage() {
     setIsSubmittingMilestone(true);
     setMilestoneError(null);
     try {
-      const amount = parseFloat(milestoneForm.amount);
-      const itemName = milestoneForm.label
-        ? `${milestoneForm.label} — Wedding Planning Service`
-        : "Wedding Planning Service";
-
-      const result = await createDoc({
-        resource: "Sales Invoice",
-        values: {
-          customer: project?.customer,
-          company: "Meraki Wedding Planner",
-          set_posting_time: 1,
-          posting_date: milestoneForm.invoiceDate,
-          due_date: milestoneForm.invoiceDate,
-          currency: "VND",
-          selling_price_list: "Standard Selling VND",
-          project: name,
-          items: [{
-            item_code: "Wedding Planning Service",
-            item_name: itemName,
-            qty: 1,
-            rate: amount,
-          }],
-        },
+      const res = await fetch(`/inquiry-api/wedding/${name}/milestone`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          amount: parseFloat(milestoneForm.amount),
+          label: milestoneForm.label,
+          invoice_date: milestoneForm.invoiceDate,
+        }),
       });
-
-      const invoiceName = result?.data?.name;
-      if (invoiceName) {
-        const fullInvRes = await fetch(
-          `/api/resource/Sales Invoice/${encodeURIComponent(invoiceName)}`,
-          { headers: { "X-Frappe-Site-Name": SITE_NAME }, credentials: "include" }
-        );
-        const fullInvData = await fullInvRes.json();
-        await fetch("/api/method/frappe.client.submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
-          credentials: "include",
-          body: JSON.stringify({ doc: fullInvData.data }),
-        });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to create milestone");
       }
-
       setAddMilestoneOpen(false);
-      setMilestoneForm({
-        label: "",
-        amount: "",
-        invoiceDate: new Date().toISOString().slice(0, 10),
-      });
+      setMilestoneForm({ label: "", amount: "", invoiceDate: new Date().toISOString().slice(0, 10) });
       if (name) fetchInvoices(name);
     } catch (err) {
       setMilestoneError(err instanceof Error ? err.message : "Failed to create milestone");
