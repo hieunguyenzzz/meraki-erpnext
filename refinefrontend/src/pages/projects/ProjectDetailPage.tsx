@@ -107,6 +107,8 @@ export default function ProjectDetailPage() {
   const [addMilestoneOpen, setAddMilestoneOpen] = useState(false);
   const [isSubmittingMilestone, setIsSubmittingMilestone] = useState(false);
   const [milestoneError, setMilestoneError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [milestoneForm, setMilestoneForm] = useState({
     label: "",
@@ -252,15 +254,23 @@ export default function ProjectDetailPage() {
   }
 
   async function handleDelete() {
-    const res = await fetch(`/inquiry-api/wedding/${name}/delete`, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || "Delete failed");
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/inquiry-api/wedding/${name}/delete`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Delete failed");
+      }
+      list("Project");
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setIsDeleting(false);
     }
-    list("Project");
   }
 
   async function handleStageChange(newStage: string) {
@@ -1298,20 +1308,26 @@ export default function ProjectDetailPage() {
       </Sheet>
 
       {/* Delete Project Sheet - kept at root level to avoid remount flashing */}
-      <Sheet open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <Sheet open={deleteOpen} onOpenChange={(open) => { if (!isDeleting) { setDeleteOpen(open); setDeleteError(null); } }}>
         <SheetContent side="right" className="sm:max-w-sm flex flex-col p-0">
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>Delete Project</SheetTitle>
           </SheetHeader>
-          <div className="px-6 py-4">
+          <div className="px-6 py-4 space-y-3">
             <p className="text-sm text-muted-foreground">Are you sure you want to delete this project? This action cannot be undone.</p>
+            {deleteError && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {deleteError}
+              </div>
+            )}
           </div>
           <SheetFooter className="px-6 py-4 border-t shrink-0">
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={isDeleting}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Deleting...</> : "Delete"}
             </Button>
           </SheetFooter>
         </SheetContent>
