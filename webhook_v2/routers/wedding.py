@@ -302,6 +302,7 @@ def create_addon_item(req: AddonItemCreateRequest):
         "item_code": req.item_name.strip(),
         "item_group": "Add-on Services",
         "is_sales_item": 1,
+        "is_stock_item": 0,
         "stock_uom": "Nos",
     })
     item = result.get("data", {})
