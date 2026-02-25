@@ -1,15 +1,11 @@
 """
 Wedding management endpoints - server-side cascade delete.
 
-Finance-safe deletion strategy:
-- Payment Entries: cancel only (preserves GL reversal entries + audit trail)
-- Sales Invoices: cancel only (preserves GL reversal entries + audit trail)
-- Sales Order: cancel + delete (no GL entries, safe to remove)
-- Project: delete
-
-Cancellation already creates reverse GL entries so the account balances
-are zeroed. We do NOT delete financial documents to keep the document
-numbering sequence intact and preserve the accounting audit trail.
+Full deletion order:
+  Payment Entries → cancel + delete
+  Sales Invoices → cancel + delete GL entries + delete
+  Sales Order → cancel + delete
+  Project → delete
 """
 
 import json
@@ -22,15 +18,34 @@ log = get_logger(__name__)
 router = APIRouter()
 
 
+def _cancel(client: ERPNextClient, doctype: str, name: str) -> None:
+    try:
+        client._post(
+            "/api/method/frappe.client.cancel",
+            {"doc": {"doctype": doctype, "name": name}},
+        )
+    except Exception as e:
+        log.warning("cancel_error", doctype=doctype, name=name, error=str(e))
+
+
+def _delete_gl_entries(client: ERPNextClient, voucher_no: str) -> int:
+    """Delete all GL entries for a voucher (required before deleting the parent doc)."""
+    gl_entries = client._get("/api/resource/GL Entry", params={
+        "filters": json.dumps([["voucher_no", "=", voucher_no]]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 500,
+    }).get("data", [])
+    for gl in gl_entries:
+        try:
+            client._delete(f"/api/resource/GL Entry/{gl['name']}")
+        except Exception as e:
+            log.warning("gl_entry_delete_error", entry=gl["name"], error=str(e))
+    return len(gl_entries)
+
+
 @router.post("/wedding/{project_name}/delete")
 def delete_wedding(project_name: str):
-    """
-    Remove a wedding project while preserving accounting integrity.
-
-    Payment Entries and Sales Invoices are cancelled (not deleted) so GL
-    reversal entries remain intact and document numbering has no gaps.
-    Only the Sales Order and Project are deleted from the system.
-    """
+    """Fully delete a wedding project and all linked documents."""
     client = ERPNextClient()
 
     # 1. Find all Sales Invoices linked to this project
@@ -40,10 +55,10 @@ def delete_wedding(project_name: str):
         "limit_page_length": 100,
     }).get("data", [])
 
-    total_payment_entries = 0
+    total_pe = 0
 
     for inv in invoices:
-        # 2. Find Payment Entries referencing this invoice (filter on child table)
+        # 2. Find Payment Entries referencing this invoice
         pe_data = client._get("/api/resource/Payment Entry", params={
             "filters": json.dumps([
                 ["Payment Entry Reference", "reference_name", "=", inv["name"]],
@@ -52,31 +67,27 @@ def delete_wedding(project_name: str):
             "limit_page_length": 100,
         }).get("data", [])
 
-        # 3. Cancel each Payment Entry (keep in system for audit trail)
+        # 3. Cancel + delete GL entries + delete each Payment Entry
         for pe in pe_data:
             if pe["docstatus"] == 1:
-                try:
-                    client._post(
-                        "/api/method/frappe.client.cancel",
-                        {"doc": {"doctype": "Payment Entry", "name": pe["name"]}},
-                    )
-                    log.info("payment_entry_cancelled", pe=pe["name"])
-                except Exception as e:
-                    log.warning("payment_entry_cancel_error", pe=pe["name"], error=str(e))
-            total_payment_entries += 1
-
-        # 4. Cancel the Invoice (keep in system for audit trail)
-        if inv["docstatus"] == 1:
+                _cancel(client, "Payment Entry", pe["name"])
+            _delete_gl_entries(client, pe["name"])
             try:
-                client._post(
-                    "/api/method/frappe.client.cancel",
-                    {"doc": {"doctype": "Sales Invoice", "name": inv["name"]}},
-                )
-                log.info("invoice_cancelled", invoice=inv["name"])
+                client._delete(f"/api/resource/Payment Entry/{pe['name']}")
             except Exception as e:
-                log.warning("invoice_cancel_error", invoice=inv["name"], error=str(e))
+                log.warning("pe_delete_error", pe=pe["name"], error=str(e))
+            total_pe += 1
 
-    # 5. Find + cancel + delete the Sales Order (no GL entries, safe to delete)
+        # 4. Cancel + delete GL entries + delete the Invoice
+        if inv["docstatus"] == 1:
+            _cancel(client, "Sales Invoice", inv["name"])
+        _delete_gl_entries(client, inv["name"])
+        try:
+            client._delete(f"/api/resource/Sales Invoice/{inv['name']}")
+        except Exception as e:
+            log.warning("invoice_delete_error", invoice=inv["name"], error=str(e))
+
+    # 5. Cancel + delete the Sales Order (no GL entries)
     so_name = None
     try:
         project_doc = client._get(f"/api/resource/Project/{project_name}").get("data", {})
@@ -84,31 +95,13 @@ def delete_wedding(project_name: str):
         if so_name:
             so = client._get(f"/api/resource/Sales Order/{so_name}").get("data", {})
             if so.get("docstatus") == 1:
-                try:
-                    client._post(
-                        "/api/method/frappe.client.cancel",
-                        {"doc": {"doctype": "Sales Order", "name": so_name}},
-                    )
-                except Exception as e:
-                    log.warning("sales_order_cancel_error", so=so_name, error=str(e))
+                _cancel(client, "Sales Order", so_name)
             client._delete(f"/api/resource/Sales Order/{so_name}")
-            log.info("sales_order_deleted", so=so_name)
     except Exception as e:
-        log.warning("sales_order_delete_error", project=project_name, error=str(e))
+        log.warning("so_delete_error", project=project_name, error=str(e))
 
     # 6. Delete the Project
     client._delete(f"/api/resource/Project/{project_name}")
 
-    log.info(
-        "wedding_deleted",
-        project=project_name,
-        invoices_cancelled=len(invoices),
-        payment_entries_cancelled=total_payment_entries,
-        sales_order_deleted=so_name,
-    )
-    return {
-        "success": True,
-        "project": project_name,
-        "invoices_cancelled": len(invoices),
-        "payment_entries_cancelled": total_payment_entries,
-    }
+    log.info("wedding_deleted", project=project_name, invoices=len(invoices), payment_entries=total_pe)
+    return {"success": True, "project": project_name}
