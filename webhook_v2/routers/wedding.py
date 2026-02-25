@@ -31,16 +31,15 @@ def delete_wedding(project_name: str):
     total_payment_entries = 0
 
     for inv in invoices:
-        # 2. Find Payment Entries referencing this invoice
-        pe_refs = client._get("/api/resource/Payment Entry Reference", params={
+        # 2. Find Payment Entries referencing this invoice (filter on child table)
+        pe_data = client._get("/api/resource/Payment Entry", params={
             "filters": json.dumps([
-                ["reference_doctype", "=", "Sales Invoice"],
-                ["reference_name", "=", inv["name"]],
+                ["Payment Entry Reference", "reference_name", "=", inv["name"]],
             ]),
-            "fields": json.dumps(["name", "parent"]),
+            "fields": json.dumps(["name"]),
             "limit_page_length": 100,
         }).get("data", [])
-        pe_names = list({r["parent"] for r in pe_refs})
+        pe_names = [r["name"] for r in pe_data]
 
         # 3. Cancel + delete each Payment Entry
         for pe_name in pe_names:
