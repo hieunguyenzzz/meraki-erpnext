@@ -255,7 +255,7 @@ export default function ProjectDetailPage() {
       );
       const invData = await invRes.json();
 
-      // Cancel submitted invoices then delete
+      // Cancel submitted invoices then delete via Refine (handles CSRF)
       for (const inv of (invData.data ?? [])) {
         if (inv.docstatus === 1) {
           await fetch("/api/method/frappe.client.cancel", {
@@ -265,19 +265,17 @@ export default function ProjectDetailPage() {
             body: JSON.stringify({ doctype: "Sales Invoice", name: inv.name }),
           });
         }
-        await fetch(`${apiUrl}/resource/Sales Invoice/${encodeURIComponent(inv.name)}`,
-          { method: "DELETE", credentials: "include" });
+        await deleteRecord({ resource: "Sales Invoice", id: inv.name });
       }
 
-      // 2. Cancel and delete the Sales Order
+      // 2. Cancel and delete the Sales Order via Refine
       await fetch("/api/method/frappe.client.cancel", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
         credentials: "include",
         body: JSON.stringify({ doctype: "Sales Order", name: soName }),
       });
-      await fetch(`${apiUrl}/resource/Sales Order/${encodeURIComponent(soName)}`,
-        { method: "DELETE", credentials: "include" });
+      await deleteRecord({ resource: "Sales Order", id: soName });
     }
 
     // 3. Delete Project (no docstatus, direct delete)
