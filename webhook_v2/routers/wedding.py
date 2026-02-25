@@ -50,6 +50,21 @@ def _delete_gl_entries(client: ERPNextClient, voucher_no: str) -> int:
     return len(gl_entries)
 
 
+def _delete_payment_ledger_entries(client: ERPNextClient, voucher_no: str) -> int:
+    """Delete all Payment Ledger Entries for a voucher (blocks deletion of invoices/PEs)."""
+    entries = client._get("/api/resource/Payment Ledger Entry", params={
+        "filters": json.dumps([["voucher_no", "=", voucher_no]]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 500,
+    }).get("data", [])
+    for entry in entries:
+        try:
+            client._delete(f"/api/resource/Payment Ledger Entry/{entry['name']}")
+        except Exception as e:
+            log.warning("payment_ledger_delete_error", entry=entry["name"], error=str(e))
+    return len(entries)
+
+
 @router.post("/wedding/{project_name}/delete")
 def delete_wedding(project_name: str):
     """Fully delete a wedding project and all linked documents."""
@@ -74,21 +89,23 @@ def delete_wedding(project_name: str):
             "limit_page_length": 100,
         }).get("data", [])
 
-        # 3. Cancel + delete GL entries + delete each Payment Entry
+        # 3. Cancel + delete GL/ledger entries + delete each Payment Entry
         for pe in pe_data:
             if pe["docstatus"] == 1:
                 _cancel(client, "Payment Entry", pe["name"])
             _delete_gl_entries(client, pe["name"])
+            _delete_payment_ledger_entries(client, pe["name"])
             try:
                 client._delete(f"/api/resource/Payment Entry/{pe['name']}")
             except Exception as e:
                 log.warning("pe_delete_error", pe=pe["name"], error=str(e))
             total_pe += 1
 
-        # 4. Cancel + delete GL entries + delete the Invoice
+        # 4. Cancel + delete GL/ledger entries + delete the Invoice
         if inv["docstatus"] == 1:
             _cancel(client, "Sales Invoice", inv["name"])
         _delete_gl_entries(client, inv["name"])
+        _delete_payment_ledger_entries(client, inv["name"])
         try:
             client._delete(f"/api/resource/Sales Invoice/{inv['name']}")
         except Exception as e:
