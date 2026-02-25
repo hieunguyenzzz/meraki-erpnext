@@ -656,7 +656,7 @@ export default function ProjectDetailPage() {
           <CollapsibleContent>
             <Card className="mb-4">
               <CardContent className="pt-4">
-                <SidebarContent />
+                {SidebarContent()}
               </CardContent>
             </Card>
           </CollapsibleContent>
@@ -691,7 +691,7 @@ export default function ProjectDetailPage() {
           <div className="sticky top-4">
             <Card>
               <CardContent className="pt-4">
-                <SidebarContent />
+                {SidebarContent()}
               </CardContent>
             </Card>
           </div>
