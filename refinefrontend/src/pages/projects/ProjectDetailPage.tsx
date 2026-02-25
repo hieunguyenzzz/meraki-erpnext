@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { useOne, useList, useUpdate, useInvalidate, useNavigation, useCreate } from "@refinedev/core";
 import * as Popover from "@radix-ui/react-popover";
@@ -223,7 +223,10 @@ export default function ProjectDetailPage() {
     queryOptions: { enabled: !!project?.sales_order },
   });
   const soItems = (soItemsResult?.data ?? []) as { name: string; item_code: string; item_name: string; qty: number; rate: number; amount: number }[];
-  const addOnItems = soItems.filter((i) => i.item_code !== "Wedding Planning Service");
+  const addOnItems = useMemo(
+    () => soItems.filter((i) => i.item_code !== "Wedding Planning Service"),
+    [soItems]
+  );
 
   // Fetch Sales Invoices linked to this Project via the `project` field
   // (sales_order is not a writable/filterable doc-level field on Sales Invoice)
@@ -1504,10 +1507,10 @@ export default function ProjectDetailPage() {
                 <div className="space-y-2">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Lead Planner</Label>
-                    <Select value={editForm.leadPlanner} onValueChange={(v) => setEditForm({ ...editForm, leadPlanner: v })}>
+                    <Select value={editForm.leadPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, leadPlanner: v === "__none__" ? "" : v })}>
                       <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {employees.map((emp) => (
                           <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
                         ))}
@@ -1516,10 +1519,10 @@ export default function ProjectDetailPage() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Support Planner</Label>
-                    <Select value={editForm.supportPlanner} onValueChange={(v) => setEditForm({ ...editForm, supportPlanner: v })}>
+                    <Select value={editForm.supportPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, supportPlanner: v === "__none__" ? "" : v })}>
                       <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {employees.map((emp) => (
                           <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
                         ))}
@@ -1529,10 +1532,10 @@ export default function ProjectDetailPage() {
                   {(["assistant1", "assistant2", "assistant3", "assistant4", "assistant5"] as const).map((field, i) => (
                     <div key={field} className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Assistant {i + 1}</Label>
-                      <Select value={editForm[field]} onValueChange={(v) => setEditForm({ ...editForm, [field]: v })}>
+                      <Select value={editForm[field] || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, [field]: v === "__none__" ? "" : v })}>
                         <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="__none__">None</SelectItem>
                           {employees.map((emp) => (
                             <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
                           ))}
