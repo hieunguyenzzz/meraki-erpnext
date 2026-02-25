@@ -16,6 +16,7 @@ ORDERED_PHASES = [
     "v011_backfill_venue_and_lead_planner",
     "v012_addon_fields",
     "v013_sales_role",
+    "v014_fix_addon_items_non_stock",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
