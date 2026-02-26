@@ -61,7 +61,7 @@ class BackfillProcessor(BaseProcessor):
     def process(self, doctype: DocType = DocType.LEAD) -> dict:
         return self.process_pending(doctype)
 
-    def backfill(self, since_date: datetime, until_date: datetime | None = None) -> dict:
+    def backfill(self, since_date: datetime, until_date: datetime | None = None, doctype: DocType = DocType.LEAD) -> dict:
         """Process stored emails from a date range."""
         log.info("backfill_starting", since=since_date.isoformat(), until=until_date.isoformat() if until_date else "now")
 

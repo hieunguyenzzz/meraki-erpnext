@@ -46,7 +46,7 @@ def save_state(state_file: Path, applied: list) -> None:
 
 
 def run_pending(client) -> int:
-    from phases import v001_wedding_venues, v002_wedding_service_item, v003_wedding_service_item_fix, v004_remove_meraki_id_unique_constraint, v005_bhxh_insurance_setup, v006_employer_bhxh, v007_fix_jv_and_bh_accounts, v008_fix_venue_unique_constraint, v009_more_assistant_fields, v010_link_projects_to_sales_orders, v011_backfill_venue_and_lead_planner, v012_addon_fields, v013_sales_role
+    from phases import v001_wedding_venues, v002_wedding_service_item, v003_wedding_service_item_fix, v004_remove_meraki_id_unique_constraint, v005_bhxh_insurance_setup, v006_employer_bhxh, v007_fix_jv_and_bh_accounts, v008_fix_venue_unique_constraint, v009_more_assistant_fields, v010_link_projects_to_sales_orders, v011_backfill_venue_and_lead_planner, v012_addon_fields, v013_sales_role, v014_fix_addon_items_non_stock
 
     phase_fns = {
         "v001_wedding_venues": v001_wedding_venues.run,
@@ -62,6 +62,7 @@ def run_pending(client) -> int:
         "v011_backfill_venue_and_lead_planner": v011_backfill_venue_and_lead_planner.run,
         "v012_addon_fields": v012_addon_fields.run,
         "v013_sales_role": v013_sales_role.run,
+        "v014_fix_addon_items_non_stock": v014_fix_addon_items_non_stock.run,
     }
 
     state_file = get_state_file()
