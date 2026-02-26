@@ -2,6 +2,7 @@ export interface Employee {
   name: string;
   employee_name: string;
   first_name?: string;
+  middle_name?: string;
   last_name?: string;
   designation: string;
   department: string;

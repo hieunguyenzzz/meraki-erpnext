@@ -200,10 +200,11 @@ export default function EmployeeDetailPage() {
     setEditError(null);
     if (section === "personal") {
       setEditValues({
-        employee_name: employee.employee_name || "",
+        first_name: employee.first_name || "",
+        middle_name: employee.middle_name || "",
+        last_name: employee.last_name || "",
         gender: employee.gender || "",
         date_of_birth: employee.date_of_birth || "",
-        custom_meraki_id: employee.custom_meraki_id || "",
       });
     } else if (section === "contact") {
       setEditValues({
@@ -636,10 +637,24 @@ export default function EmployeeDetailPage() {
             {editSection === "personal" && (
               <>
                 <div className="space-y-2">
-                  <Label>Name</Label>
+                  <Label>First Name</Label>
                   <Input
-                    value={editValues.employee_name ?? ""}
-                    onChange={(e) => setEditValues({ ...editValues, employee_name: e.target.value })}
+                    value={editValues.first_name ?? ""}
+                    onChange={(e) => setEditValues({ ...editValues, first_name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Middle Name</Label>
+                  <Input
+                    value={editValues.middle_name ?? ""}
+                    onChange={(e) => setEditValues({ ...editValues, middle_name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Last Name</Label>
+                  <Input
+                    value={editValues.last_name ?? ""}
+                    onChange={(e) => setEditValues({ ...editValues, last_name: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -655,10 +670,6 @@ export default function EmployeeDetailPage() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-dob">Date of Birth</Label>
                   <Input id="edit-dob" type="date" value={editValues.date_of_birth} onChange={(e) => setEditValues((prev) => ({ ...prev, date_of_birth: e.target.value }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-meraki-id">Meraki ID</Label>
-                  <Input id="edit-meraki-id" type="number" value={editValues.custom_meraki_id} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_meraki_id: e.target.value }))} />
                 </div>
               </>
             )}
