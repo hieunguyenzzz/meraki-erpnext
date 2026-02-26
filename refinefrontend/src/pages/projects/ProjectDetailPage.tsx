@@ -125,7 +125,6 @@ export default function ProjectDetailPage() {
   const [milestoneError, setMilestoneError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [milestoneForm, setMilestoneForm] = useState({
     label: "",
     amount: "",
@@ -512,54 +511,6 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleMarkAsPaid(inv: any) {
-    setMarkingPaidId(inv.name);
-    try {
-      const result = await createDoc({
-        resource: "Payment Entry",
-        values: {
-          payment_type: "Receive",
-          party_type: "Customer",
-          party: project?.customer,
-          paid_from: "Debtors - MWP",
-          paid_to: "Cash - MWP",
-          paid_from_account_currency: "VND",
-          paid_to_account_currency: "VND",
-          paid_amount: inv.outstanding_amount,
-          received_amount: inv.outstanding_amount,
-          posting_date: new Date().toISOString().slice(0, 10),
-          company: "Meraki Wedding Planner",
-          references: [{
-            reference_doctype: "Sales Invoice",
-            reference_name: inv.name,
-            allocated_amount: inv.outstanding_amount,
-            total_amount: inv.grand_total,
-            outstanding_amount: inv.outstanding_amount,
-          }],
-        },
-      });
-
-      if (result?.data?.name) {
-        const fullRes = await fetch(
-          `/api/resource/Payment Entry/${encodeURIComponent(result.data.name)}`,
-          { headers: { "X-Frappe-Site-Name": SITE_NAME }, credentials: "include" }
-        );
-        const fullData = await fullRes.json();
-        await fetch("/api/method/frappe.client.submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
-          credentials: "include",
-          body: JSON.stringify({ doc: fullData.data }),
-        });
-        if (name) fetchInvoices(name);
-      }
-    } catch (err) {
-      console.error("Failed to mark as paid:", err);
-    } finally {
-      setMarkingPaidId(null);
-    }
-  }
-
   async function handleAddMilestone(e: React.FormEvent) {
     e.preventDefault();
     if (!milestoneForm.amount) return;
@@ -922,7 +873,7 @@ export default function ProjectDetailPage() {
                         const pct = totalValue > 0 ? Math.round((inv.grand_total / totalValue) * 100) : 0;
                         const isLast = index === invoices.length - 1;
                         return (
-                          <div key={inv.name} className="flex gap-3 group">
+                          <div key={inv.name} className="flex gap-3">
                             {/* Timeline dot + connector */}
                             <div className="flex flex-col items-center">
                               <div
@@ -947,21 +898,6 @@ export default function ProjectDetailPage() {
                                 )}
                               </div>
                               <div className="flex items-start gap-2 shrink-0 ml-3">
-                                {!isPaid && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity h-7 text-xs px-2"
-                                    disabled={markingPaidId === inv.name}
-                                    onClick={() => handleMarkAsPaid(inv)}
-                                  >
-                                    {markingPaidId === inv.name ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <><Check className="h-3 w-3 mr-1" />Mark Paid</>
-                                    )}
-                                  </Button>
-                                )}
                                 <div className="text-right">
                                   <p className="text-sm font-medium">{formatVND(inv.grand_total)}</p>
                                   <p className="text-xs text-muted-foreground">{pct}%</p>
