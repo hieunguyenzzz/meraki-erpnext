@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import {
   Select,
@@ -20,7 +19,6 @@ import {
 } from "@/components/ui/select";
 import {
   Trash2,
-  ChevronDown,
   ArrowLeft,
   Calendar,
   MapPin,
@@ -53,11 +51,6 @@ import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
-import { PROJECT_COLUMNS } from "@/lib/projectKanban";
-
-const STAGE_OPTIONS = PROJECT_COLUMNS.map((col) => col.stages[0]);
-
-const SITE_NAME = "erp.merakiwp.com";
 
 const WEDDING_PHASES = [
   "Onboarding",
@@ -70,8 +63,8 @@ const WEDDING_PHASES = [
 
 const PRIORITY_OPTIONS = ["Low", "Medium", "High", "Urgent"];
 
-function phaseBadgeVariant(phase: string) {
-  switch (phase) {
+function stageBadgeVariant(stage: string) {
+  switch (stage) {
     case "Onboarding": return "info" as const;
     case "Planning": return "warning" as const;
     case "Final Details": return "info" as const;
@@ -91,23 +84,10 @@ function statusVariant(status: string) {
   }
 }
 
-function stageBadgeVariant(stage: string) {
-  switch (stage) {
-    case "Onboarding": return "info" as const;
-    case "Planning": return "warning" as const;
-    case "Final Details": return "info" as const;
-    case "Wedding Week": return "destructive" as const;
-    case "Day-of": return "secondary" as const;
-    case "Completed": return "success" as const;
-    default: return "secondary" as const;
-  }
-}
-
 export default function ProjectDetailPage() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [taskForm, setTaskForm] = useState({
@@ -593,95 +573,6 @@ export default function ProjectDetailPage() {
     project.custom_assistant_4,
     project.custom_assistant_5,
   ].filter(Boolean);
-
-  const SidebarContent = () => (
-    <div className="space-y-6">
-      {/* Wedding Info */}
-      <div className="space-y-3">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Wedding</h3>
-        <div className="space-y-2">
-          {weddingDate && (
-            <div className="flex items-center gap-2 text-sm">
-              <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="font-medium">{formatDate(weddingDate)}</span>
-            </div>
-          )}
-          {venueName && (
-            <div className="flex items-center gap-2 text-sm">
-              <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="truncate">{venueName}</span>
-            </div>
-          )}
-          {totalValue > 0 && (
-            <div className="flex items-center gap-2 text-sm">
-              <DollarSign className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span>{formatVND(totalValue)}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Stage Selector */}
-      <div className="space-y-3">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Stage
-        </h3>
-        <Select
-          value={project.custom_project_stage || "Planning"}
-          onValueChange={handleStageChange}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STAGE_OPTIONS.map((stage) => (
-              <SelectItem key={stage} value={stage}>
-                {stage}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Mini Payment Progress */}
-      {totalValue > 0 && (
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Payment</h3>
-            <span className="text-xs font-medium" style={{ color: "#C4A962" }}>{paidPct}% paid</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${Math.min(paidPct, 100)}%`, backgroundColor: "#C4A962" }}
-            />
-          </div>
-          {totalOutstanding > 0 && (
-            <p className="text-xs text-muted-foreground">{formatVND(totalOutstanding)} remaining</p>
-          )}
-        </div>
-      )}
-
-      {/* Customer */}
-      {customer && (
-        <div className="space-y-3">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Customer
-          </h3>
-          <div className="space-y-2">
-            <ReadOnlyField label="Name" value={customerName} />
-            {customer.mobile_no && (
-              <ReadOnlyField label="Phone" value={customer.mobile_no} />
-            )}
-            {customer.email_id && (
-              <ReadOnlyField label="Email" value={customer.email_id} />
-            )}
-          </div>
-        </div>
-      )}
-
-    </div>
-  );
 
   return (
     <div className="space-y-4">
@@ -1214,7 +1105,7 @@ export default function ProjectDetailPage() {
                             <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                               {task.custom_wedding_phase && (
                                 <Badge
-                                  variant={phaseBadgeVariant(task.custom_wedding_phase)}
+                                  variant={stageBadgeVariant(task.custom_wedding_phase)}
                                   className="text-[10px]"
                                 >
                                   {task.custom_wedding_phase}
