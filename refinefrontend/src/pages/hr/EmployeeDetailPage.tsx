@@ -200,6 +200,7 @@ export default function EmployeeDetailPage() {
     setEditError(null);
     if (section === "personal") {
       setEditValues({
+        employee_name: employee.employee_name || "",
         gender: employee.gender || "",
         date_of_birth: employee.date_of_birth || "",
         custom_meraki_id: employee.custom_meraki_id || "",
@@ -634,6 +635,13 @@ export default function EmployeeDetailPage() {
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {editSection === "personal" && (
               <>
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input
+                    value={editValues.employee_name ?? ""}
+                    onChange={(e) => setEditValues({ ...editValues, employee_name: e.target.value })}
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label>Gender</Label>
                   <Select value={editValues.gender} onValueChange={(v) => setEditValues((prev) => ({ ...prev, gender: v }))}>
