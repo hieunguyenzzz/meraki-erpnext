@@ -251,11 +251,15 @@ export default function EmployeeDetailPage() {
           values[field] = Number(values[field]);
         }
       }
-      await updateEmployee({
-        resource: "Employee",
-        id: employee.name,
-        values,
+      const res = await fetch(`/inquiry-api/employee/${employee.name}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${res.status}`);
+      }
       // Sync user roles if staff roles changed
       if (editSection === "employment" && employee.user_id && values.custom_staff_roles !== employee.custom_staff_roles) {
         const newRoles = parseStaffRoles(values.custom_staff_roles) as StaffRole[];
