@@ -17,6 +17,7 @@ log = get_logger(__name__)
 router = APIRouter()
 
 # Must match ALLOWED_FIELDS in migration/phases/v015_employee_set_value_script.py
+# (v016 adds user_id)
 ALLOWED_FIELDS = {
     "first_name",
     "middle_name",
@@ -35,6 +36,7 @@ ALLOWED_FIELDS = {
     "custom_support_commission_pct",
     "custom_assistant_commission_pct",
     "custom_sales_commission_pct",
+    "user_id",
 }
 
 
@@ -53,6 +55,28 @@ async def update_employee(employee_id: str, request: EmployeeUpdateRequest):
     updates = {k: v for k, v in request.values.items() if k in ALLOWED_FIELDS}
     if not updates:
         raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    # If company_email is changing and the employee has a linked User, rename the User
+    if "company_email" in updates:
+        try:
+            emp = client._get(f"/api/resource/Employee/{employee_id}")
+            current = emp.get("data", {})
+            user_id = current.get("user_id")
+            new_email = updates["company_email"]
+            if user_id and user_id != new_email:
+                try:
+                    client._post("/api/method/frappe.client.rename_doc", {
+                        "doctype": "User",
+                        "old_name": user_id,
+                        "new_name": new_email,
+                        "merge": False,
+                    })
+                    updates["user_id"] = new_email
+                    log.info("user_renamed", old=user_id, new=new_email)
+                except Exception as rename_err:
+                    log.warning("user_rename_failed", old=user_id, new=new_email, error=str(rename_err))
+        except Exception as fetch_err:
+            log.warning("employee_fetch_failed", employee=employee_id, error=str(fetch_err))
 
     try:
         result = client._post(
