@@ -1,8 +1,11 @@
 """
 Employee management endpoints.
 
-Uses frappe.db.set_value via RPC to update individual fields
-without triggering full-document link validation (e.g. leave_approver).
+Uses a Frappe Server Script (meraki_set_employee_fields) that calls
+frappe.db.set_value — bypasses full-document link validation (e.g. invalid
+leave_approver) that causes 417 errors when saving via frappe.client.set_value.
+
+The Server Script is created by migration phase v015.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -13,7 +16,7 @@ from webhook_v2.core.logging import get_logger
 log = get_logger(__name__)
 router = APIRouter()
 
-# Fields allowed to be updated via this endpoint
+# Must match ALLOWED_FIELDS in migration/phases/v015_employee_set_value_script.py
 ALLOWED_FIELDS = {
     "first_name",
     "middle_name",
@@ -42,35 +45,24 @@ class EmployeeUpdateRequest(BaseModel):
 @router.patch("/employee/{employee_id}")
 async def update_employee(employee_id: str, request: EmployeeUpdateRequest):
     """
-    Update employee fields using frappe.db.set_value to bypass link validation.
-
-    Only fields in ALLOWED_FIELDS are accepted. Unknown fields are ignored.
+    Update employee fields via the meraki_set_employee_fields Server Script.
+    Uses frappe.db.set_value internally — no link validation.
     """
     client = ERPNextClient()
 
-    # Filter to only allowed fields
     updates = {k: v for k, v in request.values.items() if k in ALLOWED_FIELDS}
     if not updates:
         raise HTTPException(status_code=400, detail="No valid fields to update")
 
-    errors = []
-    for field, value in updates.items():
-        try:
-            client._post(
-                "/api/method/frappe.client.set_value",
-                {
-                    "doctype": "Employee",
-                    "name": employee_id,
-                    "fieldname": field,
-                    "value": value,
-                },
-            )
-        except Exception as e:
-            log.error("employee_field_update_failed", employee=employee_id, field=field, error=str(e))
-            errors.append(f"{field}: {str(e)}")
+    try:
+        result = client._post(
+            "/api/method/meraki_set_employee_fields",
+            {"employee_name": employee_id, **updates},
+        )
+    except Exception as e:
+        log.error("employee_update_failed", employee=employee_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
-    if errors:
-        raise HTTPException(status_code=500, detail="; ".join(errors))
-
-    log.info("employee_updated", employee=employee_id, fields=list(updates.keys()))
-    return {"status": "ok", "updated": list(updates.keys())}
+    updated = result.get("message", {}).get("updated", list(updates.keys()))
+    log.info("employee_updated", employee=employee_id, fields=updated)
+    return {"status": "ok", "updated": updated}
