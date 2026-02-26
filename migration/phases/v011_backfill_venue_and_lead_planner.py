@@ -37,20 +37,26 @@ def _run(client, pg):
     venues = pg.get_all_venues()
     print(f"  Found {len(venues)} source venues")
 
+    # Fetch ALL suppliers in one call (replaces N find_one() + N get() per venue)
+    all_suppliers = client.get_list(
+        'Supplier',
+        fields=['name', 'supplier_name', 'custom_meraki_venue_id'],
+        limit=0,
+    )
+    supplier_by_name = {s['supplier_name']: s for s in all_suppliers}
+
     venue_id_seeded = 0
     for venue in venues:
         title = (venue.get('title') or '').strip()
         if not title:
             continue
-        supplier = client.find_one('Supplier', {'supplier_name': title})
+        supplier = supplier_by_name.get(title)
         if not supplier:
             continue
-        supplier_name = supplier['name']
         # Only update if not already set
-        full = client.get('Supplier', supplier_name)
-        if full and full.get('custom_meraki_venue_id'):
+        if supplier.get('custom_meraki_venue_id'):
             continue
-        result = client.update('Supplier', supplier_name, {'custom_meraki_venue_id': venue['id']})
+        result = client.update('Supplier', supplier['name'], {'custom_meraki_venue_id': venue['id']})
         if result:
             venue_id_seeded += 1
 

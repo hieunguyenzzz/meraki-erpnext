@@ -22,11 +22,21 @@ def run(client):
         })
         print("  Created supplier group: Wedding Venues")
 
+    # Fetch all existing Wedding Venue suppliers in one call instead of N exists() checks
+    existing = client.get_list(
+        "Supplier",
+        filters={"supplier_group": "Wedding Venues"},
+        fields=["supplier_name"],
+        limit=0,
+    )
+    existing_names = {s["supplier_name"] for s in existing}
+
     created = 0
     for name in VENUES:
-        if not client.exists("Supplier", {"supplier_name": name.strip(), "supplier_group": "Wedding Venues"}):
+        name = name.strip()
+        if name not in existing_names:
             result = client.create("Supplier", {
-                "supplier_name": name.strip(),
+                "supplier_name": name,
                 "supplier_group": "Wedding Venues",
                 "supplier_type": "Company",
             })

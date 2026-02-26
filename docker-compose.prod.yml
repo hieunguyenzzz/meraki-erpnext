@@ -175,7 +175,7 @@ services:
     restart: "no"
     command: ["python", "migrate_auto.py"]
     environment:
-      ERPNEXT_URL: https://app.merakiwp.com
+      ERPNEXT_URL: http://meraki-backend:8000
       ERPNEXT_API_KEY: ${ERPNEXT_API_KEY}
       ERPNEXT_API_SECRET: ${ERPNEXT_API_SECRET}
       DB_ROOT_PASSWORD: ${DB_PASSWORD}
