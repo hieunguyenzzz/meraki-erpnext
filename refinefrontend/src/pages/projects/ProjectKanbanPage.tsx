@@ -24,7 +24,7 @@ export default function ProjectKanbanPage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">(() =>
     (localStorage.getItem("wedding-view-mode") as "kanban" | "list") || "list"
   );
-  const [yearFilter, setYearFilter] = useState<string | null>(null);
+  const [yearFilter, setYearFilter] = useState<string | null>(String(new Date().getFullYear()));
 
   const handleViewChange = (mode: "kanban" | "list") => {
     setViewMode(mode);
