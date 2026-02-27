@@ -111,8 +111,9 @@ export default function ProjectDetailPage() {
     invoiceDate: new Date().toISOString().slice(0, 10),
   });
 
-  // Edit state
-  const [editOpen, setEditOpen] = useState(false);
+  // Edit state - per-section sheets
+  const [editDetailsOpen, setEditDetailsOpen] = useState(false);
+  const [editStaffOpen, setEditStaffOpen] = useState(false);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editVenueOpen, setEditVenueOpen] = useState(false);
@@ -301,17 +302,31 @@ export default function ProjectDetailPage() {
     return emp?.name || id;
   }
 
-  // Populate edit form when data loads
-  useEffect(() => {
-    if (!project || !editOpen) return;
+  // Populate details form (venue + add-ons)
+  function populateDetailsForm() {
+    if (!project) return;
     const currentAddOns = addOnItems.map((i) => ({
       itemCode: i.item_code,
       itemName: i.item_name,
       qty: i.qty,
       rate: i.rate,
     }));
-    setEditForm({
+    setEditForm((prev) => ({
+      ...prev,
       venue: salesOrder?.custom_venue || "",
+      addOns: currentAddOns,
+    }));
+    setEditAddonSearch(currentAddOns.map((a) => a.itemName));
+    setEditAddonDropdownOpen(currentAddOns.map(() => false));
+    const v = venues.find((v) => v.name === salesOrder?.custom_venue);
+    setEditVenueDisplayName(v?.supplier_name || salesOrder?.custom_venue || "");
+  }
+
+  // Populate staff form (lead/support/assistants)
+  function populateStaffForm() {
+    if (!project) return;
+    setEditForm((prev) => ({
+      ...prev,
       leadPlanner: project.custom_lead_planner || "",
       supportPlanner: project.custom_support_planner || "",
       assistant1: project.custom_assistant_1 || "",
@@ -319,34 +334,15 @@ export default function ProjectDetailPage() {
       assistant3: project.custom_assistant_3 || "",
       assistant4: project.custom_assistant_4 || "",
       assistant5: project.custom_assistant_5 || "",
-      addOns: currentAddOns,
-    });
-    setEditAddonSearch(currentAddOns.map((a) => a.itemName));
-    setEditAddonDropdownOpen(currentAddOns.map(() => false));
-    const v = venues.find((v) => v.name === salesOrder?.custom_venue);
-    setEditVenueDisplayName(v?.supplier_name || salesOrder?.custom_venue || "");
-  }, [project, salesOrder, addOnItems, editOpen]);
+    }));
+  }
 
-  async function handleEditSubmit(e: React.FormEvent) {
+  async function handleSaveDetails(e: React.FormEvent) {
     e.preventDefault();
     setIsSubmittingEdit(true);
     setEditError(null);
     try {
-      // 1. Update Project staff fields
-      await updateRecord({
-        resource: "Project",
-        id: name!,
-        values: {
-          custom_lead_planner: editForm.leadPlanner || null,
-          custom_support_planner: editForm.supportPlanner || null,
-          custom_assistant_1: editForm.assistant1 || null,
-          custom_assistant_2: editForm.assistant2 || null,
-          custom_assistant_3: editForm.assistant3 || null,
-          custom_assistant_4: editForm.assistant4 || null,
-          custom_assistant_5: editForm.assistant5 || null,
-        },
-      });
-      // 2. Update venue on Sales Order if changed
+      // 1. Update venue on Sales Order if changed
       if (project?.sales_order && editForm.venue !== (salesOrder?.custom_venue || "")) {
         await fetch("/api/method/frappe.client.set_value", {
           method: "POST",
@@ -360,7 +356,7 @@ export default function ProjectDetailPage() {
           }),
         });
       }
-      // 3. Update add-ons via server API (map camelCase → snake_case for Pydantic)
+      // 2. Update add-ons via server API (map camelCase → snake_case for Pydantic)
       const resp = await fetch(`/inquiry-api/wedding/${name}/addons`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -388,7 +384,34 @@ export default function ProjectDetailPage() {
       const updatedProject = await fetch(`/api/resource/Project/${name}`, { credentials: "include" }).then(r => r.json());
       const newSOName = updatedProject?.data?.sales_order;
       if (newSOName) fetchSOItems(newSOName);
-      setEditOpen(false);
+      setEditDetailsOpen(false);
+    } catch (err: any) {
+      setEditError(err?.message || "Failed to save changes");
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  }
+
+  async function handleSaveStaff(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSubmittingEdit(true);
+    setEditError(null);
+    try {
+      await updateRecord({
+        resource: "Project",
+        id: name!,
+        values: {
+          custom_lead_planner: editForm.leadPlanner || null,
+          custom_support_planner: editForm.supportPlanner || null,
+          custom_assistant_1: editForm.assistant1 || null,
+          custom_assistant_2: editForm.assistant2 || null,
+          custom_assistant_3: editForm.assistant3 || null,
+          custom_assistant_4: editForm.assistant4 || null,
+          custom_assistant_5: editForm.assistant5 || null,
+        },
+      });
+      invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
+      setEditStaffOpen(false);
     } catch (err: any) {
       setEditError(err?.message || "Failed to save changes");
     } finally {
@@ -595,9 +618,6 @@ export default function ProjectDetailPage() {
           <Badge variant={statusVariant(project.status)} className="shrink-0">
             {project.status}
           </Badge>
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setEditOpen(true)}>
-            <Pencil className="h-4 w-4" />
-          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -645,9 +665,6 @@ export default function ProjectDetailPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-            <Pencil className="h-4 w-4 mr-2" /> Edit
-          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -679,8 +696,15 @@ export default function ProjectDetailPage() {
               {/* Wedding Details */}
               {(weddingDate || venueName || totalValue > 0 || addOnItems.length > 0) && (
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <CardTitle>Wedding Details</CardTitle>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { populateDetailsForm(); setEditDetailsOpen(true); }}
+                    >
+                      <Pencil className="h-3 w-3 mr-1" /> Edit
+                    </Button>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {weddingDate && (
@@ -834,8 +858,15 @@ export default function ProjectDetailPage() {
               {/* Team */}
               {(project.custom_lead_planner || project.custom_support_planner || assistants.length > 0) && (
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <CardTitle>Team</CardTitle>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { populateStaffForm(); setEditStaffOpen(true); }}
+                    >
+                      <Pencil className="h-3 w-3 mr-1" /> Edit
+                    </Button>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {project.custom_lead_planner && (
@@ -1255,13 +1286,13 @@ export default function ProjectDetailPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Edit Wedding Sheet */}
-      <Sheet open={editOpen} onOpenChange={(open) => { if (!isSubmittingEdit) { setEditOpen(open); setEditError(null); } }}>
+      {/* Edit Wedding Details Sheet (Venue + Add-ons) */}
+      <Sheet open={editDetailsOpen} onOpenChange={(open) => { if (!isSubmittingEdit) { setEditDetailsOpen(open); setEditError(null); } }}>
         <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>Edit Wedding Details</SheetTitle>
           </SheetHeader>
-          <form onSubmit={handleEditSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <form onSubmit={handleSaveDetails} className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
               {editError && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
@@ -1313,51 +1344,6 @@ export default function ProjectDetailPage() {
                     </Command>
                   </ShadcnPopoverContent>
                 </ShadcnPopover>
-              </div>
-
-              {/* Staff */}
-              <div className="space-y-3">
-                <Label>Staff</Label>
-                <div className="space-y-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Lead Planner</Label>
-                    <Select value={editForm.leadPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, leadPlanner: v === "__none__" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {employees.map((emp) => (
-                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Support Planner</Label>
-                    <Select value={editForm.supportPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, supportPlanner: v === "__none__" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {employees.map((emp) => (
-                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {(["assistant1", "assistant2", "assistant3", "assistant4", "assistant5"] as const).map((field, i) => (
-                    <div key={field} className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Assistant {i + 1}</Label>
-                      <Select value={editForm[field] || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, [field]: v === "__none__" ? "" : v })}>
-                        <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
-                          {employees.map((emp) => (
-                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ))}
-                </div>
               </div>
 
               {/* Add-ons */}
@@ -1464,7 +1450,82 @@ export default function ProjectDetailPage() {
               </div>
             </div>
             <SheetFooter className="px-6 py-4 border-t shrink-0">
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={isSubmittingEdit}>
+              <Button type="button" variant="outline" onClick={() => setEditDetailsOpen(false)} disabled={isSubmittingEdit}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmittingEdit}>
+                {isSubmittingEdit ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      {/* Edit Team Sheet (Staff) */}
+      <Sheet open={editStaffOpen} onOpenChange={(open) => { if (!isSubmittingEdit) { setEditStaffOpen(open); setEditError(null); } }}>
+        <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Edit Team</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleSaveStaff} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+              {editError && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {editError}
+                </div>
+              )}
+
+              {/* Staff */}
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Lead Planner</Label>
+                    <Select value={editForm.leadPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, leadPlanner: v === "__none__" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {employees.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Support Planner</Label>
+                    <Select value={editForm.supportPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, supportPlanner: v === "__none__" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {employees.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {(["assistant1", "assistant2", "assistant3", "assistant4", "assistant5"] as const).map((field, i) => (
+                    <div key={field} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Assistant {i + 1}</Label>
+                      <Select value={editForm[field] || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, [field]: v === "__none__" ? "" : v })}>
+                        <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {employees.map((emp) => (
+                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <SheetFooter className="px-6 py-4 border-t shrink-0">
+              <Button type="button" variant="outline" onClick={() => setEditStaffOpen(false)} disabled={isSubmittingEdit}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmittingEdit}>

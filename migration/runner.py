@@ -19,6 +19,7 @@ ORDERED_PHASES = [
     "v014_fix_addon_items_non_stock",
     "v015_employee_set_value_script",
     "v016_update_employee_script",
+    "v017_stock_settings_default_warehouse",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run

@@ -215,7 +215,7 @@ class AddonsRequest(BaseModel):
 
 @router.put("/wedding/{project_name}/addons")
 def update_addons(project_name: str, req: AddonsRequest):
-    """Update add-on items on a wedding's Sales Order by cancel+amend+resubmit."""
+    """Update add-on items on a wedding's Sales Order using ERPNext's update_child_qty_rate API."""
     client = ERPNextClient()
 
     # 1. Get project → sales_order name
@@ -229,65 +229,65 @@ def update_addons(project_name: str, req: AddonsRequest):
     if so.get("docstatus") == 2:
         raise HTTPException(status_code=400, detail="Sales Order is already cancelled")
 
-    # 3. Cancel current SO
-    if so.get("docstatus") == 1:
-        _cancel(client, "Sales Order", so_name)
+    if so.get("docstatus") == 0:
+        raise HTTPException(status_code=400, detail="Sales Order is not submitted yet")
 
-    # 4. Build items for new SO: keep all "Wedding Planning Service" items + new add-ons
+    # 3. Build trans_items: keep all "Wedding Planning Service" rows (with their name/docname
+    #    so update_child_qty_rate treats them as existing rows, not new ones) + new add-on rows.
     original_items = so.get("items", [])
-    planning_service_items = [
+    planning_service_rows = [
         {
+            "docname": item["name"],
             "item_code": item["item_code"],
             "item_name": item["item_name"],
             "qty": item["qty"],
             "rate": item["rate"],
+            "conversion_factor": item.get("conversion_factor", 1),
         }
         for item in original_items
         if item.get("item_code") == "Wedding Planning Service"
     ]
-    addon_items = [
-        {
+
+    # Existing add-on rows keyed by item_code so we can carry their docname
+    existing_addon_by_code = {
+        item["item_code"]: item
+        for item in original_items
+        if item.get("item_code") != "Wedding Planning Service"
+    }
+
+    addon_rows = []
+    for addon in req.items:
+        row = {
             "item_code": addon.item_code,
             "item_name": addon.item_name,
             "qty": addon.qty,
             "rate": addon.rate,
+            "conversion_factor": 1,
         }
-        for addon in req.items
-    ]
-    new_items = planning_service_items + addon_items
+        # If this item_code already exists on the SO, pass its docname so it's
+        # treated as an update rather than a new insert.
+        if addon.item_code in existing_addon_by_code:
+            row["docname"] = existing_addon_by_code[addon.item_code]["name"]
+        addon_rows.append(row)
 
-    # 5. Create new SO (amendment)
-    new_so_data = {
-        "customer": so.get("customer"),
-        "company": so.get("company"),
-        "delivery_date": so.get("delivery_date"),
-        "currency": so.get("currency"),
-        "selling_price_list": so.get("selling_price_list"),
-        "custom_venue": so.get("custom_venue"),
-        "amended_from": so_name,
-        "items": new_items,
-    }
-    # Preserve tax template if present
-    if so.get("taxes_and_charges"):
-        new_so_data["taxes_and_charges"] = so.get("taxes_and_charges")
-    if so.get("taxes"):
-        new_so_data["taxes"] = [
-            {"charge_type": t.get("charge_type"), "account_head": t.get("account_head"), "rate": t.get("rate"), "description": t.get("description")}
-            for t in so.get("taxes", [])
-        ]
+    trans_items = planning_service_rows + addon_rows
 
-    new_so = client._post("/api/resource/Sales Order", new_so_data).get("data", {})
-    new_so_name = new_so["name"]
+    # 4. Call ERPNext's standard update_child_qty_rate — accounting-safe, works
+    #    even when invoices exist (as long as per_billed < 100% for rate changes;
+    #    adding new rows is allowed at any billing percentage).
+    import json as _json
+    client._post(
+        "/api/method/erpnext.controllers.accounts_controller.update_child_qty_rate",
+        {
+            "parent_doctype": "Sales Order",
+            "trans_items": _json.dumps(trans_items),
+            "parent_doctype_name": so_name,
+            "child_docname": "items",
+        },
+    )
 
-    # 6. Submit the new SO
-    full_so = client._get(f"/api/resource/Sales Order/{new_so_name}").get("data", {})
-    client._post("/api/method/frappe.client.submit", {"doc": full_so})
-
-    # 7. Update project.sales_order to new SO name
-    client._put(f"/api/resource/Project/{project_name}", {"sales_order": new_so_name})
-
-    log.info("addons_updated", project=project_name, old_so=so_name, new_so=new_so_name)
-    return {"success": True, "sales_order": new_so_name}
+    log.info("addons_updated", project=project_name, so=so_name, addon_count=len(addon_rows))
+    return {"success": True, "sales_order": so_name}
 
 
 class AddonItemCreateRequest(BaseModel):
