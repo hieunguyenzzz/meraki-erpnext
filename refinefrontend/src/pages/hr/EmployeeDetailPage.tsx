@@ -95,14 +95,6 @@ export default function EmployeeDetailPage() {
   });
   const designations = (designationsResult?.data ?? []) as any[];
 
-  const { result: departmentsResult } = useList({
-    resource: "Department",
-    pagination: { mode: "off" },
-    sorters: [{ field: "name", order: "asc" }],
-    meta: { fields: ["name"] },
-  });
-  const departments = (departmentsResult?.data ?? []) as any[];
-
   // Leave allocations for this employee (submitted)
   const { result: allocsResult } = useList({
     resource: "Leave Allocation",
@@ -336,7 +328,6 @@ export default function EmployeeDetailPage() {
     } else {
       setEditValues({
         designation: employee.designation || "",
-        department: employee.department || "",
         date_of_joining: employee.date_of_joining || "",
         custom_staff_roles: employee.custom_staff_roles || "",
         ctc: employee.ctc ?? "",
@@ -1114,21 +1105,6 @@ export default function EmployeeDetailPage() {
                     <SelectContent>
                       <SelectItem value="__none__">— None —</SelectItem>
                       {designations.map((d) => (
-                        <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-department">Department</Label>
-                  <Select
-                    value={editValues.department || "__none__"}
-                    onValueChange={(v) => setEditValues((prev) => ({ ...prev, department: v === "__none__" ? "" : v }))}
-                  >
-                    <SelectTrigger id="edit-department"><SelectValue placeholder="Select department" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">— None —</SelectItem>
-                      {departments.map((d) => (
                         <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
                       ))}
                     </SelectContent>
