@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useList } from "@refinedev/core";
 import {
-  BarChart, Bar, AreaChart, Area,
+  ComposedChart, BarChart, Bar, AreaChart, Area, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from "recharts";
 import { TrendingUp, TrendingDown, DollarSign, AlertCircle } from "lucide-react";
@@ -41,16 +41,25 @@ export default function DirectorSection() {
     meta: { fields: ["name", "grand_total", "delivery_date"] },
   });
 
+  const { result: allOrdersResult, query: allOrdersQuery } = useList({
+    resource: "Sales Order",
+    pagination: { mode: "off" },
+    filters: [{ field: "docstatus", operator: "eq", value: 1 }],
+    meta: { fields: ["delivery_date"] },
+  });
+
   const isLoading =
     invoicesQuery?.isLoading ||
     journalsQuery?.isLoading ||
     paymentsQuery?.isLoading ||
-    ordersQuery?.isLoading;
+    ordersQuery?.isLoading ||
+    allOrdersQuery?.isLoading;
 
   const invoices = (invoicesResult?.data ?? []) as any[];
   const journals = (journalsResult?.data ?? []) as any[];
   const payments = (paymentsResult?.data ?? []) as any[];
   const orders = (ordersResult?.data ?? []) as any[];
+  const allOrders = (allOrdersResult?.data ?? []) as any[];
 
   const currentYear = new Date().getFullYear().toString();
   const today = new Date().toISOString().split("T")[0];
@@ -98,6 +107,20 @@ export default function DirectorSection() {
       return { month, ...data, net: data.revenue - data.expenses };
     });
   }, [invoices, journals, payments, last12Months]);
+
+  const combinedMonthlyData = useMemo(() => {
+    const weddingCount = new Map<string, number>();
+    for (const month of last12Months) weddingCount.set(month, 0);
+    for (const so of allOrders) {
+      const month = so.delivery_date?.substring(0, 7);
+      if (!month || !weddingCount.has(month)) continue;
+      weddingCount.set(month, (weddingCount.get(month) ?? 0) + 1);
+    }
+    return monthlyData.map((row) => ({
+      ...row,
+      weddings: weddingCount.get(row.month) ?? 0,
+    }));
+  }, [monthlyData, allOrders, last12Months]);
 
   const ytd = useMemo(() => {
     let revenue = 0, expenses = 0, collected = 0;
@@ -214,7 +237,56 @@ export default function DirectorSection() {
         </Card>
       </div>
 
-      {/* Row 2: Charts */}
+      {/* Row 2: Combined monthly overview chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Monthly Overview — Weddings, Revenue & Expenses (Last 12 Months)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-[300px] w-full" />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={combinedMonthlyData}>
+                <XAxis dataKey="month" fontSize={11} tickFormatter={(v) => v.substring(5)} />
+                <YAxis
+                  yAxisId="money"
+                  orientation="left"
+                  fontSize={11}
+                  tickFormatter={(v: number) => `${(v / 1_000_000).toFixed(0)}M`}
+                />
+                <YAxis
+                  yAxisId="count"
+                  orientation="right"
+                  fontSize={11}
+                  allowDecimals={false}
+                  tickFormatter={(v: number) => `${v}`}
+                />
+                <Tooltip
+                  formatter={(value: number, name: string) =>
+                    name === "Weddings" ? [value, name] : [formatVND(value), name]
+                  }
+                />
+                <Legend />
+                <Bar yAxisId="money" dataKey="revenue" name="Revenue" fill="hsl(var(--chart-revenue))" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="money" dataKey="expenses" name="Expenses" fill="hsl(var(--chart-expenses))" radius={[4, 4, 0, 0]} />
+                <Line
+                  yAxisId="count"
+                  type="monotone"
+                  dataKey="weddings"
+                  name="Weddings"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={{ r: 4, fill: "hsl(var(--primary))" }}
+                  activeDot={{ r: 6 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Row 3: Charts */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -266,7 +338,7 @@ export default function DirectorSection() {
         </Card>
       </div>
 
-      {/* Row 3: Stat Cards */}
+      {/* Row 4: Stat Cards */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
