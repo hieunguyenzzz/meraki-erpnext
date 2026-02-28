@@ -1,3 +1,8 @@
+export function displayName(person: { first_name?: string | null; last_name?: string | null; employee_name?: string | null }): string {
+  const parts = [person.last_name, person.first_name].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : (person.employee_name || "");
+}
+
 export function formatVND(amount: number | undefined | null): string {
   if (amount == null) return "0 ₫";
   return new Intl.NumberFormat("vi-VN", {

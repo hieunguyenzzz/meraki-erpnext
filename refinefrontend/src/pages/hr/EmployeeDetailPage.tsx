@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router";
 import { useOne, useList, useInvalidate, useCustomMutation } from "@refinedev/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ArrowLeft, Pencil } from "lucide-react";
-import { formatDate, formatVND } from "@/lib/format";
+import { formatDate, formatVND, displayName } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +60,10 @@ export default function EmployeeDetailPage() {
   const [reviewForm, setReviewForm] = useState({ date: "", time: "09:00", notes: "", participants: [] as string[] });
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
@@ -435,6 +439,26 @@ export default function EmployeeDetailPage() {
     [allRecords, typeFilter]
   );
 
+  async function handleStatusChange() {
+    if (!employee) return;
+    setStatusLoading(true);
+    setStatusError(null);
+    const action = employee.status === "Active" ? "deactivate" : "activate";
+    try {
+      const res = await fetch(`/inquiry-api/employee/${employee.name}/${action}`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${res.status}`);
+      }
+      invalidate({ resource: "Employee", id: employee.name, invalidates: ["detail"] });
+      setStatusDialogOpen(false);
+    } catch (err: any) {
+      setStatusError(err?.message || "Failed to update employee status");
+    } finally {
+      setStatusLoading(false);
+    }
+  }
+
   if (!employee) {
     return <DetailSkeleton />;
   }
@@ -453,11 +477,19 @@ export default function EmployeeDetailPage() {
         </Button>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">
-            {[employee.first_name, employee.middle_name, employee.last_name].filter(Boolean).join(" ") || employee.employee_name}
+            {displayName(employee)}
           </h1>
           <Badge variant={employee.status === "Active" ? "success" : "secondary"}>
             {employee.status}
           </Badge>
+          <Button
+            size="sm"
+            variant="outline"
+            className={employee.status === "Active" ? "text-red-600 border-red-200 hover:bg-red-50" : "text-green-600 border-green-200 hover:bg-green-50"}
+            onClick={() => { setStatusError(null); setStatusDialogOpen(true); }}
+          >
+            {employee.status === "Active" ? "Deactivate" : "Activate"}
+          </Button>
         </div>
         {(employee.designation || employee.department) && (
           <p className="text-muted-foreground">
@@ -838,6 +870,35 @@ export default function EmployeeDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Deactivate / Activate Dialog */}
+      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {employee.status === "Active" ? `Deactivate ${displayName(employee)}?` : `Reactivate ${displayName(employee)}?`}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {employee.status === "Active"
+              ? `This will set their status to "Left" and disable their login account${employee.company_email ? ` (${employee.company_email})` : ""}.`
+              : "This will set their status to \"Active\" and re-enable their login account."}
+          </p>
+          {statusError && <p className="text-sm text-red-600">{statusError}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStatusDialogOpen(false)} disabled={statusLoading}>
+              Cancel
+            </Button>
+            <Button
+              variant={employee.status === "Active" ? "destructive" : "default"}
+              onClick={handleStatusChange}
+              disabled={statusLoading}
+            >
+              {statusLoading ? "Saving..." : employee.status === "Active" ? "Deactivate" : "Activate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Schedule Review Dialog */}
       <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>

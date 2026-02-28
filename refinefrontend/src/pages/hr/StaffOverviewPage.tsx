@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { extractErrorMessage } from "@/lib/errors";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { formatDate } from "@/lib/format";
+import { formatDate, displayName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   getReviewStatus,
@@ -66,10 +66,6 @@ interface StaffRow {
   leave_remaining: number;
 }
 
-function fullName(emp: { first_name?: string; last_name?: string; employee_name?: string }): string {
-  const parts = [emp.last_name, emp.first_name].filter(Boolean);
-  return parts.length > 0 ? parts.join(" ") : (emp.employee_name || "");
-}
 
 function SortableStaffRow({ emp, onEdit }: { emp: StaffRow; onEdit: (emp: StaffRow) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: emp.name });
@@ -89,7 +85,7 @@ function SortableStaffRow({ emp, onEdit }: { emp: StaffRow; onEdit: (emp: StaffR
       >
         <GripVertical className="h-5 w-5" />
       </button>
-      <span className="flex-1 font-medium">{fullName(emp)}</span>
+      <span className="flex-1 font-medium">{displayName(emp)}</span>
       <span className="text-sm text-muted-foreground">{emp.designation || "-"}</span>
     </div>
   );
@@ -511,11 +507,11 @@ export default function StaffOverviewPage() {
       header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
       cell: ({ row }) => (
         <Link to={`/hr/employees/${row.original.name}`} className="font-medium text-primary hover:underline">
-          {fullName(row.original)}
+          {displayName(row.original)}
         </Link>
       ),
       filterFn: (row, _id, filterValue) => {
-        const name = fullName(row.original).toLowerCase();
+        const name = displayName(row.original).toLowerCase();
         return name.includes((filterValue as string).toLowerCase());
       },
     },
@@ -736,7 +732,7 @@ export default function StaffOverviewPage() {
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>Review</SheetTitle>
             {selectedEmployee && (
-              <p className="text-sm text-muted-foreground">{fullName(selectedEmployee)}</p>
+              <p className="text-sm text-muted-foreground">{displayName(selectedEmployee)}</p>
             )}
           </SheetHeader>
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
@@ -780,7 +776,7 @@ export default function StaffOverviewPage() {
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>Assign Staff Roles</SheetTitle>
             {selectedEmployee && (
-              <p className="text-sm text-muted-foreground">{fullName(selectedEmployee)}</p>
+              <p className="text-sm text-muted-foreground">{displayName(selectedEmployee)}</p>
             )}
           </SheetHeader>
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">

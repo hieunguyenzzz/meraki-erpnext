@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { formatVND, formatDate } from "@/lib/format";
+import { formatVND, formatDate, displayName } from "@/lib/format";
 import {
   Popover,
   PopoverContent,
@@ -176,11 +176,13 @@ export function CreateWeddingDialog({
     resource: "Employee",
     pagination: { mode: "off" },
     filters: [{ field: "status", operator: "eq", value: "Active" }],
-    meta: { fields: ["name", "employee_name"] },
+    meta: { fields: ["name", "employee_name", "first_name", "last_name"] },
   });
   const employees = (employeesResult?.data ?? []) as {
     name: string;
     employee_name: string;
+    first_name?: string;
+    last_name?: string;
   }[];
 
   // Fetch existing customers for duplicate check
@@ -535,7 +537,7 @@ export function CreateWeddingDialog({
 
   const getEmployeeName = (employeeId: string) => {
     const emp = employees.find((e) => e.name === employeeId);
-    return emp?.employee_name || employeeId;
+    return emp ? displayName(emp) : employeeId;
   };
 
   return (
@@ -1072,7 +1074,7 @@ export function CreateWeddingDialog({
                   <SelectContent>
                     {employees.map((emp) => (
                       <SelectItem key={emp.name} value={emp.name}>
-                        {emp.employee_name}
+                        {displayName(emp)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1104,7 +1106,7 @@ export function CreateWeddingDialog({
                       .filter((emp) => emp.name !== formData.leadPlanner)
                       .map((emp) => (
                         <SelectItem key={emp.name} value={emp.name}>
-                          {emp.employee_name}
+                          {displayName(emp)}
                         </SelectItem>
                       ))}
                   </SelectContent>
@@ -1137,7 +1139,7 @@ export function CreateWeddingDialog({
                           )
                           .map((emp) => (
                             <SelectItem key={emp.name} value={emp.name}>
-                              {emp.employee_name}
+                              {displayName(emp)}
                             </SelectItem>
                           ))}
                       </SelectContent>

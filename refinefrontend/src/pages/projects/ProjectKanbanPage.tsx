@@ -18,6 +18,7 @@ import {
   type ProjectKanbanItem,
 } from "@/lib/projectKanban";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
+import { displayName } from "@/lib/format";
 
 export default function ProjectKanbanPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -78,7 +79,7 @@ export default function ProjectKanbanPage() {
   const { result: employeesResult } = useList({
     resource: "Employee",
     pagination: { mode: "off" },
-    meta: { fields: ["name", "employee_name"] },
+    meta: { fields: ["name", "employee_name", "first_name", "last_name"] },
   });
 
   // Fetch Suppliers for venue names
@@ -122,7 +123,7 @@ export default function ProjectKanbanPage() {
       customers.map((c: any) => [c.name, c])
     );
     const employeeByName = new Map(
-      employees.map((e: any) => [e.name, e.employee_name])
+      employees.map((e: any) => [e.name, displayName(e)])
     );
     const supplierByName = new Map(
       suppliers.map((s: any) => [s.name, s.supplier_name])

@@ -3,10 +3,13 @@ import { useList } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
+import { displayName } from "@/lib/format";
 
 interface Employee {
   name: string;
   employee_name: string;
+  first_name?: string;
+  last_name?: string;
   designation: string;
   department: string;
   status: string;
@@ -28,7 +31,7 @@ const columns: ColumnDef<Employee, unknown>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
     cell: ({ row }) => (
       <Link to={`/hr/employees/${row.original.name}`} className="font-medium text-primary hover:underline">
-        {row.original.employee_name}
+        {displayName(row.original)}
       </Link>
     ),
     filterFn: "includesString",
@@ -70,7 +73,7 @@ export default function EmployeesPage() {
     resource: "Employee",
     pagination: { mode: "off" },
     sorters: [{ field: "employee_name", order: "asc" }],
-    meta: { fields: ["name", "employee_name", "designation", "department", "status", "custom_last_review_date"] },
+    meta: { fields: ["name", "employee_name", "first_name", "last_name", "designation", "department", "status", "custom_last_review_date"] },
   });
 
   const employees = (result?.data ?? []) as Employee[];

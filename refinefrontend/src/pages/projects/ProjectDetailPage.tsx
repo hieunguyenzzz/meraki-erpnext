@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { useOne, useList, useUpdate, useInvalidate, useNavigation, useCreate } from "@refinedev/core";
 import * as Popover from "@radix-ui/react-popover";
-import { formatDate, formatVND } from "@/lib/format";
+import { formatDate, formatVND, displayName } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -279,11 +279,11 @@ export default function ProjectDetailPage() {
     resource: "Employee",
     pagination: { mode: "off" as const },
     filters: [{ field: "status", operator: "eq", value: "Active" }],
-    meta: { fields: ["name", "employee_name", "user_id"] },
+    meta: { fields: ["name", "employee_name", "first_name", "last_name", "user_id"] },
   });
   const employees = (employeesResult?.data ?? []).map((e: any) => ({
     id: e.name,
-    name: e.employee_name,
+    name: displayName(e),
     userId: e.user_id,
   }));
 
