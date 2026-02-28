@@ -46,7 +46,7 @@ export default function EmployeeDetailPage() {
   const [leaveSaving, setLeaveSaving] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
-  type EditSection = "personal" | "contact" | "employment" | "commission";
+  type EditSection = "personal" | "contact" | "employment" | "commission" | "allowance";
   const [editSection, setEditSection] = useState<EditSection | null>(null);
   const [editValues, setEditValues] = useState<Record<string, any>>({});
   const [editSaving, setEditSaving] = useState(false);
@@ -287,6 +287,13 @@ export default function EmployeeDetailPage() {
         custom_assistant_commission_pct: employee.custom_assistant_commission_pct ?? 0,
         custom_sales_commission_pct: employee.custom_sales_commission_pct ?? 0,
       });
+    } else if (section === "allowance") {
+      setEditValues({
+        custom_allowance_hcm_full: employee.custom_allowance_hcm_full ?? 0,
+        custom_allowance_hcm_partial: employee.custom_allowance_hcm_partial ?? 0,
+        custom_allowance_dest_full: employee.custom_allowance_dest_full ?? 0,
+        custom_allowance_dest_partial: employee.custom_allowance_dest_partial ?? 0,
+      });
     } else {
       setEditValues({
         designation: employee.designation || "",
@@ -295,10 +302,6 @@ export default function EmployeeDetailPage() {
         ctc: employee.ctc ?? "",
         custom_insurance_salary: employee.custom_insurance_salary ?? "",
         leave_approver: employee.leave_approver || "",
-        custom_allowance_hcm_full: employee.custom_allowance_hcm_full ?? "",
-        custom_allowance_hcm_partial: employee.custom_allowance_hcm_partial ?? "",
-        custom_allowance_dest_full: employee.custom_allowance_dest_full ?? "",
-        custom_allowance_dest_partial: employee.custom_allowance_dest_partial ?? "",
       });
     }
     // Note: department field intentionally excluded from employment edit
@@ -609,40 +612,6 @@ export default function EmployeeDetailPage() {
                     <span>{formatVND(employee.custom_insurance_salary)}</span>
                   </div>
                 )}
-                {((employee.custom_allowance_hcm_full ?? 0) > 0 ||
-                  (employee.custom_allowance_hcm_partial ?? 0) > 0 ||
-                  (employee.custom_allowance_dest_full ?? 0) > 0 ||
-                  (employee.custom_allowance_dest_partial ?? 0) > 0) && (
-                  <>
-                    <div className="pt-1 pb-0.5">
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Allowance Rates</span>
-                    </div>
-                    {(employee.custom_allowance_hcm_full ?? 0) > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">HCM – Full Package</span>
-                        <span>{formatVND(employee.custom_allowance_hcm_full!)}</span>
-                      </div>
-                    )}
-                    {(employee.custom_allowance_hcm_partial ?? 0) > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">HCM – Partial</span>
-                        <span>{formatVND(employee.custom_allowance_hcm_partial!)}</span>
-                      </div>
-                    )}
-                    {(employee.custom_allowance_dest_full ?? 0) > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Destination – Full Package</span>
-                        <span>{formatVND(employee.custom_allowance_dest_full!)}</span>
-                      </div>
-                    )}
-                    {(employee.custom_allowance_dest_partial ?? 0) > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Destination – Partial</span>
-                        <span>{formatVND(employee.custom_allowance_dest_partial!)}</span>
-                      </div>
-                    )}
-                  </>
-                )}
                 {employee.leave_approver && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Leave Approver</span>
@@ -734,6 +703,48 @@ export default function EmployeeDetailPage() {
                 ) : (
                   <p className="text-muted-foreground text-sm">No commissions set</p>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Allowance Rates */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Allowance Rates</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => openEdit("allowance")}>
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-left font-normal text-muted-foreground pb-2"></th>
+                      <th className="text-right font-medium pb-2 pr-4">HCM</th>
+                      <th className="text-right font-medium pb-2">Destination</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="text-muted-foreground py-1">Full Package</td>
+                      <td className="text-right pr-4 py-1">
+                        {(employee.custom_allowance_hcm_full ?? 0) > 0 ? formatVND(employee.custom_allowance_hcm_full!) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="text-right py-1">
+                        {(employee.custom_allowance_dest_full ?? 0) > 0 ? formatVND(employee.custom_allowance_dest_full!) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="text-muted-foreground py-1">Partial</td>
+                      <td className="text-right pr-4 py-1">
+                        {(employee.custom_allowance_hcm_partial ?? 0) > 0 ? formatVND(employee.custom_allowance_hcm_partial!) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="text-right py-1">
+                        {(employee.custom_allowance_dest_partial ?? 0) > 0 ? formatVND(employee.custom_allowance_dest_partial!) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </CardContent>
             </Card>
           </div>
@@ -1030,7 +1041,7 @@ export default function EmployeeDetailPage() {
         <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>
-              {editSection === "personal" ? "Edit Personal Information" : editSection === "contact" ? "Edit Contact" : editSection === "commission" ? "Edit Commission Structure" : "Edit Employment"}
+              {editSection === "personal" ? "Edit Personal Information" : editSection === "contact" ? "Edit Contact" : editSection === "commission" ? "Edit Commission Structure" : editSection === "allowance" ? "Edit Allowance Rates" : "Edit Employment"}
             </SheetTitle>
             <p className="text-sm text-muted-foreground">{employee.employee_name}</p>
           </SheetHeader>
@@ -1145,27 +1156,6 @@ export default function EmployeeDetailPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="pt-2 border-t">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Allowance Rates (VND)</p>
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-allowance-hcm-full">HCM – Full Package</Label>
-                      <Input id="edit-allowance-hcm-full" type="number" min={0} value={editValues.custom_allowance_hcm_full} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_allowance_hcm_full: e.target.value }))} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-allowance-hcm-partial">HCM – Partial</Label>
-                      <Input id="edit-allowance-hcm-partial" type="number" min={0} value={editValues.custom_allowance_hcm_partial} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_allowance_hcm_partial: e.target.value }))} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-allowance-dest-full">Destination – Full Package</Label>
-                      <Input id="edit-allowance-dest-full" type="number" min={0} value={editValues.custom_allowance_dest_full} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_allowance_dest_full: e.target.value }))} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-allowance-dest-partial">Destination – Partial</Label>
-                      <Input id="edit-allowance-dest-partial" type="number" min={0} value={editValues.custom_allowance_dest_partial} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_allowance_dest_partial: e.target.value }))} />
-                    </div>
-                  </div>
-                </div>
               </>
             )}
             {editSection === "commission" && (
@@ -1185,6 +1175,29 @@ export default function EmployeeDetailPage() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-sales-pct">Sales Commission (%)</Label>
                   <Input id="edit-sales-pct" type="number" min={0} max={100} step={0.1} value={editValues.custom_sales_commission_pct} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_sales_commission_pct: e.target.value }))} />
+                </div>
+              </>
+            )}
+            {editSection === "allowance" && (
+              <>
+                <p className="text-sm text-muted-foreground">Set the fixed allowance this employee receives when assigned to a wedding, based on wedding type and package.</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>HCM – Full Package (VND)</Label>
+                    <Input type="number" min={0} step={100000} value={editValues.custom_allowance_hcm_full} onChange={(e) => setEditValues((p) => ({ ...p, custom_allowance_hcm_full: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>HCM – Partial (VND)</Label>
+                    <Input type="number" min={0} step={100000} value={editValues.custom_allowance_hcm_partial} onChange={(e) => setEditValues((p) => ({ ...p, custom_allowance_hcm_partial: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Destination – Full Package (VND)</Label>
+                    <Input type="number" min={0} step={100000} value={editValues.custom_allowance_dest_full} onChange={(e) => setEditValues((p) => ({ ...p, custom_allowance_dest_full: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Destination – Partial (VND)</Label>
+                    <Input type="number" min={0} step={100000} value={editValues.custom_allowance_dest_partial} onChange={(e) => setEditValues((p) => ({ ...p, custom_allowance_dest_partial: e.target.value }))} />
+                  </div>
                 </div>
               </>
             )}
