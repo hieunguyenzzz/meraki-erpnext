@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { DetailSkeleton } from "@/components/detail-skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   getReviewStatus,
   getReviewBadgeVariant,
@@ -60,6 +62,9 @@ export default function EmployeeDetailPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [recordsError, setRecordsError] = useState<string | null>(null);
+
   const invalidate = useInvalidate();
   const { mutateAsync: updateEmployee } = useUpdate();
   const { mutateAsync: customMutation } = useCustomMutation();
@@ -101,6 +106,31 @@ export default function EmployeeDetailPage() {
     meta: { fields: ["name", "employee", "leave_type", "total_leave_days"] },
     queryOptions: { enabled: !!name },
   });
+
+  // All leave applications for this employee (for history tab)
+  const { result: leaveHistoryResult } = useList({
+    resource: "Leave Application",
+    pagination: { mode: "off" },
+    filters: [{ field: "employee", operator: "eq", value: name }],
+    sorters: [{ field: "from_date", order: "desc" }],
+    meta: { fields: ["name", "leave_type", "from_date", "to_date", "total_leave_days", "status", "docstatus", "description"] },
+    queryOptions: { enabled: !!name },
+  });
+  const leaveHistory = (leaveHistoryResult?.data ?? []) as any[];
+
+  // All WFH requests for this employee
+  const { result: wfhResult } = useList({
+    resource: "Attendance Request",
+    pagination: { mode: "off" },
+    filters: [
+      { field: "employee", operator: "eq", value: name },
+      { field: "reason", operator: "eq", value: "Work From Home" },
+    ],
+    sorters: [{ field: "from_date", order: "desc" }],
+    meta: { fields: ["name", "from_date", "to_date", "explanation", "docstatus", "workflow_state"] },
+    queryOptions: { enabled: !!name },
+  });
+  const wfhRequests = (wfhResult?.data ?? []) as any[];
 
   const allocations = (allocsResult?.data ?? []) as any[];
   const applications = (appsResult?.data ?? []) as any[];
@@ -195,6 +225,48 @@ export default function EmployeeDetailPage() {
     }
   }
 
+  async function handleLeaveApprove(appName: string) {
+    setProcessingId(appName); setRecordsError(null);
+    try {
+      await customMutation({ url: "/api/method/frappe.client.set_value", method: "post",
+        values: { doctype: "Leave Application", name: appName, fieldname: "status", value: "Approved" } });
+      await customMutation({ url: "/api/method/frappe.client.submit", method: "post",
+        values: { doctype: "Leave Application", name: appName } });
+      invalidate({ resource: "Leave Application", invalidates: ["list"] });
+    } catch { setRecordsError(`Failed to approve ${appName}`); } finally { setProcessingId(null); }
+  }
+
+  async function handleLeaveReject(appName: string) {
+    setProcessingId(appName); setRecordsError(null);
+    try {
+      await customMutation({ url: "/api/method/frappe.client.set_value", method: "post",
+        values: { doctype: "Leave Application", name: appName, fieldname: "status", value: "Rejected" } });
+      await customMutation({ url: "/api/method/frappe.client.submit", method: "post",
+        values: { doctype: "Leave Application", name: appName } });
+      invalidate({ resource: "Leave Application", invalidates: ["list"] });
+    } catch { setRecordsError(`Failed to reject ${appName}`); } finally { setProcessingId(null); }
+  }
+
+  async function handleWFHApprove(reqName: string) {
+    setProcessingId(reqName); setRecordsError(null);
+    try {
+      await customMutation({ url: "/api/method/frappe.client.submit", method: "post",
+        values: { doctype: "Attendance Request", name: reqName } });
+      invalidate({ resource: "Attendance Request", invalidates: ["list"] });
+    } catch { setRecordsError(`Failed to approve ${reqName}`); } finally { setProcessingId(null); }
+  }
+
+  async function handleWFHReject(reqName: string) {
+    setProcessingId(reqName); setRecordsError(null);
+    try {
+      await customMutation({ url: "/api/method/frappe.client.set_value", method: "post",
+        values: { doctype: "Attendance Request", name: reqName, fieldname: "workflow_state", value: "Rejected" } });
+      await customMutation({ url: "/api/method/frappe.client.submit", method: "post",
+        values: { doctype: "Attendance Request", name: reqName } });
+      invalidate({ resource: "Attendance Request", invalidates: ["list"] });
+    } catch { setRecordsError(`Failed to reject ${reqName}`); } finally { setProcessingId(null); }
+  }
+
   function openEdit(section: EditSection) {
     if (!employee) return;
     setEditError(null);
@@ -285,6 +357,10 @@ export default function EmployeeDetailPage() {
   const leaveBalanceVariant = getLeaveBalanceVariant(leaveBalance.remaining, leaveBalance.allocated);
   const leavePercent = leaveBalance.allocated > 0 ? (leaveBalance.remaining / leaveBalance.allocated) * 100 : 0;
 
+  const pendingLeave = leaveHistory.filter((a) => a.docstatus === 0 && a.status === "Open").length;
+  const pendingWFH = wfhRequests.filter((r) => r.docstatus === 0 && r.workflow_state !== "Rejected").length;
+  const pendingCount = pendingLeave + pendingWFH;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -308,233 +384,355 @@ export default function EmployeeDetailPage() {
         )}
       </div>
 
-      {/* Grid of Cards */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Personal Information */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Personal Information</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => openEdit("personal")}>
-              <Pencil className="h-3 w-3 mr-1" />
-              Edit
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Employee ID</span>
-              <span className="font-mono text-sm">{employee.name}</span>
-            </div>
-            {employee.gender && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Gender</span>
-                <span>{employee.gender}</span>
-              </div>
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="records" className="flex items-center gap-1.5">
+            Leave &amp; WFH
+            {pendingCount > 0 && (
+              <Badge variant="destructive" className="h-4 px-1 text-xs">{pendingCount}</Badge>
             )}
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Date of Birth</span>
-              <span>{formatDate(employee.date_of_birth)}</span>
-            </div>
-          </CardContent>
-        </Card>
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Contact */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Contact</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => openEdit("contact")}>
-              <Pencil className="h-3 w-3 mr-1" />
-              Edit
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Email</span>
-              <span>{employee.company_email || "-"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Phone</span>
-              <span>{employee.cell_phone || "-"}</span>
-            </div>
-            {employee.user_id && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">User Account</span>
-                <span className="text-sm">{employee.user_id}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Employment */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Employment</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => openEdit("employment")}>
-              <Pencil className="h-3 w-3 mr-1" />
-              Edit
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Designation</span>
-              <span>{employee.designation || "-"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Department</span>
-              <span>{employee.department || "-"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Date of Joining</span>
-              <span>{formatDate(employee.date_of_joining)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Tenure</span>
-              <span>{calculateTenure(employee.date_of_joining)}</span>
-            </div>
-            {staffRoles.length > 0 && (
-              <div className="flex justify-between items-start">
-                <span className="text-muted-foreground">Staff Roles</span>
-                <div className="flex gap-1 flex-wrap justify-end">
-                  {staffRoles.map((role) => (
-                    <Badge key={role} variant={getRoleBadgeVariant(role)}>
-                      {role}
-                    </Badge>
-                  ))}
+        <TabsContent value="overview" className="space-y-6">
+          {/* Grid of Cards */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Personal Information */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Personal Information</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => openEdit("personal")}>
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Employee ID</span>
+                  <span className="font-mono text-sm">{employee.name}</span>
                 </div>
-              </div>
-            )}
-            {employee.ctc != null && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">CTC</span>
-                <span>{formatVND(employee.ctc)}</span>
-              </div>
-            )}
-            {employee.custom_insurance_salary != null && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Insurance Salary (BHXH)</span>
-                <span>{formatVND(employee.custom_insurance_salary)}</span>
-              </div>
-            )}
-            {employee.leave_approver && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Leave Approver</span>
-                <span>{users.find((u) => u.name === employee.leave_approver)?.full_name || employee.leave_approver}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                {employee.gender && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Gender</span>
+                    <span>{employee.gender}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date of Birth</span>
+                  <span>{formatDate(employee.date_of_birth)}</span>
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Performance Review */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Performance Review</CardTitle>
-            <Button size="sm" variant="outline" onClick={openReviewDialog}>
-              <Pencil className="h-3 w-3 mr-1" />
-              {employee.custom_last_review_date ? "Edit" : "Add"}
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Last Review</span>
-              <span>{employee.custom_last_review_date ? formatDate(employee.custom_last_review_date) : "-"}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Status</span>
-              <Badge variant={reviewBadgeVariant}>{reviewStatusText}</Badge>
-            </div>
-            {employee.custom_review_notes && (
-              <div className="pt-2 border-t">
-                <span className="text-muted-foreground text-sm">Notes</span>
-                <p className="mt-1 text-sm whitespace-pre-wrap">{employee.custom_review_notes}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            {/* Contact */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Contact</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => openEdit("contact")}>
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Email</span>
+                  <span>{employee.company_email || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Phone</span>
+                  <span>{employee.cell_phone || "-"}</span>
+                </div>
+                {employee.user_id && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">User Account</span>
+                    <span className="text-sm">{employee.user_id}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-        {/* Leave Balance */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Leave Balance</CardTitle>
-            {leaveBalance.allocated > 0 && (
-              <Button size="sm" variant="outline" onClick={openLeaveDialog}>
-                <Pencil className="h-3 w-3 mr-1" />
-                Edit
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {leaveBalance.allocated > 0 ? (
-              <>
+            {/* Employment */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Employment</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => openEdit("employment")}>
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Designation</span>
+                  <span>{employee.designation || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Department</span>
+                  <span>{employee.department || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date of Joining</span>
+                  <span>{formatDate(employee.date_of_joining)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tenure</span>
+                  <span>{calculateTenure(employee.date_of_joining)}</span>
+                </div>
+                {staffRoles.length > 0 && (
+                  <div className="flex justify-between items-start">
+                    <span className="text-muted-foreground">Staff Roles</span>
+                    <div className="flex gap-1 flex-wrap justify-end">
+                      {staffRoles.map((role) => (
+                        <Badge key={role} variant={getRoleBadgeVariant(role)}>
+                          {role}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {employee.ctc != null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">CTC</span>
+                    <span>{formatVND(employee.ctc)}</span>
+                  </div>
+                )}
+                {employee.custom_insurance_salary != null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Insurance Salary (BHXH)</span>
+                    <span>{formatVND(employee.custom_insurance_salary)}</span>
+                  </div>
+                )}
+                {employee.leave_approver && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Leave Approver</span>
+                    <span>{users.find((u) => u.name === employee.leave_approver)?.full_name || employee.leave_approver}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Performance Review */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Performance Review</CardTitle>
+                <Button size="sm" variant="outline" onClick={openReviewDialog}>
+                  <Pencil className="h-3 w-3 mr-1" />
+                  {employee.custom_last_review_date ? "Edit" : "Add"}
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Annual Leave</span>
-                  <Badge variant={leaveBalanceVariant}>
-                    {leaveBalance.remaining}/{leaveBalance.allocated} days
-                  </Badge>
+                  <span className="text-muted-foreground">Last Review</span>
+                  <span>{employee.custom_last_review_date ? formatDate(employee.custom_last_review_date) : "-"}</span>
                 </div>
-                <Progress
-                  value={leavePercent}
-                  className="h-2"
-                  indicatorClassName={
-                    leavePercent > 50
-                      ? "bg-green-500"
-                      : leavePercent >= 25
-                      ? "bg-amber-500"
-                      : "bg-red-500"
-                  }
-                />
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>Used: {leaveBalance.taken} days</span>
-                  <span>Remaining: {leaveBalance.remaining} days</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Status</span>
+                  <Badge variant={reviewBadgeVariant}>{reviewStatusText}</Badge>
                 </div>
-              </>
-            ) : (
-              <p className="text-muted-foreground">No leave allocation found</p>
-            )}
-          </CardContent>
-        </Card>
+                {employee.custom_review_notes && (
+                  <div className="pt-2 border-t">
+                    <span className="text-muted-foreground text-sm">Notes</span>
+                    <p className="mt-1 text-sm whitespace-pre-wrap">{employee.custom_review_notes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-        {/* Commission Structure */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Commission Structure</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => openEdit("commission")}>
-              <Pencil className="h-3 w-3 mr-1" />
-              Edit
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {hasCommission ? (
-              <>
-                {(employee.custom_lead_commission_pct ?? 0) > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Lead Commission</span>
-                    <span className="font-medium">{employee.custom_lead_commission_pct}%</span>
-                  </div>
+            {/* Leave Balance */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Leave Balance</CardTitle>
+                {leaveBalance.allocated > 0 && (
+                  <Button size="sm" variant="outline" onClick={openLeaveDialog}>
+                    <Pencil className="h-3 w-3 mr-1" />
+                    Edit
+                  </Button>
                 )}
-                {(employee.custom_support_commission_pct ?? 0) > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Support Commission</span>
-                    <span className="font-medium">{employee.custom_support_commission_pct}%</span>
-                  </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {leaveBalance.allocated > 0 ? (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Annual Leave</span>
+                      <Badge variant={leaveBalanceVariant}>
+                        {leaveBalance.remaining}/{leaveBalance.allocated} days
+                      </Badge>
+                    </div>
+                    <Progress
+                      value={leavePercent}
+                      className="h-2"
+                      indicatorClassName={
+                        leavePercent > 50
+                          ? "bg-green-500"
+                          : leavePercent >= 25
+                          ? "bg-amber-500"
+                          : "bg-red-500"
+                      }
+                    />
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Used: {leaveBalance.taken} days</span>
+                      <span>Remaining: {leaveBalance.remaining} days</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground">No leave allocation found</p>
                 )}
-                {(employee.custom_assistant_commission_pct ?? 0) > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Assistant Commission</span>
-                    <span className="font-medium">{employee.custom_assistant_commission_pct}%</span>
-                  </div>
+              </CardContent>
+            </Card>
+
+            {/* Commission Structure */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Commission Structure</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => openEdit("commission")}>
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {hasCommission ? (
+                  <>
+                    {(employee.custom_lead_commission_pct ?? 0) > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Lead Commission</span>
+                        <span className="font-medium">{employee.custom_lead_commission_pct}%</span>
+                      </div>
+                    )}
+                    {(employee.custom_support_commission_pct ?? 0) > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Support Commission</span>
+                        <span className="font-medium">{employee.custom_support_commission_pct}%</span>
+                      </div>
+                    )}
+                    {(employee.custom_assistant_commission_pct ?? 0) > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Assistant Commission</span>
+                        <span className="font-medium">{employee.custom_assistant_commission_pct}%</span>
+                      </div>
+                    )}
+                    {(employee.custom_sales_commission_pct ?? 0) > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Sales Commission</span>
+                        <span className="font-medium">{employee.custom_sales_commission_pct}%</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-muted-foreground text-sm">No commissions set</p>
                 )}
-                {(employee.custom_sales_commission_pct ?? 0) > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Sales Commission</span>
-                    <span className="font-medium">{employee.custom_sales_commission_pct}%</span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-muted-foreground text-sm">No commissions set</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="records" className="space-y-4">
+          {recordsError && <p className="text-sm text-red-600">{recordsError}</p>}
+
+          {/* Leave History */}
+          <Card>
+            <CardHeader><CardTitle>Leave Applications</CardTitle></CardHeader>
+            <CardContent>
+              {leaveHistory.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No leave applications</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>From</TableHead>
+                      <TableHead>To</TableHead>
+                      <TableHead>Days</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {leaveHistory.map((app) => (
+                      <TableRow key={app.name}>
+                        <TableCell>{app.leave_type}</TableCell>
+                        <TableCell>{formatDate(app.from_date)}</TableCell>
+                        <TableCell>{formatDate(app.to_date)}</TableCell>
+                        <TableCell>{app.total_leave_days}</TableCell>
+                        <TableCell>
+                          <Badge variant={app.status === "Approved" ? "default" : app.status === "Rejected" ? "destructive" : "secondary"}>
+                            {app.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {app.docstatus === 0 && app.status === "Open" && (
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" disabled={processingId === app.name}
+                                onClick={() => handleLeaveApprove(app.name)}>Approve</Button>
+                              <Button size="sm" variant="destructive" disabled={processingId === app.name}
+                                onClick={() => handleLeaveReject(app.name)}>Reject</Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* WFH History */}
+          <Card>
+            <CardHeader><CardTitle>Work From Home Requests</CardTitle></CardHeader>
+            <CardContent>
+              {wfhRequests.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No WFH requests</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>From</TableHead>
+                      <TableHead>To</TableHead>
+                      <TableHead>Days</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Explanation</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {wfhRequests.map((req) => {
+                      const isPending = req.docstatus === 0 && req.workflow_state !== "Rejected";
+                      const isApproved = req.docstatus === 1;
+                      const isRejected = req.workflow_state === "Rejected";
+                      const days = req.from_date && req.to_date
+                        ? Math.ceil((new Date(req.to_date).getTime() - new Date(req.from_date).getTime()) / 86400000) + 1
+                        : "-";
+                      return (
+                        <TableRow key={req.name}>
+                          <TableCell>{formatDate(req.from_date)}</TableCell>
+                          <TableCell>{formatDate(req.to_date)}</TableCell>
+                          <TableCell>{days}</TableCell>
+                          <TableCell>
+                            <Badge variant={isApproved ? "default" : isRejected ? "destructive" : "secondary"}>
+                              {isApproved ? "Approved" : isRejected ? "Rejected" : "Pending"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="max-w-xs truncate">{req.explanation || "-"}</TableCell>
+                          <TableCell>
+                            {isPending && (
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" disabled={processingId === req.name}
+                                  onClick={() => handleWFHApprove(req.name)}>Approve</Button>
+                                <Button size="sm" variant="destructive" disabled={processingId === req.name}
+                                  onClick={() => handleWFHReject(req.name)}>Reject</Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Review Sheet */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
