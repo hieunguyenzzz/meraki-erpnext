@@ -59,7 +59,18 @@ export default function ProjectKanbanPage() {
     pagination: { mode: "off" },
     filters: [{ field: "docstatus", operator: "in", value: [0, 1] }],
     meta: {
-      fields: ["name", "customer_name", "custom_venue", "grand_total", "per_billed"],
+      fields: ["name", "customer_name", "custom_venue", "grand_total"],
+    },
+  });
+
+  // Fetch submitted Sales Invoices to calculate % paid per project
+  // (milestone invoices link to project, not SO items, so SO.per_billed stays 0)
+  const { result: invoicesResult } = useList({
+    resource: "Sales Invoice",
+    pagination: { mode: "off" },
+    filters: [{ field: "docstatus", operator: "eq", value: 1 }],
+    meta: {
+      fields: ["name", "project", "grand_total", "outstanding_amount"],
     },
   });
 
@@ -93,11 +104,20 @@ export default function ProjectKanbanPage() {
     const customers = customersResult?.data ?? [];
     const employees = employeesResult?.data ?? [];
     const suppliers = suppliersResult?.data ?? [];
+    const invoices = invoicesResult?.data ?? [];
 
     // Build lookup maps
     const soByName = new Map(
       salesOrders.map((so: any) => [so.name, so])
     );
+
+    // Build per-project paid amount map from submitted invoices
+    const paidByProject = new Map<string, number>();
+    for (const inv of invoices as any[]) {
+      if (!inv.project) continue;
+      const paid = (inv.grand_total || 0) - (inv.outstanding_amount || 0);
+      paidByProject.set(inv.project, (paidByProject.get(inv.project) ?? 0) + paid);
+    }
     const customerByName = new Map(
       customers.map((c: any) => [c.name, c])
     );
@@ -127,10 +147,12 @@ export default function ProjectKanbanPage() {
         lead_planner_name: p.custom_lead_planner ? employeeByName.get(p.custom_lead_planner) : undefined,
         support_planner_name: p.custom_support_planner ? employeeByName.get(p.custom_support_planner) : undefined,
         package_amount: linkedSO?.grand_total,
-        per_billed: linkedSO?.per_billed,
+        per_billed: linkedSO?.grand_total > 0
+          ? Math.round((paidByProject.get(p.name) ?? 0) / linkedSO.grand_total * 100)
+          : undefined,
       };
     });
-  }, [projectsResult, salesOrdersResult, customersResult, employeesResult, suppliersResult]);
+  }, [projectsResult, salesOrdersResult, customersResult, employeesResult, suppliersResult, invoicesResult]);
 
   const isLoading = projectsQuery?.isLoading;
 
