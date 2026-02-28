@@ -20,6 +20,8 @@ from webhook_v2.routers.inquiry import router as inquiry_router
 from webhook_v2.routers.wedding import router as wedding_router
 from webhook_v2.routers.employee import router as employee_router
 from webhook_v2.routers.review import router as review_router
+from webhook_v2.routers.allowance import router as allowance_router
+from webhook_v2.routers.employee_order import router as employee_order_router
 
 log = get_logger(__name__)
 
@@ -80,6 +82,8 @@ app.include_router(inquiry_router)
 app.include_router(wedding_router)
 app.include_router(employee_router)
 app.include_router(review_router)
+app.include_router(allowance_router)
+app.include_router(employee_order_router)
 
 
 # Request/Response Models

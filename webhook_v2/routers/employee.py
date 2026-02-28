@@ -39,6 +39,11 @@ ALLOWED_FIELDS = {
     "user_id",
     "custom_last_review_date",
     "custom_review_notes",
+    "custom_allowance_hcm_full",
+    "custom_allowance_hcm_partial",
+    "custom_allowance_dest_full",
+    "custom_allowance_dest_partial",
+    "custom_display_order",
 }
 
 
