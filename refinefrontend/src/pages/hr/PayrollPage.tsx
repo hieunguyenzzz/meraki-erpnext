@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useList, useCustomMutation, useInvalidate, useApiUrl } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,68 +71,78 @@ interface PayrollEntry {
   number_of_employees: number;
 }
 
-const slipColumns: ColumnDef<SalarySlip, unknown>[] = [
-  {
-    accessorKey: "employee_name",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
-    cell: ({ row }) => <span className="font-medium">{row.original.employee_name}</span>,
-    filterFn: "includesString",
-  },
-  {
-    id: "base",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Base" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(getEarningAmount(row.original.earnings, "Basic Salary"))}</div>,
-  },
-  {
-    id: "commission",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Commission" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(getTotalCommission(row.original.earnings))}</div>,
-  },
-  {
-    id: "bonus",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Bonus" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(getEarningAmount(row.original.earnings, "Bonus"))}</div>,
-  },
-  {
-    accessorKey: "gross_pay",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Gross Pay" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(row.original.gross_pay)}</div>,
-  },
-  {
-    id: "bhxh",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="BHXH 8%" className="text-right" />,
-    cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHXH (Employee)"))}</div>,
-  },
-  {
-    id: "bhyt",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="BHYT 1.5%" className="text-right" />,
-    cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHYT (Employee)"))}</div>,
-  },
-  {
-    id: "bhtn",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="BHTN 1%" className="text-right" />,
-    cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHTN (Employee)"))}</div>,
-  },
-  {
-    id: "employer_bhxh",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Employer BHXH" className="text-right" />,
-    cell: ({ row }) => <div className="text-right text-amber-600 dark:text-amber-400">{formatVND(getEmployerBHXH(row.original.deductions))}</div>,
-  },
-  {
-    accessorKey: "net_pay",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Net Pay" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(row.original.net_pay)}</div>,
-  },
-  {
-    accessorKey: "docstatus",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-    cell: ({ row }) => (
-      <Badge variant={docstatusBadge(row.original.docstatus)}>
-        {docstatusLabel(row.original.docstatus)}
-      </Badge>
-    ),
-  },
-];
+function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDef<SalarySlip, unknown>[] {
+  return [
+    {
+      accessorKey: "employee_name",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
+      cell: ({ row }) => <span className="font-medium">{row.original.employee_name}</span>,
+      filterFn: "includesString",
+    },
+    {
+      id: "base",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Base" className="text-right" />,
+      cell: ({ row }) => <div className="text-right">{formatVND(getEarningAmount(row.original.earnings, "Basic Salary"))}</div>,
+    },
+    {
+      id: "commission",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Commission" className="text-right" />,
+      cell: ({ row }) => <div className="text-right">{formatVND(getTotalCommission(row.original.earnings))}</div>,
+    },
+    {
+      id: "wedding_allowance",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Wedding Allowance" className="text-right" />,
+      cell: ({ row }) => {
+        const amount = weddingAllowanceMap[row.original.employee] ?? 0;
+        return <div className="text-right">{amount > 0 ? formatVND(amount) : <span className="text-muted-foreground">-</span>}</div>;
+      },
+    },
+    {
+      id: "bonus",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Bonus" className="text-right" />,
+      cell: ({ row }) => <div className="text-right">{formatVND(getEarningAmount(row.original.earnings, "Bonus"))}</div>,
+    },
+    {
+      accessorKey: "gross_pay",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Gross Pay" className="text-right" />,
+      cell: ({ row }) => <div className="text-right">{formatVND(row.original.gross_pay)}</div>,
+    },
+    {
+      id: "bhxh",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="BHXH 8%" className="text-right" />,
+      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHXH (Employee)"))}</div>,
+    },
+    {
+      id: "bhyt",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="BHYT 1.5%" className="text-right" />,
+      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHYT (Employee)"))}</div>,
+    },
+    {
+      id: "bhtn",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="BHTN 1%" className="text-right" />,
+      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHTN (Employee)"))}</div>,
+    },
+    {
+      id: "employer_bhxh",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Employer BHXH" className="text-right" />,
+      cell: ({ row }) => <div className="text-right text-amber-600 dark:text-amber-400">{formatVND(getEmployerBHXH(row.original.deductions))}</div>,
+    },
+    {
+      accessorKey: "net_pay",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Net Pay" className="text-right" />,
+      cell: ({ row }) => <div className="text-right">{formatVND(row.original.net_pay)}</div>,
+    },
+    {
+      accessorKey: "docstatus",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+      cell: ({ row }) => (
+        <Badge variant={docstatusBadge(row.original.docstatus)}>
+          {docstatusLabel(row.original.docstatus)}
+        </Badge>
+      ),
+    },
+  ];
+}
 
 const historyColumns: ColumnDef<PayrollEntry, unknown>[] = [
   {
@@ -264,6 +274,30 @@ export default function PayrollPage() {
   });
 
   const activeCount = empResult?.data?.length ?? 0;
+
+  // Fetch Wedding Allowance Additional Salary records for current period
+  const { result: additionalSalariesResult } = useList({
+    resource: "Additional Salary",
+    pagination: { mode: "off" },
+    filters: [
+      { field: "salary_component", operator: "eq", value: "Wedding Allowance" },
+      { field: "payroll_date", operator: "gte", value: start },
+      { field: "payroll_date", operator: "lte", value: end },
+      { field: "docstatus", operator: "eq", value: 1 },
+    ],
+    meta: { fields: ["name", "employee", "amount", "custom_wedding_project"] },
+    queryOptions: { enabled: !!start && !!end },
+  });
+
+  const weddingAllowanceMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const rec of (additionalSalariesResult?.data ?? []) as any[]) {
+      map[rec.employee] = (map[rec.employee] ?? 0) + (rec.amount ?? 0);
+    }
+    return map;
+  }, [additionalSalariesResult?.data]);
+
+  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap), [weddingAllowanceMap]);
 
   const COMMISSION_COMPONENTS = ["Lead Planner Commission", "Support Planner Commission", "Assistant Commission"];
 

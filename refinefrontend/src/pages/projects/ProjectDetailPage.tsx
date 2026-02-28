@@ -51,6 +51,7 @@ import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 const WEDDING_PHASES = [
   "Onboarding",
@@ -132,6 +133,14 @@ export default function ProjectDetailPage() {
   });
   const [editAddonSearch, setEditAddonSearch] = useState<string[]>([]);
   const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
+
+  // Allowance generation state
+  const [allowanceDialogOpen, setAllowanceDialogOpen] = useState(false);
+  const [allowancePreview, setAllowancePreview] = useState<{ created: any[]; skipped: any[] } | null>(null);
+  const [allowanceLoading, setAllowanceLoading] = useState(false);
+  const [allowanceSubmitting, setAllowanceSubmitting] = useState(false);
+  const [allowanceError, setAllowanceError] = useState<string | null>(null);
+  const [allowanceSuccess, setAllowanceSuccess] = useState<string | null>(null);
 
   const invalidate = useInvalidate();
   const { mutateAsync: updateRecord } = useUpdate();
@@ -544,6 +553,53 @@ export default function ProjectDetailPage() {
     }
   }
 
+  async function handleOpenAllowanceDialog() {
+    setAllowanceLoading(true);
+    setAllowanceError(null);
+    setAllowancePreview(null);
+    setAllowanceSuccess(null);
+    try {
+      const res = await fetch(`/inquiry-api/generate-allowances/${encodeURIComponent(name!)}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Preview failed (${res.status})`);
+      }
+      const data = await res.json();
+      setAllowancePreview(data);
+      setAllowanceDialogOpen(true);
+    } catch (err: any) {
+      setAllowanceError(err?.message || "Failed to load preview");
+      setAllowanceDialogOpen(true);
+    } finally {
+      setAllowanceLoading(false);
+    }
+  }
+
+  async function handleConfirmAllowances() {
+    setAllowanceSubmitting(true);
+    setAllowanceError(null);
+    try {
+      const res = await fetch(`/inquiry-api/generate-allowances/${encodeURIComponent(name!)}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Generation failed (${res.status})`);
+      }
+      const data = await res.json();
+      const count = data.created?.length ?? 0;
+      setAllowanceSuccess(`${count} allowance record${count !== 1 ? "s" : ""} created successfully.`);
+      setAllowancePreview(null);
+    } catch (err: any) {
+      setAllowanceError(err?.message || "Failed to generate allowances");
+    } finally {
+      setAllowanceSubmitting(false);
+    }
+  }
+
   function getAssigneeFromTask(task: any) {
     try {
       const assignedUsers = JSON.parse(task._assign || "[]");
@@ -860,15 +916,32 @@ export default function ProjectDetailPage() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <CardTitle>Team</CardTitle>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { populateStaffForm(); setEditStaffOpen(true); }}
-                    >
-                      <Pencil className="h-3 w-3 mr-1" /> Edit
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleOpenAllowanceDialog}
+                        disabled={allowanceLoading}
+                      >
+                        {allowanceLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Generate Allowances
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { populateStaffForm(); setEditStaffOpen(true); }}
+                      >
+                        <Pencil className="h-3 w-3 mr-1" /> Edit
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
+                    {allowanceSuccess && (
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm mb-2">
+                        <Check className="h-4 w-4 shrink-0" />
+                        {allowanceSuccess}
+                      </div>
+                    )}
                     {project.custom_lead_planner && (
                       <ReadOnlyField
                         label="Lead Planner"
@@ -1539,6 +1612,64 @@ export default function ProjectDetailPage() {
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* Generate Allowances Dialog */}
+      <Dialog open={allowanceDialogOpen} onOpenChange={(open) => { if (!allowanceSubmitting) { setAllowanceDialogOpen(open); if (!open) { setAllowancePreview(null); setAllowanceError(null); setAllowanceSuccess(null); } } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate Wedding Allowances</DialogTitle>
+            <p className="text-sm text-muted-foreground">{customerName}</p>
+          </DialogHeader>
+          <div className="space-y-4">
+            {allowanceError && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {allowanceError}
+              </div>
+            )}
+            {allowanceSuccess && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm">
+                <Check className="h-4 w-4 shrink-0" />
+                {allowanceSuccess}
+              </div>
+            )}
+            {allowancePreview && !allowanceSuccess && (
+              <>
+                {allowancePreview.created.length > 0 ? (
+                  <div>
+                    <p className="text-sm font-medium mb-2">Employees to receive allowance:</p>
+                    <div className="space-y-1.5">
+                      {allowancePreview.created.map((item: any, i: number) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span>{item.employee_name || item.employee}</span>
+                          <span className="font-medium">{formatVND(item.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No employees are eligible for an allowance on this project.</p>
+                )}
+                {allowancePreview.skipped.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {allowancePreview.skipped.length} employee{allowancePreview.skipped.length !== 1 ? "s have" : " has"} no rate configured and will be skipped.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAllowanceDialogOpen(false)} disabled={allowanceSubmitting}>
+              {allowanceSuccess ? "Close" : "Cancel"}
+            </Button>
+            {!allowanceSuccess && allowancePreview && allowancePreview.created.length > 0 && (
+              <Button onClick={handleConfirmAllowances} disabled={allowanceSubmitting}>
+                {allowanceSubmitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</> : "Generate"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Project Sheet - kept at root level to avoid remount flashing */}
       <Sheet open={deleteOpen} onOpenChange={(open) => { if (!isDeleting) { setDeleteOpen(open); setDeleteError(null); } }}>

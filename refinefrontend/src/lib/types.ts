@@ -25,6 +25,10 @@ export interface Employee {
   custom_insurance_salary?: number;
   relieving_date?: string;
   leave_approver?: string;
+  custom_allowance_hcm_full?: number;
+  custom_allowance_hcm_partial?: number;
+  custom_allowance_dest_full?: number;
+  custom_allowance_dest_partial?: number;
 }
 
 export interface EmployeeProfile {
