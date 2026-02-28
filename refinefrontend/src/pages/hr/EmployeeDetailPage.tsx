@@ -297,6 +297,7 @@ export default function EmployeeDetailPage() {
         custom_allowance_dest_partial: employee.custom_allowance_dest_partial ?? "",
       });
     }
+    // Note: department field intentionally excluded from employment edit
     setEditSection(section);
   }
 
@@ -543,10 +544,6 @@ export default function EmployeeDetailPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Designation</span>
                   <span>{employee.designation || "-"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Department</span>
-                  <span>{employee.department || "-"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Date of Joining</span>

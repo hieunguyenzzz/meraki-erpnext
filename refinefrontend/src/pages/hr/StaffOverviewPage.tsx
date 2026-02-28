@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { useList, useCreate, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck } from "lucide-react";
+import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck, GripVertical } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,22 +31,68 @@ import {
   getRoleBadgeVariant,
   syncUserRoles,
 } from "@/lib/staff-roles";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface StaffRow {
   name: string;
   employee_name: string;
+  first_name?: string;
+  last_name?: string;
   designation: string;
   department: string;
   date_of_joining: string;
   custom_last_review_date?: string;
   custom_review_notes?: string;
   custom_staff_roles?: string;
+  custom_display_order?: number;
   user_id?: string;
   staff_roles: StaffRole[];
   review_status: ReviewStatus;
   leave_allocated: number;
   leave_taken: number;
   leave_remaining: number;
+}
+
+function fullName(emp: { first_name?: string; last_name?: string; employee_name?: string }): string {
+  const parts = [emp.last_name, emp.first_name].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : (emp.employee_name || "");
+}
+
+function SortableStaffRow({ emp, onEdit }: { emp: StaffRow; onEdit: (emp: StaffRow) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: emp.name });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-3 bg-card border rounded-md mb-2">
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab text-muted-foreground hover:text-foreground touch-none"
+        type="button"
+      >
+        <GripVertical className="h-5 w-5" />
+      </button>
+      <span className="flex-1 font-medium">{fullName(emp)}</span>
+      <span className="text-sm text-muted-foreground">{emp.designation || "-"}</span>
+    </div>
+  );
 }
 
 type SummaryFilter = "all" | "overdue" | "due-soon" | "up-to-date";
@@ -62,6 +108,11 @@ export default function StaffOverviewPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Arrange mode state
+  const [arrangeMode, setArrangeMode] = useState(false);
+  const [orderedIds, setOrderedIds] = useState<string[]>([]);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Unsaved-changes guard
   const [pendingClose, setPendingClose] = useState<(() => void) | null>(null);
   const [initialReviewDate, setInitialReviewDate] = useState("");
@@ -75,6 +126,9 @@ export default function StaffOverviewPage() {
 
   const invalidate = useInvalidate();
   const { mutateAsync: createDoc } = useCreate();
+
+  // DnD sensors
+  const sensors = useSensors(useSensor(PointerSensor));
 
   // Invite staff dialog state
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
@@ -100,12 +154,15 @@ export default function StaffOverviewPage() {
       fields: [
         "name",
         "employee_name",
+        "first_name",
+        "last_name",
         "designation",
         "department",
         "date_of_joining",
         "custom_last_review_date",
         "custom_review_notes",
         "custom_staff_roles",
+        "custom_display_order",
         "user_id",
         "custom_meraki_id",
       ],
@@ -164,12 +221,15 @@ export default function StaffOverviewPage() {
       return {
         name: emp.name,
         employee_name: emp.employee_name,
+        first_name: emp.first_name,
+        last_name: emp.last_name,
         designation: emp.designation || "-",
         department: emp.department || "-",
         date_of_joining: emp.date_of_joining,
         custom_last_review_date: emp.custom_last_review_date,
         custom_review_notes: emp.custom_review_notes,
         custom_staff_roles: emp.custom_staff_roles,
+        custom_display_order: emp.custom_display_order,
         user_id: emp.user_id,
         staff_roles: parseStaffRoles(emp.custom_staff_roles),
         review_status: getReviewStatus(emp.custom_last_review_date),
@@ -179,6 +239,51 @@ export default function StaffOverviewPage() {
       };
     });
   }, [employees, allocByEmployee, takenByEmployee]);
+
+  // Initialize orderedIds from custom_display_order when data first loads
+  useEffect(() => {
+    if (staffData.length > 0) {
+      const sorted = [...staffData].sort((a, b) => {
+        const oa = a.custom_display_order || 0;
+        const ob = b.custom_display_order || 0;
+        if (oa === 0 && ob === 0) return (a.employee_name || "").localeCompare(b.employee_name || "");
+        if (oa === 0) return 1;
+        if (ob === 0) return -1;
+        return oa - ob;
+      });
+      setOrderedIds(sorted.map((e) => e.name));
+    }
+  }, [staffData]);
+
+  // Compute ordered staff list from orderedIds
+  const orderedStaff = useMemo(() => {
+    const map = Object.fromEntries(staffData.map((e) => [e.name, e]));
+    return orderedIds.map((id) => map[id]).filter(Boolean) as StaffRow[];
+  }, [orderedIds, staffData]);
+
+  // Debounced save of order to ERPNext
+  function saveOrderDebounced(ids: string[]) {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      await fetch("/inquiry-api/employee-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: ids.map((id, index) => ({ employee: id, order: index + 1 })) }),
+      });
+    }, 400);
+  }
+
+  function handleDragEnd(event: any) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setOrderedIds((ids) => {
+      const oldIndex = ids.indexOf(active.id as string);
+      const newIndex = ids.indexOf(over.id as string);
+      const next = arrayMove(ids, oldIndex, newIndex);
+      saveOrderDebounced(next);
+      return next;
+    });
+  }
 
   // Summary counts
   const { total, overdue, dueSoon, upToDate } = useMemo(() => {
@@ -204,10 +309,10 @@ export default function StaffOverviewPage() {
     return { total: staffData.length, overdue, dueSoon, upToDate };
   }, [staffData]);
 
-  // Filter data by summary card selection
+  // Filter data by summary card selection — based on orderedStaff to preserve custom order
   const filteredData = useMemo(() => {
-    if (summaryFilter === "all") return staffData;
-    return staffData.filter((row) => {
+    if (summaryFilter === "all") return orderedStaff;
+    return orderedStaff.filter((row) => {
       switch (summaryFilter) {
         case "overdue":
           return row.review_status === "overdue" || row.review_status === "never-reviewed";
@@ -219,7 +324,7 @@ export default function StaffOverviewPage() {
           return true;
       }
     });
-  }, [staffData, summaryFilter]);
+  }, [orderedStaff, summaryFilter]);
 
   // Handle adding review
   function openReviewDialog(employee: StaffRow) {
@@ -406,10 +511,13 @@ export default function StaffOverviewPage() {
       header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
       cell: ({ row }) => (
         <Link to={`/hr/employees/${row.original.name}`} className="font-medium text-primary hover:underline">
-          {row.original.employee_name}
+          {fullName(row.original)}
         </Link>
       ),
-      filterFn: "includesString",
+      filterFn: (row, _id, filterValue) => {
+        const name = fullName(row.original).toLowerCase();
+        return name.includes((filterValue as string).toLowerCase());
+      },
     },
     {
       accessorKey: "designation",
@@ -508,10 +616,16 @@ export default function StaffOverviewPage() {
           <h1 className="text-2xl font-bold tracking-tight">Staff Overview</h1>
           <p className="text-muted-foreground">Employee status, reviews, and leave balances at a glance</p>
         </div>
-        <Button onClick={() => setInviteDialogOpen(true)}>
-          <UserPlus className="h-4 w-4 mr-2" />
-          Invite Staff
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setArrangeMode(v => !v)}>
+            <GripVertical className="h-4 w-4 mr-1" />
+            {arrangeMode ? "Done" : "Arrange Order"}
+          </Button>
+          <Button onClick={() => setInviteDialogOpen(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Invite Staff
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -569,40 +683,52 @@ export default function StaffOverviewPage() {
         </Card>
       </div>
 
-      {/* Staff Table */}
-      <DataTable
-        columns={columns}
-        data={filteredData}
-        isLoading={isLoading}
-        searchKey="employee_name"
-        searchPlaceholder="Search by name..."
-        filterableColumns={[
-          {
-            id: "staff_roles",
-            title: "Staff Role",
-            options: STAFF_ROLES.map(role => ({ label: role, value: role })),
-          },
-          {
-            id: "department",
-            title: "Department",
-            options: [
-              { label: "Operations", value: "Operations" },
-              { label: "Management", value: "Management" },
-              { label: "Administration", value: "Administration" },
-            ],
-          },
-          {
-            id: "review_status",
-            title: "Review Status",
-            options: [
-              { label: "Overdue", value: "overdue" },
-              { label: "Never Reviewed", value: "never-reviewed" },
-              { label: "Due Soon", value: "due-soon" },
-              { label: "Up to Date", value: "up-to-date" },
-            ],
-          },
-        ]}
-      />
+      {/* Staff Table or Arrange Mode */}
+      {arrangeMode ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
+            <div className="space-y-1">
+              {orderedStaff.map((emp) => (
+                <SortableStaffRow key={emp.name} emp={emp} onEdit={openReviewDialog} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={filteredData}
+          isLoading={isLoading}
+          searchKey="employee_name"
+          searchPlaceholder="Search by name..."
+          filterableColumns={[
+            {
+              id: "staff_roles",
+              title: "Staff Role",
+              options: STAFF_ROLES.map(role => ({ label: role, value: role })),
+            },
+            {
+              id: "department",
+              title: "Department",
+              options: [
+                { label: "Operations", value: "Operations" },
+                { label: "Management", value: "Management" },
+                { label: "Administration", value: "Administration" },
+              ],
+            },
+            {
+              id: "review_status",
+              title: "Review Status",
+              options: [
+                { label: "Overdue", value: "overdue" },
+                { label: "Never Reviewed", value: "never-reviewed" },
+                { label: "Due Soon", value: "due-soon" },
+                { label: "Up to Date", value: "up-to-date" },
+              ],
+            },
+          ]}
+        />
+      )}
 
       {/* Review Sheet */}
       <Sheet open={reviewDialogOpen} onOpenChange={(open) => { if (!open) tryClose(isReviewDirty, () => setReviewDialogOpen(false)); }}>
@@ -610,7 +736,7 @@ export default function StaffOverviewPage() {
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>Review</SheetTitle>
             {selectedEmployee && (
-              <p className="text-sm text-muted-foreground">{selectedEmployee.employee_name}</p>
+              <p className="text-sm text-muted-foreground">{fullName(selectedEmployee)}</p>
             )}
           </SheetHeader>
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
@@ -654,7 +780,7 @@ export default function StaffOverviewPage() {
           <SheetHeader className="px-6 py-4 border-b shrink-0">
             <SheetTitle>Assign Staff Roles</SheetTitle>
             {selectedEmployee && (
-              <p className="text-sm text-muted-foreground">{selectedEmployee.employee_name}</p>
+              <p className="text-sm text-muted-foreground">{fullName(selectedEmployee)}</p>
             )}
           </SheetHeader>
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
