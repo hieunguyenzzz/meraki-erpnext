@@ -15,7 +15,7 @@ router = APIRouter()
 
 # Maps staff roles to the ERPNext roles they grant
 STAFF_ROLE_TO_ERPNEXT_ROLES: dict[str, list[str]] = {
-    "Director":   ["System Manager", "Sales Manager", "HR Manager", "Accounts Manager"],
+    "Director":   ["System Manager", "Sales Manager", "HR Manager", "Accounts Manager", "Projects User", "Sales User"],
     "Sales":      ["Sales User", "Inbox User", "Super Email User"],
     "HR":         ["HR User", "HR Manager"],
     "Accounting": ["Accounts User"],
