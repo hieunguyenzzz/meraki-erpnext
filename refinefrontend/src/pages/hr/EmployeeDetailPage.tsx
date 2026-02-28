@@ -294,7 +294,9 @@ export default function EmployeeDetailPage() {
           Back
         </Button>
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{employee.employee_name}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {[employee.first_name, employee.middle_name, employee.last_name].filter(Boolean).join(" ") || employee.employee_name}
+          </h1>
           <Badge variant={employee.status === "Active" ? "success" : "secondary"}>
             {employee.status}
           </Badge>
@@ -332,12 +334,6 @@ export default function EmployeeDetailPage() {
               <span className="text-muted-foreground">Date of Birth</span>
               <span>{formatDate(employee.date_of_birth)}</span>
             </div>
-            {employee.custom_meraki_id && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Meraki ID</span>
-                <span>{employee.custom_meraki_id}</span>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -421,7 +417,7 @@ export default function EmployeeDetailPage() {
             {employee.leave_approver && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Leave Approver</span>
-                <span>{employee.leave_approver}</span>
+                <span>{users.find((u) => u.name === employee.leave_approver)?.full_name || employee.leave_approver}</span>
               </div>
             )}
           </CardContent>

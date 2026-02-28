@@ -59,7 +59,7 @@ export default function ProjectKanbanPage() {
     pagination: { mode: "off" },
     filters: [{ field: "docstatus", operator: "in", value: [0, 1] }],
     meta: {
-      fields: ["name", "customer_name", "custom_venue", "grand_total"],
+      fields: ["name", "customer_name", "custom_venue", "grand_total", "per_billed"],
     },
   });
 
@@ -127,6 +127,7 @@ export default function ProjectKanbanPage() {
         lead_planner_name: p.custom_lead_planner ? employeeByName.get(p.custom_lead_planner) : undefined,
         support_planner_name: p.custom_support_planner ? employeeByName.get(p.custom_support_planner) : undefined,
         package_amount: linkedSO?.grand_total,
+        per_billed: linkedSO?.per_billed,
       };
     });
   }, [projectsResult, salesOrdersResult, customersResult, employeesResult, suppliersResult]);
@@ -199,6 +200,17 @@ export default function ProjectKanbanPage() {
         return amount
           ? <span>{amount.toLocaleString("vi-VN")} ₫</span>
           : <span className="text-muted-foreground">—</span>;
+      },
+    },
+    {
+      accessorKey: "per_billed",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Paid" />,
+      cell: ({ row }) => {
+        const pct = row.getValue("per_billed") as number | undefined;
+        if (pct == null) return <span className="text-muted-foreground">—</span>;
+        const rounded = Math.round(pct);
+        const color = rounded >= 100 ? "text-green-600" : rounded >= 50 ? "text-amber-600" : "text-muted-foreground";
+        return <span className={`font-medium ${color}`}>{rounded}%</span>;
       },
     },
     {

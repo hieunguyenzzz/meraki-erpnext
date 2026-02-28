@@ -14,6 +14,7 @@ export interface ProjectKanbanItem {
   lead_planner_name?: string;
   support_planner_name?: string;
   package_amount?: number;      // from Sales Order grand_total
+  per_billed?: number;          // from Sales Order per_billed (0-100)
 }
 
 export interface ProjectColumnDef {
