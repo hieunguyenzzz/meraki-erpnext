@@ -317,7 +317,6 @@ export default function EmployeeDetailPage() {
     if (section === "personal") {
       setEditValues({
         first_name: employee.first_name || "",
-        middle_name: employee.middle_name || "",
         last_name: employee.last_name || "",
         gender: employee.gender || "",
         date_of_birth: employee.date_of_birth || "",
@@ -1066,13 +1065,6 @@ export default function EmployeeDetailPage() {
                   <Input
                     value={editValues.first_name ?? ""}
                     onChange={(e) => setEditValues({ ...editValues, first_name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Middle Name</Label>
-                  <Input
-                    value={editValues.middle_name ?? ""}
-                    onChange={(e) => setEditValues({ ...editValues, middle_name: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
