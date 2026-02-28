@@ -75,8 +75,13 @@ async def generate_payroll(request: GeneratePayrollRequest):
         docs = fill_resp.get("docs", [])
         employees = docs[0].get("employees", []) if docs else []
         if employees:
-            client._put(f"/api/resource/Payroll Entry/{pe_name}", {"employees": employees})
-            log.info("payroll_employees_saved", pe=pe_name, count=len(employees))
+            # Strip client-only fields that cause validation errors
+            clean_employees = [
+                {k: v for k, v in emp.items() if not k.startswith("__")}
+                for emp in employees
+            ]
+            client._put(f"/api/resource/Payroll Entry/{pe_name}", {"employees": clean_employees})
+            log.info("payroll_employees_saved", pe=pe_name, count=len(clean_employees))
         client._post("/api/method/run_doc_method", {
             "dt": "Payroll Entry", "dn": pe_name, "method": "create_salary_slips"
         })
@@ -100,7 +105,11 @@ async def generate_payroll(request: GeneratePayrollRequest):
         docs = fill_resp.get("docs", [])
         employees = docs[0].get("employees", []) if docs else []
         if employees:
-            client._put(f"/api/resource/Payroll Entry/{pe_name}", {"employees": employees})
+            clean_employees = [
+                {k: v for k, v in emp.items() if not k.startswith("__")}
+                for emp in employees
+            ]
+            client._put(f"/api/resource/Payroll Entry/{pe_name}", {"employees": clean_employees})
         client._post("/api/method/run_doc_method", {
             "dt": "Payroll Entry", "dn": pe_name, "method": "create_salary_slips"
         })
