@@ -5,6 +5,7 @@ GET  /generate-allowances/{project_name} — preview (dry run)
 POST /generate-allowances/{project_name} — create Additional Salary records
 """
 
+import json
 from datetime import date
 
 from fastapi import APIRouter, HTTPException
@@ -118,6 +119,101 @@ def _build_preview(client: ERPNextClient, project_name: str) -> dict:
         "created": created,
         "skipped": skipped,
     }
+
+
+def generate_allowances_for_period(client: ERPNextClient, start_date: str, end_date: str) -> dict:
+    """
+    Idempotently generate wedding allowances for all weddings in the period.
+
+    Finds SOs with delivery_date in [start_date, end_date], gets their projects,
+    generates Additional Salary for each employee assigned to those projects.
+    Skips if Additional Salary already exists for employee+custom_wedding_project.
+    """
+    so_data = client._get("/api/resource/Sales Order", params={
+        "filters": json.dumps([
+            ["delivery_date", "between", [start_date, end_date]],
+            ["docstatus", "=", 1],
+        ]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 500,
+    }).get("data", [])
+
+    so_names = [so["name"] for so in so_data]
+    if not so_names:
+        return {"created": 0, "duplicates": 0, "skipped": 0, "errors": 0}
+
+    proj_data = client._get("/api/resource/Project", params={
+        "filters": json.dumps([["sales_order", "in", so_names]]),
+        "fields": json.dumps([
+            "name", "sales_order",
+            "custom_lead_planner", "custom_support_planner",
+            "custom_assistant_1", "custom_assistant_2",
+        ]),
+        "limit_page_length": 500,
+    }).get("data", [])
+
+    # Fetch existing Additional Salary records to prevent duplicates
+    existing = client._get("/api/resource/Additional Salary", params={
+        "filters": json.dumps([
+            ["salary_component", "=", "Wedding Allowance"],
+            ["payroll_date", ">=", start_date],
+            ["payroll_date", "<=", end_date],
+        ]),
+        "fields": json.dumps(["employee", "custom_wedding_project"]),
+        "limit_page_length": 1000,
+    }).get("data", [])
+    existing_keys = {(r["employee"], r["custom_wedding_project"]) for r in existing}
+
+    created = duplicates = skipped = errors = 0
+    payroll_date = end_date
+    company = "Meraki Wedding Planner"
+
+    for proj in proj_data:
+        project_name = proj["name"]
+        try:
+            proj_detail = _get_project_data(client, project_name)
+        except Exception:
+            skipped += 1
+            continue
+
+        project = proj_detail["project"]
+        wedding_type = proj_detail["wedding_type"]
+        service_type = proj_detail["service_type"]
+        employees = _get_assigned_employees(client, project)
+
+        for emp in employees:
+            rate = _get_rate(emp, wedding_type, service_type)
+            if rate <= 0:
+                skipped += 1
+                continue
+
+            key = (emp.get("name"), project_name)
+            if key in existing_keys:
+                duplicates += 1
+                continue
+
+            try:
+                resp = client._post("/api/resource/Additional Salary", {
+                    "employee": emp.get("name"),
+                    "salary_component": "Wedding Allowance",
+                    "amount": rate,
+                    "payroll_date": payroll_date,
+                    "company": company,
+                    "custom_wedding_project": project_name,
+                    "custom_wedding_type": wedding_type,
+                    "custom_service_type": service_type,
+                })
+                doc_name = resp.get("data", {}).get("name", "")
+                client._post("/api/method/frappe.client.submit", {
+                    "doc": {"doctype": "Additional Salary", "name": doc_name}
+                })
+                created += 1
+                existing_keys.add(key)
+            except Exception as e:
+                log.error("allowance_period_create_failed", employee=emp.get("name"), project=project_name, error=str(e))
+                errors += 1
+
+    return {"created": created, "duplicates": duplicates, "skipped": skipped, "errors": errors}
 
 
 @router.get("/generate-allowances/{project_name}")

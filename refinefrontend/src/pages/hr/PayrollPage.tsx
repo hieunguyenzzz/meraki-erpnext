@@ -176,9 +176,8 @@ export default function PayrollPage() {
   const start = firstOfMonth(today);
   const end = endOfMonth(today);
 
-  const [generating, setGenerating] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [calculatingCommissions, setCalculatingCommissions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailedSlips, setDetailedSlips] = useState<SalarySlip[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -299,157 +298,25 @@ export default function PayrollPage() {
 
   const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap), [weddingAllowanceMap]);
 
-  const COMMISSION_COMPONENTS = ["Lead Planner Commission", "Support Planner Commission", "Assistant Commission"];
-
-  async function calculateAndApplyCommissions(peId: string) {
-    // Step 1: Fetch submitted Sales Orders with delivery_date in this period
-    const soFilters = JSON.stringify([["delivery_date", "between", [start, end]], ["docstatus", "=", 1]]);
-    const soFields = JSON.stringify(["name", "net_total", "custom_commission_base"]);
-    const soRes = await fetch(`${apiUrl}/resource/Sales%20Order?filters=${encodeURIComponent(soFilters)}&fields=${encodeURIComponent(soFields)}&limit_page_length=500`, { credentials: "include" });
-    const soData = await soRes.json();
-    const salesOrders: { name: string; net_total: number; custom_commission_base?: number }[] = soData.data ?? [];
-
-    // Step 2: Fetch Projects linked to those SOs
-    const soNames = salesOrders.map(so => so.name);
-    let projects: { name: string; sales_order: string; custom_lead_planner: string; custom_support_planner: string; custom_assistant_1: string; custom_assistant_2: string }[] = [];
-    if (soNames.length > 0) {
-      const projFilters = JSON.stringify([["sales_order", "in", soNames]]);
-      const projFields = JSON.stringify(["name", "sales_order", "custom_lead_planner", "custom_support_planner", "custom_assistant_1", "custom_assistant_2"]);
-      const projRes = await fetch(`${apiUrl}/resource/Project?filters=${encodeURIComponent(projFilters)}&fields=${encodeURIComponent(projFields)}&limit_page_length=500`, { credentials: "include" });
-      const projData = await projRes.json();
-      projects = projData.data ?? [];
-    }
-
-    // Step 3: Fetch draft salary slips for this payroll entry
-    const slipFilters = JSON.stringify([["payroll_entry", "=", peId], ["docstatus", "=", 0]]);
-    const slipFields = JSON.stringify(["name", "employee"]);
-    const slipsRes = await fetch(`${apiUrl}/resource/Salary%20Slip?filters=${encodeURIComponent(slipFilters)}&fields=${encodeURIComponent(slipFields)}&limit_page_length=200`, { credentials: "include" });
-    const slipsData = await slipsRes.json();
-    const slips: { name: string; employee: string }[] = slipsData.data ?? [];
-
-    if (slips.length === 0) return;
-
-    // Step 4: Fetch employee commission percentages
-    const employeeIds = slips.map(s => s.employee);
-    const empFilters = JSON.stringify([["name", "in", employeeIds]]);
-    const empFields = JSON.stringify(["name", "custom_lead_commission_pct", "custom_support_commission_pct", "custom_assistant_commission_pct"]);
-    const empRes = await fetch(`${apiUrl}/resource/Employee?filters=${encodeURIComponent(empFilters)}&fields=${encodeURIComponent(empFields)}&limit_page_length=200`, { credentials: "include" });
-    const empData = await empRes.json();
-    const employees: { name: string; custom_lead_commission_pct: number; custom_support_commission_pct: number; custom_assistant_commission_pct: number }[] = empData.data ?? [];
-
-    const empCommMap: Record<string, { lead: number; support: number; assistant: number }> = {};
-    for (const emp of employees) {
-      empCommMap[emp.name] = {
-        lead: emp.custom_lead_commission_pct ?? 0,
-        support: emp.custom_support_commission_pct ?? 0,
-        assistant: emp.custom_assistant_commission_pct ?? 0,
-      };
-    }
-
-    // Step 5: Build commission totals per employee
-    const soNetMap: Record<string, number> = {};
-    for (const so of salesOrders) soNetMap[so.name] = so.custom_commission_base ?? so.net_total ?? 0;
-
-    const commTotals: Record<string, { lead: number; support: number; assistant: number }> = {};
-    const addComm = (empId: string, type: "lead" | "support" | "assistant", netTotal: number) => {
-      if (!empId) return;
-      if (!commTotals[empId]) commTotals[empId] = { lead: 0, support: 0, assistant: 0 };
-      const pct = empCommMap[empId]?.[type] ?? 0;
-      commTotals[empId][type] += netTotal * pct / 100;
-    };
-    for (const proj of projects) {
-      const netTotal = soNetMap[proj.sales_order] ?? 0;
-      if (netTotal === 0) continue;
-      addComm(proj.custom_lead_planner, "lead", netTotal);
-      addComm(proj.custom_support_planner, "support", netTotal);
-      addComm(proj.custom_assistant_1, "assistant", netTotal);
-      addComm(proj.custom_assistant_2, "assistant", netTotal);
-    }
-
-    // Step 6: Update each draft salary slip with commission rows
-    for (const slip of slips) {
-      const fullSlipRes = await fetch(`${apiUrl}/resource/Salary%20Slip/${slip.name}`, { credentials: "include" });
-      const fullSlipData = await fullSlipRes.json();
-      const currentEarnings: SalarySlipEarning[] = fullSlipData.data?.earnings ?? [];
-      const currentDeductions: SalarySlipEarning[] = fullSlipData.data?.deductions ?? [];
-
-      const nonCommEarnings = currentEarnings.filter(e => !COMMISSION_COMPONENTS.includes(e.salary_component));
-      const totals = commTotals[slip.employee];
-      const newEarnings = [...nonCommEarnings];
-      if (totals) {
-        if (totals.lead > 0) newEarnings.push({ salary_component: "Lead Planner Commission", amount: Math.round(totals.lead) });
-        if (totals.support > 0) newEarnings.push({ salary_component: "Support Planner Commission", amount: Math.round(totals.support) });
-        if (totals.assistant > 0) newEarnings.push({ salary_component: "Assistant Commission", amount: Math.round(totals.assistant) });
-      }
-
-      await fetch(`${apiUrl}/resource/Salary%20Slip/${slip.name}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ earnings: newEarnings, deductions: currentDeductions }),
-      });
-    }
-  }
-
   async function handleGenerate() {
-    setGenerating(true);
+    setIsRunning(true);
     setError(null);
     try {
-      // Step 1: Create Payroll Entry
-      const createRes = await customMutation({
-        url: "/api/resource/Payroll Entry", method: "post",
-        values: { payroll_frequency: "Monthly", posting_date: end, start_date: start, end_date: end, company: "Meraki Wedding Planner", currency: "VND", exchange_rate: 1, cost_center: "Main - MWP", payment_account: "Cash - MWP", payroll_payable_account: "Payroll Payable - MWP" },
+      const res = await fetch("/inquiry-api/generate-payroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start_date: start, end_date: end }),
       });
-      const peId = (createRes as any)?.data?.data?.name;
-      if (!peId) throw new Error("Failed to create Payroll Entry");
-
-      // Step 2: Fill Employee Details
-      const fillRes = await customMutation({ url: "/api/method/run_doc_method", method: "post", values: { dt: "Payroll Entry", dn: peId, method: "fill_employee_details" } });
-      const updatedDoc = (fillRes as any)?.data?.docs?.[0];
-      if (!updatedDoc) throw new Error("Failed to fill employee details");
-      await customMutation({ url: `/api/resource/Payroll Entry/${peId}`, method: "put", values: updatedDoc });
-
-      // Step 3: Create Salary Slips
-      await customMutation({ url: "/api/method/run_doc_method", method: "post", values: { dt: "Payroll Entry", dn: peId, method: "create_salary_slips" } });
-
-      // Step 4: Calculate Commissions
-      setCalculatingCommissions(true);
-      await calculateAndApplyCommissions(peId);
-      setCalculatingCommissions(false);
-      setDetailRefreshKey(k => k + 1);
-
+      if (!res.ok) throw new Error(`Payroll generation failed: ${res.status}`);
       invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
       invalidate({ resource: "Salary Slip", invalidates: ["list"] });
-    } catch (err) {
-      setError(extractErrorMessage(err, "Failed to generate payroll"));
-      setCalculatingCommissions(false);
-    } finally { setGenerating(false); }
-  }
-
-  async function handleRecalculate() {
-    if (!currentPE) return;
-    setCalculatingCommissions(true);
-    setError(null);
-    try {
-      // Delete all draft salary slips so ERPNext regenerates them fresh,
-      // picking up the latest custom_insurance_salary from each Employee.
-      const slipFilters = JSON.stringify([["payroll_entry", "=", currentPE.name], ["docstatus", "=", 0]]);
-      const existingRes = await fetch(`${apiUrl}/resource/Salary%20Slip?filters=${encodeURIComponent(slipFilters)}&fields=%5B%22name%22%5D&limit_page_length=200`, { credentials: "include" });
-      const existingData = await existingRes.json();
-      for (const slip of (existingData.data ?? [])) {
-        await fetch(`${apiUrl}/resource/Salary%20Slip/${encodeURIComponent(slip.name)}`, { method: "DELETE", credentials: "include" });
-      }
-
-      // Regenerate salary slips — ERPNext evaluates BHXH formulas against Employee data
-      await customMutation({ url: "/api/method/run_doc_method", method: "post", values: { dt: "Payroll Entry", dn: currentPE.name, method: "create_salary_slips" } });
-
-      // Apply commission earnings on top
-      await calculateAndApplyCommissions(currentPE.name);
-      invalidate({ resource: "Salary Slip", invalidates: ["list"] });
+      invalidate({ resource: "Additional Salary", invalidates: ["list"] });
       setDetailRefreshKey(k => k + 1);
-    } catch (err) {
-      setError(extractErrorMessage(err, "Failed to recalculate commissions"));
-    } finally { setCalculatingCommissions(false); }
+    } catch (err: any) {
+      setError(extractErrorMessage(err, "Failed to generate payroll"));
+    } finally {
+      setIsRunning(false);
+    }
   }
 
   async function handleSubmitAll() {
@@ -498,7 +365,6 @@ export default function PayrollPage() {
   }
 
   const isLoading = peQuery?.isLoading || slipsQuery?.isLoading || loadingDetails;
-  const isWorking = generating || calculatingCommissions;
   const peHasNoSlips = currentPE && salarySlips.length === 0 && !isLoading;
 
   return (
@@ -509,20 +375,15 @@ export default function PayrollPage() {
           <p className="text-muted-foreground">Salary processing and history</p>
         </div>
         <div className="flex gap-2">
-          {(!currentPE || peHasNoSlips) && !isLoading && (
-            <Button onClick={handleGenerate} disabled={isWorking}>
-              {generating ? (calculatingCommissions ? "Calculating commissions..." : "Generating...") : `Generate for ${monthLabel(today)}`}
+          {!isLoading && !allSlipsSubmitted && (
+            <Button onClick={handleGenerate} disabled={isRunning || submitting}>
+              {isRunning ? "Generating..." : currentPE ? `Recalculate ${monthLabel(today)}` : `Generate for ${monthLabel(today)}`}
             </Button>
           )}
           {currentPE && hasDraftSlips && (
-            <>
-              <Button variant="outline" onClick={handleRecalculate} disabled={calculatingCommissions || submitting}>
-                {calculatingCommissions ? "Recalculating..." : "Recalculate Commissions"}
-              </Button>
-              <Button onClick={handleSubmitAll} disabled={submitting || calculatingCommissions}>
-                {submitting ? "Submitting..." : "Submit All"}
-              </Button>
-            </>
+            <Button onClick={handleSubmitAll} disabled={submitting || isRunning}>
+              {submitting ? "Submitting..." : "Submit All"}
+            </Button>
           )}
           {allSlipsSubmitted && (
             <Badge variant="success" className="px-3 py-1.5 text-sm">Payroll Submitted</Badge>
