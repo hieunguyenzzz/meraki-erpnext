@@ -40,6 +40,7 @@ import OverviewPage from "@/pages/finance/OverviewPage";
 import MyProfilePage from "@/pages/self-service/MyProfilePage";
 import MyLeavesPage from "@/pages/self-service/MyLeavesPage";
 import MyAttendancePage from "@/pages/self-service/MyAttendancePage";
+import DesignationsPage from "@/pages/admin/DesignationsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -153,6 +154,9 @@ export default function App() {
               <Route path="/finance/payments/:name" element={<PaymentDetailPage />} />
               <Route path="/finance/journals" element={<JournalsPage />} />
               <Route path="/finance/overview" element={<OverviewPage />} />
+
+              {/* Admin / Settings */}
+              <Route path="/admin/designations" element={<DesignationsPage />} />
             </Route>
 
             {/* Self-service routes (no sidebar) - for all authenticated users */}
