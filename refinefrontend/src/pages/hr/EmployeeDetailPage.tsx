@@ -361,6 +361,49 @@ export default function EmployeeDetailPage() {
   const pendingWFH = wfhRequests.filter((r) => r.docstatus === 0 && r.workflow_state !== "Rejected").length;
   const pendingCount = pendingLeave + pendingWFH;
 
+  const [typeFilter, setTypeFilter] = useState<"all" | "leave" | "wfh">("all");
+
+  const allRecords = useMemo(() => {
+    const leaves = leaveHistory.map((a) => ({
+      id: a.name,
+      type: "leave" as const,
+      from_date: a.from_date,
+      to_date: a.to_date,
+      days: a.total_leave_days,
+      details: a.leave_type,
+      status: a.docstatus === 0 && a.status === "Open" ? "Pending" : a.status,
+      isPending: a.docstatus === 0 && a.status === "Open",
+      raw: a,
+    }));
+    const wfhs = wfhRequests.map((r) => {
+      const days =
+        r.from_date && r.to_date
+          ? Math.ceil((new Date(r.to_date).getTime() - new Date(r.from_date).getTime()) / 86400000) + 1
+          : 1;
+      const isPending = r.docstatus === 0 && r.workflow_state !== "Rejected";
+      const status = r.docstatus === 1 ? "Approved" : r.workflow_state === "Rejected" ? "Rejected" : "Pending";
+      return {
+        id: r.name,
+        type: "wfh" as const,
+        from_date: r.from_date,
+        to_date: r.to_date,
+        days,
+        details: r.explanation || "-",
+        status,
+        isPending,
+        raw: r,
+      };
+    });
+    return [...leaves, ...wfhs].sort(
+      (a, b) => new Date(b.from_date).getTime() - new Date(a.from_date).getTime()
+    );
+  }, [leaveHistory, wfhRequests]);
+
+  const filteredRecords = useMemo(
+    () => (typeFilter === "all" ? allRecords : allRecords.filter((r) => r.type === typeFilter)),
+    [allRecords, typeFilter]
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -628,107 +671,77 @@ export default function EmployeeDetailPage() {
         <TabsContent value="records" className="space-y-4">
           {recordsError && <p className="text-sm text-red-600">{recordsError}</p>}
 
-          {/* Leave History */}
+          {/* Unified Leave & WFH History */}
           <Card>
-            <CardHeader><CardTitle>Leave Applications</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Leave &amp; WFH History</CardTitle></CardHeader>
             <CardContent>
-              {leaveHistory.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No leave applications</p>
-              ) : (
-                <Table>
-                  <TableHeader>
+              <div className="flex gap-2 mb-4">
+                {(["all", "leave", "wfh"] as const).map((f) => (
+                  <Button
+                    key={f}
+                    size="sm"
+                    variant={typeFilter === f ? "default" : "outline"}
+                    onClick={() => setTypeFilter(f)}
+                  >
+                    {f === "all" ? "All" : f === "leave" ? "Leave" : "WFH"}
+                  </Button>
+                ))}
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Type</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead>Days</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRecords.length === 0 ? (
                     <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>From</TableHead>
-                      <TableHead>To</TableHead>
-                      <TableHead>Days</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground text-sm py-8">
+                        No records found
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leaveHistory.map((app) => (
-                      <TableRow key={app.name}>
-                        <TableCell>{app.leave_type}</TableCell>
-                        <TableCell>{formatDate(app.from_date)}</TableCell>
-                        <TableCell>{formatDate(app.to_date)}</TableCell>
-                        <TableCell>{app.total_leave_days}</TableCell>
+                  ) : (
+                    filteredRecords.map((rec) => (
+                      <TableRow key={rec.id}>
                         <TableCell>
-                          <Badge variant={app.status === "Approved" ? "default" : app.status === "Rejected" ? "destructive" : "secondary"}>
-                            {app.status}
+                          <Badge variant={rec.type === "leave" ? "secondary" : "outline"}>
+                            {rec.type === "leave" ? "Leave" : "WFH"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{formatDate(rec.from_date)}</TableCell>
+                        <TableCell>{formatDate(rec.to_date)}</TableCell>
+                        <TableCell>{rec.days}</TableCell>
+                        <TableCell className="max-w-[200px] truncate">{rec.details}</TableCell>
+                        <TableCell>
+                          <Badge variant={rec.status === "Approved" ? "default" : rec.status === "Rejected" ? "destructive" : "secondary"}>
+                            {rec.status}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {app.docstatus === 0 && app.status === "Open" && (
+                          {rec.isPending && (
                             <div className="flex gap-2">
-                              <Button size="sm" variant="outline" disabled={processingId === app.name}
-                                onClick={() => handleLeaveApprove(app.name)}>Approve</Button>
-                              <Button size="sm" variant="destructive" disabled={processingId === app.name}
-                                onClick={() => handleLeaveReject(app.name)}>Reject</Button>
+                              <Button size="sm" variant="outline" disabled={processingId === rec.id}
+                                onClick={() => rec.type === "leave" ? handleLeaveApprove(rec.id) : handleWFHApprove(rec.id)}>
+                                Approve
+                              </Button>
+                              <Button size="sm" variant="destructive" disabled={processingId === rec.id}
+                                onClick={() => rec.type === "leave" ? handleLeaveReject(rec.id) : handleWFHReject(rec.id)}>
+                                Reject
+                              </Button>
                             </div>
                           )}
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* WFH History */}
-          <Card>
-            <CardHeader><CardTitle>Work From Home Requests</CardTitle></CardHeader>
-            <CardContent>
-              {wfhRequests.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No WFH requests</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>From</TableHead>
-                      <TableHead>To</TableHead>
-                      <TableHead>Days</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Explanation</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {wfhRequests.map((req) => {
-                      const isPending = req.docstatus === 0 && req.workflow_state !== "Rejected";
-                      const isApproved = req.docstatus === 1;
-                      const isRejected = req.workflow_state === "Rejected";
-                      const days = req.from_date && req.to_date
-                        ? Math.ceil((new Date(req.to_date).getTime() - new Date(req.from_date).getTime()) / 86400000) + 1
-                        : "-";
-                      return (
-                        <TableRow key={req.name}>
-                          <TableCell>{formatDate(req.from_date)}</TableCell>
-                          <TableCell>{formatDate(req.to_date)}</TableCell>
-                          <TableCell>{days}</TableCell>
-                          <TableCell>
-                            <Badge variant={isApproved ? "default" : isRejected ? "destructive" : "secondary"}>
-                              {isApproved ? "Approved" : isRejected ? "Rejected" : "Pending"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="max-w-xs truncate">{req.explanation || "-"}</TableCell>
-                          <TableCell>
-                            {isPending && (
-                              <div className="flex gap-2">
-                                <Button size="sm" variant="outline" disabled={processingId === req.name}
-                                  onClick={() => handleWFHApprove(req.name)}>Approve</Button>
-                                <Button size="sm" variant="destructive" disabled={processingId === req.name}
-                                  onClick={() => handleWFHReject(req.name)}>Reject</Button>
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
