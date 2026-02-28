@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router";
-import { useList, useUpdate, useCreate, useInvalidate } from "@refinedev/core";
+import { useList, useCreate, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,7 +74,6 @@ export default function StaffOverviewPage() {
   }
 
   const invalidate = useInvalidate();
-  const { mutateAsync: updateEmployee } = useUpdate();
   const { mutateAsync: createDoc } = useCreate();
 
   // Invite staff dialog state
@@ -240,14 +239,15 @@ export default function StaffOverviewPage() {
     setSaving(true);
     setError(null);
     try {
-      await updateEmployee({
-        resource: "Employee",
-        id: selectedEmployee.name,
-        values: {
-          custom_last_review_date: reviewDate,
-          custom_review_notes: reviewNotes,
-        },
+      const res = await fetch(`/inquiry-api/employee/${selectedEmployee.name}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: { custom_last_review_date: reviewDate, custom_review_notes: reviewNotes } }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${res.status}`);
+      }
       invalidate({ resource: "Employee", invalidates: ["list"] });
       setReviewDialogOpen(false);
       setSelectedEmployee(null);
@@ -284,14 +284,16 @@ export default function StaffOverviewPage() {
     try {
       const staffRoles = Array.from(selectedRoles) as StaffRole[];
 
-      // Save staff roles to Employee
-      await updateEmployee({
-        resource: "Employee",
-        id: selectedEmployee.name,
-        values: {
-          custom_staff_roles: serializeStaffRoles(staffRoles),
-        },
+      // Save staff roles to Employee via custom endpoint (bypasses ERPNext link validation)
+      const res = await fetch(`/inquiry-api/employee/${selectedEmployee.name}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: { custom_staff_roles: serializeStaffRoles(staffRoles) } }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${res.status}`);
+      }
 
       // Sync ERPNext User roles if employee has a linked user account
       if (selectedEmployee.user_id) {

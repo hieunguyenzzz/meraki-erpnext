@@ -15,12 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  getReviewStatus,
-  getReviewBadgeVariant,
-  getReviewStatusText,
-  getLeaveBalanceVariant,
-} from "@/lib/review-status";
+import { getLeaveBalanceVariant } from "@/lib/review-status";
 import { parseStaffRoles, getRoleBadgeVariant, serializeStaffRoles, STAFF_ROLES, syncUserRoles } from "@/lib/staff-roles";
 import type { StaffRole } from "@/lib/staff-roles";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -46,12 +41,6 @@ function calculateTenure(dateOfJoining: string): string {
 export default function EmployeeDetailPage() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
-  const [reviewDate, setReviewDate] = useState("");
-  const [reviewNotes, setReviewNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [leaveAllocEdit, setLeaveAllocEdit] = useState<{ name: string; allocated: number; taken: number } | null>(null);
   const [leaveSaving, setLeaveSaving] = useState(false);
@@ -195,42 +184,6 @@ export default function EmployeeDetailPage() {
       (employee.custom_sales_commission_pct ?? 0) > 0
     );
   }, [employee]);
-
-  function openReviewDialog() {
-    if (!employee) return;
-    setReviewDate(employee.custom_last_review_date || new Date().toISOString().split("T")[0]);
-    setReviewNotes(employee.custom_review_notes || "");
-    setError(null);
-    setReviewDialogOpen(true);
-  }
-
-  async function handleSaveReview() {
-    if (!employee || !reviewDate) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch(`/inquiry-api/employee/${employee.name}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          values: {
-            custom_last_review_date: reviewDate,
-            custom_review_notes: reviewNotes,
-          },
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `API error ${res.status}`);
-      }
-      invalidate({ resource: "Employee", id: employee.name, invalidates: ["detail"] });
-      setReviewDialogOpen(false);
-    } catch (err: any) {
-      setError(err?.message || "Failed to save review");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   function openLeaveDialog() {
     if (allocations.length === 0) return;
@@ -476,9 +429,6 @@ export default function EmployeeDetailPage() {
   }
 
   const staffRoles = parseStaffRoles(employee.custom_staff_roles);
-  const reviewStatus = getReviewStatus(employee.custom_last_review_date);
-  const reviewBadgeVariant = getReviewBadgeVariant(reviewStatus);
-  const reviewStatusText = getReviewStatusText(employee.custom_last_review_date);
   const leaveBalanceVariant = getLeaveBalanceVariant(leaveBalance.remaining, leaveBalance.allocated);
   const leavePercent = leaveBalance.allocated > 0 ? (leaveBalance.remaining / leaveBalance.allocated) * 100 : 0;
 
@@ -624,33 +574,6 @@ export default function EmployeeDetailPage() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Leave Approver</span>
                     <span>{users.find((u) => u.name === employee.leave_approver)?.full_name || employee.leave_approver}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Performance Review */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle>Performance Review</CardTitle>
-                <Button size="sm" variant="outline" onClick={openReviewDialog}>
-                  <Pencil className="h-3 w-3 mr-1" />
-                  {employee.custom_last_review_date ? "Edit" : "Add"}
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Last Review</span>
-                  <span>{employee.custom_last_review_date ? formatDate(employee.custom_last_review_date) : "-"}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Status</span>
-                  <Badge variant={reviewBadgeVariant}>{reviewStatusText}</Badge>
-                </div>
-                {employee.custom_review_notes && (
-                  <div className="pt-2 border-t">
-                    <span className="text-muted-foreground text-sm">Notes</span>
-                    <p className="mt-1 text-sm whitespace-pre-wrap">{employee.custom_review_notes}</p>
                   </div>
                 )}
               </CardContent>
@@ -951,46 +874,6 @@ export default function EmployeeDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Review Sheet */}
-      <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
-          <SheetHeader className="px-6 py-4 border-b shrink-0">
-            <SheetTitle>Performance Review</SheetTitle>
-            <p className="text-sm text-muted-foreground">{employee.employee_name}</p>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="review-date">Review Date</Label>
-              <Input
-                id="review-date"
-                type="date"
-                value={reviewDate}
-                onChange={(e) => setReviewDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="review-notes">Notes</Label>
-              <Textarea
-                id="review-notes"
-                placeholder="Add review notes..."
-                value={reviewNotes}
-                onChange={(e) => setReviewNotes(e.target.value)}
-                className="min-h-[120px]"
-              />
-            </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-          </div>
-          <SheetFooter className="px-6 py-4 border-t shrink-0">
-            <Button variant="outline" onClick={() => setReviewDialogOpen(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveReview} disabled={saving || !reviewDate}>
-              {saving ? "Saving..." : "Save"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
 
       {/* Leave Balance Sheet */}
       <Sheet open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
