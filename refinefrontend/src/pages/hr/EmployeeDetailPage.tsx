@@ -87,6 +87,22 @@ export default function EmployeeDetailPage() {
   });
   const users = (usersResult?.data ?? []) as any[];
 
+  const { result: designationsResult } = useList({
+    resource: "Designation",
+    pagination: { mode: "off" },
+    sorters: [{ field: "name", order: "asc" }],
+    meta: { fields: ["name"] },
+  });
+  const designations = (designationsResult?.data ?? []) as any[];
+
+  const { result: departmentsResult } = useList({
+    resource: "Department",
+    pagination: { mode: "off" },
+    sorters: [{ field: "name", order: "asc" }],
+    meta: { fields: ["name"] },
+  });
+  const departments = (departmentsResult?.data ?? []) as any[];
+
   // Leave allocations for this employee (submitted)
   const { result: allocsResult } = useList({
     resource: "Leave Allocation",
@@ -1098,11 +1114,33 @@ export default function EmployeeDetailPage() {
               <>
                 <div className="space-y-2">
                   <Label htmlFor="edit-designation">Designation</Label>
-                  <Input id="edit-designation" value={editValues.designation} onChange={(e) => setEditValues((prev) => ({ ...prev, designation: e.target.value }))} />
+                  <Select
+                    value={editValues.designation || "__none__"}
+                    onValueChange={(v) => setEditValues((prev) => ({ ...prev, designation: v === "__none__" ? "" : v }))}
+                  >
+                    <SelectTrigger id="edit-designation"><SelectValue placeholder="Select designation" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— None —</SelectItem>
+                      {designations.map((d) => (
+                        <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-department">Department</Label>
-                  <Input id="edit-department" value={editValues.department} onChange={(e) => setEditValues((prev) => ({ ...prev, department: e.target.value }))} />
+                  <Select
+                    value={editValues.department || "__none__"}
+                    onValueChange={(v) => setEditValues((prev) => ({ ...prev, department: v === "__none__" ? "" : v }))}
+                  >
+                    <SelectTrigger id="edit-department"><SelectValue placeholder="Select department" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— None —</SelectItem>
+                      {departments.map((d) => (
+                        <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-doj">Date of Joining</Label>
@@ -1132,7 +1170,7 @@ export default function EmployeeDetailPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-ctc">CTC (VND)</Label>
+                  <Label htmlFor="edit-ctc">Base Salary (VND)</Label>
                   <Input id="edit-ctc" type="number" value={editValues.ctc} onChange={(e) => setEditValues((prev) => ({ ...prev, ctc: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
