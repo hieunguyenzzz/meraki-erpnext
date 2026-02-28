@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "react-router";
-import { useList, useCreate, useInvalidate } from "@refinedev/core";
+import { useList, useCreate, useInvalidate, usePermissions } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck, GripVertical } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,6 +118,9 @@ export default function StaffOverviewPage() {
     if (isDirty) setPendingClose(() => closeFn);
     else closeFn();
   }
+
+  const { data: userRoles } = usePermissions<string[]>({});
+  const canManageRoles = (userRoles ?? []).some(r => r === "System Manager" || r === "Administrator");
 
   const invalidate = useInvalidate();
   const { mutateAsync: createDoc } = useCreate();
@@ -360,6 +363,7 @@ export default function StaffOverviewPage() {
 
   // Handle roles dialog
   function openRolesDialog(employee: StaffRow) {
+    if (!canManageRoles) return;
     const roles = new Set<string>(employee.staff_roles);
     setSelectedEmployee(employee);
     setSelectedRoles(roles);
@@ -539,14 +543,16 @@ export default function StaffOverviewPage() {
           ) : (
             <span className="text-muted-foreground text-sm">—</span>
           )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0 ml-1"
-            onClick={() => openRolesDialog(row.original)}
-          >
-            <Pencil className="h-3 w-3" />
-          </Button>
+          {canManageRoles && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0 ml-1"
+              onClick={() => openRolesDialog(row.original)}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       ),
       filterFn: (row, id, filterValue) => {
