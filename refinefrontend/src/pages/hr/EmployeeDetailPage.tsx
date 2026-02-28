@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
-import { useOne, useList, useUpdate, useInvalidate, useCustomMutation } from "@refinedev/core";
+import { useOne, useList, useInvalidate, useCustomMutation } from "@refinedev/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { formatDate, formatVND } from "@/lib/format";
@@ -73,7 +73,6 @@ export default function EmployeeDetailPage() {
   const [reviewError, setReviewError] = useState<string | null>(null);
 
   const invalidate = useInvalidate();
-  const { mutateAsync: updateEmployee } = useUpdate();
   const { mutateAsync: customMutation } = useCustomMutation();
 
   const { result: employee } = useOne<Employee>({ resource: "Employee", id: name! });
@@ -210,14 +209,20 @@ export default function EmployeeDetailPage() {
     setSaving(true);
     setError(null);
     try {
-      await updateEmployee({
-        resource: "Employee",
-        id: employee.name,
-        values: {
-          custom_last_review_date: reviewDate,
-          custom_review_notes: reviewNotes,
-        },
+      const res = await fetch(`/inquiry-api/employee/${employee.name}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          values: {
+            custom_last_review_date: reviewDate,
+            custom_review_notes: reviewNotes,
+          },
+        }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${res.status}`);
+      }
       invalidate({ resource: "Employee", id: employee.name, invalidates: ["detail"] });
       setReviewDialogOpen(false);
     } catch (err: any) {

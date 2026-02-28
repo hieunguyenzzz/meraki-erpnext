@@ -37,6 +37,8 @@ ALLOWED_FIELDS = {
     "custom_assistant_commission_pct",
     "custom_sales_commission_pct",
     "user_id",
+    "custom_last_review_date",
+    "custom_review_notes",
 }
 
 
