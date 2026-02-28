@@ -68,15 +68,21 @@ async def generate_payroll(request: GeneratePayrollRequest):
 
     # Step 2: Fill employees + create salary slips
     if is_new:
-        client._post("/api/method/run_doc_method", {
+        # fill_employee_details returns updated doc but does NOT persist; save employees back
+        fill_resp = client._post("/api/method/run_doc_method", {
             "dt": "Payroll Entry", "dn": pe_name, "method": "fill_employee_details"
         })
+        docs = fill_resp.get("docs", [])
+        employees = docs[0].get("employees", []) if docs else []
+        if employees:
+            client._put(f"/api/resource/Payroll Entry/{pe_name}", {"employees": employees})
+            log.info("payroll_employees_saved", pe=pe_name, count=len(employees))
         client._post("/api/method/run_doc_method", {
             "dt": "Payroll Entry", "dn": pe_name, "method": "create_salary_slips"
         })
         log.info("salary_slips_created", pe=pe_name)
     else:
-        # Re-generate: delete draft slips and recreate
+        # Re-generate: delete draft slips, re-fill employees, recreate
         existing_slips = client._get("/api/resource/Salary Slip", params={
             "filters": json.dumps([["payroll_entry", "=", pe_name], ["docstatus", "=", 0]]),
             "fields": json.dumps(["name"]),
@@ -87,6 +93,14 @@ async def generate_payroll(request: GeneratePayrollRequest):
                 client._delete(f"/api/resource/Salary Slip/{slip['name']}")
             except Exception:
                 pass
+        # Re-fill employees (same as new flow — fill_employee_details does not persist)
+        fill_resp = client._post("/api/method/run_doc_method", {
+            "dt": "Payroll Entry", "dn": pe_name, "method": "fill_employee_details"
+        })
+        docs = fill_resp.get("docs", [])
+        employees = docs[0].get("employees", []) if docs else []
+        if employees:
+            client._put(f"/api/resource/Payroll Entry/{pe_name}", {"employees": employees})
         client._post("/api/method/run_doc_method", {
             "dt": "Payroll Entry", "dn": pe_name, "method": "create_salary_slips"
         })
