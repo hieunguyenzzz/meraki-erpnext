@@ -10,6 +10,16 @@ interface Employee {
   designation: string;
   department: string;
   status: string;
+  custom_last_review_date?: string;
+}
+
+function timeSinceReview(d?: string): string {
+  if (!d) return "Never";
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  if (days < 0) return "Upcoming";
+  const mo = Math.floor(days / 30);
+  const dd = days % 30;
+  return mo > 0 ? `${mo}mo ${dd}d ago` : `${dd}d ago`;
 }
 
 const columns: ColumnDef<Employee, unknown>[] = [
@@ -44,6 +54,15 @@ const columns: ColumnDef<Employee, unknown>[] = [
     ),
     filterFn: "arrIncludesSome",
   },
+  {
+    accessorKey: "custom_last_review_date",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Last Review" />,
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {timeSinceReview(row.original.custom_last_review_date)}
+      </span>
+    ),
+  },
 ];
 
 export default function EmployeesPage() {
@@ -51,7 +70,7 @@ export default function EmployeesPage() {
     resource: "Employee",
     pagination: { mode: "off" },
     sorters: [{ field: "employee_name", order: "asc" }],
-    meta: { fields: ["name", "employee_name", "designation", "department", "status"] },
+    meta: { fields: ["name", "employee_name", "designation", "department", "status", "custom_last_review_date"] },
   });
 
   const employees = (result?.data ?? []) as Employee[];

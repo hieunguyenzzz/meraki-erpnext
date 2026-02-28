@@ -19,6 +19,7 @@ from webhook_v2.scheduler import start_scheduler, start_fetch_scheduler, stop_sc
 from webhook_v2.routers.inquiry import router as inquiry_router
 from webhook_v2.routers.wedding import router as wedding_router
 from webhook_v2.routers.employee import router as employee_router
+from webhook_v2.routers.review import router as review_router
 
 log = get_logger(__name__)
 
@@ -78,6 +79,7 @@ app.add_middleware(
 app.include_router(inquiry_router)
 app.include_router(wedding_router)
 app.include_router(employee_router)
+app.include_router(review_router)
 
 
 # Request/Response Models

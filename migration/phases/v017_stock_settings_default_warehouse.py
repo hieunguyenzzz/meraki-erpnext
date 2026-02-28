@@ -6,12 +6,6 @@ without throwing a warehouse validation error.
 
 
 def run(client):
-    client._post(
-        "/api/method/frappe.client.set_value",
-        {
-            "doctype": "Stock Settings",
-            "name": "Stock Settings",
-            "fieldname": "default_warehouse",
-            "value": "Stores - MWP",
-        },
-    )
+    client.update("Stock Settings", "Stock Settings", {
+        "default_warehouse": "Stores - MWP",
+    })

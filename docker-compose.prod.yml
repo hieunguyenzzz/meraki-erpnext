@@ -287,6 +287,8 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET:-merakiweddingplanner}
+      - GOOGLE_SERVICE_ACCOUNT_JSON=${GOOGLE_SERVICE_ACCOUNT_JSON}
+      - GOOGLE_ORGANIZER_EMAIL=${GOOGLE_ORGANIZER_EMAIL}
     depends_on:
       email-storage:
         condition: service_healthy

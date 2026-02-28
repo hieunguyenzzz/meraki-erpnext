@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     # Meraki domains (for detecting outgoing emails)
     meraki_domains: list[str] = ["merakiweddingplanner.com", "merakiwp.com"]
 
+    # Google Calendar integration
+    google_service_account_json: str = ""  # Full JSON string of service account key
+    google_organizer_email: str = ""  # Google account the SA impersonates (e.g. xuanhoang@merakiwp.com)
+
     @property
     def database_url(self) -> str:
         """PostgreSQL connection URL for email storage database."""

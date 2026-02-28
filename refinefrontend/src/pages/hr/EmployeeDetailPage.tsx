@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useOne, useList, useUpdate, useInvalidate, useCustomMutation } from "@refinedev/core";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { formatDate, formatVND } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +65,12 @@ export default function EmployeeDetailPage() {
 
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [recordsError, setRecordsError] = useState<string | null>(null);
+
+  // Review scheduling state
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [reviewForm, setReviewForm] = useState({ date: "", time: "09:00", notes: "", participants: [] as string[] });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const invalidate = useInvalidate();
   const { mutateAsync: updateEmployee } = useUpdate();
@@ -131,6 +138,27 @@ export default function EmployeeDetailPage() {
     queryOptions: { enabled: !!name },
   });
   const wfhRequests = (wfhResult?.data ?? []) as any[];
+
+  // Review history for this employee
+  const { result: reviewsResult } = useList({
+    resource: "Meraki Review",
+    pagination: { mode: "off" },
+    filters: [{ field: "employee", operator: "eq", value: name }],
+    sorters: [{ field: "review_date", order: "desc" }],
+    meta: { fields: ["name", "review_date", "review_time", "notes", "participants", "google_event_id"] },
+    queryOptions: { enabled: !!name },
+  });
+  const reviews = (reviewsResult?.data ?? []) as any[];
+
+  // All active employees (for participant selector)
+  const { result: allEmployeesResult } = useList({
+    resource: "Employee",
+    pagination: { mode: "off" },
+    filters: [{ field: "status", operator: "eq", value: "Active" }],
+    sorters: [{ field: "employee_name", order: "asc" }],
+    meta: { fields: ["name", "employee_name"] },
+  });
+  const allEmployees = (allEmployeesResult?.data ?? []) as any[];
 
   const allocations = (allocsResult?.data ?? []) as any[];
   const applications = (appsResult?.data ?? []) as any[];
@@ -346,6 +374,45 @@ export default function EmployeeDetailPage() {
     }
   }
 
+  async function handleScheduleReview() {
+    if (!reviewForm.date) return;
+    setReviewSubmitting(true);
+    setReviewError(null);
+    try {
+      const res = await fetch(`/inquiry-api/review/${name}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          review_date: reviewForm.date,
+          review_time: reviewForm.time,
+          notes: reviewForm.notes,
+          participants: reviewForm.participants,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${res.status}`);
+      }
+      invalidate({ resource: "Meraki Review", invalidates: ["list"] });
+      invalidate({ resource: "Employee", invalidates: ["detail"] });
+      setScheduleDialogOpen(false);
+      setReviewForm({ date: "", time: "09:00", notes: "", participants: [] });
+    } catch (e: any) {
+      setReviewError(e?.message ?? "Failed to schedule review");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  }
+
+  function toggleParticipant(empId: string) {
+    setReviewForm((prev) => ({
+      ...prev,
+      participants: prev.participants.includes(empId)
+        ? prev.participants.filter((p) => p !== empId)
+        : [...prev.participants, empId],
+    }));
+  }
+
   const pendingLeave = leaveHistory.filter((a) => a.docstatus === 0 && a.status === "Open").length;
   const pendingWFH = wfhRequests.filter((r) => r.docstatus === 0).length;
   const pendingCount = pendingLeave + pendingWFH;
@@ -436,6 +503,7 @@ export default function EmployeeDetailPage() {
               <Badge variant="destructive" className="h-4 px-1 text-xs">{pendingCount}</Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="review">Review</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -745,7 +813,137 @@ export default function EmployeeDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="review" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-medium text-muted-foreground">Review History</h3>
+            <Button size="sm" onClick={() => {
+              setReviewForm({ date: new Date().toISOString().split("T")[0], time: "09:00", notes: "", participants: [] });
+              setReviewError(null);
+              setScheduleDialogOpen(true);
+            }}>
+              Schedule Review
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent className="pt-4">
+              {reviews.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No reviews yet</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Time</TableHead>
+                      <TableHead>Participants</TableHead>
+                      <TableHead>Notes</TableHead>
+                      <TableHead>Calendar</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reviews.map((r) => {
+                      const parts = (() => { try { return JSON.parse(r.participants || "[]"); } catch { return []; } })();
+                      return (
+                        <TableRow key={r.name}>
+                          <TableCell>{formatDate(r.review_date)}</TableCell>
+                          <TableCell>{r.review_time ? r.review_time.slice(0, 5) : "-"}</TableCell>
+                          <TableCell className="text-sm">{parts.length > 0 ? parts.join(", ") : "-"}</TableCell>
+                          <TableCell className="max-w-xs truncate text-sm">{r.notes || "-"}</TableCell>
+                          <TableCell>
+                            {r.google_event_id ? (
+                              <span className="text-xs text-green-600">Synced</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* Schedule Review Dialog */}
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule Performance Review</DialogTitle>
+            <p className="text-sm text-muted-foreground">{employee.employee_name}</p>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="schedule-date">Review Date</Label>
+              <Input
+                id="schedule-date"
+                type="date"
+                value={reviewForm.date}
+                onChange={(e) => setReviewForm((p) => ({ ...p, date: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="schedule-time">Time</Label>
+              <Input
+                id="schedule-time"
+                type="time"
+                value={reviewForm.time}
+                onChange={(e) => setReviewForm((p) => ({ ...p, time: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="schedule-notes">Notes</Label>
+              <Textarea
+                id="schedule-notes"
+                placeholder="Review agenda or notes..."
+                value={reviewForm.notes}
+                onChange={(e) => setReviewForm((p) => ({ ...p, notes: e.target.value }))}
+                className="min-h-[80px]"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Participants</Label>
+              <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
+                {allEmployees.map((emp) => {
+                  const isSelected = reviewForm.participants.includes(emp.name);
+                  const isSelf = emp.name === name;
+                  return (
+                    <Button
+                      key={emp.name}
+                      type="button"
+                      size="sm"
+                      variant={isSelected ? "default" : "outline"}
+                      className="w-full justify-start text-left h-8"
+                      onClick={() => !isSelf && toggleParticipant(emp.name)}
+                      disabled={isSelf}
+                    >
+                      {emp.employee_name}
+                      {isSelf && <span className="ml-auto text-xs opacity-60">self</span>}
+                    </Button>
+                  );
+                })}
+              </div>
+              {reviewForm.participants.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {reviewForm.participants.length} participant{reviewForm.participants.length > 1 ? "s" : ""} selected
+                </p>
+              )}
+            </div>
+            {reviewError && <p className="text-sm text-red-600">{reviewError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)} disabled={reviewSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleScheduleReview} disabled={reviewSubmitting || !reviewForm.date}>
+              {reviewSubmitting ? "Scheduling…" : "Schedule & Add to Calendar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Review Sheet */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
