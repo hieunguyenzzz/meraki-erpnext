@@ -60,6 +60,7 @@ async def generate_payroll(request: GeneratePayrollRequest):
             "cost_center": "Main - MWP",
             "payment_account": "Cash - MWP",
             "payroll_payable_account": "Payroll Payable - MWP",
+            "exchange_rate": 1,
         })
         pe_name = pe_resp["data"]["name"]
         is_new = True
