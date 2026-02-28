@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useList } from "@refinedev/core";
 import {
   ComposedChart, BarChart, Bar, AreaChart, Area, Line,
@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import { TrendingUp, TrendingDown, DollarSign, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatVND } from "@/lib/format";
 
@@ -61,56 +62,66 @@ export default function DirectorSection() {
   const orders = (ordersResult?.data ?? []) as any[];
   const allOrders = (allOrdersResult?.data ?? []) as any[];
 
-  const currentYear = new Date().getFullYear().toString();
+  const currentYear = new Date().getFullYear();
   const today = new Date().toISOString().split("T")[0];
 
-  const last12Months = useMemo(() => {
-    const months: string[] = [];
-    const d = new Date();
-    for (let i = 11; i >= 0; i--) {
-      const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
-      months.push(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`);
+  // Derive available years from all data, always include current year
+  const availableYears = useMemo(() => {
+    const years = new Set<number>([currentYear]);
+    for (const inv of invoices) {
+      const y = inv.posting_date?.substring(0, 4);
+      if (y) years.add(parseInt(y));
     }
-    return months;
-  }, []);
+    for (const j of journals) {
+      const y = j.posting_date?.substring(0, 4);
+      if (y) years.add(parseInt(y));
+    }
+    for (const so of allOrders) {
+      const y = so.delivery_date?.substring(0, 4);
+      if (y) years.add(parseInt(y));
+    }
+    return Array.from(years).sort((a, b) => b - a); // newest first
+  }, [invoices, journals, allOrders, currentYear]);
+
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+
+  // Jan–Dec months for the selected year
+  const yearMonths = useMemo(() =>
+    Array.from({ length: 12 }, (_, i) =>
+      `${selectedYear}-${String(i + 1).padStart(2, "0")}`
+    ),
+    [selectedYear]
+  );
 
   const monthlyData = useMemo(() => {
     const map = new Map<string, { revenue: number; expenses: number; collected: number }>();
-
-    for (const month of last12Months) {
-      map.set(month, { revenue: 0, expenses: 0, collected: 0 });
-    }
+    for (const month of yearMonths) map.set(month, { revenue: 0, expenses: 0, collected: 0 });
 
     for (const inv of invoices) {
       const month = inv.posting_date?.substring(0, 7);
       if (!month || !map.has(month)) continue;
-      const entry = map.get(month)!;
-      entry.revenue += inv.grand_total ?? 0;
+      map.get(month)!.revenue += inv.grand_total ?? 0;
     }
-
     for (const j of journals) {
       const month = j.posting_date?.substring(0, 7);
       if (!month || !map.has(month)) continue;
-      const entry = map.get(month)!;
-      entry.expenses += j.total_debit ?? 0;
+      map.get(month)!.expenses += j.total_debit ?? 0;
     }
-
     for (const p of payments) {
       const month = p.posting_date?.substring(0, 7);
       if (!month || !map.has(month)) continue;
-      const entry = map.get(month)!;
-      entry.collected += p.paid_amount ?? 0;
+      map.get(month)!.collected += p.paid_amount ?? 0;
     }
 
-    return last12Months.map((month) => {
+    return yearMonths.map((month) => {
       const data = map.get(month)!;
       return { month, ...data, net: data.revenue - data.expenses };
     });
-  }, [invoices, journals, payments, last12Months]);
+  }, [invoices, journals, payments, yearMonths]);
 
   const combinedMonthlyData = useMemo(() => {
     const weddingCount = new Map<string, number>();
-    for (const month of last12Months) weddingCount.set(month, 0);
+    for (const month of yearMonths) weddingCount.set(month, 0);
     for (const so of allOrders) {
       const month = so.delivery_date?.substring(0, 7);
       if (!month || !weddingCount.has(month)) continue;
@@ -120,23 +131,23 @@ export default function DirectorSection() {
       ...row,
       weddings: weddingCount.get(row.month) ?? 0,
     }));
-  }, [monthlyData, allOrders, last12Months]);
+  }, [monthlyData, allOrders, yearMonths]);
 
-  const ytd = useMemo(() => {
+  // KPI totals for selected year
+  const yearTotals = useMemo(() => {
+    const prefix = String(selectedYear);
     let revenue = 0, expenses = 0, collected = 0;
-
     for (const inv of invoices) {
-      if (inv.posting_date?.startsWith(currentYear)) revenue += inv.grand_total ?? 0;
+      if (inv.posting_date?.startsWith(prefix)) revenue += inv.grand_total ?? 0;
     }
     for (const j of journals) {
-      if (j.posting_date?.startsWith(currentYear)) expenses += j.total_debit ?? 0;
+      if (j.posting_date?.startsWith(prefix)) expenses += j.total_debit ?? 0;
     }
     for (const p of payments) {
-      if (p.posting_date?.startsWith(currentYear)) collected += p.paid_amount ?? 0;
+      if (p.posting_date?.startsWith(prefix)) collected += p.paid_amount ?? 0;
     }
-
     return { revenue, expenses, net: revenue - expenses, collected };
-  }, [invoices, journals, payments, currentYear]);
+  }, [invoices, journals, payments, selectedYear]);
 
   const outstandingInvoices = useMemo(() =>
     invoices.filter((inv) => (inv.outstanding_amount ?? 0) > 0),
@@ -158,6 +169,28 @@ export default function DirectorSection() {
     [activeWeddings]
   );
 
+  const isCurrentYear = selectedYear === currentYear;
+  const kpiLabel = isCurrentYear ? "YTD" : String(selectedYear);
+
+  // Year selector control
+  const yearSelector = (
+    <Select
+      value={String(selectedYear)}
+      onValueChange={(v) => setSelectedYear(parseInt(v))}
+    >
+      <SelectTrigger className="h-7 w-24 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {availableYears.map((y) => (
+          <SelectItem key={y} value={String(y)}>
+            {y}{y === currentYear ? " (now)" : ""}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   return (
     <div className="space-y-6">
       {/* Row 1: KPI Cards */}
@@ -166,7 +199,7 @@ export default function DirectorSection() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-green-600" />
-              Revenue YTD
+              Revenue {kpiLabel}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -174,7 +207,7 @@ export default function DirectorSection() {
               <Skeleton className="h-8 w-[120px]" />
             ) : (
               <div className="text-2xl font-bold text-green-700 dark:text-green-400">
-                {formatVND(ytd.revenue)}
+                {formatVND(yearTotals.revenue)}
               </div>
             )}
           </CardContent>
@@ -184,7 +217,7 @@ export default function DirectorSection() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <TrendingDown className="h-4 w-4 text-red-600" />
-              Expenses YTD
+              Expenses {kpiLabel}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -192,7 +225,7 @@ export default function DirectorSection() {
               <Skeleton className="h-8 w-[120px]" />
             ) : (
               <div className="text-2xl font-bold text-red-700 dark:text-red-400">
-                {formatVND(ytd.expenses)}
+                {formatVND(yearTotals.expenses)}
               </div>
             )}
           </CardContent>
@@ -201,18 +234,18 @@ export default function DirectorSection() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              {ytd.net >= 0
+              {yearTotals.net >= 0
                 ? <TrendingUp className="h-4 w-4 text-green-600" />
                 : <TrendingDown className="h-4 w-4 text-red-600" />}
-              Net Profit YTD
+              Net Profit {kpiLabel}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <Skeleton className="h-8 w-[120px]" />
             ) : (
-              <div className={`text-2xl font-bold ${ytd.net >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
-                {formatVND(ytd.net)}
+              <div className={`text-2xl font-bold ${yearTotals.net >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
+                {formatVND(yearTotals.net)}
               </div>
             )}
           </CardContent>
@@ -222,7 +255,7 @@ export default function DirectorSection() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-primary" />
-              Cash Collected YTD
+              Collected {kpiLabel}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -230,7 +263,7 @@ export default function DirectorSection() {
               <Skeleton className="h-8 w-[120px]" />
             ) : (
               <div className="text-2xl font-bold">
-                {formatVND(ytd.collected)}
+                {formatVND(yearTotals.collected)}
               </div>
             )}
           </CardContent>
@@ -239,8 +272,9 @@ export default function DirectorSection() {
 
       {/* Row 2: Combined monthly overview chart */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">Monthly Overview — Weddings, Revenue & Expenses (Last 12 Months)</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium">Weddings, Revenue & Expenses by Month</CardTitle>
+          {!isLoading && yearSelector}
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -286,11 +320,11 @@ export default function DirectorSection() {
         </CardContent>
       </Card>
 
-      {/* Row 3: Charts */}
+      {/* Row 3: Revenue vs Expenses + Net Profit */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Revenue vs Expenses (Last 12 Months)</CardTitle>
+            <CardTitle className="text-sm font-medium">Revenue vs Expenses ({selectedYear})</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -312,7 +346,7 @@ export default function DirectorSection() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Net Profit Trend (Last 12 Months)</CardTitle>
+            <CardTitle className="text-sm font-medium">Net Profit Trend ({selectedYear})</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
