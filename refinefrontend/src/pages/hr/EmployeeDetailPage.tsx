@@ -210,7 +210,7 @@ export default function EmployeeDetailPage() {
           custom_review_notes: reviewNotes,
         },
       });
-      invalidate({ resource: "Employee", invalidates: ["detail"] });
+      invalidate({ resource: "Employee", id: employee.name, invalidates: ["detail"] });
       setReviewDialogOpen(false);
     } catch (err: any) {
       setError(err?.message || "Failed to save review");
@@ -365,7 +365,7 @@ export default function EmployeeDetailPage() {
         const newRoles = parseStaffRoles(values.custom_staff_roles) as StaffRole[];
         await syncUserRoles(employee.user_id, newRoles);
       }
-      invalidate({ resource: "Employee", invalidates: ["detail"] });
+      invalidate({ resource: "Employee", id: employee.name, invalidates: ["detail"] });
       setEditSection(null);
     } catch (err: any) {
       setEditError(err?.message || "Failed to save");
@@ -394,7 +394,7 @@ export default function EmployeeDetailPage() {
         throw new Error(data.detail || `API error ${res.status}`);
       }
       invalidate({ resource: "Meraki Review", invalidates: ["list"] });
-      invalidate({ resource: "Employee", invalidates: ["detail"] });
+      invalidate({ resource: "Employee", id: name, invalidates: ["detail"] });
       setScheduleDialogOpen(false);
       setReviewForm({ date: "", time: "09:00", notes: "", participants: [] });
     } catch (e: any) {
