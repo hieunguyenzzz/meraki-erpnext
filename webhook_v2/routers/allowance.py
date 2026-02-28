@@ -152,17 +152,20 @@ def generate_allowances_for_period(client: ERPNextClient, start_date: str, end_d
         "limit_page_length": 500,
     }).get("data", [])
 
-    # Fetch existing Additional Salary records to prevent duplicates
+    # Fetch existing Additional Salary records (non-cancelled) to detect duplicates/drafts
     existing = client._get("/api/resource/Additional Salary", params={
         "filters": json.dumps([
             ["salary_component", "=", "Wedding Allowance"],
             ["payroll_date", ">=", start_date],
             ["payroll_date", "<=", end_date],
+            ["docstatus", "!=", 2],
         ]),
-        "fields": json.dumps(["employee", "custom_wedding_project"]),
+        "fields": json.dumps(["name", "employee", "custom_wedding_project", "docstatus"]),
         "limit_page_length": 1000,
     }).get("data", [])
-    existing_keys = {(r["employee"], r["custom_wedding_project"]) for r in existing}
+    # Map (employee, project) → doc name for drafts; exclude already-submitted
+    submitted_keys = {(r["employee"], r["custom_wedding_project"]) for r in existing if r["docstatus"] == 1}
+    draft_docs = {(r["employee"], r["custom_wedding_project"]): r["name"] for r in existing if r["docstatus"] == 0}
 
     created = duplicates = skipped = errors = 0
     payroll_date = end_date
@@ -188,27 +191,30 @@ def generate_allowances_for_period(client: ERPNextClient, start_date: str, end_d
                 continue
 
             key = (emp.get("name"), project_name)
-            if key in existing_keys:
+            if key in submitted_keys:
                 duplicates += 1
                 continue
 
             try:
-                resp = client._post("/api/resource/Additional Salary", {
-                    "employee": emp.get("name"),
-                    "salary_component": "Wedding Allowance",
-                    "amount": rate,
-                    "payroll_date": payroll_date,
-                    "company": company,
-                    "custom_wedding_project": project_name,
-                    "custom_wedding_type": wedding_type,
-                    "custom_service_type": service_type,
-                })
-                doc_name = resp.get("data", {}).get("name", "")
-                client._post("/api/method/frappe.client.submit", {
-                    "doc": {"doctype": "Additional Salary", "name": doc_name}
-                })
+                # If a draft exists (from a failed previous run), submit it
+                if key in draft_docs:
+                    doc_name = draft_docs[key]
+                else:
+                    resp = client._post("/api/resource/Additional Salary", {
+                        "employee": emp.get("name"),
+                        "salary_component": "Wedding Allowance",
+                        "amount": rate,
+                        "payroll_date": payroll_date,
+                        "company": company,
+                        "custom_wedding_project": project_name,
+                        "custom_wedding_type": wedding_type,
+                        "custom_service_type": service_type,
+                    })
+                    doc_name = resp.get("data", {}).get("name", "")
+                full_doc = client._get(f"/api/resource/Additional Salary/{doc_name}").get("data", {})
+                client._post("/api/method/frappe.client.submit", {"doc": full_doc})
                 created += 1
-                existing_keys.add(key)
+                submitted_keys.add(key)
             except Exception as e:
                 log.error("allowance_period_create_failed", employee=emp.get("name"), project=project_name, error=str(e))
                 errors += 1
