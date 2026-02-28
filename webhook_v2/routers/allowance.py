@@ -152,7 +152,8 @@ def generate_allowances_for_period(client: ERPNextClient, start_date: str, end_d
         "limit_page_length": 500,
     }).get("data", [])
 
-    # Fetch existing Additional Salary records (non-cancelled) to detect duplicates/drafts
+    # Cancel all existing submitted/draft Wedding Allowance records for the period
+    # so that recalculate always reflects current configuration (rates + assignments).
     existing = client._get("/api/resource/Additional Salary", params={
         "filters": json.dumps([
             ["salary_component", "=", "Wedding Allowance"],
@@ -163,9 +164,20 @@ def generate_allowances_for_period(client: ERPNextClient, start_date: str, end_d
         "fields": json.dumps(["name", "employee", "custom_wedding_project", "docstatus"]),
         "limit_page_length": 1000,
     }).get("data", [])
-    # Map (employee, project) → doc name for drafts; exclude already-submitted
-    submitted_keys = {(r["employee"], r["custom_wedding_project"]) for r in existing if r["docstatus"] == 1}
-    draft_docs = {(r["employee"], r["custom_wedding_project"]): r["name"] for r in existing if r["docstatus"] == 0}
+
+    for rec in existing:
+        try:
+            if rec["docstatus"] == 1:
+                client._post("/api/method/frappe.client.cancel", {
+                    "doctype": "Additional Salary", "name": rec["name"]
+                })
+            client._delete(f"/api/resource/Additional Salary/{rec['name']}")
+        except Exception as e:
+            log.warning("allowance_cleanup_failed", name=rec["name"], error=str(e))
+
+    # All old records cleared — start fresh
+    submitted_keys: set[tuple] = set()
+    draft_docs: dict[tuple, str] = {}
 
     created = duplicates = skipped = errors = 0
     payroll_date = end_date
