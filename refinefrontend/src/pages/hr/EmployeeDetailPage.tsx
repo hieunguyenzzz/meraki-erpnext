@@ -127,7 +127,7 @@ export default function EmployeeDetailPage() {
       { field: "reason", operator: "eq", value: "Work From Home" },
     ],
     sorters: [{ field: "from_date", order: "desc" }],
-    meta: { fields: ["name", "from_date", "to_date", "explanation", "docstatus", "workflow_state"] },
+    meta: { fields: ["name", "from_date", "to_date", "explanation", "docstatus"] },
     queryOptions: { enabled: !!name },
   });
   const wfhRequests = (wfhResult?.data ?? []) as any[];
@@ -346,19 +346,8 @@ export default function EmployeeDetailPage() {
     }
   }
 
-  if (!employee) {
-    return <DetailSkeleton />;
-  }
-
-  const staffRoles = parseStaffRoles(employee.custom_staff_roles);
-  const reviewStatus = getReviewStatus(employee.custom_last_review_date);
-  const reviewBadgeVariant = getReviewBadgeVariant(reviewStatus);
-  const reviewStatusText = getReviewStatusText(employee.custom_last_review_date);
-  const leaveBalanceVariant = getLeaveBalanceVariant(leaveBalance.remaining, leaveBalance.allocated);
-  const leavePercent = leaveBalance.allocated > 0 ? (leaveBalance.remaining / leaveBalance.allocated) * 100 : 0;
-
   const pendingLeave = leaveHistory.filter((a) => a.docstatus === 0 && a.status === "Open").length;
-  const pendingWFH = wfhRequests.filter((r) => r.docstatus === 0 && r.workflow_state !== "Rejected").length;
+  const pendingWFH = wfhRequests.filter((r) => r.docstatus === 0).length;
   const pendingCount = pendingLeave + pendingWFH;
 
   const [typeFilter, setTypeFilter] = useState<"all" | "leave" | "wfh">("all");
@@ -380,8 +369,8 @@ export default function EmployeeDetailPage() {
         r.from_date && r.to_date
           ? Math.ceil((new Date(r.to_date).getTime() - new Date(r.from_date).getTime()) / 86400000) + 1
           : 1;
-      const isPending = r.docstatus === 0 && r.workflow_state !== "Rejected";
-      const status = r.docstatus === 1 ? "Approved" : r.workflow_state === "Rejected" ? "Rejected" : "Pending";
+      const isPending = r.docstatus === 0;
+      const status = r.docstatus === 1 ? "Approved" : "Pending";
       return {
         id: r.name,
         type: "wfh" as const,
@@ -403,6 +392,17 @@ export default function EmployeeDetailPage() {
     () => (typeFilter === "all" ? allRecords : allRecords.filter((r) => r.type === typeFilter)),
     [allRecords, typeFilter]
   );
+
+  if (!employee) {
+    return <DetailSkeleton />;
+  }
+
+  const staffRoles = parseStaffRoles(employee.custom_staff_roles);
+  const reviewStatus = getReviewStatus(employee.custom_last_review_date);
+  const reviewBadgeVariant = getReviewBadgeVariant(reviewStatus);
+  const reviewStatusText = getReviewStatusText(employee.custom_last_review_date);
+  const leaveBalanceVariant = getLeaveBalanceVariant(leaveBalance.remaining, leaveBalance.allocated);
+  const leavePercent = leaveBalance.allocated > 0 ? (leaveBalance.remaining / leaveBalance.allocated) * 100 : 0;
 
   return (
     <div className="space-y-6">
