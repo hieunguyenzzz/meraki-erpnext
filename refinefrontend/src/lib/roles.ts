@@ -22,6 +22,18 @@ export interface ModuleConfig {
 export const CRM_ROLES = ["System Manager", "Sales Manager", "Sales User"];
 export const HR_ROLES = ["System Manager", "HR Manager", "HR User"];
 export const FINANCE_ROLES = ["System Manager", "Accounts Manager", "Accounts User"];
+export const DIRECTOR_ROLES = ["System Manager"];
+
+export type DashboardOption = "personal" | "director";
+
+/** Returns which dashboard views a user is eligible for, in priority order. */
+export function getDashboardOptions(roles: string[]): DashboardOption[] {
+  const options: DashboardOption[] = ["personal"]; // always available
+  if (hasModuleAccess(roles, DIRECTOR_ROLES)) {
+    options.unshift("director"); // director first = default
+  }
+  return options;
+}
 
 export const MODULES: ModuleConfig[] = [
   {

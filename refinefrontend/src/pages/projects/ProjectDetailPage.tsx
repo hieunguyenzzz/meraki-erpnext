@@ -129,7 +129,7 @@ export default function ProjectDetailPage() {
     assistant3: "",
     assistant4: "",
     assistant5: "",
-    addOns: [] as { itemCode: string; itemName: string; qty: number; rate: number }[],
+    addOns: [] as { itemCode: string; itemName: string; qty: number; rate: number; includeInCommission: boolean }[],
   });
   const [editAddonSearch, setEditAddonSearch] = useState<string[]>([]);
   const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
@@ -182,6 +182,7 @@ export default function ProjectDetailPage() {
         "customer_name",
         "grand_total",
         "custom_venue",
+        "custom_commission_base",
         "delivery_date",
         "per_billed",
         "per_delivered",
@@ -301,9 +302,9 @@ export default function ProjectDetailPage() {
     resource: "Item",
     pagination: { mode: "off" as const },
     filters: [{ field: "item_group", operator: "eq", value: "Add-on Services" }],
-    meta: { fields: ["name", "item_name"] },
+    meta: { fields: ["name", "item_name", "custom_include_in_commission"] },
   });
-  const availableAddOns = (addOnItemsListResult?.data ?? []) as { name: string; item_name: string }[];
+  const availableAddOns = (addOnItemsListResult?.data ?? []) as { name: string; item_name: string; custom_include_in_commission?: number }[];
 
   function getEmployeeNameById(id: string | null | undefined): string | null {
     if (!id) return null;
@@ -314,12 +315,16 @@ export default function ProjectDetailPage() {
   // Populate details form (venue + add-ons)
   function populateDetailsForm() {
     if (!project) return;
-    const currentAddOns = addOnItems.map((i) => ({
-      itemCode: i.item_code,
-      itemName: i.item_name,
-      qty: i.qty,
-      rate: i.rate,
-    }));
+    const currentAddOns = addOnItems.map((i) => {
+      const itemMeta = availableAddOns.find((a) => a.name === i.item_code);
+      return {
+        itemCode: i.item_code,
+        itemName: i.item_name,
+        qty: i.qty,
+        rate: i.rate,
+        includeInCommission: !!(itemMeta?.custom_include_in_commission),
+      };
+    });
     setEditForm((prev) => ({
       ...prev,
       venue: salesOrder?.custom_venue || "",
@@ -386,6 +391,24 @@ export default function ProjectDetailPage() {
           ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
           : detail || "Failed to update add-ons";
         throw new Error(msg);
+      }
+      // 3. Update custom_commission_base on the Sales Order
+      if (project?.sales_order) {
+        const packageRate = soItems.find((i) => i.item_code === "Wedding Planning Service")?.rate || 0;
+        const commissionBase = packageRate + editForm.addOns
+          .filter((a) => a.itemCode && a.includeInCommission)
+          .reduce((sum, a) => sum + (a.rate || 0), 0);
+        await fetch("/api/method/frappe.client.set_value", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            doctype: "Sales Order",
+            name: project.sales_order,
+            fieldname: "custom_commission_base",
+            value: commissionBase,
+          }),
+        });
       }
       invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
       invalidate({ resource: "Sales Order", invalidates: ["detail"], id: project?.sales_order! });
@@ -1465,7 +1488,12 @@ export default function ProjectDetailPage() {
                                   newSearch[i] = item.item_name;
                                   setEditAddonSearch(newSearch);
                                   const updated = editForm.addOns.map((a, j) =>
-                                    j === i ? { ...a, itemCode: item.name, itemName: item.item_name } : a
+                                    j === i ? {
+                                      ...a,
+                                      itemCode: item.name,
+                                      itemName: item.item_name,
+                                      includeInCommission: !!(item as any).custom_include_in_commission,
+                                    } : a
                                   );
                                   setEditForm({ ...editForm, addOns: updated });
                                   const newOpen = [...editAddonDropdownOpen];
@@ -1493,6 +1521,20 @@ export default function ProjectDetailPage() {
                       }}
                       className="w-28 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                     />
+                    <label className="flex items-center gap-1.5 py-2 text-sm text-muted-foreground whitespace-nowrap cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={addon.includeInCommission}
+                        onChange={(e) => {
+                          const updated = editForm.addOns.map((a, j) =>
+                            j === i ? { ...a, includeInCommission: e.target.checked } : a
+                          );
+                          setEditForm({ ...editForm, addOns: updated });
+                        }}
+                        className="accent-[#C4A962]"
+                      />
+                      Commission
+                    </label>
                     <Button
                       type="button"
                       variant="ghost"
@@ -1511,7 +1553,7 @@ export default function ProjectDetailPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setEditForm({ ...editForm, addOns: [...editForm.addOns, { itemCode: "", itemName: "", qty: 1, rate: 0 }] });
+                    setEditForm({ ...editForm, addOns: [...editForm.addOns, { itemCode: "", itemName: "", qty: 1, rate: 0, includeInCommission: false }] });
                     setEditAddonSearch((prev) => [...prev, ""]);
                     setEditAddonDropdownOpen((prev) => [...prev, false]);
                   }}

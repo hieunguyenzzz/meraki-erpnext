@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { useUpdate } from "@refinedev/core";
+import { useUpdate, usePermissions } from "@refinedev/core";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
+import { getDashboardOptions, type DashboardOption } from "@/lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +58,19 @@ const INITIAL_FORM: FormData = {
 export default function MyProfilePage() {
   const { employee, employeeId, isLoading, refetch } = useMyEmployee();
   const { mutateAsync: updateAsync } = useUpdate();
+  const { data: roles } = usePermissions<string[]>({});
+  const dashboardOptions = getDashboardOptions(roles ?? []);
+
+  const [dashboardPref, setDashboardPref] = useState<DashboardOption>(() => {
+    const stored = localStorage.getItem("meraki-dashboard-preference") as DashboardOption | null;
+    if (stored && ["personal", "director"].includes(stored)) return stored;
+    return "personal";
+  });
+
+  function handleDashboardPrefChange(value: DashboardOption) {
+    setDashboardPref(value);
+    localStorage.setItem("meraki-dashboard-preference", value);
+  }
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -184,6 +198,35 @@ export default function MyProfilePage() {
           <p className="font-medium">{employee.date_of_joining}</p>
         </div>
       </div>
+
+      {/* Display Preferences */}
+      {dashboardOptions.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Display Preferences</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Default Dashboard</p>
+                <p className="text-xs text-muted-foreground">Choose what you see when you open the app</p>
+              </div>
+              <Select value={dashboardPref} onValueChange={handleDashboardPrefChange}>
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {dashboardOptions.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt === "director" ? "Director Dashboard" : "Personal Dashboard"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Personal Info */}
       <Card>

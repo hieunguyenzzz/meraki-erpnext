@@ -8,7 +8,8 @@ import { CalendarDays, CheckSquare, Clock, FolderKanban } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { formatTimeShort, interviewStatusVariant } from "@/lib/interview-scheduling";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
-import { CRM_ROLES, HR_ROLES, hasModuleAccess } from "@/lib/roles";
+import { CRM_ROLES, HR_ROLES, hasModuleAccess, getDashboardOptions, type DashboardOption } from "@/lib/roles";
+import DirectorSection from "@/components/dashboard/DirectorSection";
 
 function priorityVariant(priority: string) {
   switch (priority) {
@@ -49,6 +50,16 @@ export default function DashboardPage() {
 
   const hasCrmAccess = hasModuleAccess(roles ?? [], CRM_ROLES);
   const hasHrAccess = hasModuleAccess(roles ?? [], HR_ROLES);
+
+  const dashboardOptions = getDashboardOptions(roles ?? []);
+  const [dashboardPref] = useState<DashboardOption>(() => {
+    if (typeof window === "undefined") return dashboardOptions[0] ?? "personal";
+    const stored = localStorage.getItem("meraki-dashboard-preference") as DashboardOption | null;
+    if (stored && dashboardOptions.includes(stored)) return stored;
+    return dashboardOptions[0] ?? "personal";
+  });
+  // Keep pref in sync if roles load after initial render
+  const effectivePref = dashboardOptions.includes(dashboardPref) ? dashboardPref : (dashboardOptions[0] ?? "personal");
 
   const { result: leadsResult, query: leadsQuery } = useList({
     resource: "Lead",
@@ -226,6 +237,10 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">Here's an overview of your business</p>
       </div>
 
+      {effectivePref === "director" ? (
+        <DirectorSection />
+      ) : (
+        <>
       {(hasCrmAccess || hasHrAccess) && (
         <div className="grid gap-4 md:grid-cols-3">
           {hasCrmAccess && (
@@ -402,6 +417,8 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+      )}
+        </>
       )}
     </div>
   );

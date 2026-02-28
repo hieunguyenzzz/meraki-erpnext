@@ -1,4 +1,4 @@
-export const STAFF_ROLES = ["HR", "Planner", "Accounting", "Sales"] as const;
+export const STAFF_ROLES = ["Director", "HR", "Planner", "Accounting", "Sales"] as const;
 export type StaffRole = typeof STAFF_ROLES[number];
 
 export type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "info";
@@ -8,6 +8,7 @@ export type BadgeVariant = "default" | "secondary" | "destructive" | "outline" |
  * When a staff role is assigned, these ERPNext roles are added to the User.
  */
 export const STAFF_ROLE_TO_ERPNEXT_ROLES: Record<StaffRole, string[]> = {
+  Director: ["System Manager", "Sales Manager", "HR Manager", "Accounts Manager"],
   Sales: ["Sales User", "Inbox User", "Super Email User"],
   HR: ["HR User", "HR Manager"],
   Accounting: ["Accounts User"],
@@ -25,6 +26,7 @@ export function serializeStaffRoles(roles: StaffRole[]): string {
 
 export function getRoleBadgeVariant(role: StaffRole): BadgeVariant {
   switch (role) {
+    case "Director": return "destructive"; // Red/prominent
     case "HR": return "info";           // Blue
     case "Planner": return "success";   // Green
     case "Accounting": return "secondary"; // Gray/purple
