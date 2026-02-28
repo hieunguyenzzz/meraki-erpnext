@@ -29,7 +29,6 @@ import {
   parseStaffRoles,
   serializeStaffRoles,
   getRoleBadgeVariant,
-  syncUserRoles,
 } from "@/lib/staff-roles";
 import {
   DndContext,
@@ -396,9 +395,17 @@ export default function StaffOverviewPage() {
         throw new Error(data.detail || `API error ${res.status}`);
       }
 
-      // Sync ERPNext User roles if employee has a linked user account
+      // Sync ERPNext User roles via backend (uses admin API key — no CSRF issues)
       if (selectedEmployee.user_id) {
-        await syncUserRoles(selectedEmployee.user_id, staffRoles);
+        const syncRes = await fetch("/inquiry-api/sync-user-roles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: selectedEmployee.user_id, staff_roles: staffRoles }),
+        });
+        if (!syncRes.ok) {
+          const data = await syncRes.json().catch(() => ({}));
+          throw new Error(data.detail || `Failed to sync user roles (${syncRes.status})`);
+        }
       }
 
       invalidate({ resource: "Employee", invalidates: ["list"] });
