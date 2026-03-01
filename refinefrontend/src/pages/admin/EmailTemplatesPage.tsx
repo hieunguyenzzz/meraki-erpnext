@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useList, useUpdate, useOne, useInvalidate } from "@refinedev/core";
 import {
   Pencil, Loader2, Mail, Bell, Cake, Trophy, CalendarDays,
-  FileCheck, Banknote, AlertCircle, CheckCircle2,
+  FileCheck, Banknote, AlertCircle, CheckCircle2, Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +98,9 @@ function EditNotificationSheet({
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testEmail, setTestEmail] = useState("");
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const { mutateAsync: updateRecord } = useUpdate();
 
   useEffect(() => {
@@ -105,8 +108,37 @@ function EditNotificationSheet({
       setSubject(notification.subject ?? "");
       setMessage(notification.message ?? "");
       setError(null);
+      setTestEmail("");
+      setTestResult(null);
     }
   }, [notification]);
+
+  const handleSendTest = async () => {
+    if (!notification || !testEmail.trim()) return;
+    setTestSending(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/inquiry-api/test-notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          notification_name: notification.name,
+          recipient_email: testEmail.trim(),
+        }),
+      });
+      if (res.ok) {
+        setTestResult({ ok: true, msg: `Test email sent to ${testEmail.trim()}` });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setTestResult({ ok: false, msg: err.detail ?? "Failed to send" });
+      }
+    } catch {
+      setTestResult({ ok: false, msg: "Network error" });
+    } finally {
+      setTestSending(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!notification) return;
@@ -177,6 +209,43 @@ function EditNotificationSheet({
               className="font-mono text-xs leading-relaxed min-h-[340px] resize-none"
               placeholder={"<p>Dear {{ doc.employee_name }},</p>\n<p>This is a reminder that...</p>"}
             />
+          </div>
+
+          <Separator />
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Send Test Email</Label>
+            <p className="text-xs text-muted-foreground">
+              Sends the saved template to the address you specify. Template variables shown as-is.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="you@example.com"
+                value={testEmail}
+                onChange={(e) => { setTestEmail(e.target.value); setTestResult(null); }}
+                className="flex-1"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSendTest}
+                disabled={testSending || !testEmail.trim()}
+                className="shrink-0"
+              >
+                {testSending
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  : <Send className="h-3.5 w-3.5 mr-1.5" />}
+                Send Test
+              </Button>
+            </div>
+            {testResult && (
+              <div className={`flex items-center gap-2 text-sm ${testResult.ok ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
+                {testResult.ok
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  : <AlertCircle className="h-4 w-4 shrink-0" />}
+                <span>{testResult.msg}</span>
+              </div>
+            )}
           </div>
 
           {error && (

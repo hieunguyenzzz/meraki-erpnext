@@ -25,6 +25,7 @@ from webhook_v2.routers.employee_order import router as employee_order_router
 from webhook_v2.routers.employee_status import router as employee_status_router
 from webhook_v2.routers.payroll import router as payroll_router
 from webhook_v2.routers.user_roles import router as user_roles_router
+from webhook_v2.routers.notification_test import router as notification_test_router
 
 log = get_logger(__name__)
 
@@ -90,6 +91,7 @@ app.include_router(employee_order_router)
 app.include_router(employee_status_router)
 app.include_router(payroll_router)
 app.include_router(user_roles_router)
+app.include_router(notification_test_router)
 
 
 # Request/Response Models
