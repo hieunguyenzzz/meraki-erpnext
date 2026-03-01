@@ -41,6 +41,7 @@ import MyProfilePage from "@/pages/self-service/MyProfilePage";
 import MyLeavesPage from "@/pages/self-service/MyLeavesPage";
 import MyAttendancePage from "@/pages/self-service/MyAttendancePage";
 import DesignationsPage from "@/pages/admin/DesignationsPage";
+import EmailTemplatesPage from "@/pages/admin/EmailTemplatesPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -157,6 +158,7 @@ export default function App() {
 
               {/* Admin / Settings */}
               <Route path="/admin/designations" element={<DesignationsPage />} />
+              <Route path="/admin/notifications" element={<EmailTemplatesPage />} />
             </Route>
 
             {/* Self-service routes (no sidebar) - for all authenticated users */}

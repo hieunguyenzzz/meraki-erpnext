@@ -3,7 +3,7 @@ import {
   Columns3, MessageSquare,
   Banknote, Users, LayoutDashboard,
   FileText, Receipt, CreditCard, BookOpen, PieChart,
-  FolderKanban, Settings, Briefcase,
+  FolderKanban, Settings, Briefcase, Bell,
 } from "lucide-react";
 
 export interface ModuleChild {
@@ -81,6 +81,7 @@ export const MODULES: ModuleConfig[] = [
     roles: ["System Manager", "Administrator"],
     children: [
       { label: "Designations", path: "/admin/designations", icon: Briefcase },
+      { label: "Notifications", path: "/admin/notifications", icon: Bell },
     ],
   },
 ];
