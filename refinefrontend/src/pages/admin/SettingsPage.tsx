@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { useList, useUpdate, useOne, useInvalidate } from "@refinedev/core";
+import { useSearchParams } from "react-router";
+import { useList, useCreate, useDelete, useCustomMutation, useInvalidate, useUpdate, useOne } from "@refinedev/core";
 import {
-  Pencil, Loader2, Mail, Bell, Cake, Trophy, CalendarDays,
-  FileCheck, Banknote, AlertCircle, CheckCircle2, Send,
+  Pencil, Trash2, Plus, Loader2, AlertCircle, Mail, Bell, Cake, Trophy,
+  CalendarDays, FileCheck, Banknote, CheckCircle2, Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,15 +13,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter,
 } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+interface Designation {
+  name: string;
+}
 
 interface Notification {
   name: string;
@@ -44,7 +53,372 @@ interface PayrollSettings {
 }
 
 // ---------------------------------------------------------------------------
-// Toggle component (no extra package needed)
+// Designations — Add Dialog
+// ---------------------------------------------------------------------------
+
+function AddDesignationDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const { mutateAsync: createDoc } = useCreate();
+
+  const handleSubmit = async () => {
+    const name = value.trim();
+    if (!name) return;
+    setError(null);
+    setIsSaving(true);
+    try {
+      await createDoc({
+        resource: "Designation",
+        values: { designation_name: name },
+      });
+      setValue("");
+      onOpenChange(false);
+      onSuccess();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to create designation";
+      setError(msg);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleClose = (open: boolean) => {
+    if (!open) {
+      setValue("");
+      setError(null);
+    }
+    onOpenChange(open);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add Designation</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="add-designation-name">Name</Label>
+            <Input
+              id="add-designation-name"
+              placeholder="e.g. Director"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSubmit();
+              }}
+              autoFocus
+            />
+          </div>
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => handleClose(false)} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={!value.trim() || isSaving}>
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Add
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Designations — Edit/Rename Dialog
+// ---------------------------------------------------------------------------
+
+function EditDesignationDialog({
+  designation,
+  onOpenChange,
+  onSuccess,
+}: {
+  designation: Designation | null;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const open = designation !== null;
+  const [value, setValue] = useState(designation?.name ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const { mutateAsync: customMutate } = useCustomMutation();
+
+  useEffect(() => {
+    setValue(designation?.name ?? "");
+    setError(null);
+  }, [designation]);
+
+  const handleSubmit = async () => {
+    const newName = value.trim();
+    if (!newName || !designation) return;
+    if (newName === designation.name) {
+      onOpenChange(false);
+      return;
+    }
+    setError(null);
+    setIsSaving(true);
+    try {
+      await customMutate({
+        url: "/api/method/frappe.client.rename_doc",
+        method: "post",
+        values: {
+          doctype: "Designation",
+          old_name: designation.name,
+          new_name: newName,
+          merge: false,
+        },
+      });
+      onOpenChange(false);
+      onSuccess();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to rename designation";
+      setError(msg);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleClose = (open: boolean) => {
+    if (!open) setError(null);
+    onOpenChange(open);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Rename Designation</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-designation-name">Name</Label>
+            <Input
+              id="edit-designation-name"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSubmit();
+              }}
+              autoFocus
+            />
+          </div>
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => handleClose(false)} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={!value.trim() || isSaving}>
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Designations — Delete Confirm Dialog
+// ---------------------------------------------------------------------------
+
+function DeleteDesignationDialog({
+  designation,
+  onOpenChange,
+  onSuccess,
+}: {
+  designation: Designation | null;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const open = designation !== null;
+  const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { mutateAsync: deleteDoc } = useDelete();
+
+  const handleDelete = async () => {
+    if (!designation) return;
+    setError(null);
+    setIsDeleting(true);
+    try {
+      await deleteDoc({
+        resource: "Designation",
+        id: designation.name,
+      });
+      onOpenChange(false);
+      onSuccess();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to delete designation";
+      setError(msg);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Delete Designation</DialogTitle>
+        </DialogHeader>
+        <div className="py-2 space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete{" "}
+            <span className="font-medium text-foreground">{designation?.name}</span>? This cannot be
+            undone.
+          </p>
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Designations Tab Content
+// ---------------------------------------------------------------------------
+
+function DesignationsTab() {
+  const invalidate = useInvalidate();
+
+  const { result, query } = useList<Designation>({
+    resource: "Designation",
+    pagination: { mode: "off" },
+    sorters: [{ field: "name", order: "asc" }],
+    meta: { fields: ["name"] },
+  });
+
+  const designations = (result?.data ?? []) as Designation[];
+  const isLoading = query.isLoading;
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Designation | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Designation | null>(null);
+
+  const refresh = () => {
+    invalidate({ resource: "Designation", invalidates: ["list"] });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">Manage employee job designations</p>
+        </div>
+        <Button onClick={() => setAddOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Designation
+        </Button>
+      </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead className="w-24 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                </TableCell>
+              </TableRow>
+            ) : designations.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">
+                  No designations yet. Add one to get started.
+                </TableCell>
+              </TableRow>
+            ) : (
+              designations.map((d) => (
+                <TableRow key={d.name}>
+                  <TableCell className="font-medium">{d.name}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setEditTarget(d)}
+                        title="Rename"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(d)}
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <AddDesignationDialog open={addOpen} onOpenChange={setAddOpen} onSuccess={refresh} />
+
+      <EditDesignationDialog
+        designation={editTarget}
+        onOpenChange={(open) => { if (!open) setEditTarget(null); }}
+        onSuccess={() => { setEditTarget(null); refresh(); }}
+      />
+
+      <DeleteDesignationDialog
+        designation={deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onSuccess={() => { setDeleteTarget(null); refresh(); }}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Notifications — Toggle component
 // ---------------------------------------------------------------------------
 
 function Toggle({
@@ -82,7 +456,7 @@ function Toggle({
 }
 
 // ---------------------------------------------------------------------------
-// Edit Notification Sheet
+// Notifications — Edit Sheet
 // ---------------------------------------------------------------------------
 
 function EditNotificationSheet({
@@ -271,7 +645,7 @@ function EditNotificationSheet({
 }
 
 // ---------------------------------------------------------------------------
-// HR Settings toggle row
+// Notifications — HR Settings toggle row
 // ---------------------------------------------------------------------------
 
 function HRSettingRow({
@@ -312,14 +686,13 @@ function HRSettingRow({
 }
 
 // ---------------------------------------------------------------------------
-// Main Page
+// Notifications Tab Content
 // ---------------------------------------------------------------------------
 
-export default function EmailTemplatesPage() {
+function NotificationsTab() {
   const invalidate = useInvalidate();
   const { mutateAsync: updateRecord } = useUpdate();
 
-  // ── Notification doctype records ──────────────────────────────────────────
   const { result: notifList, query: notifQuery } = useList<Notification>({
     resource: "Notification",
     pagination: { mode: "off" },
@@ -331,7 +704,6 @@ export default function EmailTemplatesPage() {
   const notifications = (notifList?.data ?? []) as Notification[];
   const notifLoading = notifQuery?.isLoading;
 
-  // ── HR Settings (singleton) ───────────────────────────────────────────────
   const { result: hrSettings } = useOne<HRSettings>({
     resource: "HR Settings",
     id: "HR Settings",
@@ -345,14 +717,12 @@ export default function EmailTemplatesPage() {
     },
   });
 
-  // ── Payroll Settings (singleton) ──────────────────────────────────────────
   const { result: payrollSettings } = useOne<PayrollSettings>({
     resource: "Payroll Settings",
     id: "Payroll Settings",
     meta: { fields: ["email_salary_slip_to_employee"] },
   });
 
-  // ── Local state for HR toggles (optimistic) ───────────────────────────────
   const [hrState, setHRState] = useState<HRSettings>({
     send_birthday_reminders: 0,
     send_work_anniversary_reminders: 0,
@@ -362,7 +732,6 @@ export default function EmailTemplatesPage() {
   const [payrollEmailSlip, setPayrollEmailSlip] = useState(0);
   const [savingHR, setSavingHR] = useState<string | null>(null);
 
-  // Sync from API once loaded
   useEffect(() => {
     if (hrSettings) {
       setHRState({
@@ -380,7 +749,6 @@ export default function EmailTemplatesPage() {
     }
   }, [payrollSettings]);
 
-  // Toggle HR setting
   const toggleHR = async (field: keyof HRSettings, value: boolean) => {
     const intVal = value ? 1 : 0;
     setSavingHR(field);
@@ -392,13 +760,12 @@ export default function EmailTemplatesPage() {
         values: { [field]: intVal },
       });
     } catch {
-      setHRState((prev) => ({ ...prev, [field]: intVal === 1 ? 0 : 1 })); // rollback
+      setHRState((prev) => ({ ...prev, [field]: intVal === 1 ? 0 : 1 }));
     } finally {
       setSavingHR(null);
     }
   };
 
-  // Toggle Payroll setting
   const togglePayroll = async (value: boolean) => {
     const intVal = value ? 1 : 0;
     setSavingHR("payroll");
@@ -410,13 +777,12 @@ export default function EmailTemplatesPage() {
         values: { email_salary_slip_to_employee: intVal },
       });
     } catch {
-      setPayrollEmailSlip(intVal === 1 ? 0 : 1); // rollback
+      setPayrollEmailSlip(intVal === 1 ? 0 : 1);
     } finally {
       setSavingHR(null);
     }
   };
 
-  // ── Notification toggle + edit ────────────────────────────────────────────
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Notification | null>(null);
 
@@ -440,23 +806,12 @@ export default function EmailTemplatesPage() {
 
   return (
     <div className="space-y-8 max-w-5xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage automated emails and notification rules sent by the system.
-        </p>
-      </div>
-
-      {/* ── Section 1: Notification Rules ────────────────────────────────── */}
       <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div>
-            <h2 className="text-sm font-semibold">Notification Rules</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Event-triggered emails configured in ERPNext. Edit subjects and message templates.
-            </p>
-          </div>
+        <div>
+          <h2 className="text-sm font-semibold">Notification Rules</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Event-triggered emails configured in ERPNext. Edit subjects and message templates.
+          </p>
         </div>
 
         <div className="rounded-lg border bg-card overflow-hidden">
@@ -540,7 +895,6 @@ export default function EmailTemplatesPage() {
 
       <Separator />
 
-      {/* ── Section 2: HR Scheduler Reminders ────────────────────────────── */}
       <div className="space-y-3">
         <div>
           <h2 className="text-sm font-semibold">HR Email Reminders</h2>
@@ -550,7 +904,6 @@ export default function EmailTemplatesPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {/* HR Settings Card */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">People &amp; Events</CardTitle>
@@ -602,7 +955,6 @@ export default function EmailTemplatesPage() {
             </CardContent>
           </Card>
 
-          {/* Payroll Card */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Payroll</CardTitle>
@@ -630,12 +982,44 @@ export default function EmailTemplatesPage() {
         </div>
       </div>
 
-      {/* Edit Sheet */}
       <EditNotificationSheet
         notification={editTarget}
         onClose={() => setEditTarget(null)}
         onSuccess={() => invalidate({ resource: "Notification", invalidates: ["list"] })}
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Settings Page
+// ---------------------------------------------------------------------------
+
+export default function SettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") ?? "designations";
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground">Manage designations, notifications, and system configuration.</p>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={(val) => setSearchParams({ tab: val })}>
+        <TabsList>
+          <TabsTrigger value="designations">Designations</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="designations" className="mt-6">
+          <DesignationsTab />
+        </TabsContent>
+
+        <TabsContent value="notifications" className="mt-6">
+          <NotificationsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
