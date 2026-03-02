@@ -65,6 +65,7 @@ export default function VenueDetailPage() {
   // Delete dialog state
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Gallery state
   const [uploading, setUploading] = useState(false);
@@ -200,6 +201,7 @@ export default function VenueDetailPage() {
 
   function handleDelete() {
     setDeleteError(null);
+    setDeleting(true);
     deleteVenue(
       {
         resource: "Supplier",
@@ -210,6 +212,7 @@ export default function VenueDetailPage() {
       {
         onSuccess: () => navigate("/venues"),
         onError: (err: any) => {
+          setDeleting(false);
           setDeleteError(err?.message ?? "Failed to delete venue.");
         },
       }
@@ -692,11 +695,11 @@ export default function VenueDetailPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete Venue
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete Venue"}
             </Button>
           </DialogFooter>
         </DialogContent>
