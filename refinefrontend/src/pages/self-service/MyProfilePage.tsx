@@ -5,7 +5,6 @@ import { getDashboardOptions, type DashboardOption } from "@/lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,22 +13,41 @@ import { Skeleton } from "@/components/ui/skeleton";
 const REQUIRED_FIELDS = [
   "cell_phone",
   "personal_email",
-  "current_address",
+  "addr_street",
+  "addr_ward",
+  "addr_district",
+  "addr_province",
   "person_to_be_contacted",
   "emergency_phone_number",
   "bank_name",
   "bank_ac_no",
 ] as const;
 
+function parseAddress(raw: string) {
+  const parts = raw.split("||");
+  return {
+    addr_street: parts[0]?.trim() ?? "",
+    addr_ward: parts[1]?.trim() ?? "",
+    addr_district: parts[2]?.trim() ?? "",
+    addr_province: parts[3]?.trim() ?? "",
+  };
+}
+
+function joinAddress(f: FormData) {
+  return [f.addr_street, f.addr_ward, f.addr_district, f.addr_province].join("||");
+}
+
 type FormData = {
   first_name: string;
-  middle_name: string;
   last_name: string;
   gender: string;
   date_of_birth: string;
   cell_phone: string;
   personal_email: string;
-  current_address: string;
+  addr_street: string;
+  addr_ward: string;
+  addr_district: string;
+  addr_province: string;
   permanent_address: string;
   person_to_be_contacted: string;
   relation: string;
@@ -40,13 +58,15 @@ type FormData = {
 
 const INITIAL_FORM: FormData = {
   first_name: "",
-  middle_name: "",
   last_name: "",
   gender: "",
   date_of_birth: "",
   cell_phone: "",
   personal_email: "",
-  current_address: "",
+  addr_street: "",
+  addr_ward: "",
+  addr_district: "",
+  addr_province: "",
   permanent_address: "",
   person_to_be_contacted: "",
   relation: "",
@@ -79,13 +99,12 @@ export default function MyProfilePage() {
     if (employee) {
       setForm({
         first_name: employee.first_name ?? "",
-        middle_name: employee.middle_name ?? "",
         last_name: employee.last_name ?? "",
         gender: employee.gender ?? "",
         date_of_birth: employee.date_of_birth ?? "",
         cell_phone: employee.cell_phone ?? "",
         personal_email: employee.personal_email ?? "",
-        current_address: employee.current_address ?? "",
+        ...parseAddress(employee.current_address ?? ""),
         permanent_address: employee.permanent_address ?? "",
         person_to_be_contacted: employee.person_to_be_contacted ?? "",
         relation: employee.relation ?? "",
@@ -109,7 +128,12 @@ export default function MyProfilePage() {
     if (!employeeId || !allRequiredFilled) return;
     setIsSaving(true);
     try {
-      await updateAsync({ resource: "Employee", id: employeeId, values: form });
+      const { addr_street, addr_ward, addr_district, addr_province, ...rest } = form;
+      await updateAsync({
+        resource: "Employee",
+        id: employeeId,
+        values: { ...rest, current_address: joinAddress(form) },
+      });
       setSaveSuccess(true);
       refetch();
     } finally {
@@ -234,21 +258,13 @@ export default function MyProfilePage() {
           <CardTitle>Personal Information</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label htmlFor="first_name">First Name *</Label>
               <Input
                 id="first_name"
                 value={form.first_name}
                 onChange={(e) => setField("first_name", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="middle_name">Middle Name</Label>
-              <Input
-                id="middle_name"
-                value={form.middle_name}
-                onChange={(e) => setField("middle_name", e.target.value)}
               />
             </div>
             <div>
@@ -309,26 +325,46 @@ export default function MyProfilePage() {
       {/* Address */}
       <Card>
         <CardHeader>
-          <CardTitle>Address</CardTitle>
+          <CardTitle>Current Address</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="current_address">Current Address *</Label>
-            <Textarea
-              id="current_address"
-              value={form.current_address}
-              onChange={(e) => setField("current_address", e.target.value)}
-              rows={3}
-            />
-          </div>
-          <div>
-            <Label htmlFor="permanent_address">Permanent Address</Label>
-            <Textarea
-              id="permanent_address"
-              value={form.permanent_address}
-              onChange={(e) => setField("permanent_address", e.target.value)}
-              rows={3}
-            />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="addr_street">Số nhà / Đường *</Label>
+              <Input
+                id="addr_street"
+                placeholder="VD: 12 Nguyễn Huệ"
+                value={form.addr_street}
+                onChange={(e) => setField("addr_street", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="addr_ward">Phường / Xã *</Label>
+              <Input
+                id="addr_ward"
+                placeholder="VD: Phường Bến Nghé"
+                value={form.addr_ward}
+                onChange={(e) => setField("addr_ward", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="addr_district">Quận / Huyện *</Label>
+              <Input
+                id="addr_district"
+                placeholder="VD: Quận 1"
+                value={form.addr_district}
+                onChange={(e) => setField("addr_district", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="addr_province">Tỉnh / Thành phố *</Label>
+              <Input
+                id="addr_province"
+                placeholder="VD: TP. Hồ Chí Minh"
+                value={form.addr_province}
+                onChange={(e) => setField("addr_province", e.target.value)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
