@@ -58,28 +58,38 @@ export default function UpdatePasswordPage() {
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
 
-        // ERPNext returns error details in _server_messages (JSON array of message objects)
-        // or in the exception string — both may contain HTML, so strip tags
+        // ERPNext may return HTML in error messages — strip tags and map to friendly messages
         const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
-        let msg = "Failed to update password.";
+        let rawMsg = "";
         if (data?._server_messages) {
           try {
             const msgs = JSON.parse(data._server_messages) as any[];
             const first = typeof msgs[0] === "string" ? JSON.parse(msgs[0]) : msgs[0];
-            msg = stripHtml(first?.message || first?.title || msg);
+            rawMsg = stripHtml(first?.message || first?.title || "");
           } catch {
-            msg = stripHtml(data._server_messages);
+            rawMsg = stripHtml(data._server_messages);
           }
         } else if (data?.exception) {
-          // e.g. "frappe.exceptions.ValidationError: <html>..." — take the part after the colon
-          const raw = data.exception.split("ValidationError:").pop() ?? data.exception;
-          msg = stripHtml(raw);
+          rawMsg = stripHtml(data.exception.split("ValidationError:").pop() ?? "");
         } else if (data?.message) {
-          msg = stripHtml(data.message);
+          rawMsg = stripHtml(data.message);
         }
 
-        throw new Error(msg || "Failed to update password.");
+        // Map technical ERPNext messages to friendly, specific guidance
+        const lc = rawMsg.toLowerCase();
+        let msg: string;
+        if (lc.includes("commonly used") || lc.includes("capitalization") || lc.includes("similar to")) {
+          msg = "This password is too common. Choose something more unique — mix uppercase, lowercase, numbers and symbols. Example: Meraki2026! or Blue#Cloud9";
+        } else if (lc.includes("too short") || lc.includes("at least")) {
+          msg = "Password is too short. Use at least 8 characters.";
+        } else if (lc.includes("expired") || lc.includes("invalid key") || lc.includes("not found")) {
+          msg = "This reset link has expired. Please request a new one from the login page.";
+        } else {
+          msg = rawMsg || "Failed to update password. Please try a different password.";
+        }
+
+        throw new Error(msg);
       }
 
       setSuccess(true);
