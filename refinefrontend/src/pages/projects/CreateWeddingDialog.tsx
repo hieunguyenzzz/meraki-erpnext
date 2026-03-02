@@ -334,25 +334,27 @@ export function CreateWeddingDialog({
     setIsCreatingVenue(true);
     setVenueError(null);
     try {
-      const result = await createDoc({
-        resource: "Supplier",
-        values: {
+      const resp = await fetch("/api/resource/Supplier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": "erp.merakiwp.com" },
+        credentials: "include",
+        body: JSON.stringify({
           supplier_name: venueName,
           supplier_group: "Wedding Venues",
           supplier_type: "Company",
-        },
+        }),
       });
-      // Store document name (ID) for the Link field, display supplier_name for UI
+      if (!resp.ok) throw new Error("Failed to create venue");
+      const result = await resp.json();
       const supplierId = result?.data?.name ?? venueName;
-      const displayName = result?.data?.supplier_name ?? venueName;
+      const supplierDisplayName = result?.data?.supplier_name ?? venueName;
       updateFormData({ venue: supplierId });
-      setVenueDisplayName(displayName);
+      setVenueDisplayName(supplierDisplayName);
       setVenueOpen(false);
       setVenueSearch("");
     } catch (err: any) {
       const msg = err?.message || "Failed to create venue";
       setVenueError(`Could not create venue: ${msg}`);
-      // Do NOT set venue — leave it empty so Sales Order won't fail
     } finally {
       setIsCreatingVenue(false);
     }
