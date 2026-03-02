@@ -139,6 +139,24 @@ def _get_holidays_in_range(client: ERPNextClient, holiday_list: str, from_str: s
     return result
 
 
+def _get_holiday_details_in_range(client: ERPNextClient, holiday_list: str, from_str: str, to_str: str) -> list:
+    """Return list of {date, description} for non-weekend holidays in [from_str, to_str]."""
+    if not holiday_list:
+        return []
+    data = client._get(f"/api/resource/Holiday List/{holiday_list}").get("data") or {}
+    holidays = data.get("holidays") or []
+    result = []
+    for h in holidays:
+        d = (h.get("holiday_date") or "")[:10]
+        if not d or not (from_str <= d <= to_str):
+            continue
+        # Only include actual public holidays, not Sundays added to the list
+        day_obj = date.fromisoformat(d)
+        if day_obj.weekday() < 5:  # Mon–Fri only (exclude weekends already in list)
+            result.append({"date": d, "description": h.get("description", "Holiday")})
+    return sorted(result, key=lambda x: x["date"])
+
+
 def _count_leave_days(from_str: str, to_str: str, holidays: set) -> int:
     """Count Mon-Fri days in [from_str, to_str] excluding given holiday dates."""
     start = date.fromisoformat(from_str)
@@ -268,8 +286,15 @@ def apply_leave(body: LeaveApplyRequest):
     }
 
 
+class HolidayInfo(BaseModel):
+    date: str
+    description: str
+
+
 class LeavePreviewResponse(BaseModel):
     requested_days: int
+    total_weekdays: int
+    holidays_excluded: list[HolidayInfo]
     casual_balance: int
     needs_split: bool
     casual_days: int
@@ -283,23 +308,29 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
 
     if leave_type != "Casual Leave":
         return LeavePreviewResponse(
-            requested_days=0, casual_balance=0,
-            needs_split=False, casual_days=0, lwp_days=0,
+            requested_days=0, total_weekdays=0, holidays_excluded=[],
+            casual_balance=0, needs_split=False, casual_days=0, lwp_days=0,
         )
 
-    holiday_list = _get_employee_holiday_list(client, employee)
-    holidays     = _get_holidays_in_range(client, holiday_list, from_date, to_date) if holiday_list else set()
-    requested    = _count_leave_days(from_date, to_date, holidays)
-    balance      = _get_casual_leave_balance(client, employee)
+    holiday_list     = _get_employee_holiday_list(client, employee)
+    holidays         = _get_holidays_in_range(client, holiday_list, from_date, to_date) if holiday_list else set()
+    holiday_details  = _get_holiday_details_in_range(client, holiday_list, from_date, to_date) if holiday_list else []
+    total_weekdays   = _count_leave_days(from_date, to_date, set())   # raw Mon–Fri count
+    requested        = _count_leave_days(from_date, to_date, holidays)
+    balance          = _get_casual_leave_balance(client, employee)
 
     if balance >= requested:
         return LeavePreviewResponse(
-            requested_days=requested, casual_balance=balance,
+            requested_days=requested, total_weekdays=total_weekdays,
+            holidays_excluded=[HolidayInfo(**h) for h in holiday_details],
+            casual_balance=balance,
             needs_split=False, casual_days=requested, lwp_days=0,
         )
 
     return LeavePreviewResponse(
-        requested_days=requested, casual_balance=balance,
+        requested_days=requested, total_weekdays=total_weekdays,
+        holidays_excluded=[HolidayInfo(**h) for h in holiday_details],
+        casual_balance=balance,
         needs_split=True,
         casual_days=max(balance, 0),
         lwp_days=requested - max(balance, 0),

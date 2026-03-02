@@ -159,6 +159,8 @@ export default function MyLeavesPage() {
   // Backend-driven split preview for Casual Leave (holiday-aware)
   const [splitPreview, setSplitPreview] = useState<{
     requested_days: number;
+    total_weekdays: number;
+    holidays_excluded: { date: string; description: string }[];
     casual_balance: number;
     needs_split: boolean;
     casual_days: number;
@@ -501,14 +503,37 @@ export default function MyLeavesPage() {
                 </div>
               )}
 
-              {!previewLoading && splitPreview?.needs_split && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 space-y-1">
-                  <p className="font-medium">Leave will be split automatically</p>
-                  <p>
-                    You only have <strong>{splitPreview.casual_balance}</strong> Casual Leave day(s) remaining.{" "}
-                    <strong>{splitPreview.lwp_days}</strong> day(s) will be submitted as{" "}
-                    <strong>Leave Without Pay</strong>.
-                  </p>
+              {!previewLoading && splitPreview && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 space-y-2">
+                  {/* Day count breakdown */}
+                  <div className="space-y-0.5">
+                    <p className="font-medium">Leave breakdown</p>
+                    <p>
+                      {splitPreview.total_weekdays} weekday{splitPreview.total_weekdays !== 1 ? "s" : ""}
+                      {splitPreview.holidays_excluded.length > 0 && (
+                        <> − {splitPreview.holidays_excluded.length} public holiday{splitPreview.holidays_excluded.length !== 1 ? "s" : ""} = <strong>{splitPreview.requested_days} leave day{splitPreview.requested_days !== 1 ? "s" : ""}</strong></>
+                      )}
+                    </p>
+                    {splitPreview.holidays_excluded.length > 0 && (
+                      <ul className="list-disc list-inside pl-1 text-xs opacity-80">
+                        {splitPreview.holidays_excluded.map((h) => (
+                          <li key={h.date}>{h.description} ({new Date(h.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })})</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Split warning */}
+                  {splitPreview.needs_split && (
+                    <div className="border-t border-amber-200 dark:border-amber-800 pt-2 space-y-0.5">
+                      <p className="font-medium">Leave will be split automatically</p>
+                      <p>
+                        You have <strong>{splitPreview.casual_balance}</strong> Casual Leave day{splitPreview.casual_balance !== 1 ? "s" : ""} remaining.{" "}
+                        <strong>{splitPreview.lwp_days}</strong> day{splitPreview.lwp_days !== 1 ? "s" : ""} will be submitted as{" "}
+                        <strong>Leave Without Pay</strong>.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
