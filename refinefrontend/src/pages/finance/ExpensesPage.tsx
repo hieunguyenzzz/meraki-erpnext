@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { useList, useCreate, useInvalidate } from "@refinedev/core";
+import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
@@ -22,10 +22,6 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 
-// Constants
-const SITE_NAME = "erp.merakiwp.com";
-const DEFAULT_CASH_ACCOUNT = "Cash - MWP";
-const COMPANY_NAME = "Meraki Wedding Planner";
 
 interface Expense {
   name: string;
@@ -133,7 +129,6 @@ const columns: ColumnDef<Expense, unknown>[] = [
 
 export default function ExpensesPage() {
   const invalidate = useInvalidate();
-  const { mutateAsync: createDoc } = useCreate();
 
   // Dialog states
   const [quickExpenseOpen, setQuickExpenseOpen] = useState(false);
@@ -238,55 +233,31 @@ export default function ExpensesPage() {
     setQuickSuccess(null);
 
     try {
-      // Create Journal Entry
-      const createResult = await createDoc({
-        resource: "Journal Entry",
-        values: {
-          posting_date: quickForm.date,
-          voucher_type: "Journal Entry",
-          company: COMPANY_NAME,
-          user_remark: quickForm.description,
-          ...(quickForm.wedding ? { project: quickForm.wedding } : {}),
-          accounts: [
-            {
-              account: quickForm.category,
-              debit_in_account_currency: Math.round(amount),
-              credit_in_account_currency: 0,
-            },
-            {
-              account: DEFAULT_CASH_ACCOUNT,
-              debit_in_account_currency: 0,
-              credit_in_account_currency: Math.round(amount),
-            },
-          ],
-        },
+      const resp = await fetch("/inquiry-api/expense/quick", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: quickForm.date,
+          description: quickForm.description,
+          amount,
+          account: quickForm.category,
+          project: quickForm.wedding || null,
+        }),
       });
 
-      // Submit the Journal Entry
-      if (createResult?.data?.name) {
-        const submitRes = await fetch("/api/method/frappe.client.submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
-          credentials: "include",
-          body: JSON.stringify({
-            doc: { doctype: "Journal Entry", name: createResult.data.name },
-          }),
-        });
-
-        if (!submitRes.ok) {
-          const errorData = await submitRes.json().catch(() => ({}));
-          throw new Error(errorData.message || "Failed to submit Journal Entry");
-        }
-
-        setQuickSuccess(`Journal Entry ${createResult.data.name} created successfully`);
-        invalidate({ resource: "Journal Entry", invalidates: ["list"] });
-
-        // Close dialog after short delay to show success message
-        setTimeout(() => {
-          setQuickExpenseOpen(false);
-          resetQuickForm();
-        }, 1500);
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to create expense");
       }
+
+      const result = await resp.json();
+      setQuickSuccess(`Journal Entry ${result.journal_entry} created successfully`);
+      invalidate({ resource: "Journal Entry", invalidates: ["list"] });
+
+      setTimeout(() => {
+        setQuickExpenseOpen(false);
+        resetQuickForm();
+      }, 1500);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create expense";
       setQuickError(message);
@@ -300,7 +271,6 @@ export default function ExpensesPage() {
     e.preventDefault();
     if (!invoiceForm.supplier || invoiceForm.items.some(i => !i.description || !i.category || !i.amount)) return;
 
-    // Validate all amounts are positive
     const invalidAmount = invoiceForm.items.find(i => parseFloat(i.amount) <= 0);
     if (invalidAmount) {
       setInvoiceError("All amounts must be greater than 0");
@@ -312,49 +282,33 @@ export default function ExpensesPage() {
     setInvoiceSuccess(null);
 
     try {
-      // Create Purchase Invoice
-      const createResult = await createDoc({
-        resource: "Purchase Invoice",
-        values: {
+      const resp = await fetch("/inquiry-api/expense/supplier-invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           supplier: invoiceForm.supplier,
-          posting_date: invoiceForm.date,
-          company: COMPANY_NAME,
+          date: invoiceForm.date,
           items: invoiceForm.items.map((item) => ({
-            item_code: "EXPENSE-ITEM",
-            item_name: item.description,
             description: item.description,
-            expense_account: item.category,
-            qty: 1,
-            rate: Math.round(parseFloat(item.amount)),
+            account: item.category,
+            amount: parseFloat(item.amount),
           })),
-        },
+        }),
       });
 
-      // Submit the Purchase Invoice
-      if (createResult?.data?.name) {
-        const submitRes = await fetch("/api/method/frappe.client.submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": SITE_NAME },
-          credentials: "include",
-          body: JSON.stringify({
-            doc: { doctype: "Purchase Invoice", name: createResult.data.name },
-          }),
-        });
-
-        if (!submitRes.ok) {
-          const errorData = await submitRes.json().catch(() => ({}));
-          throw new Error(errorData.message || "Failed to submit Purchase Invoice");
-        }
-
-        setInvoiceSuccess(`Purchase Invoice ${createResult.data.name} created successfully`);
-        invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
-
-        // Close dialog after short delay to show success message
-        setTimeout(() => {
-          setSupplierInvoiceOpen(false);
-          resetInvoiceForm();
-        }, 1500);
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to create invoice");
       }
+
+      const result = await resp.json();
+      setInvoiceSuccess(`Purchase Invoice ${result.purchase_invoice} created successfully`);
+      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
+
+      setTimeout(() => {
+        setSupplierInvoiceOpen(false);
+        resetInvoiceForm();
+      }, 1500);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create invoice";
       setInvoiceError(message);

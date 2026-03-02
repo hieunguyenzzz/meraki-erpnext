@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "react-router";
-import { useList, useCreate, useInvalidate, usePermissions } from "@refinedev/core";
+import { useList, useInvalidate, usePermissions } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck, GripVertical } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -123,7 +123,6 @@ export default function StaffOverviewPage() {
   const canManageRoles = (userRoles ?? []).some(r => r === "System Manager" || r === "Administrator");
 
   const invalidate = useInvalidate();
-  const { mutateAsync: createDoc } = useCreate();
 
   // DnD sensors
   const sensors = useSensors(useSensor(PointerSensor));
@@ -444,58 +443,30 @@ export default function StaffOverviewPage() {
     setInviteError(null);
 
     try {
-      // Generate password
-      const password = `Meraki-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      // Step 1: Create User via fetch (need roles array)
-      const userRes = await fetch("/api/resource/User", {
+      const resp = await fetch("/inquiry-api/staff/invite", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Frappe-Site-Name": "erp.merakiwp.com",
-        },
-        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          full_name: inviteForm.fullName.trim(),
           email: inviteForm.email.trim(),
-          first_name: inviteForm.fullName.trim().split(" ")[0],
-          last_name: inviteForm.fullName.trim().split(" ").slice(1).join(" ") || undefined,
-          enabled: 1,
-          new_password: password,
-          send_welcome_email: 0,
-          roles: [{ role: "Employee Self Service" }],
+          gender: inviteForm.gender,
+          date_of_birth: inviteForm.dateOfBirth,
+          date_of_joining: inviteForm.dateOfJoining,
         }),
       });
 
-      if (!userRes.ok) {
-        const errData = await userRes.json().catch(() => null);
-        const msg = errData?._server_messages
-          ? extractErrorMessage(errData, "Failed to create user")
-          : errData?.message || `Failed to create user (${userRes.status})`;
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        const detail = errData.detail;
+        const msg = Array.isArray(detail)
+          ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
+          : detail || `Failed to invite staff (${resp.status})`;
         throw new Error(msg);
       }
 
-      // Step 2: Compute next custom_meraki_id
-      const nextMerakiId = Math.max(0, ...employees.map((e: any) => parseInt(e.custom_meraki_id) || 0)) + 1;
-
-      // Step 3: Create Employee
-      await createDoc({
-        resource: "Employee",
-        values: {
-          first_name: inviteForm.fullName.trim().split(" ")[0],
-          employee_name: inviteForm.fullName.trim(),
-          company: "Meraki Wedding Planner",
-          user_id: inviteForm.email.trim(),
-          date_of_joining: inviteForm.dateOfJoining,
-          gender: inviteForm.gender,
-          date_of_birth: inviteForm.dateOfBirth,
-          status: "Active",
-          custom_meraki_id: nextMerakiId,
-        },
-      });
-
-      // Success
+      const result = await resp.json();
       invalidate({ resource: "Employee", invalidates: ["list"] });
-      setInviteSuccess({ password, name: inviteForm.fullName.trim() });
+      setInviteSuccess({ password: result.password, name: inviteForm.fullName.trim() });
     } catch (err: unknown) {
       setInviteError(extractErrorMessage(err, "Failed to invite staff member"));
     } finally {

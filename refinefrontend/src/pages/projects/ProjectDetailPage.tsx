@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useOne, useList, useUpdate, useInvalidate, useNavigation, useCreate } from "@refinedev/core";
+import { useOne, useList, useUpdate, useInvalidate, useNavigation } from "@refinedev/core";
 import * as Popover from "@radix-ui/react-popover";
 import { formatDate, formatVND, displayName } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -144,7 +144,6 @@ export default function ProjectDetailPage() {
 
   const invalidate = useInvalidate();
   const { mutateAsync: updateRecord } = useUpdate();
-  const { mutateAsync: createDoc } = useCreate();
   const { list } = useNavigation();
 
   // Fetch Project
@@ -356,31 +355,18 @@ export default function ProjectDetailPage() {
     setIsSubmittingEdit(true);
     setEditError(null);
     try {
-      // 1. Update venue on Sales Order if changed
-      if (project?.sales_order && editForm.venue !== (salesOrder?.custom_venue || "")) {
-        await fetch("/api/method/frappe.client.set_value", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            doctype: "Sales Order",
-            name: project.sales_order,
-            fieldname: "custom_venue",
-            value: editForm.venue,
-          }),
-        });
-      }
-      // 2. Update add-ons via server API (map camelCase → snake_case for Pydantic)
-      const resp = await fetch(`/inquiry-api/wedding/${name}/addons`, {
+      const resp = await fetch(`/inquiry-api/wedding/${name}/details`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          items: editForm.addOns.map((a) => ({
+          venue: editForm.venue || null,
+          addons: editForm.addOns.map((a) => ({
             item_code: a.itemCode,
             item_name: a.itemName,
             qty: a.qty,
             rate: a.rate,
+            include_in_commission: a.includeInCommission,
           })),
         }),
       });
@@ -389,30 +375,11 @@ export default function ProjectDetailPage() {
         const detail = err.detail;
         const msg = Array.isArray(detail)
           ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
-          : detail || "Failed to update add-ons";
+          : detail || "Failed to save details";
         throw new Error(msg);
-      }
-      // 3. Update custom_commission_base on the Sales Order
-      if (project?.sales_order) {
-        const packageRate = soItems.find((i) => i.item_code === "Wedding Planning Service")?.rate || 0;
-        const commissionBase = packageRate + editForm.addOns
-          .filter((a) => a.itemCode && a.includeInCommission)
-          .reduce((sum, a) => sum + (a.rate || 0), 0);
-        await fetch("/api/method/frappe.client.set_value", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            doctype: "Sales Order",
-            name: project.sales_order,
-            fieldname: "custom_commission_base",
-            value: commissionBase,
-          }),
-        });
       }
       invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
       invalidate({ resource: "Sales Order", invalidates: ["detail"], id: project?.sales_order! });
-      // Refetch SO items after save (the SO name may have changed due to amendment)
       const updatedProject = await fetch(`/api/resource/Project/${name}`, { credentials: "include" }).then(r => r.json());
       const newSOName = updatedProject?.data?.sales_order;
       if (newSOName) fetchSOItems(newSOName);
@@ -512,30 +479,23 @@ export default function ProjectDetailPage() {
       const assigneeEmployee = employees.find((e) => e.id === taskForm.assignee);
       const assigneeUserId = assigneeEmployee?.userId;
 
-      const result = await createDoc({
-        resource: "Task",
-        values: {
-          subject: taskForm.subject.trim(),
+      const resp = await fetch("/inquiry-api/task/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           project: name,
-          custom_wedding_phase: taskForm.phase,
-          exp_end_date: taskForm.deadline,
+          subject: taskForm.subject.trim(),
+          phase: taskForm.phase,
+          deadline: taskForm.deadline,
           priority: taskForm.priority || "Medium",
-          custom_shared_with: Array.from(sharedWith).join(","),
-          status: "Open",
-        },
+          shared_with: Array.from(sharedWith).join(","),
+          assignee_user_id: assigneeUserId || null,
+        }),
       });
 
-      if (assigneeUserId && result?.data?.name) {
-        await fetch("/api/method/frappe.desk.form.assign_to.add", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            doctype: "Task",
-            name: result.data.name,
-            assign_to: [assigneeUserId],
-          }),
-        });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to create task");
       }
 
       setCreateTaskOpen(false);

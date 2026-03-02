@@ -54,7 +54,7 @@ class ExpenseHandler(BaseHandler):
         Process supplier invoice email.
 
         1. Find PDF attachment
-        2. Extract invoice data using Gemini Vision
+        2. Extract invoice data using the classifier-agent service
         3. Find or create Supplier in ERPNext
         4. Create Purchase Invoice
         """

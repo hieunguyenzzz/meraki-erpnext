@@ -290,6 +290,123 @@ def update_addons(project_name: str, req: AddonsRequest):
     return {"success": True, "sales_order": so_name}
 
 
+class UpdateDetailsAddonItem(BaseModel):
+    item_code: str
+    item_name: str
+    qty: float = 1
+    rate: float
+    include_in_commission: bool = False
+
+
+class UpdateWeddingDetailsRequest(BaseModel):
+    venue: str | None = None
+    addons: list[UpdateDetailsAddonItem] = []
+
+
+@router.put("/wedding/{project_name}/details")
+def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
+    """
+    Update wedding details atomically:
+    1. set_value custom_venue on Sales Order
+    2. Update add-on items via update_child_qty_rate
+    3. Recalculate and set_value custom_commission_base on Sales Order
+    """
+    import json as _json
+    client = ERPNextClient()
+
+    # Get project → sales_order
+    project = client._get(f"/api/resource/Project/{project_name}").get("data", {})
+    so_name = project.get("sales_order")
+    if not so_name:
+        raise HTTPException(status_code=404, detail="No Sales Order linked to this project")
+
+    # Get current SO
+    so = client._get(f"/api/resource/Sales Order/{so_name}").get("data", {})
+    if so.get("docstatus") != 1:
+        raise HTTPException(status_code=400, detail="Sales Order is not submitted")
+
+    # 1. Update venue
+    if req.venue is not None:
+        try:
+            client._post("/api/method/frappe.client.set_value", {
+                "doctype": "Sales Order",
+                "name": so_name,
+                "fieldname": "custom_venue",
+                "value": req.venue,
+            })
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to update venue: {e}")
+
+    # 2. Update add-on items via update_child_qty_rate
+    original_items = so.get("items", [])
+    planning_service_rows = [
+        {
+            "docname": item["name"],
+            "item_code": item["item_code"],
+            "item_name": item["item_name"],
+            "qty": item["qty"],
+            "rate": item["rate"],
+            "conversion_factor": item.get("conversion_factor", 1),
+        }
+        for item in original_items
+        if item.get("item_code") == "Wedding Planning Service"
+    ]
+
+    existing_addon_by_code = {
+        item["item_code"]: item
+        for item in original_items
+        if item.get("item_code") != "Wedding Planning Service"
+    }
+
+    addon_rows = []
+    for addon in req.addons:
+        row = {
+            "item_code": addon.item_code,
+            "item_name": addon.item_name,
+            "qty": addon.qty,
+            "rate": addon.rate,
+            "conversion_factor": 1,
+        }
+        if addon.item_code in existing_addon_by_code:
+            row["docname"] = existing_addon_by_code[addon.item_code]["name"]
+        addon_rows.append(row)
+
+    trans_items = planning_service_rows + addon_rows
+    try:
+        client._post(
+            "/api/method/erpnext.controllers.accounts_controller.update_child_qty_rate",
+            {
+                "parent_doctype": "Sales Order",
+                "trans_items": _json.dumps(trans_items),
+                "parent_doctype_name": so_name,
+                "child_docname": "items",
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to update add-ons: {e}")
+
+    # 3. Recalculate commission_base
+    package_rate = next(
+        (item["rate"] for item in original_items if item.get("item_code") == "Wedding Planning Service"),
+        0,
+    )
+    commission_base = package_rate + sum(
+        a.rate for a in req.addons if a.include_in_commission
+    )
+    try:
+        client._post("/api/method/frappe.client.set_value", {
+            "doctype": "Sales Order",
+            "name": so_name,
+            "fieldname": "custom_commission_base",
+            "value": commission_base,
+        })
+    except Exception as e:
+        log.warning("commission_base_update_failed", so=so_name, error=str(e))
+
+    log.info("wedding_details_updated", project=project_name, so=so_name, commission_base=commission_base)
+    return {"success": True, "commission_base": commission_base}
+
+
 class AddonItemCreateRequest(BaseModel):
     item_name: str
 

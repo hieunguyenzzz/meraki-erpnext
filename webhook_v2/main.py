@@ -26,6 +26,12 @@ from webhook_v2.routers.employee_status import router as employee_status_router
 from webhook_v2.routers.payroll import router as payroll_router
 from webhook_v2.routers.user_roles import router as user_roles_router
 from webhook_v2.routers.notification_test import router as notification_test_router
+from webhook_v2.routers.wedding_ops import router as wedding_ops_router
+from webhook_v2.routers.tasks import router as tasks_router
+from webhook_v2.routers.leaves import router as leaves_router
+from webhook_v2.routers.applicants import router as applicants_router
+from webhook_v2.routers.expenses import router as expenses_router
+from webhook_v2.routers.financial import router as financial_router
 
 log = get_logger(__name__)
 
@@ -92,6 +98,12 @@ app.include_router(employee_status_router)
 app.include_router(payroll_router)
 app.include_router(user_roles_router)
 app.include_router(notification_test_router)
+app.include_router(wedding_ops_router)
+app.include_router(tasks_router)
+app.include_router(leaves_router)
+app.include_router(applicants_router)
+app.include_router(expenses_router)
+app.include_router(financial_router)
 
 
 # Request/Response Models
@@ -248,7 +260,7 @@ async def trigger_expense_processing(
 
     1. Fetches emails from INBOX (last N days)
     2. Classifies emails using expense classifier
-    3. Extracts invoice data from PDF attachments using Gemini Vision
+    3. Extracts invoice data from PDF attachments using the classifier-agent service
     4. Creates Purchase Invoices in ERPNext
     """
     days = min(request.days, 365)
