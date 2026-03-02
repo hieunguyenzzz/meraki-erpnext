@@ -31,6 +31,20 @@ export interface Employee {
   custom_allowance_dest_partial?: number;
 }
 
+export interface VenueSupplier {
+  name: string;
+  supplier_name: string;
+  supplier_group: string;
+  custom_venue_city?: string;
+  custom_location?: string;
+  custom_capacity_min?: number;
+  custom_capacity_max?: number;
+  custom_price_range?: string;
+  custom_features?: string;   // newline-separated
+  custom_contact_person?: string;
+  custom_notes?: string;
+}
+
 export interface EmployeeProfile {
   name: string;
   employee_name: string;

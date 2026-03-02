@@ -42,6 +42,8 @@ import MyProfilePage from "@/pages/self-service/MyProfilePage";
 import MyLeavesPage from "@/pages/self-service/MyLeavesPage";
 import MyAttendancePage from "@/pages/self-service/MyAttendancePage";
 import SettingsPage from "@/pages/admin/SettingsPage";
+import VenuesPage from "@/pages/venues/VenuesPage";
+import VenueDetailPage from "@/pages/venues/VenueDetailPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -106,6 +108,7 @@ export default function App() {
             { name: "Purchase Invoice", list: "/finance/expenses", show: "/finance/expenses/:name" },
             { name: "Journal Entry", list: "/finance/journals" },
             { name: "Project", list: "/projects", show: "/projects/:name" },
+            { name: "Supplier", list: "/venues", show: "/venues/:name" },
           ]}
           options={{ syncWithLocation: true, disableTelemetry: true }}
         >
@@ -135,6 +138,10 @@ export default function App() {
               {/* Weddings/Projects */}
               <Route path="/projects" element={<ProjectKanbanPage />} />
               <Route path="/projects/:name" element={<ProjectDetailPage />} />
+
+              {/* Venues */}
+              <Route path="/venues" element={<VenuesPage />} />
+              <Route path="/venues/:name" element={<VenueDetailPage />} />
 
               {/* HR */}
               <Route path="/hr/staff-overview" element={<StaffOverviewPage />} />

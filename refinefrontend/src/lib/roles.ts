@@ -3,7 +3,7 @@ import {
   Columns3, MessageSquare,
   Banknote, Users, LayoutDashboard,
   FileText, Receipt, CreditCard, BookOpen, PieChart,
-  FolderKanban, Settings,
+  FolderKanban, Settings, MapPin,
 } from "lucide-react";
 
 export interface ModuleChild {
@@ -51,6 +51,7 @@ export const MODULES: ModuleConfig[] = [
     roles: CRM_ROLES,
     children: [
       { label: "Kanban", path: "/projects", icon: FolderKanban },
+      { label: "Venues", path: "/venues",   icon: MapPin },
     ],
   },
   {
