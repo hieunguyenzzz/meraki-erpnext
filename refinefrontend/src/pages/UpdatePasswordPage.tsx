@@ -57,8 +57,29 @@ export default function UpdatePasswordPage() {
 
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        const msg = data?.message || data?.exc_type || "Failed to update password";
-        throw new Error(msg);
+
+        // ERPNext returns error details in _server_messages (JSON array of message objects)
+        // or in the exception string — both may contain HTML, so strip tags
+        const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+
+        let msg = "Failed to update password.";
+        if (data?._server_messages) {
+          try {
+            const msgs = JSON.parse(data._server_messages) as any[];
+            const first = typeof msgs[0] === "string" ? JSON.parse(msgs[0]) : msgs[0];
+            msg = stripHtml(first?.message || first?.title || msg);
+          } catch {
+            msg = stripHtml(data._server_messages);
+          }
+        } else if (data?.exception) {
+          // e.g. "frappe.exceptions.ValidationError: <html>..." — take the part after the colon
+          const raw = data.exception.split("ValidationError:").pop() ?? data.exception;
+          msg = stripHtml(raw);
+        } else if (data?.message) {
+          msg = stripHtml(data.message);
+        }
+
+        throw new Error(msg || "Failed to update password.");
       }
 
       setSuccess(true);
@@ -104,6 +125,7 @@ export default function UpdatePasswordPage() {
                   onChange={(e) => setNewPassword(e.target.value)}
                   autoFocus
                 />
+                <p className="text-xs text-muted-foreground">Use a unique password — avoid common words or names.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirm Password</Label>
