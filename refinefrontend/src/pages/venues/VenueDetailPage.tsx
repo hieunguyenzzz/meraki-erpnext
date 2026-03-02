@@ -12,11 +12,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft,
   MapPin,
   Users,
   DollarSign,
   User,
+  Phone,
+  Mail,
+  Globe,
   ImagePlus,
   ChevronLeft,
   ChevronRight,
@@ -60,6 +70,8 @@ export default function VenueDetailPage() {
   const [editContact, setEditContact] = useState("");
   const [editFeatures, setEditFeatures] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editWebsite, setEditWebsite] = useState("");
+  const [editVenueType, setEditVenueType] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
   // Delete dialog state
@@ -89,9 +101,24 @@ export default function VenueDetailPage() {
         "custom_features",
         "custom_contact_person",
         "custom_notes",
+        "website",
+        "custom_venue_type",
       ],
     },
   });
+
+  // Fetch linked Contact for phone/email
+  const { result: contactResult } = useList({
+    resource: "Contact",
+    pagination: { mode: "off" },
+    filters: [
+      { field: "link_doctype", operator: "eq", value: "Supplier" },
+      { field: "link_name", operator: "eq", value: name! },
+    ],
+    meta: { fields: ["name", "phone", "mobile_no", "email_id"] },
+    queryOptions: { enabled: !!name },
+  });
+  const contact = (contactResult?.data?.[0] ?? null) as any;
 
   // Gallery files
   const { result: filesResult, query: filesQuery } = useList({
@@ -156,6 +183,8 @@ export default function VenueDetailPage() {
       parseFeatures((venue as any).custom_features).join("\n")
     );
     setEditNotes((venue as any).custom_notes ?? "");
+    setEditWebsite((venue as any).website ?? "");
+    setEditVenueType((venue as any).custom_venue_type ?? "");
     setEditError(null);
     setEditOpen(true);
   }
@@ -181,6 +210,8 @@ export default function VenueDetailPage() {
           custom_contact_person: editContact || undefined,
           custom_features: editFeatures || undefined,
           custom_notes: editNotes || undefined,
+          website: editWebsite || undefined,
+          custom_venue_type: editVenueType || undefined,
         },
         successNotification: false,
         errorNotification: false,
@@ -305,6 +336,11 @@ export default function VenueDetailPage() {
                 <span className="text-muted-foreground">{v.custom_location}</span>
               </div>
             )}
+            {v.custom_venue_type && (
+              <div>
+                <Badge variant="secondary">{v.custom_venue_type}</Badge>
+              </div>
+            )}
             {(v.custom_capacity_min || v.custom_capacity_max) && (
               <div className="flex items-center gap-2 text-sm">
                 <Users className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -326,6 +362,33 @@ export default function VenueDetailPage() {
               <div className="flex items-center gap-2 text-sm">
                 <User className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span className="text-muted-foreground">{v.custom_contact_person}</span>
+              </div>
+            )}
+            {(contact?.phone || contact?.mobile_no) && (
+              <div className="flex items-center gap-2 text-sm">
+                <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">
+                  {contact.phone || contact.mobile_no}
+                </span>
+              </div>
+            )}
+            {contact?.email_id && (
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">{contact.email_id}</span>
+              </div>
+            )}
+            {v.website && (
+              <div className="flex items-center gap-2 text-sm">
+                <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                <a
+                  href={v.website.startsWith("http") ? v.website : `https://${v.website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline truncate"
+                >
+                  {v.website}
+                </a>
               </div>
             )}
 
@@ -572,6 +635,36 @@ export default function VenueDetailPage() {
                   onChange={(e) => setEditLocation(e.target.value)}
                   placeholder="e.g. 123 Nguyen Hue, District 1"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-website">Website</Label>
+                <Input
+                  id="edit-website"
+                  value={editWebsite}
+                  onChange={(e) => setEditWebsite(e.target.value)}
+                  placeholder="e.g. https://venue.com"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-venue-type">Venue Type</Label>
+                <Select
+                  value={editVenueType || "__none__"}
+                  onValueChange={(v) => setEditVenueType(v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger id="edit-venue-type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— None —</SelectItem>
+                    <SelectItem value="Hotel">Hotel</SelectItem>
+                    <SelectItem value="Event Hall">Event Hall</SelectItem>
+                    <SelectItem value="Restaurant">Restaurant</SelectItem>
+                    <SelectItem value="Beach">Beach</SelectItem>
+                    <SelectItem value="Outdoor Garden">Outdoor Garden</SelectItem>
+                    <SelectItem value="Rooftop">Rooftop</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

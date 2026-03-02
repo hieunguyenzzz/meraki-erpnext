@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useList, useCreate, useInvalidate } from "@refinedev/core";
+import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, Calendar } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
@@ -69,7 +69,6 @@ const initialForm = {
 
 export default function MyLeavesPage() {
   const { employee, employeeId, isLoading: employeeLoading } = useMyEmployee();
-  const { mutateAsync: createDoc } = useCreate();
   const invalidate = useInvalidate();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -235,7 +234,6 @@ export default function MyLeavesPage() {
       setError("Please fill in all required fields");
       return;
     }
-
     if (new Date(form.from_date) > new Date(form.to_date)) {
       setError("From date cannot be after To date");
       return;
@@ -246,28 +244,35 @@ export default function MyLeavesPage() {
     setSuccess(null);
 
     try {
-      await createDoc({
-        resource: "Leave Application",
-        values: {
+      const res = await fetch("/inquiry-api/leave/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           employee: employeeId,
           leave_type: form.leave_type,
           from_date: form.from_date,
           to_date: form.to_date,
           description: form.description,
-          status: "Open",
-        },
+        }),
       });
 
-      setSuccess("Leave request submitted successfully");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail ?? "Failed to submit leave request");
+      }
+
+      const data = await res.json();
+      setSuccess(data.message ?? "Leave request submitted successfully");
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
 
+      // Longer delay when there's a split message so user can read it
       setTimeout(() => {
         setDialogOpen(false);
         resetForm();
-      }, 1500);
+      }, data.message ? 3000 : 1500);
+
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to submit leave request";
+      const message = err instanceof Error ? err.message : "Failed to submit leave request";
       setError(message);
     } finally {
       setIsSubmitting(false);
