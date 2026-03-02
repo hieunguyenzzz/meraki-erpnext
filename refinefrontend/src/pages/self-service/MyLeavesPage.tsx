@@ -165,8 +165,11 @@ export default function MyLeavesPage() {
     needs_split: boolean;
     casual_days: number;
     lwp_days: number;
+    casual_to_date: string | null;
+    lwp_from_date: string | null;
   } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [submitStep, setSubmitStep] = useState<string | null>(null);
 
   useEffect(() => {
     if (form.leave_type !== "Casual Leave" || !form.from_date || !form.to_date || !employeeId) {
@@ -268,6 +271,8 @@ export default function MyLeavesPage() {
     setForm(initialForm);
     setError(null);
     setSuccess(null);
+    setSplitPreview(null);
+    setSubmitStep(null);
   }
 
   function handleDialogOpenChange(open: boolean) {
@@ -275,6 +280,25 @@ export default function MyLeavesPage() {
     if (!open) {
       resetForm();
     }
+  }
+
+  async function fetchLeaveApply(payload: {
+    employee: string;
+    leave_type: string;
+    from_date: string;
+    to_date: string;
+    description: string;
+  }) {
+    const res = await fetch("/inquiry-api/leave/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail ?? "Failed to submit leave request");
+    }
+    return res.json();
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -291,40 +315,65 @@ export default function MyLeavesPage() {
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
+    setSubmitStep(null);
+
+    const basePayload = {
+      employee: employeeId,
+      leave_type: form.leave_type,
+      from_date: form.from_date,
+      to_date: form.to_date,
+      description: form.description,
+    };
 
     try {
-      const res = await fetch("/inquiry-api/leave/apply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employee: employeeId,
-          leave_type: form.leave_type,
-          from_date: form.from_date,
-          to_date: form.to_date,
-          description: form.description,
-        }),
-      });
+      if (splitPreview?.needs_split && splitPreview.casual_to_date && splitPreview.lwp_from_date) {
+        // Partial balance: submit CL first, then LWP
+        setSubmitStep("Submitting Casual Leave…");
+        await fetchLeaveApply({
+          ...basePayload,
+          leave_type: "Casual Leave",
+          to_date: splitPreview.casual_to_date,
+        });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail ?? "Failed to submit leave request");
+        setSubmitStep("Submitting Leave Without Pay…");
+        try {
+          await fetchLeaveApply({
+            ...basePayload,
+            leave_type: "Leave Without Pay",
+            from_date: splitPreview.lwp_from_date,
+          });
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          setError(`Casual Leave was created, but the Leave Without Pay portion failed: ${message}. Please resubmit the remaining days manually.`);
+          invalidate({ resource: "Leave Application", invalidates: ["list"] });
+          return;
+        }
+
+        setSuccess("Both leave requests submitted successfully.");
+      } else if (splitPreview?.needs_split && splitPreview.lwp_from_date && !splitPreview.casual_to_date) {
+        // Zero CL balance: submit full range as LWP
+        setSubmitStep("Submitting Leave Without Pay…");
+        await fetchLeaveApply({
+          ...basePayload,
+          leave_type: "Leave Without Pay",
+        });
+        setSuccess("Leave request submitted as Leave Without Pay (no Casual Leave balance remaining).");
+      } else {
+        await fetchLeaveApply(basePayload);
+        setSuccess("Leave request submitted successfully.");
       }
 
-      const data = await res.json();
-      setSuccess(data.message ?? "Leave request submitted successfully");
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
-
-      // Longer delay when there's a split message so user can read it
       setTimeout(() => {
         setDialogOpen(false);
         resetForm();
-      }, data.message ? 3000 : 1500);
-
+      }, 1500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to submit leave request";
       setError(message);
     } finally {
       setIsSubmitting(false);
+      setSubmitStep(null);
     }
   }
 
@@ -504,9 +553,9 @@ export default function MyLeavesPage() {
               )}
 
               {!previewLoading && splitPreview && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 space-y-2">
+                <div className="space-y-2 text-sm">
                   {/* Day count breakdown */}
-                  <div className="space-y-0.5">
+                  <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-amber-800 dark:text-amber-300 space-y-0.5">
                     <p className="font-medium">Leave breakdown</p>
                     <p>
                       {splitPreview.total_weekdays} weekday{splitPreview.total_weekdays !== 1 ? "s" : ""}
@@ -523,15 +572,38 @@ export default function MyLeavesPage() {
                     )}
                   </div>
 
-                  {/* Split warning */}
-                  {splitPreview.needs_split && (
-                    <div className="border-t border-amber-200 dark:border-amber-800 pt-2 space-y-0.5">
-                      <p className="font-medium">Leave will be split automatically</p>
-                      <p>
-                        You have <strong>{splitPreview.casual_balance}</strong> Casual Leave day{splitPreview.casual_balance !== 1 ? "s" : ""} remaining.{" "}
-                        <strong>{splitPreview.lwp_days}</strong> day{splitPreview.lwp_days !== 1 ? "s" : ""} will be submitted as{" "}
-                        <strong>Leave Without Pay</strong>.
+                  {/* Two-panel split display (partial balance) */}
+                  {splitPreview.needs_split && splitPreview.casual_to_date && (
+                    <div className="space-y-2">
+                      <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-4 py-3 text-blue-800 dark:text-blue-300">
+                        <p className="font-semibold text-xs uppercase tracking-wide mb-1">Request 1 — Casual Leave (paid)</p>
+                        <p>
+                          {formatDate(form.from_date)} → {formatDate(splitPreview.casual_to_date)}
+                          {" · "}<strong>{splitPreview.casual_days} day{splitPreview.casual_days !== 1 ? "s" : ""}</strong>
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-orange-200 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800 px-4 py-3 text-orange-800 dark:text-orange-300">
+                        <p className="font-semibold text-xs uppercase tracking-wide mb-1">Request 2 — Leave Without Pay (unpaid)</p>
+                        <p>
+                          {splitPreview.lwp_from_date ? formatDate(splitPreview.lwp_from_date) : "—"} → {formatDate(form.to_date)}
+                          {" · "}<strong>{splitPreview.lwp_days} day{splitPreview.lwp_days !== 1 ? "s" : ""}</strong>
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Your Casual Leave balance is {splitPreview.casual_balance} day{splitPreview.casual_balance !== 1 ? "s" : ""}. The remaining {splitPreview.lwp_days} day{splitPreview.lwp_days !== 1 ? "s" : ""} will be unpaid.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Zero balance: full LWP */}
+                  {splitPreview.needs_split && !splitPreview.casual_to_date && (
+                    <div className="rounded-md border border-orange-200 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800 px-4 py-3 text-orange-800 dark:text-orange-300 space-y-1">
+                      <p className="font-semibold text-xs uppercase tracking-wide">Leave Without Pay (unpaid)</p>
+                      <p>
+                        {formatDate(form.from_date)} → {formatDate(form.to_date)}
+                        {" · "}<strong>{splitPreview.lwp_days} day{splitPreview.lwp_days !== 1 ? "s" : ""}</strong>
+                      </p>
+                      <p className="text-xs opacity-80">Your Casual Leave balance is exhausted. This leave will be fully unpaid.</p>
                     </div>
                   )}
                 </div>
@@ -561,7 +633,11 @@ export default function MyLeavesPage() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Submitting..." : "Submit Request"}
+                {isSubmitting
+                  ? (submitStep ?? "Submitting…")
+                  : splitPreview?.needs_split && splitPreview.casual_to_date
+                    ? "Submit Both Requests"
+                    : "Submit Request"}
               </Button>
             </SheetFooter>
           </form>

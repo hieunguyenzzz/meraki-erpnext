@@ -102,17 +102,15 @@ class LeaveApplyRequest(BaseModel):
     description: str = ""
 
 
-def _get_casual_leave_balance(client: ERPNextClient, employee: str) -> int:
-    """Sum Leave Ledger entries for Casual Leave (submitted, not expired)."""
-    filters = (
-        f'[["employee","=","{employee}"]'
-        ',["leave_type","=","Casual Leave"]'
-        ',["docstatus","=",1],["is_expired","=",0]]'
+def _get_erp_leave_balance(client: ERPNextClient, employee: str, leave_type: str, date: str) -> float:
+    """Get leave balance from ERPNext's own API (accounts for pending applications)."""
+    result = client._get(
+        "/api/method/hrms.hr.doctype.leave_application.leave_application.get_leave_details",
+        params={"employee": employee, "leave_type": leave_type, "date": date}
     )
-    data = client._get(
-        f"/api/resource/Leave Ledger Entry?filters={filters}&fields=[%22leaves%22]&limit=200"
-    )
-    return int(sum(float(e.get("leaves", 0)) for e in (data.get("data") or [])))
+    message = result.get("message") or {}
+    allocation = (message.get("leave_allocation") or {}).get(leave_type) or {}
+    return float(allocation.get("remaining_leaves", 0))
 
 
 def _get_employee_holiday_list(client: ERPNextClient, employee: str) -> str | None:
@@ -205,85 +203,13 @@ def _create_leave_application(
 @router.post("/leave/apply")
 def apply_leave(body: LeaveApplyRequest):
     client = ERPNextClient()
-
-    # Non-Casual Leave: create directly, no special logic
-    if body.leave_type != "Casual Leave":
-        try:
-            app = _create_leave_application(
-                client, body.employee, body.leave_type,
-                body.from_date, body.to_date, body.description)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        return {"created": [app], "message": None}
-
-    # Casual Leave — check balance and auto-split if needed
-    holiday_list = _get_employee_holiday_list(client, body.employee)
-    holidays     = _get_holidays_in_range(client, holiday_list, body.from_date, body.to_date) if holiday_list else set()
-    balance      = _get_casual_leave_balance(client, body.employee)
-    requested    = _count_leave_days(body.from_date, body.to_date, holidays)
-
-    # Case 1: enough balance
-    if balance >= requested:
-        try:
-            app = _create_leave_application(
-                client, body.employee, "Casual Leave",
-                body.from_date, body.to_date, body.description)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        return {"created": [app], "message": None}
-
-    # Case 2: zero balance — full LWP
-    if balance <= 0:
-        try:
-            app = _create_leave_application(
-                client, body.employee, "Leave Without Pay",
-                body.from_date, body.to_date, body.description)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        return {
-            "created": [app],
-            "message": (
-                f"Your Casual Leave balance is exhausted. "
-                f"All {requested} day(s) have been submitted as Leave Without Pay (Unpaid)."
-            ),
-        }
-
-    # Case 3: partial balance — split Casual + LWP
-    lwp_days   = requested - balance
-    casual_end = _end_date_for_n_leave_days(body.from_date, balance, holidays)
-    lwp_start  = _next_leave_day(casual_end, holidays)
-    created    = []
-
     try:
-        created.append(_create_leave_application(
-            client, body.employee, "Casual Leave",
-            body.from_date, casual_end, body.description))
+        app = _create_leave_application(
+            client, body.employee, body.leave_type,
+            body.from_date, body.to_date, body.description)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to create Casual Leave portion: {e}")
-
-    try:
-        created.append(_create_leave_application(
-            client, body.employee, "Leave Without Pay",
-            lwp_start, body.to_date, body.description))
-    except Exception as e:
-        # Rollback: cancel the casual leave we just created
-        try:
-            client._post("/api/method/frappe.client.cancel",
-                         {"doctype": "Leave Application", "name": created[0].get("name", "")})
-        except Exception:
-            pass
-        raise HTTPException(status_code=400, detail=f"Failed to create Leave Without Pay portion: {e}")
-
-    log.info("leave_applied_split", employee=body.employee,
-             casual_days=balance, lwp_days=lwp_days)
-    return {
-        "created": created,
-        "message": (
-            f"Your leave has been split: {balance} day(s) as Casual Leave "
-            f"and {lwp_days} day(s) as Leave Without Pay (Unpaid), "
-            f"since your remaining Casual Leave balance was {balance} day(s)."
-        ),
-    }
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"created": [app]}
 
 
 class HolidayInfo(BaseModel):
@@ -295,10 +221,12 @@ class LeavePreviewResponse(BaseModel):
     requested_days: int
     total_weekdays: int
     holidays_excluded: list[HolidayInfo]
-    casual_balance: int
+    casual_balance: float
     needs_split: bool
     casual_days: int
     lwp_days: int
+    casual_to_date: str | None
+    lwp_from_date: str | None
 
 
 @router.get("/leave/preview")
@@ -310,6 +238,7 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
         return LeavePreviewResponse(
             requested_days=0, total_weekdays=0, holidays_excluded=[],
             casual_balance=0, needs_split=False, casual_days=0, lwp_days=0,
+            casual_to_date=None, lwp_from_date=None,
         )
 
     holiday_list     = _get_employee_holiday_list(client, employee)
@@ -317,7 +246,8 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
     holiday_details  = _get_holiday_details_in_range(client, holiday_list, from_date, to_date) if holiday_list else []
     total_weekdays   = _count_leave_days(from_date, to_date, set())   # raw Mon–Fri count
     requested        = _count_leave_days(from_date, to_date, holidays)
-    balance          = _get_casual_leave_balance(client, employee)
+    balance          = _get_erp_leave_balance(client, employee, "Casual Leave", from_date)
+    balance_int      = int(balance)
 
     if balance >= requested:
         return LeavePreviewResponse(
@@ -325,13 +255,21 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
             holidays_excluded=[HolidayInfo(**h) for h in holiday_details],
             casual_balance=balance,
             needs_split=False, casual_days=requested, lwp_days=0,
+            casual_to_date=None, lwp_from_date=None,
         )
+
+    casual_days = max(balance_int, 0)
+    lwp_days    = requested - casual_days
+    casual_to_date = _end_date_for_n_leave_days(from_date, casual_days, holidays) if casual_days > 0 else None
+    lwp_from_date  = _next_leave_day(casual_to_date, holidays) if casual_to_date else from_date
 
     return LeavePreviewResponse(
         requested_days=requested, total_weekdays=total_weekdays,
         holidays_excluded=[HolidayInfo(**h) for h in holiday_details],
         casual_balance=balance,
         needs_split=True,
-        casual_days=max(balance, 0),
-        lwp_days=requested - max(balance, 0),
+        casual_days=casual_days,
+        lwp_days=lwp_days,
+        casual_to_date=casual_to_date,
+        lwp_from_date=lwp_from_date,
     )
