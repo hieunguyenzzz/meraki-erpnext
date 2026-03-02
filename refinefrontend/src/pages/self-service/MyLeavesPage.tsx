@@ -67,6 +67,19 @@ const initialForm = {
   description: "",
 };
 
+function countWorkingDays(from: string, to: string): number {
+  const start = new Date(from);
+  const end = new Date(to);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return 0;
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    if (cur.getDay() !== 0 && cur.getDay() !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
 export default function MyLeavesPage() {
   const { employee, employeeId, isLoading: employeeLoading } = useMyEmployee();
   const invalidate = useInvalidate();
@@ -154,6 +167,16 @@ export default function MyLeavesPage() {
       };
     });
   }, [allocations, leaveApps]);
+
+  // Real-time split preview for Casual Leave
+  const splitPreview = useMemo(() => {
+    if (form.leave_type !== "Casual Leave" || !form.from_date || !form.to_date) return null;
+    const requested = countWorkingDays(form.from_date, form.to_date);
+    if (requested === 0) return null;
+    const balance = leaveBalances.find((b) => b.leaveType === "Casual Leave")?.remaining ?? 0;
+    if (balance >= requested) return null;
+    return { balance, requested, lwpDays: requested - balance };
+  }, [form.leave_type, form.from_date, form.to_date, leaveBalances]);
 
   // Table columns
   const columns: ColumnDef<LeaveApplication, unknown>[] = [
@@ -447,6 +470,17 @@ export default function MyLeavesPage() {
                   />
                 </div>
               </div>
+
+              {splitPreview && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 space-y-1">
+                  <p className="font-medium">Leave will be split automatically</p>
+                  <p>
+                    You only have <strong>{splitPreview.balance}</strong> Casual Leave day(s) remaining.{" "}
+                    <strong>{splitPreview.lwpDays}</strong> day(s) will be submitted as{" "}
+                    <strong>Leave Without Pay</strong>.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <Label htmlFor="description">Reason</Label>
