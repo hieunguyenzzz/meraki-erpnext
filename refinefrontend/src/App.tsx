@@ -12,6 +12,7 @@ import { ThemeProvider } from "@/context/theme-context";
 import { isEmployeeSelfServiceOnly } from "@/lib/roles";
 
 import LoginPage from "@/pages/LoginPage";
+import UpdatePasswordPage from "@/pages/UpdatePasswordPage";
 import InquiryPage from "@/pages/InquiryPage";
 import DashboardPage from "@/pages/DashboardPage";
 import LeadDetailPage from "@/pages/crm/LeadDetailPage";
@@ -110,6 +111,7 @@ export default function App() {
         >
           <Routes>
             <Route path="/login" element={<ThemeProvider><LoginPage /></ThemeProvider>} />
+          <Route path="/update-password" element={<ThemeProvider><UpdatePasswordPage /></ThemeProvider>} />
             <Route path="/inquiry" element={<InquiryPage />} />
 
             {/* Admin: full app with sidebar */}
