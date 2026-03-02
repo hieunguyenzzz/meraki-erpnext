@@ -4,7 +4,7 @@ import type { EmployeeProfile } from "@/lib/types";
 const PROFILE_FIELDS = [
   "name", "employee_name", "first_name", "middle_name", "last_name",
   "gender", "date_of_birth", "designation", "department", "status",
-  "date_of_joining", "cell_phone", "personal_email",
+  "date_of_joining", "cell_number", "personal_email",
   "current_address", "permanent_address",
   "person_to_be_contacted", "emergency_phone_number", "relation",
   "bank_name", "bank_ac_no", "iban",

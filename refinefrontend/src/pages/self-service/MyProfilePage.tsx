@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 
 const REQUIRED_FIELDS = [
-  "cell_phone",
+  "cell_number",
   "personal_email",
   "addr_street",
   "addr_ward",
@@ -42,7 +42,7 @@ type FormData = {
   last_name: string;
   gender: string;
   date_of_birth: string;
-  cell_phone: string;
+  cell_number: string;
   personal_email: string;
   addr_street: string;
   addr_ward: string;
@@ -61,7 +61,7 @@ const INITIAL_FORM: FormData = {
   last_name: "",
   gender: "",
   date_of_birth: "",
-  cell_phone: "",
+  cell_number: "",
   personal_email: "",
   addr_street: "",
   addr_ward: "",
@@ -102,7 +102,7 @@ export default function MyProfilePage() {
         last_name: employee.last_name ?? "",
         gender: employee.gender ?? "",
         date_of_birth: employee.date_of_birth ?? "",
-        cell_phone: employee.cell_phone ?? "",
+        cell_number: employee.cell_number ?? "",
         personal_email: employee.personal_email ?? "",
         ...parseAddress(employee.current_address ?? ""),
         permanent_address: employee.permanent_address ?? "",
@@ -300,11 +300,11 @@ export default function MyProfilePage() {
               />
             </div>
             <div>
-              <Label htmlFor="cell_phone">Phone *</Label>
+              <Label htmlFor="cell_number">Phone *</Label>
               <Input
-                id="cell_phone"
-                value={form.cell_phone}
-                onChange={(e) => setField("cell_phone", e.target.value)}
+                id="cell_number"
+                value={form.cell_number}
+                onChange={(e) => setField("cell_number", e.target.value)}
               />
             </div>
           </div>

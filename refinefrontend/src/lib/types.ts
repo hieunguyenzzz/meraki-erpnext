@@ -43,7 +43,7 @@ export interface EmployeeProfile {
   department: string;
   status: string;
   date_of_joining: string;
-  cell_phone?: string;
+  cell_number?: string;
   personal_email?: string;
   current_address?: string;
   permanent_address?: string;
