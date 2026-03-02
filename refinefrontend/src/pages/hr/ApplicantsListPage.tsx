@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
-import { useList, useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,6 @@ function RatingStars({ value }: { value: number }) {
 
 export default function ApplicantsListPage() {
   const invalidate = useInvalidate();
-  const { mutateAsync: customMutation } = useCustomMutation();
 
   // Filters
   const [minRating, setMinRating] = useState(0);
@@ -210,20 +209,15 @@ export default function ApplicantsListPage() {
   const handleSendToScanner = async () => {
     setIsSending(true);
     try {
-      await Promise.all(
-        selectedIds.map((id) =>
-          customMutation({
-            url: "/api/method/frappe.client.set_value",
-            method: "post",
-            values: {
-              doctype: "Job Applicant",
-              name: id,
-              fieldname: "custom_recruiting_stage",
-              value: "Applied",
-            },
-          })
-        )
-      );
+      const resp = await fetch("/inquiry-api/applicants/batch-stage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicant_names: selectedIds, stage: "Applied" }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to send to scanner");
+      }
       invalidate({ resource: "Job Applicant", invalidates: ["list"] });
       setRowSelection({});
     } catch (err) {

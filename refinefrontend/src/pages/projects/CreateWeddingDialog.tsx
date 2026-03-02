@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useList, useCreate, useInvalidate } from "@refinedev/core";
+import { useList, useInvalidate } from "@refinedev/core";
 import { useNavigate } from "react-router";
 import {
   Users,
@@ -54,8 +54,6 @@ const THEME = {
   sage: "#A8B5A0",
   gold: "#C4A962",
 };
-
-const SITE_NAME = "erp.merakiwp.com";
 
 const STEPS = [
   { id: "client", title: "Client", icon: Users },
@@ -121,7 +119,6 @@ export function CreateWeddingDialog({
 }: CreateWeddingDialogProps) {
   const navigate = useNavigate();
   const invalidate = useInvalidate();
-  const { mutateAsync: createDoc } = useCreate();
 
   const [currentStep, setCurrentStep] = useState<StepId>("client");
   const [formData, setFormData] = useState<FormData>(initialFormData);
@@ -275,151 +272,47 @@ export function CreateWeddingDialog({
     setError(null);
 
     try {
-      // 1. Create customer
-      const customerResult = await createDoc({
-        resource: "Customer",
-        values: {
-          customer_name: formData.coupleName.trim(),
-          customer_type: "Individual",
-          customer_group: "Wedding Clients",
-          territory: "Vietnam",
-          email_id: formData.email.trim() || undefined,
-          mobile_no: formData.phone.trim() || undefined,
-        },
-      });
-      const customerId = customerResult?.data?.name;
-      if (!customerId) throw new Error("Failed to create customer");
-
-      // 1b. Create Contact records for extra emails (non-blocking)
-      const validExtraEmails = formData.extraEmails.filter((e) => e.trim());
-      for (const extraEmail of validExtraEmails) {
-        try {
-          await createDoc({
-            resource: "Contact",
-            values: {
-              first_name: formData.coupleName.trim(),
-              email_ids: [{ email_id: extraEmail.trim(), is_primary: 0 }],
-              links: [{ link_doctype: "Customer", link_name: customerId }],
-            },
-          });
-        } catch {
-          // Extra email contact creation is best-effort
-        }
-      }
-
-      // 2. Create Sales Order (wedding booking)
-      const today = new Date().toISOString().slice(0, 10);
-      const commissionBase =
-        parseFloat(formData.packageAmount || "0") +
-        formData.addOns
-          .filter((a) => a.itemCode && a.price && a.includeInCommission)
-          .reduce((s, a) => s + parseFloat(a.price), 0);
-      const salesOrderValues: Record<string, unknown> = {
-        customer: customerId,
-        transaction_date: today,
-        delivery_date: formData.weddingDate,
-        custom_venue: formData.venue.trim() || undefined,
-        custom_wedding_type: formData.weddingType || undefined,
-        custom_commission_base: commissionBase,
-        items: [
-          {
-            item_code: "Wedding Planning Service",
-            qty: 1,
-            rate: parseFloat(formData.packageAmount) || 0,
-          },
-          ...formData.addOns
+      const resp = await fetch("/inquiry-api/wedding/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          couple_name: formData.coupleName.trim(),
+          email: formData.email.trim() || null,
+          phone: formData.phone.trim() || null,
+          extra_emails: formData.extraEmails.filter((e) => e.trim()),
+          wedding_date: formData.weddingDate,
+          venue: formData.venue.trim() || null,
+          wedding_type: formData.weddingType || null,
+          package_amount: parseFloat(formData.packageAmount) || 0,
+          addons: formData.addOns
             .filter((a) => a.itemCode && a.price)
             .map((a) => ({
               item_code: a.itemCode,
-              qty: 1,
+              item_name: a.itemName,
               rate: parseFloat(a.price),
+              include_in_commission: a.includeInCommission,
             })),
-        ],
-      };
-      if (formData.taxType === "vat_included") {
-        salesOrderValues.taxes = [
-          {
-            charge_type: "On Net Total",
-            account_head: "Output Tax - MWP",
-            rate: 8,
-            included_in_print_rate: 1,
-            description: "VAT 8%",
-          },
-        ];
-      }
-      const salesOrderResult = await createDoc({
-        resource: "Sales Order",
-        values: salesOrderValues,
-      });
-      const salesOrderName = salesOrderResult?.data?.name;
-      if (!salesOrderName) throw new Error("Failed to create sales order");
-
-      // 3. Submit Sales Order (fetch full doc first to avoid TimestampMismatchError)
-      const fullDocRes = await fetch(
-        `/api/resource/Sales Order/${encodeURIComponent(salesOrderName)}`,
-        {
-          headers: { "X-Frappe-Site-Name": SITE_NAME },
-          credentials: "include",
-        }
-      );
-      const fullDocData = await fullDocRes.json();
-      const submitRes = await fetch("/api/method/frappe.client.submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Frappe-Site-Name": SITE_NAME,
-        },
-        credentials: "include",
-        body: JSON.stringify({ doc: fullDocData.data }),
-      });
-      if (!submitRes.ok) {
-        const errorText = await submitRes.text();
-        throw new Error(`Failed to submit sales order: ${errorText}`);
-      }
-
-      // 3b. Mark sales order as fully delivered
-      await fetch("/api/method/frappe.client.set_value", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Frappe-Site-Name": SITE_NAME,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          doctype: "Sales Order",
-          name: salesOrderName,
-          fieldname: "per_delivered",
-          value: 100,
+          tax_type: formData.taxType === "vat_included" ? "vat" : "none",
+          lead_planner: formData.leadPlanner || null,
+          support_planner: formData.supportPlanner && formData.supportPlanner !== "__none__"
+            ? formData.supportPlanner
+            : null,
+          assistants: formData.assistants.filter((a) => a && a !== "__none__"),
         }),
       });
 
-      // 4. Create Project linked to Sales Order with team assignment
-      const projectResult = await createDoc({
-        resource: "Project",
-        values: {
-          project_name: `${formData.coupleName.trim()} Wedding`,
-          expected_end_date: formData.weddingDate,
-          sales_order: salesOrderName,
-          customer: customerId,
-          custom_project_stage: formData.weddingDate < new Date().toISOString().slice(0, 10) ? "Completed" : "Onboarding",
-          custom_lead_planner: formData.leadPlanner || null,
-          custom_support_planner: formData.supportPlanner && formData.supportPlanner !== "__none__" ? formData.supportPlanner : null,
-          ...(() => {
-            const validAssistants = formData.assistants.filter((a) => a && a !== "__none__");
-            return {
-              custom_assistant_1: validAssistants[0] ?? null,
-              custom_assistant_2: validAssistants[1] ?? null,
-              custom_assistant_3: validAssistants[2] ?? null,
-              custom_assistant_4: validAssistants[3] ?? null,
-              custom_assistant_5: validAssistants[4] ?? null,
-            };
-          })(),
-        },
-      });
-      const projectName = projectResult?.data?.name;
-      if (!projectName) throw new Error("Failed to create project");
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        const detail = err.detail;
+        const msg = Array.isArray(detail)
+          ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
+          : detail || "Failed to create wedding";
+        throw new Error(msg);
+      }
 
-      // Success - invalidate and navigate
+      const result = await resp.json();
+      const projectName = result.project_name;
+
       invalidate({ resource: "Project", invalidates: ["list"] });
       invalidate({ resource: "Sales Order", invalidates: ["list"] });
       invalidate({ resource: "Customer", invalidates: ["list"] });

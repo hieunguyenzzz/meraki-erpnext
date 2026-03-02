@@ -12,22 +12,15 @@ from webhook_v2.handlers.base import BaseHandler
 # Mock external dependencies
 @pytest.fixture(autouse=True)
 def mock_dependencies():
-    """Mock google.generativeai and httpx modules."""
-    mock_genai = MagicMock()
-    mock_genai.types.BlockedPromptException = Exception
-    mock_genai.types.StopCandidateException = Exception
-    sys.modules["google.generativeai"] = mock_genai
-    sys.modules["google"] = MagicMock()
-
+    """Mock httpx module."""
     mock_httpx = MagicMock()
     sys.modules["httpx"] = mock_httpx
 
     yield
 
     # Cleanup
-    for mod in ["google.generativeai", "google", "httpx"]:
-        if mod in sys.modules:
-            del sys.modules[mod]
+    if "httpx" in sys.modules:
+        del sys.modules["httpx"]
 
 
 class TestHandlerRegistry:

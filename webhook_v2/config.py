@@ -33,10 +33,6 @@ class Settings(BaseSettings):
     erpnext_api_key: str = ""
     erpnext_api_secret: str = ""
 
-    # Gemini
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
-
     # MinIO (optional)
     minio_endpoint: str | None = None
     minio_access_key: str | None = None

@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { useList } from "@refinedev/core";
+import { useState, useEffect, useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { formatVND } from "@/lib/format";
@@ -42,62 +41,55 @@ const breakdownColumns: ColumnDef<MonthlyRow, unknown>[] = [
 ];
 
 export default function OverviewPage() {
-  const { result: invoicesResult, query: invoicesQuery } = useList({
-    resource: "Sales Invoice",
-    pagination: { mode: "off" },
-    filters: [{ field: "docstatus", operator: "eq", value: 1 }],
-    meta: { fields: ["posting_date", "grand_total"] },
-  });
+  const [allMonths, setAllMonths] = useState<MonthlyRow[]>([]);
+  const [totals, setTotals] = useState({ revenue: 0, expenses: 0, net: 0 });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { result: journalsResult, query: journalsQuery } = useList({
-    resource: "Journal Entry",
-    pagination: { mode: "off" },
-    filters: [{ field: "docstatus", operator: "eq", value: 1 }],
-    meta: { fields: ["posting_date", "total_debit", "voucher_type"] },
-  });
+  useEffect(() => {
+    // Fetch all-time overview (use a large year range by fetching current year;
+    // the endpoint returns all data for the year, but for all-time we aggregate across years)
+    // For OverviewPage we want all historical data — fetch all available years.
+    const currentYear = new Date().getFullYear();
+    setIsLoading(true);
+    fetch(`/inquiry-api/financial-overview?year=${currentYear}`)
+      .then((r) => r.json())
+      .then(async (d) => {
+        const availableYears: number[] = d.available_years ?? [currentYear];
+        // Fetch all years and aggregate
+        const allData = await Promise.all(
+          availableYears.map((y: number) =>
+            fetch(`/inquiry-api/financial-overview?year=${y}`).then((r) => r.json())
+          )
+        );
+        const monthMap = new Map<string, { revenue: number; expenses: number }>();
+        for (const yearData of allData) {
+          for (const row of yearData.months ?? []) {
+            if (!row.revenue && !row.expenses) continue;
+            const entry = monthMap.get(row.month) ?? { revenue: 0, expenses: 0 };
+            entry.revenue += row.revenue;
+            entry.expenses += row.expenses;
+            monthMap.set(row.month, entry);
+          }
+        }
+        const rows: MonthlyRow[] = Array.from(monthMap.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([month, data]) => ({ month, ...data, net: data.revenue - data.expenses }));
 
-  const invoices = invoicesResult?.data ?? [];
-  const journals = journalsResult?.data ?? [];
-  const isLoading = invoicesQuery?.isLoading || journalsQuery?.isLoading;
+        setAllMonths(rows);
+        const t = rows.reduce(
+          (acc, r) => ({ revenue: acc.revenue + r.revenue, expenses: acc.expenses + r.expenses, net: acc.net + r.net }),
+          { revenue: 0, expenses: 0, net: 0 }
+        );
+        setTotals(t);
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
 
-  const monthlyData = useMemo(() => {
-    const map = new Map<string, { revenue: number; expenses: number }>();
-
-    for (const inv of invoices as any[]) {
-      const month = inv.posting_date?.substring(0, 7);
-      if (!month) continue;
-      const entry = map.get(month) ?? { revenue: 0, expenses: 0 };
-      entry.revenue += inv.grand_total;
-      map.set(month, entry);
-    }
-
-    for (const j of journals as any[]) {
-      const month = j.posting_date?.substring(0, 7);
-      if (!month) continue;
-      const entry = map.get(month) ?? { revenue: 0, expenses: 0 };
-      entry.expenses += j.total_debit;
-      map.set(month, entry);
-    }
-
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, data]) => ({ month, ...data, net: data.revenue - data.expenses }));
-  }, [invoices, journals]);
-
-  const monthlyDataDesc = useMemo(() => {
-    return [...monthlyData].sort((a, b) => b.month.localeCompare(a.month));
-  }, [monthlyData]);
-
-  const totals = useMemo(() => {
-    return monthlyData.reduce(
-      (acc, row) => ({
-        revenue: acc.revenue + row.revenue,
-        expenses: acc.expenses + row.expenses,
-        net: acc.net + row.net,
-      }),
-      { revenue: 0, expenses: 0, net: 0 }
-    );
-  }, [monthlyData]);
+  const monthlyDataDesc = useMemo(
+    () => [...allMonths].sort((a, b) => b.month.localeCompare(a.month)),
+    [allMonths]
+  );
 
   return (
     <div className="space-y-6">
@@ -154,11 +146,11 @@ export default function OverviewPage() {
         <CardContent>
           {isLoading ? (
             <Skeleton className="h-[300px] w-full" />
-          ) : monthlyData.length === 0 ? (
+          ) : allMonths.length === 0 ? (
             <p className="text-muted-foreground">No data available</p>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={monthlyData}>
+              <BarChart data={allMonths}>
                 <XAxis dataKey="month" fontSize={12} />
                 <YAxis fontSize={12} tickFormatter={(v: number) => `${(v / 1_000_000).toFixed(0)}M`} />
                 <Tooltip formatter={(v: number) => formatVND(v)} />

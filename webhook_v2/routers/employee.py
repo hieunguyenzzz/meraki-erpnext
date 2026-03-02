@@ -97,3 +97,92 @@ async def update_employee(employee_id: str, request: EmployeeUpdateRequest):
     updated = result.get("message", {}).get("updated", list(updates.keys()))
     log.info("employee_updated", employee=employee_id, fields=updated)
     return {"status": "ok", "updated": updated}
+
+
+import json as _json
+import random
+
+
+class InviteStaffRequest(BaseModel):
+    full_name: str
+    email: str
+    gender: str = "Female"
+    date_of_birth: str = "2000-01-01"
+    date_of_joining: str
+    password: str | None = None  # if None, backend generates "Meraki-{4digits}"
+
+
+@router.post("/staff/invite")
+async def invite_staff(request: InviteStaffRequest):
+    """
+    Invite a new staff member:
+    1. Create User with Employee Self Service role
+    2. Fetch max custom_meraki_id from existing employees → increment
+    3. Create Employee linked to that User
+    Returns {employee_name, user_id, password}
+    """
+    client = ERPNextClient()
+
+    # Generate password if not provided
+    password = request.password or f"Meraki-{random.randint(1000, 9999)}"
+
+    name_parts = request.full_name.strip().split(" ")
+    first_name = name_parts[0]
+    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+
+    # 1. Create User
+    try:
+        user_values = {
+            "email": request.email.strip(),
+            "first_name": first_name,
+            "enabled": 1,
+            "new_password": password,
+            "send_welcome_email": 0,
+            "roles": [{"role": "Employee Self Service"}],
+        }
+        if last_name:
+            user_values["last_name"] = last_name
+        client._post("/api/resource/User", user_values)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to create user: {e}")
+
+    log.info("staff_user_created", email=request.email)
+
+    # 2. Fetch max custom_meraki_id
+    try:
+        emp_data = client._get("/api/resource/Employee", params={
+            "fields": _json.dumps(["custom_meraki_id"]),
+            "limit_page_length": 500,
+        }).get("data", [])
+        max_id = max((int(e.get("custom_meraki_id") or 0) for e in emp_data), default=0)
+        next_meraki_id = max_id + 1
+    except Exception:
+        next_meraki_id = 1
+
+    # 3. Create Employee
+    try:
+        emp_values = {
+            "first_name": first_name,
+            "employee_name": request.full_name.strip(),
+            "company": "Meraki Wedding Planner",
+            "user_id": request.email.strip(),
+            "date_of_joining": request.date_of_joining,
+            "gender": request.gender,
+            "date_of_birth": request.date_of_birth,
+            "status": "Active",
+            "custom_meraki_id": next_meraki_id,
+        }
+        if last_name:
+            emp_values["last_name"] = last_name
+        emp_resp = client._post("/api/resource/Employee", emp_values)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to create employee: {e}")
+
+    employee_name = emp_resp.get("data", {}).get("name")
+    log.info("staff_employee_created", employee=employee_name, meraki_id=next_meraki_id)
+
+    return {
+        "employee_name": employee_name,
+        "user_id": request.email.strip(),
+        "password": password,
+    }

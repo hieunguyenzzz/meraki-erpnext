@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useList, useCustomMutation, useInvalidate, useApiUrl } from "@refinedev/core";
+import { useList, useInvalidate, useApiUrl } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -185,7 +185,6 @@ export default function PayrollPage() {
 
   const apiUrl = useApiUrl();
   const invalidate = useInvalidate();
-  const { mutateAsync: customMutation } = useCustomMutation();
 
   const { result: peResult, query: peQuery } = useList({
     resource: "Payroll Entry",
@@ -323,40 +322,25 @@ export default function PayrollPage() {
     if (!currentPE) return;
     setSubmitting(true);
     setError(null);
-    const errors: string[] = [];
     try {
-      const draftSlips = salarySlips.filter(s => s.docstatus === 0);
-      for (const slip of draftSlips) {
-        try {
-          const fullDocRes = await fetch(`${apiUrl}/resource/Salary Slip/${encodeURIComponent(slip.name)}`, { credentials: "include" });
-          const fullDocData = await fullDocRes.json();
-          // Skip if already submitted (stale local state)
-          if (fullDocData.data?.docstatus !== 0) continue;
-          await customMutation({
-            url: "/api/method/frappe.client.submit",
-            method: "post",
-            values: { doc: fullDocData.data },
-          });
-        } catch (slipErr) {
-          errors.push(`${slip.employee_name}: ${extractErrorMessage(slipErr, "submission failed")}`);
-        }
+      const resp = await fetch("/inquiry-api/payroll/submit-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payroll_entry: currentPE.name }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to submit payroll");
       }
-      if (errors.length > 0) {
-        setError(errors.join(" | "));
-      } else {
-        // All slips submitted — create accrual JV to post GL entries
-        try {
-          await customMutation({
-            url: "/api/method/create_payroll_accrual_jv",
-            method: "post",
-            values: { payroll_entry: currentPE.name },
-          });
-        } catch (peErr) {
-          setError(`Slips submitted but GL posting failed: ${extractErrorMessage(peErr, "")}`);
-        }
+
+      const result = await resp.json();
+      if (result.failed && result.failed.length > 0) {
+        setError(result.failed.join(" | "));
       }
+    } catch (err: any) {
+      setError(extractErrorMessage(err, "Failed to submit payroll"));
     } finally {
-      // Always refresh UI regardless of errors
       setSubmitting(false);
       invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
       invalidate({ resource: "Salary Slip", invalidates: ["list"] });

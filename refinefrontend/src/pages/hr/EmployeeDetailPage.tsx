@@ -226,10 +226,8 @@ export default function EmployeeDetailPage() {
   async function handleLeaveApprove(appName: string) {
     setProcessingId(appName); setRecordsError(null);
     try {
-      await customMutation({ url: "/api/method/frappe.client.set_value", method: "post",
-        values: { doctype: "Leave Application", name: appName, fieldname: "status", value: "Approved" } });
-      await customMutation({ url: "/api/method/frappe.client.submit", method: "post",
-        values: { doctype: "Leave Application", name: appName } });
+      const resp = await fetch(`/inquiry-api/leave/${encodeURIComponent(appName)}/approve`, { method: "POST" });
+      if (!resp.ok) throw new Error(`Failed to approve ${appName}`);
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
     } catch { setRecordsError(`Failed to approve ${appName}`); } finally { setProcessingId(null); }
   }
@@ -237,10 +235,8 @@ export default function EmployeeDetailPage() {
   async function handleLeaveReject(appName: string) {
     setProcessingId(appName); setRecordsError(null);
     try {
-      await customMutation({ url: "/api/method/frappe.client.set_value", method: "post",
-        values: { doctype: "Leave Application", name: appName, fieldname: "status", value: "Rejected" } });
-      await customMutation({ url: "/api/method/frappe.client.submit", method: "post",
-        values: { doctype: "Leave Application", name: appName } });
+      const resp = await fetch(`/inquiry-api/leave/${encodeURIComponent(appName)}/reject`, { method: "POST" });
+      if (!resp.ok) throw new Error(`Failed to reject ${appName}`);
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
     } catch { setRecordsError(`Failed to reject ${appName}`); } finally { setProcessingId(null); }
   }
@@ -248,8 +244,8 @@ export default function EmployeeDetailPage() {
   async function handleWFHApprove(reqName: string) {
     setProcessingId(reqName); setRecordsError(null);
     try {
-      await customMutation({ url: "/api/method/frappe.client.submit", method: "post",
-        values: { doctype: "Attendance Request", name: reqName } });
+      const resp = await fetch(`/inquiry-api/wfh/${encodeURIComponent(reqName)}/approve`, { method: "POST" });
+      if (!resp.ok) throw new Error(`Failed to approve ${reqName}`);
       invalidate({ resource: "Attendance Request", invalidates: ["list"] });
     } catch { setRecordsError(`Failed to approve ${reqName}`); } finally { setProcessingId(null); }
   }
@@ -257,10 +253,8 @@ export default function EmployeeDetailPage() {
   async function handleWFHReject(reqName: string) {
     setProcessingId(reqName); setRecordsError(null);
     try {
-      await customMutation({ url: "/api/method/frappe.client.set_value", method: "post",
-        values: { doctype: "Attendance Request", name: reqName, fieldname: "workflow_state", value: "Rejected" } });
-      await customMutation({ url: "/api/method/frappe.client.submit", method: "post",
-        values: { doctype: "Attendance Request", name: reqName } });
+      const resp = await fetch(`/inquiry-api/wfh/${encodeURIComponent(reqName)}/reject`, { method: "POST" });
+      if (!resp.ok) throw new Error(`Failed to reject ${reqName}`);
       invalidate({ resource: "Attendance Request", invalidates: ["list"] });
     } catch { setRecordsError(`Failed to reject ${reqName}`); } finally { setProcessingId(null); }
   }

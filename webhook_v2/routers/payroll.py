@@ -263,3 +263,57 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
             log.error("commission_apply_failed", slip=slip["name"], error=str(e))
 
     return {"applied": applied, "employees_with_commission": employees_with_commission}
+
+
+class SubmitPayrollRequest(BaseModel):
+    payroll_entry: str
+
+
+@router.post("/payroll/submit-all")
+async def submit_payroll(request: SubmitPayrollRequest):
+    """
+    Submit all draft Salary Slips for a Payroll Entry + create GL accrual JV.
+    1. Fetch all draft Salary Slips for the given Payroll Entry
+    2. For each: fetch full doc → submit (collect errors)
+    3. Call create_payroll_accrual_jv for GL entries
+    Returns {submitted, failed, jv_name}
+    """
+    client = ERPNextClient()
+    pe_name = request.payroll_entry
+
+    # 1. Fetch draft salary slips
+    draft_slips = client._get("/api/resource/Salary Slip", params={
+        "filters": json.dumps([["payroll_entry", "=", pe_name], ["docstatus", "=", 0]]),
+        "fields": json.dumps(["name", "employee_name"]),
+        "limit_page_length": 200,
+    }).get("data", [])
+
+    submitted = 0
+    failed: list[str] = []
+
+    # 2. Submit each slip
+    for slip in draft_slips:
+        try:
+            full_slip = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
+            # Skip if already submitted (stale state)
+            if full_slip.get("docstatus") != 0:
+                continue
+            client._post("/api/method/frappe.client.submit", {"doc": full_slip})
+            submitted += 1
+        except Exception as e:
+            failed.append(f"{slip.get('employee_name', slip['name'])}: {e}")
+
+    jv_name = None
+    if not failed:
+        # 3. Create GL accrual JV
+        try:
+            jv_resp = client._post("/api/method/create_payroll_accrual_jv", {
+                "payroll_entry": pe_name,
+            })
+            jv_name = jv_resp.get("message") or jv_resp.get("data", {}).get("name")
+        except Exception as e:
+            log.warning("payroll_accrual_jv_failed", pe=pe_name, error=str(e))
+            # Not fatal — slips are already submitted
+
+    log.info("payroll_submitted", pe=pe_name, submitted=submitted, failed=len(failed))
+    return {"submitted": submitted, "failed": failed, "jv_name": jv_name}

@@ -125,4 +125,4 @@ def mock_settings(monkeypatch):
     monkeypatch.setenv("EMAIL_STORAGE_PASSWORD", "test-db-password")
     monkeypatch.setenv("ERPNEXT_API_KEY", "test-api-key")
     monkeypatch.setenv("ERPNEXT_API_SECRET", "test-api-secret")
-    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+
