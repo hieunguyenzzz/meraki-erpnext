@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, Calendar } from "lucide-react";
@@ -67,18 +67,6 @@ const initialForm = {
   description: "",
 };
 
-function countWorkingDays(from: string, to: string): number {
-  const start = new Date(from);
-  const end = new Date(to);
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return 0;
-  let count = 0;
-  const cur = new Date(start);
-  while (cur <= end) {
-    if (cur.getDay() !== 0 && cur.getDay() !== 6) count++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return count;
-}
 
 export default function MyLeavesPage() {
   const { employee, employeeId, isLoading: employeeLoading } = useMyEmployee();
@@ -168,15 +156,51 @@ export default function MyLeavesPage() {
     });
   }, [allocations, leaveApps]);
 
-  // Real-time split preview for Casual Leave
-  const splitPreview = useMemo(() => {
-    if (form.leave_type !== "Casual Leave" || !form.from_date || !form.to_date) return null;
-    const requested = countWorkingDays(form.from_date, form.to_date);
-    if (requested === 0) return null;
-    const balance = leaveBalances.find((b) => b.leaveType === "Casual Leave")?.remaining ?? 0;
-    if (balance >= requested) return null;
-    return { balance, requested, lwpDays: requested - balance };
-  }, [form.leave_type, form.from_date, form.to_date, leaveBalances]);
+  // Backend-driven split preview for Casual Leave (holiday-aware)
+  const [splitPreview, setSplitPreview] = useState<{
+    requested_days: number;
+    casual_balance: number;
+    needs_split: boolean;
+    casual_days: number;
+    lwp_days: number;
+  } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (form.leave_type !== "Casual Leave" || !form.from_date || !form.to_date || !employeeId) {
+      setSplitPreview(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const params = new URLSearchParams({
+          employee: employeeId,
+          leave_type: form.leave_type,
+          from_date: form.from_date,
+          to_date: form.to_date,
+        });
+        const res = await fetch(`/inquiry-api/leave/preview?${params}`, {
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSplitPreview(data);
+        }
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") setSplitPreview(null);
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [form.leave_type, form.from_date, form.to_date, employeeId]);
 
   // Table columns
   const columns: ColumnDef<LeaveApplication, unknown>[] = [
@@ -471,12 +495,18 @@ export default function MyLeavesPage() {
                 </div>
               </div>
 
-              {splitPreview && (
+              {previewLoading && form.leave_type === "Casual Leave" && form.from_date && form.to_date && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+                  Checking leave balance…
+                </div>
+              )}
+
+              {!previewLoading && splitPreview?.needs_split && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 space-y-1">
                   <p className="font-medium">Leave will be split automatically</p>
                   <p>
-                    You only have <strong>{splitPreview.balance}</strong> Casual Leave day(s) remaining.{" "}
-                    <strong>{splitPreview.lwpDays}</strong> day(s) will be submitted as{" "}
+                    You only have <strong>{splitPreview.casual_balance}</strong> Casual Leave day(s) remaining.{" "}
+                    <strong>{splitPreview.lwp_days}</strong> day(s) will be submitted as{" "}
                     <strong>Leave Without Pay</strong>.
                   </p>
                 </div>

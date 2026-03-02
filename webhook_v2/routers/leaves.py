@@ -115,30 +115,58 @@ def _get_casual_leave_balance(client: ERPNextClient, employee: str) -> int:
     return int(sum(float(e.get("leaves", 0)) for e in (data.get("data") or [])))
 
 
-def _count_working_days(from_str: str, to_str: str) -> int:
-    """Count Mon-Fri days between two dates (inclusive)."""
+def _get_employee_holiday_list(client: ERPNextClient, employee: str) -> str | None:
+    """Return the holiday list name for an employee (employee-level or company default)."""
+    emp = client._get(f"/api/resource/Employee/{employee}").get("data") or {}
+    if emp.get("holiday_list"):
+        return emp["holiday_list"]
+    company = emp.get("company", "Meraki Wedding Planner")
+    co = client._get(f"/api/resource/Company/{company}").get("data") or {}
+    return co.get("default_holiday_list")
+
+
+def _get_holidays_in_range(client: ERPNextClient, holiday_list: str, from_str: str, to_str: str) -> set:
+    """Return ISO date strings of holidays within [from_str, to_str] from ERPNext."""
+    if not holiday_list:
+        return set()
+    data = client._get(f"/api/resource/Holiday List/{holiday_list}").get("data") or {}
+    holidays = data.get("holidays") or []
+    result = set()
+    for h in holidays:
+        d = (h.get("holiday_date") or "")[:10]
+        if d and from_str <= d <= to_str:
+            result.add(d)
+    return result
+
+
+def _count_leave_days(from_str: str, to_str: str, holidays: set) -> int:
+    """Count Mon-Fri days in [from_str, to_str] excluding given holiday dates."""
     start = date.fromisoformat(from_str)
     end   = date.fromisoformat(to_str)
-    return sum(1 for n in range((end - start).days + 1)
-               if (start + timedelta(days=n)).weekday() < 5)
+    count = 0
+    for n in range((end - start).days + 1):
+        d = start + timedelta(days=n)
+        if d.weekday() < 5 and d.isoformat() not in holidays:
+            count += 1
+    return count
 
 
-def _end_date_for_n_working_days(start_str: str, n: int) -> str:
-    """Return ISO date that is the n-th Mon-Fri working day from start (inclusive)."""
+def _end_date_for_n_leave_days(start_str: str, n: int, holidays: set) -> str:
+    """Return ISO date of the n-th working non-holiday day from start (inclusive)."""
     current = date.fromisoformat(start_str)
     count = 0
     while True:
-        if current.weekday() < 5:
+        if current.weekday() < 5 and current.isoformat() not in holidays:
             count += 1
             if count >= n:
                 return current.isoformat()
         current += timedelta(days=1)
 
 
-def _next_working_day(d_str: str) -> str:
-    """Return the next Mon-Fri day after d_str."""
+def _next_leave_day(d_str: str, holidays: set) -> str:
+    """Return the next working non-holiday day after d_str."""
     current = date.fromisoformat(d_str) + timedelta(days=1)
-    while current.weekday() >= 5:
+    while current.weekday() >= 5 or current.isoformat() in holidays:
         current += timedelta(days=1)
     return current.isoformat()
 
@@ -171,8 +199,10 @@ def apply_leave(body: LeaveApplyRequest):
         return {"created": [app], "message": None}
 
     # Casual Leave — check balance and auto-split if needed
-    balance   = _get_casual_leave_balance(client, body.employee)
-    requested = _count_working_days(body.from_date, body.to_date)
+    holiday_list = _get_employee_holiday_list(client, body.employee)
+    holidays     = _get_holidays_in_range(client, holiday_list, body.from_date, body.to_date) if holiday_list else set()
+    balance      = _get_casual_leave_balance(client, body.employee)
+    requested    = _count_leave_days(body.from_date, body.to_date, holidays)
 
     # Case 1: enough balance
     if balance >= requested:
@@ -202,8 +232,8 @@ def apply_leave(body: LeaveApplyRequest):
 
     # Case 3: partial balance — split Casual + LWP
     lwp_days   = requested - balance
-    casual_end = _end_date_for_n_working_days(body.from_date, balance)
-    lwp_start  = _next_working_day(casual_end)
+    casual_end = _end_date_for_n_leave_days(body.from_date, balance, holidays)
+    lwp_start  = _next_leave_day(casual_end, holidays)
     created    = []
 
     try:
@@ -236,3 +266,41 @@ def apply_leave(body: LeaveApplyRequest):
             f"since your remaining Casual Leave balance was {balance} day(s)."
         ),
     }
+
+
+class LeavePreviewResponse(BaseModel):
+    requested_days: int
+    casual_balance: int
+    needs_split: bool
+    casual_days: int
+    lwp_days: int
+
+
+@router.get("/leave/preview")
+def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
+    """Return split preview without creating any documents."""
+    client = ERPNextClient()
+
+    if leave_type != "Casual Leave":
+        return LeavePreviewResponse(
+            requested_days=0, casual_balance=0,
+            needs_split=False, casual_days=0, lwp_days=0,
+        )
+
+    holiday_list = _get_employee_holiday_list(client, employee)
+    holidays     = _get_holidays_in_range(client, holiday_list, from_date, to_date) if holiday_list else set()
+    requested    = _count_leave_days(from_date, to_date, holidays)
+    balance      = _get_casual_leave_balance(client, employee)
+
+    if balance >= requested:
+        return LeavePreviewResponse(
+            requested_days=requested, casual_balance=balance,
+            needs_split=False, casual_days=requested, lwp_days=0,
+        )
+
+    return LeavePreviewResponse(
+        requested_days=requested, casual_balance=balance,
+        needs_split=True,
+        casual_days=max(balance, 0),
+        lwp_days=requested - max(balance, 0),
+    )
