@@ -47,7 +47,6 @@ class BackfillProcessor(BaseProcessor):
         for attempt in range(3):
             try:
                 result = self.classifier.classify(email)
-                time.sleep(30)  # Rate limit delay
                 return result
             except Exception as e:
                 if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
