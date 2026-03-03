@@ -17,6 +17,45 @@ from webhook_v2.core.models import ClassificationResult
 
 log = get_logger(__name__)
 
+
+def _extract_erp_message(response) -> str:
+    """Extract human-readable message from an ERPNext 4xx/5xx response."""
+    try:
+        body = response.json()
+    except Exception:
+        return response.text[:300]
+    raw = body.get("_server_messages", "")
+    if raw:
+        try:
+            msgs = json.loads(raw)
+            if msgs and isinstance(msgs, list):
+                first = msgs[0]
+                if isinstance(first, dict):
+                    return first.get("message", "") or first.get("msg", "")
+                if isinstance(first, str):
+                    # May be a message object encoded as string or a raw traceback
+                    try:
+                        obj = json.loads(first)
+                        if isinstance(obj, dict):
+                            return obj.get("message", "") or obj.get("msg", "")
+                    except Exception:
+                        pass
+                    # Last non-empty line is the actual error
+                    lines = [l.strip() for l in first.splitlines() if l.strip()]
+                    if lines:
+                        return lines[-1]
+        except Exception:
+            pass
+    if body.get("message"):
+        return body["message"]
+    exc = body.get("exc", "")
+    if exc:
+        lines = [l.strip() for l in exc.splitlines() if l.strip()]
+        if lines:
+            return lines[-1]
+    return response.text[:300]
+
+
 # Retry settings for intermittent 401 errors
 MAX_RETRIES = 3
 RETRY_DELAY = 0.5  # seconds
@@ -115,14 +154,10 @@ class ERPNextClient:
                 response.raise_for_status()
                 return response.json()
             except requests.HTTPError as e:
-                # Log detailed error for 417s and 500s
                 if e.response is not None and e.response.status_code in (417, 500):
-                    log.error(
-                        "erpnext_error",
-                        endpoint=endpoint,
-                        status=e.response.status_code,
-                        response_body=e.response.text[:500],
-                    )
+                    msg = _extract_erp_message(e.response)
+                    log.error("erpnext_error", endpoint=endpoint, status=e.response.status_code, message=msg)
+                    raise Exception(msg) from e
                 if e.response is not None and e.response.status_code == 401:
                     last_error = e
                     if attempt < MAX_RETRIES - 1:

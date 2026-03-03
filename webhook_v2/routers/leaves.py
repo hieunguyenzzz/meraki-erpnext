@@ -191,12 +191,16 @@ def _create_leave_application(
     client: ERPNextClient,
     employee: str, leave_type: str,
     from_date: str, to_date: str, description: str,
+    leave_approver: str | None = None,
 ) -> dict:
-    result = client._post("/api/resource/Leave Application", {
+    payload = {
         "employee": employee, "leave_type": leave_type,
         "from_date": from_date, "to_date": to_date,
         "description": description, "status": "Open",
-    })
+    }
+    if leave_approver:
+        payload["leave_approver"] = leave_approver
+    result = client._post("/api/resource/Leave Application", payload)
     return result.get("data", {})
 
 
@@ -204,9 +208,15 @@ def _create_leave_application(
 def apply_leave(body: LeaveApplyRequest):
     client = ERPNextClient()
     try:
+        details = client._get(
+            "/api/method/hrms.hr.doctype.leave_application.leave_application.get_leave_details",
+            params={"employee": body.employee, "leave_type": body.leave_type, "date": body.from_date}
+        )
+        leave_approver = (details.get("message") or {}).get("leave_approver")
         app = _create_leave_application(
             client, body.employee, body.leave_type,
-            body.from_date, body.to_date, body.description)
+            body.from_date, body.to_date, body.description,
+            leave_approver=leave_approver)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"created": [app]}
