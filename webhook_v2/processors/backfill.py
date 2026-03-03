@@ -11,7 +11,7 @@ from datetime import datetime
 
 from webhook_v2.core.logging import get_logger, configure_logging, bind_context, clear_context
 from webhook_v2.core.database import Database
-from webhook_v2.core.models import Classification, DocType, Email, ProcessingLog
+from webhook_v2.core.models import Classification, ClassificationResult, DocType, Email, ProcessingLog
 from webhook_v2.classifiers import get_classifier
 from webhook_v2.handlers import get_handler
 from webhook_v2.handlers.lead.handler import LeadHandler
@@ -95,7 +95,12 @@ class BackfillProcessor(BaseProcessor):
             for email in emails:
                 try:
                     bind_context(email_id=email.id)
-                    classification = self._classify_with_retry(email)
+                    # Skip Gemini if we already have stored classification data
+                    if email.classification_data and email.classification:
+                        classification = ClassificationResult.from_dict(email.classification_data)
+                        log.info("using_stored_classification", email_id=email.id, classification=email.classification)
+                    else:
+                        classification = self._classify_with_retry(email)
 
                     if classification.classification == Classification.IRRELEVANT:
                         self.db.mark_processed(email.id, classification.classification, classification.to_dict())
