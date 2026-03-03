@@ -134,24 +134,29 @@ export default function MyLeavesPage() {
 
   // Calculate leave balances
   const leaveBalances = useMemo(() => {
-    const approvedApps = leaveApps.filter(
-      (app) => app.status === "Approved" && app.docstatus === 1
-    );
     const takenByType = new Map<string, number>();
-    for (const app of approvedApps) {
-      const current = takenByType.get(app.leave_type) ?? 0;
-      takenByType.set(app.leave_type, current + (app.total_leave_days ?? 0));
+    const pendingByType = new Map<string, number>();
+    for (const app of leaveApps) {
+      if (app.status === "Rejected" || app.docstatus === 2) continue;
+      const days = app.total_leave_days ?? 0;
+      if (app.status === "Approved" && app.docstatus === 1) {
+        takenByType.set(app.leave_type, (takenByType.get(app.leave_type) ?? 0) + days);
+      } else {
+        pendingByType.set(app.leave_type, (pendingByType.get(app.leave_type) ?? 0) + days);
+      }
     }
 
     return allocations.map((alloc) => {
       const allocated =
         alloc.total_leaves_allocated ?? alloc.new_leaves_allocated ?? 0;
       const taken = takenByType.get(alloc.leave_type) ?? 0;
+      const pending = pendingByType.get(alloc.leave_type) ?? 0;
       return {
         leaveType: alloc.leave_type,
         allocated,
         taken,
-        remaining: allocated - taken,
+        pending,
+        remaining: allocated - taken - pending,
       };
     });
   }, [allocations, leaveApps]);
@@ -435,6 +440,9 @@ export default function MyLeavesPage() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   {balance.taken} days taken
+                  {balance.pending > 0 && (
+                    <span className="ml-2 text-yellow-600">· {balance.pending} pending</span>
+                  )}
                 </p>
               </CardContent>
             </Card>
