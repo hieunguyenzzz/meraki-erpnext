@@ -3,6 +3,7 @@ Lead handler for wedding inquiry emails.
 """
 
 import html
+import re
 
 from webhook_v2.config import settings
 from webhook_v2.core.logging import get_logger
@@ -204,7 +205,14 @@ class LeadHandler(BaseHandler):
         lead_name = self.erpnext.find_lead_by_email(target_email)
 
         if not lead_name:
-            # Lead not found - skip silently (don't create leads for follow-ups)
+            # For client replies, auto-create a lead so the communication isn't lost
+            if classification.classification in (
+                Classification.CLIENT_MESSAGE,
+                Classification.MEETING_CONFIRMED,
+            ):
+                lead_name = self._create_lead_from_reply(email, classification, target_email, timestamp)
+
+        if not lead_name:
             log.info(
                 "lead_not_found_skipping",
                 email=target_email,
@@ -265,6 +273,43 @@ class LeadHandler(BaseHandler):
             result_id=lead_name,
             details={"communication": comm_name, "status_updated": new_status},
         )
+
+    def _create_lead_from_reply(
+        self,
+        email: Email,
+        classification: ClassificationResult,
+        target_email: str,
+        timestamp: str | None,
+    ) -> str | None:
+        """Create a minimal Lead when a client replies but no lead exists yet.
+
+        Extracts the couple/client name from the email subject bracket pattern
+        e.g. 'Re: [Billy & Helen] - Warmest greetings...' → 'Billy & Helen'
+        """
+        # Extract name from subject brackets e.g. [Billy & Helen]
+        name = None
+        if email.subject:
+            m = re.search(r"\[([^\]]+)\]", email.subject)
+            if m:
+                name = m.group(1).strip()
+
+        # Fall back to sender name from email address
+        if not name:
+            name = email.sender_email.split("@")[0] if email.sender_email else "Unknown"
+
+        # Build a minimal ClassificationResult to reuse create_lead()
+        minimal = ClassificationResult(
+            classification=Classification.NEW_LEAD,
+            email=target_email,
+            firstname=name,
+        )
+
+        lead = self.erpnext.create_lead(minimal, timestamp)
+        if lead:
+            log.info("lead_created_from_reply", email=target_email, lead=lead, name=name)
+        else:
+            log.warning("lead_creation_from_reply_failed", email=target_email)
+        return lead
 
     def _regenerate_summary(self, lead_name: str, comm_count_before: int = 0) -> None:
         """Regenerate AI summary for the lead.
