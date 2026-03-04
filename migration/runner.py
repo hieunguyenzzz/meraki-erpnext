@@ -26,6 +26,7 @@ ORDERED_PHASES = [
     "v021_venue_custom_fields",
     "v022_venue_type_field",
     "v023_fix_casual_leave_max_days",
+    "v024_employee_supplier_read",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -55,7 +56,7 @@ def save_state(state_file: Path, applied: list) -> None:
 
 
 def run_pending(client) -> int:
-    from phases import v001_wedding_venues, v002_wedding_service_item, v003_wedding_service_item_fix, v004_remove_meraki_id_unique_constraint, v005_bhxh_insurance_setup, v006_employer_bhxh, v007_fix_jv_and_bh_accounts, v008_fix_venue_unique_constraint, v009_more_assistant_fields, v010_link_projects_to_sales_orders, v011_backfill_venue_and_lead_planner, v012_addon_fields, v013_sales_role, v014_fix_addon_items_non_stock, v015_employee_set_value_script, v016_update_employee_script, v017_stock_settings_default_warehouse, v018_review_history_doctype, v019_clear_middle_names, v020_wedding_allowance, v021_venue_custom_fields, v022_venue_type_field, v023_fix_casual_leave_max_days
+    from phases import v001_wedding_venues, v002_wedding_service_item, v003_wedding_service_item_fix, v004_remove_meraki_id_unique_constraint, v005_bhxh_insurance_setup, v006_employer_bhxh, v007_fix_jv_and_bh_accounts, v008_fix_venue_unique_constraint, v009_more_assistant_fields, v010_link_projects_to_sales_orders, v011_backfill_venue_and_lead_planner, v012_addon_fields, v013_sales_role, v014_fix_addon_items_non_stock, v015_employee_set_value_script, v016_update_employee_script, v017_stock_settings_default_warehouse, v018_review_history_doctype, v019_clear_middle_names, v020_wedding_allowance, v021_venue_custom_fields, v022_venue_type_field, v023_fix_casual_leave_max_days, v024_employee_supplier_read
 
     phase_fns = {
         "v001_wedding_venues": v001_wedding_venues.run,
@@ -81,6 +82,7 @@ def run_pending(client) -> int:
         "v021_venue_custom_fields": v021_venue_custom_fields.run,
         "v022_venue_type_field": v022_venue_type_field.run,
         "v023_fix_casual_leave_max_days": v023_fix_casual_leave_max_days.run,
+        "v024_employee_supplier_read": v024_employee_supplier_read.run,
     }
 
     state_file = get_state_file()
