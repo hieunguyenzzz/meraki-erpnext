@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Columns3, MessageSquare,
   Banknote, Users, LayoutDashboard,
-  FileText, Receipt, CreditCard, BookOpen, PieChart,
+  FileText, Receipt, CreditCard, BookOpen,
   FolderKanban, Settings, MapPin,
 } from "lucide-react";
 
@@ -73,7 +73,6 @@ export const MODULES: ModuleConfig[] = [
       { label: "Expenses", path: "/finance/expenses", icon: Receipt },
       { label: "Payments", path: "/finance/payments", icon: CreditCard },
       { label: "Journal Entries", path: "/finance/journals", icon: BookOpen },
-      { label: "Overview", path: "/finance/overview", icon: PieChart },
     ],
   },
   {

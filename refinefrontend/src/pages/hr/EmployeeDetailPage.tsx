@@ -52,6 +52,10 @@ export default function EmployeeDetailPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
+  const [linkUserEmail, setLinkUserEmail] = useState("");
+  const [isLinkingUser, setIsLinkingUser] = useState(false);
+  const [linkUserMessage, setLinkUserMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [recordsError, setRecordsError] = useState<string | null>(null);
 
@@ -274,6 +278,8 @@ export default function EmployeeDetailPage() {
         company_email: employee.company_email || "",
         cell_phone: employee.cell_phone || "",
       });
+      setLinkUserEmail(employee.user_id || "");
+      setLinkUserMessage(null);
     } else if (section === "commission") {
       setEditValues({
         custom_lead_commission_pct: employee.custom_lead_commission_pct ?? 0,
@@ -347,6 +353,28 @@ export default function EmployeeDetailPage() {
       setEditError(err?.message || "Failed to save");
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  async function handleLinkUser() {
+    if (!employee || !linkUserEmail.trim()) return;
+    setIsLinkingUser(true);
+    setLinkUserMessage(null);
+    try {
+      const res = await fetch(`/inquiry-api/employee/${employee.name}/link-user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: linkUserEmail.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `API error ${res.status}`);
+      const msg = data.created ? "User created and linked" : "User linked";
+      setLinkUserMessage({ type: "success", text: msg });
+      invalidate({ resource: "Employee", id: employee.name, invalidates: ["detail"] });
+    } catch (err: any) {
+      setLinkUserMessage({ type: "error", text: err?.message || "Failed to link user" });
+    } finally {
+      setIsLinkingUser(false);
     }
   }
 
@@ -1081,6 +1109,32 @@ export default function EmployeeDetailPage() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-phone">Phone</Label>
                   <Input id="edit-phone" type="tel" value={editValues.cell_phone} onChange={(e) => setEditValues((prev) => ({ ...prev, cell_phone: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-link-user">Linked User</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="edit-link-user"
+                      type="email"
+                      value={linkUserEmail}
+                      onChange={(e) => { setLinkUserEmail(e.target.value); setLinkUserMessage(null); }}
+                      placeholder="Enter email to link or create user"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isLinkingUser || !linkUserEmail.trim()}
+                      onClick={handleLinkUser}
+                    >
+                      {isLinkingUser ? "Linking…" : "Link"}
+                    </Button>
+                  </div>
+                  {linkUserMessage && (
+                    <p className={`text-sm ${linkUserMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                      {linkUserMessage.text}
+                    </p>
+                  )}
                 </div>
               </>
             )}

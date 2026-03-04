@@ -103,6 +103,88 @@ import json as _json
 import random
 
 
+class LinkUserRequest(BaseModel):
+    email: str
+
+
+@router.post("/employee/{employee_id}/link-user")
+async def link_user_to_employee(employee_id: str, request: LinkUserRequest):
+    """
+    Find or create an ERPNext User for the given email, assign roles from
+    employee's custom_staff_roles, then link the user to the employee.
+    Returns {user_id, created}.
+    """
+    client = ERPNextClient()
+    email = request.email.strip()
+
+    # 1. Fetch employee
+    try:
+        emp_resp = client._get(f"/api/resource/Employee/{employee_id}")
+        emp = emp_resp.get("data", {})
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Employee not found: {e}")
+
+    employee_name = emp.get("employee_name") or emp.get("first_name", email)
+
+    # 2. Check if user already exists
+    try:
+        existing = client._get("/api/resource/User", params={
+            "filters": _json.dumps([["name", "=", email]]),
+            "fields": _json.dumps(["name"]),
+            "limit_page_length": 1,
+        })
+        user_exists = bool(existing.get("data"))
+    except Exception:
+        user_exists = False
+
+    created = False
+
+    # 3. Create user if not found
+    if not user_exists:
+        try:
+            client._post("/api/resource/User", {
+                "email": email,
+                "first_name": employee_name,
+                "enabled": 1,
+                "send_welcome_email": 0,
+                "roles": [{"role": "Employee Self Service"}],
+            })
+            created = True
+            log.info("link_user_created", email=email, employee=employee_id)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to create user: {e}")
+
+    # 4. Build roles from custom_staff_roles
+    from webhook_v2.routers.user_roles import STAFF_ROLE_TO_ERPNEXT_ROLES
+    raw_roles = emp.get("custom_staff_roles") or "[]"
+    try:
+        staff_roles = _json.loads(raw_roles)
+    except Exception:
+        staff_roles = []
+
+    erp_roles: set[str] = {"Employee", "Employee Self Service"}
+    for sr in staff_roles:
+        erp_roles.update(STAFF_ROLE_TO_ERPNEXT_ROLES.get(sr, []))
+    roles_payload = [{"role": r} for r in erp_roles]
+
+    try:
+        client._put(f"/api/resource/User/{email}", {"roles": roles_payload})
+    except Exception as e:
+        log.warning("link_user_roles_failed", email=email, error=str(e))
+
+    # 5. Link user to employee
+    try:
+        client._post("/api/method/meraki_set_employee_fields", {
+            "employee_name": employee_id,
+            "user_id": email,
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to link user to employee: {e}")
+
+    log.info("link_user_done", email=email, employee=employee_id, created=created)
+    return {"user_id": email, "created": created}
+
+
 class InviteStaffRequest(BaseModel):
     full_name: str
     email: str
