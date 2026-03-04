@@ -23,13 +23,7 @@ import {
   getLeaveBalanceVariant,
   type ReviewStatus,
 } from "@/lib/review-status";
-import {
-  STAFF_ROLES,
-  type StaffRole,
-  parseStaffRoles,
-  serializeStaffRoles,
-  getRoleBadgeVariant,
-} from "@/lib/staff-roles";
+import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import {
   DndContext,
   closestCenter,
@@ -55,10 +49,9 @@ interface StaffRow {
   date_of_joining: string;
   custom_last_review_date?: string;
   custom_review_notes?: string;
-  custom_staff_roles?: string;
   custom_display_order?: number;
   user_id?: string;
-  staff_roles: StaffRole[];
+  staff_roles: string[];
   review_status: ReviewStatus;
   leave_allocated: number;
   leave_taken: number;
@@ -102,6 +95,7 @@ export default function StaffOverviewPage() {
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rolesMap, setRolesMap] = useState<Record<string, string[]>>({});
 
   // Arrange mode state
   const [arrangeMode, setArrangeMode] = useState(false);
@@ -158,7 +152,6 @@ export default function StaffOverviewPage() {
         "date_of_joining",
         "custom_last_review_date",
         "custom_review_notes",
-        "custom_staff_roles",
         "custom_display_order",
         "user_id",
         "custom_meraki_id",
@@ -190,6 +183,15 @@ export default function StaffOverviewPage() {
   const employees = (employeesResult?.data ?? []) as any[];
   const allocations = (allocsResult?.data ?? []) as any[];
   const applications = (appsResult?.data ?? []) as any[];
+
+  // Fetch roles map once employees are loaded
+  useEffect(() => {
+    if (employees.length === 0) return;
+    fetch("/inquiry-api/employees/roles-map", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => setRolesMap(data ?? {}))
+      .catch(() => setRolesMap({}));
+  }, [employees.length]);
 
   // Build leave data maps
   const { allocByEmployee, takenByEmployee } = useMemo(() => {
@@ -225,17 +227,16 @@ export default function StaffOverviewPage() {
         date_of_joining: emp.date_of_joining,
         custom_last_review_date: emp.custom_last_review_date,
         custom_review_notes: emp.custom_review_notes,
-        custom_staff_roles: emp.custom_staff_roles,
         custom_display_order: emp.custom_display_order,
         user_id: emp.user_id,
-        staff_roles: parseStaffRoles(emp.custom_staff_roles),
+        staff_roles: rolesMap[emp.name] ?? [],
         review_status: getReviewStatus(emp.custom_last_review_date),
         leave_allocated: allocated,
         leave_taken: taken,
         leave_remaining: allocated - taken,
       };
     });
-  }, [employees, allocByEmployee, takenByEmployee]);
+  }, [employees, allocByEmployee, takenByEmployee, rolesMap]);
 
   // Initialize orderedIds from custom_display_order when data first loads
   useEffect(() => {
@@ -366,7 +367,7 @@ export default function StaffOverviewPage() {
     const roles = new Set<string>(employee.staff_roles);
     setSelectedEmployee(employee);
     setSelectedRoles(roles);
-    setInitialRoles(roles);
+    setInitialRoles(new Set(employee.staff_roles));
     setError(null);
     setRolesDialogOpen(true);
   }
@@ -385,31 +386,20 @@ export default function StaffOverviewPage() {
     setSaving(true);
     setError(null);
     try {
-      const staffRoles = Array.from(selectedRoles) as StaffRole[];
+      const roles = Array.from(selectedRoles);
 
-      // Save staff roles to Employee via custom endpoint (bypasses ERPNext link validation)
-      const res = await fetch(`/inquiry-api/employee/${selectedEmployee.name}`, {
-        method: "PATCH",
+      const res = await fetch(`/inquiry-api/employee/${selectedEmployee.name}/set-roles`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: { custom_staff_roles: serializeStaffRoles(staffRoles) } }),
+        body: JSON.stringify({ roles }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `API error ${res.status}`);
       }
 
-      // Sync ERPNext User roles via backend (uses admin API key — no CSRF issues)
-      if (selectedEmployee.user_id) {
-        const syncRes = await fetch("/inquiry-api/sync-user-roles", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: selectedEmployee.user_id, staff_roles: staffRoles }),
-        });
-        if (!syncRes.ok) {
-          const data = await syncRes.json().catch(() => ({}));
-          throw new Error(data.detail || `Failed to sync user roles (${syncRes.status})`);
-        }
-      }
+      // Update local rolesMap immediately
+      setRolesMap((prev) => ({ ...prev, [selectedEmployee.name]: roles }));
 
       invalidate({ resource: "Employee", invalidates: ["list"] });
       setRolesDialogOpen(false);
@@ -504,32 +494,35 @@ export default function StaffOverviewPage() {
     {
       id: "staff_roles",
       accessorFn: (row) => row.staff_roles.join(","),
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Staff Roles" />,
-      cell: ({ row }) => (
-        <div className="flex gap-1 flex-wrap items-center">
-          {row.original.staff_roles.length > 0 ? (
-            row.original.staff_roles.map(role => (
-              <Badge key={role} variant={getRoleBadgeVariant(role)}>{role}</Badge>
-            ))
-          ) : (
-            <span className="text-muted-foreground text-sm">—</span>
-          )}
-          {canManageRoles && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 p-0 ml-1"
-              onClick={() => openRolesDialog(row.original)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
-      ),
-      filterFn: (row, id, filterValue) => {
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Roles" />,
+      cell: ({ row }) => {
+        const assignedRoles = ASSIGNABLE_ROLES.filter((r) => row.original.staff_roles.includes(r.role));
+        return (
+          <div className="flex gap-1 flex-wrap items-center">
+            {assignedRoles.length > 0 ? (
+              assignedRoles.map((r) => (
+                <Badge key={r.role} variant={r.variant as any}>{r.label}</Badge>
+              ))
+            ) : (
+              <span className="text-muted-foreground text-sm">—</span>
+            )}
+            {canManageRoles && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0 ml-1"
+                onClick={() => openRolesDialog(row.original)}
+              >
+                <Pencil className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        );
+      },
+      filterFn: (row, _id, filterValue) => {
         if (!filterValue || filterValue.length === 0) return true;
         const roles = row.original.staff_roles;
-        return filterValue.some((v: string) => roles.includes(v as StaffRole));
+        return filterValue.some((v: string) => roles.includes(v));
       },
     },
     {
@@ -684,8 +677,8 @@ export default function StaffOverviewPage() {
           filterableColumns={[
             {
               id: "staff_roles",
-              title: "Staff Role",
-              options: STAFF_ROLES.map(role => ({ label: role, value: role })),
+              title: "Role",
+              options: ASSIGNABLE_ROLES.map((r) => ({ label: r.label, value: r.role })),
             },
             {
               id: "department",
@@ -758,27 +751,28 @@ export default function StaffOverviewPage() {
       <Sheet open={rolesDialogOpen} onOpenChange={(open) => { if (!open) tryClose(isRolesDirty, () => setRolesDialogOpen(false)); }}>
         <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
           <SheetHeader className="px-6 py-4 border-b shrink-0">
-            <SheetTitle>Assign Staff Roles</SheetTitle>
+            <SheetTitle>Assign Roles</SheetTitle>
             {selectedEmployee && (
               <p className="text-sm text-muted-foreground">{displayName(selectedEmployee)}</p>
             )}
           </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-            {STAFF_ROLES.map(role => (
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-1">
+            {ASSIGNABLE_ROLES.map((r) => (
               <div
-                key={role}
+                key={r.role}
                 className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50"
-                onClick={() => toggleRole(role)}
+                onClick={() => toggleRole(r.role)}
               >
                 <div className={cn(
                   "h-5 w-5 rounded border-2 flex items-center justify-center transition-colors",
-                  selectedRoles.has(role)
+                  selectedRoles.has(r.role)
                     ? "bg-primary border-primary text-primary-foreground"
                     : "border-muted-foreground/30"
                 )}>
-                  {selectedRoles.has(role) && <Check className="h-3 w-3" />}
+                  {selectedRoles.has(r.role) && <Check className="h-3 w-3" />}
                 </div>
-                <Badge variant={getRoleBadgeVariant(role)}>{role}</Badge>
+                <Badge variant={r.variant as any}>{r.label}</Badge>
+                <span className="text-sm text-muted-foreground">{r.role}</span>
               </div>
             ))}
             {error && (

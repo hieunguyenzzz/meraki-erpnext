@@ -97,3 +97,17 @@ export function isEmployeeSelfServiceOnly(roles: string[]): boolean {
   if (roles.includes("Administrator")) return false;
   return !ALL_ADMIN_ROLES.some((r) => roles.includes(r));
 }
+
+export const ASSIGNABLE_ROLES = [
+  { role: "System Manager",   label: "Admin",         variant: "destructive" },
+  { role: "Sales Manager",    label: "Sales Manager", variant: "warning" },
+  { role: "Sales User",       label: "Sales",         variant: "warning" },
+  { role: "HR Manager",       label: "HR Manager",    variant: "info" },
+  { role: "HR User",          label: "HR",            variant: "info" },
+  { role: "Accounts Manager", label: "Finance Mgr",   variant: "secondary" },
+  { role: "Accounts User",    label: "Finance",       variant: "secondary" },
+  { role: "Projects User",    label: "Planner",       variant: "success" },
+  { role: "Inbox User",       label: "Inbox",         variant: "default" },
+] as const;
+
+export type AssignableRole = typeof ASSIGNABLE_ROLES[number]["role"];

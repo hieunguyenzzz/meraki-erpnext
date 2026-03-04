@@ -24,7 +24,6 @@ from webhook_v2.routers.allowance import router as allowance_router
 from webhook_v2.routers.employee_order import router as employee_order_router
 from webhook_v2.routers.employee_status import router as employee_status_router
 from webhook_v2.routers.payroll import router as payroll_router
-from webhook_v2.routers.user_roles import router as user_roles_router
 from webhook_v2.routers.notification_test import router as notification_test_router
 from webhook_v2.routers.wedding_ops import router as wedding_ops_router
 from webhook_v2.routers.tasks import router as tasks_router
@@ -96,7 +95,6 @@ app.include_router(allowance_router)
 app.include_router(employee_order_router)
 app.include_router(employee_status_router)
 app.include_router(payroll_router)
-app.include_router(user_roles_router)
 app.include_router(notification_test_router)
 app.include_router(wedding_ops_router)
 app.include_router(tasks_router)
