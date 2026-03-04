@@ -16,6 +16,18 @@ from webhook_v2.core.logging import get_logger
 log = get_logger(__name__)
 router = APIRouter()
 
+ASSIGNABLE_ROLES_PY = [
+    {"role": "System Manager",   "label": "Admin"},
+    {"role": "Sales Manager",    "label": "Sales Manager"},
+    {"role": "Sales User",       "label": "Sales"},
+    {"role": "HR Manager",       "label": "HR Manager"},
+    {"role": "HR User",          "label": "HR"},
+    {"role": "Accounts Manager", "label": "Finance Mgr"},
+    {"role": "Accounts User",    "label": "Finance"},
+    {"role": "Projects User",    "label": "Planner"},
+    {"role": "Inbox User",       "label": "Inbox"},
+]
+
 # Must match ALLOWED_FIELDS in migration/phases/v015_employee_set_value_script.py
 # (v016 adds user_id)
 ALLOWED_FIELDS = {
@@ -154,23 +166,15 @@ async def link_user_to_employee(employee_id: str, request: LinkUserRequest):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to create user: {e}")
 
-    # 4. Build roles from custom_staff_roles
-    from webhook_v2.routers.user_roles import STAFF_ROLE_TO_ERPNEXT_ROLES
-    raw_roles = emp.get("custom_staff_roles") or "[]"
-    try:
-        staff_roles = _json.loads(raw_roles)
-    except Exception:
-        staff_roles = []
-
-    erp_roles: set[str] = {"Employee", "Employee Self Service"}
-    for sr in staff_roles:
-        erp_roles.update(STAFF_ROLE_TO_ERPNEXT_ROLES.get(sr, []))
-    roles_payload = [{"role": r} for r in erp_roles]
-
-    try:
-        client._put(f"/api/resource/User/{email}", {"roles": roles_payload})
-    except Exception as e:
-        log.warning("link_user_roles_failed", email=email, error=str(e))
+    # 4. Ensure default roles are set (Employee + Employee Self Service)
+    #    Roles will be customised separately via the set-roles endpoint.
+    if not user_exists:
+        try:
+            client._put(f"/api/resource/User/{email}", {
+                "roles": [{"role": "Employee"}, {"role": "Employee Self Service"}],
+            })
+        except Exception as e:
+            log.warning("link_user_roles_failed", email=email, error=str(e))
 
     # 5. Link user to employee
     try:
@@ -268,3 +272,72 @@ async def invite_staff(request: InviteStaffRequest):
         "user_id": request.email.strip(),
         "password": password,
     }
+
+
+class SetRolesRequest(BaseModel):
+    roles: list[str]  # list of ASSIGNABLE role names to set
+
+
+@router.post("/employee/{employee_id}/set-roles")
+async def set_employee_roles(employee_id: str, request: SetRolesRequest):
+    """
+    Directly set ERPNext User roles for the employee's linked user.
+    Always includes Employee + Employee Self Service.
+    Only touches roles from ASSIGNABLE_ROLES — preserves all others.
+    """
+    client = ERPNextClient()
+
+    emp = client._get(f"/api/resource/Employee/{employee_id}").get("data", {})
+    user_id = emp.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Employee has no linked user")
+
+    MANAGEABLE = {r["role"] for r in ASSIGNABLE_ROLES_PY}
+
+    user_data = client._get(f"/api/resource/User/{user_id}").get("data", {})
+    current_roles = user_data.get("roles", [])
+
+    requested = set(request.roles) & MANAGEABLE
+    always = {"Employee", "Employee Self Service"}
+    new_roles = []
+    seen = set()
+    for r in current_roles:
+        name = r["role"]
+        if name not in MANAGEABLE:
+            new_roles.append(r)
+            seen.add(name)
+    for name in always | requested:
+        if name not in seen:
+            new_roles.append({"role": name})
+
+    client._put(f"/api/resource/User/{user_id}", {"roles": new_roles})
+    return {"status": "ok", "roles": [r["role"] for r in new_roles]}
+
+
+@router.get("/employees/roles-map")
+async def get_employees_roles_map():
+    """
+    Returns {employee_name: [role1, role2, ...]} for all employees that have a linked user.
+    Only returns roles from ASSIGNABLE_ROLES.
+    """
+    client = ERPNextClient()
+    emps_response = client._get("/api/resource/Employee", params={
+        "fields": '["name","user_id"]',
+        "filters": '[["user_id","!=",""]]',
+        "limit_page_length": 500,
+    })
+    emps = emps_response.get("data", [])
+
+    result = {}
+    MANAGEABLE = {r["role"] for r in ASSIGNABLE_ROLES_PY}
+    for emp in emps:
+        uid = emp.get("user_id")
+        if not uid:
+            continue
+        try:
+            user_data = client._get(f"/api/resource/User/{uid}").get("data", {})
+            roles = [r["role"] for r in user_data.get("roles", []) if r["role"] in MANAGEABLE]
+            result[emp["name"]] = roles
+        except Exception:
+            result[emp["name"]] = []
+    return result

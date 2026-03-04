@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useOne, useList, useInvalidate, useCustomMutation } from "@refinedev/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -16,8 +16,7 @@ import { DetailSkeleton } from "@/components/detail-skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getLeaveBalanceVariant } from "@/lib/review-status";
-import { parseStaffRoles, getRoleBadgeVariant, serializeStaffRoles, STAFF_ROLES, syncUserRoles } from "@/lib/staff-roles";
-import type { StaffRole } from "@/lib/staff-roles";
+import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Employee } from "@/lib/types";
 
@@ -51,6 +50,9 @@ export default function EmployeeDetailPage() {
   const [editValues, setEditValues] = useState<Record<string, any>>({});
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [displayUserRoles, setDisplayUserRoles] = useState<string[]>([]);
 
   const [linkUserEmail, setLinkUserEmail] = useState("");
   const [isLinkingUser, setIsLinkingUser] = useState(false);
@@ -166,6 +168,23 @@ export default function EmployeeDetailPage() {
 
   const allocations = (allocsResult?.data ?? []) as any[];
   const applications = (appsResult?.data ?? []) as any[];
+
+  // Fetch display roles for the employee when user_id becomes available
+  useEffect(() => {
+    if (!employee?.user_id) {
+      setDisplayUserRoles([]);
+      return;
+    }
+    fetch(`/api/resource/User/${encodeURIComponent(employee.user_id)}`, {
+      credentials: "include",
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const roles = (data?.data?.roles ?? []) as { role: string }[];
+        setDisplayUserRoles(roles.map((r) => r.role));
+      })
+      .catch(() => setDisplayUserRoles([]));
+  }, [employee?.user_id]);
 
   // Calculate leave balance
   const leaveBalance = useMemo(() => {
@@ -298,11 +317,25 @@ export default function EmployeeDetailPage() {
       setEditValues({
         designation: employee.designation || "",
         date_of_joining: employee.date_of_joining || "",
-        custom_staff_roles: employee.custom_staff_roles || "",
         ctc: employee.ctc ?? "",
         custom_insurance_salary: employee.custom_insurance_salary ?? "",
         leave_approver: employee.leave_approver || "",
       });
+      // Fetch current ERPNext user roles if a user is linked
+      setUserRoles([]);
+      if (employee.user_id) {
+        fetch(`/api/resource/User/${encodeURIComponent(employee.user_id)}`, {
+          credentials: "include",
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            const roles = (data?.data?.roles ?? []) as { role: string }[];
+            setUserRoles(roles.map((r) => r.role));
+          })
+          .catch(() => {
+            // If fetch fails, leave userRoles empty
+          });
+      }
     }
     // Note: department field intentionally excluded from employment edit
     setEditSection(section);
@@ -342,10 +375,17 @@ export default function EmployeeDetailPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `API error ${res.status}`);
       }
-      // Sync user roles if staff roles changed
-      if (editSection === "employment" && employee.user_id && values.custom_staff_roles !== employee.custom_staff_roles) {
-        const newRoles = parseStaffRoles(values.custom_staff_roles) as StaffRole[];
-        await syncUserRoles(employee.user_id, newRoles);
+      // Save ERPNext user roles directly if employment section and user is linked
+      if (editSection === "employment" && employee.user_id) {
+        const rolesRes = await fetch(`/inquiry-api/employee/${employee.name}/set-roles`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roles: userRoles }),
+        });
+        if (!rolesRes.ok) {
+          const data = await rolesRes.json().catch(() => ({}));
+          throw new Error(data.detail || `Failed to save roles (${rolesRes.status})`);
+        }
       }
       invalidate({ resource: "Employee", id: employee.name, invalidates: ["detail"] });
       setEditSection(null);
@@ -488,7 +528,6 @@ export default function EmployeeDetailPage() {
     return <DetailSkeleton />;
   }
 
-  const staffRoles = parseStaffRoles(employee.custom_staff_roles);
   const leaveBalanceVariant = getLeaveBalanceVariant(leaveBalance.remaining, leaveBalance.allocated);
   const leavePercent = leaveBalance.allocated > 0 ? (leaveBalance.remaining / leaveBalance.allocated) * 100 : 0;
 
@@ -610,18 +649,21 @@ export default function EmployeeDetailPage() {
                   <span className="text-muted-foreground">Tenure</span>
                   <span>{calculateTenure(employee.date_of_joining)}</span>
                 </div>
-                {staffRoles.length > 0 && (
-                  <div className="flex justify-between items-start">
-                    <span className="text-muted-foreground">Staff Roles</span>
-                    <div className="flex gap-1 flex-wrap justify-end">
-                      {staffRoles.map((role) => (
-                        <Badge key={role} variant={getRoleBadgeVariant(role)}>
-                          {role}
-                        </Badge>
-                      ))}
+                {(() => {
+                  const assignedRoles = ASSIGNABLE_ROLES.filter((r) => displayUserRoles.includes(r.role));
+                  return assignedRoles.length > 0 ? (
+                    <div className="flex justify-between items-start">
+                      <span className="text-muted-foreground">Roles</span>
+                      <div className="flex gap-1 flex-wrap justify-end">
+                        {assignedRoles.map((r) => (
+                          <Badge key={r.role} variant={r.variant as any}>
+                            {r.label}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ) : null;
+                })()}
                 {employee.ctc != null && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">CTC</span>
@@ -1160,27 +1202,33 @@ export default function EmployeeDetailPage() {
                   <Input id="edit-doj" type="date" value={editValues.date_of_joining} onChange={(e) => setEditValues((prev) => ({ ...prev, date_of_joining: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Staff Roles</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {STAFF_ROLES.map((role) => {
-                      const currentRoles = parseStaffRoles(editValues.custom_staff_roles) as StaffRole[];
-                      const isActive = currentRoles.includes(role);
-                      return (
-                        <Button
-                          key={role}
-                          type="button"
-                          size="sm"
-                          variant={isActive ? "default" : "outline"}
-                          onClick={() => {
-                            const updated = isActive ? currentRoles.filter((r) => r !== role) : [...currentRoles, role];
-                            setEditValues((prev) => ({ ...prev, custom_staff_roles: serializeStaffRoles(updated) }));
-                          }}
-                        >
-                          {role}
-                        </Button>
-                      );
-                    })}
-                  </div>
+                  <Label>Roles</Label>
+                  {employee.user_id ? (
+                    <div className="space-y-1">
+                      {ASSIGNABLE_ROLES.map((r) => {
+                        const isChecked = userRoles.includes(r.role);
+                        return (
+                          <div
+                            key={r.role}
+                            className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50"
+                            onClick={() => {
+                              setUserRoles((prev) =>
+                                isChecked ? prev.filter((x) => x !== r.role) : [...prev, r.role]
+                              );
+                            }}
+                          >
+                            <div className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${isChecked ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30"}`}>
+                              {isChecked && <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>}
+                            </div>
+                            <Badge variant={r.variant as any}>{r.label}</Badge>
+                            <span className="text-sm text-muted-foreground">{r.role}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Link a user first to manage roles.</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-ctc">Base Salary (VND)</Label>

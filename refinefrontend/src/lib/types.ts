@@ -17,7 +17,6 @@ export interface Employee {
   ctc?: number;
   custom_last_review_date?: string;
   custom_review_notes?: string;
-  custom_staff_roles?: string;
   custom_lead_commission_pct?: number;
   custom_support_commission_pct?: number;
   custom_assistant_commission_pct?: number;
