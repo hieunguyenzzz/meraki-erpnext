@@ -20,6 +20,7 @@ export interface ModuleConfig {
 }
 
 export const CRM_ROLES = ["System Manager", "Sales Manager", "Sales User"];
+export const PLANNER_ROLES = [...CRM_ROLES, "Projects User"];
 export const HR_ROLES = ["System Manager", "HR Manager", "HR User"];
 export const FINANCE_ROLES = ["System Manager", "Accounts Manager", "Accounts User"];
 export const DIRECTOR_ROLES = ["System Manager"];
@@ -48,7 +49,7 @@ export const MODULES: ModuleConfig[] = [
   {
     label: "Weddings",
     path: "/projects",
-    roles: CRM_ROLES,
+    roles: PLANNER_ROLES,
     children: [
       { label: "Kanban", path: "/projects", icon: FolderKanban },
       { label: "Venues", path: "/venues",   icon: MapPin },
