@@ -185,6 +185,7 @@ services:
       MERAKI_PG_USER: ${MERAKI_PG_USER}
       MERAKI_PG_PASSWORD: ${MERAKI_PG_PASSWORD}
       MERAKI_PG_DATABASE: ${MERAKI_PG_DATABASE}
+      SITE_NAME: ${SITE_NAME}
     volumes:
       - meraki-sites:/home/frappe/frappe-bench/sites
     depends_on:
