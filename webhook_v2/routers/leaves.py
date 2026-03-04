@@ -245,6 +245,15 @@ def apply_leave(body: LeaveApplyRequest):
         if body.leave_type == "Casual Leave":
             balance = _get_erp_leave_balance(client, body.employee, "Casual Leave", body.from_date)
             balance_int = int(balance)
+
+            # Zero balance: convert entire request to LWP — never create a CL draft with no balance
+            if balance_int == 0:
+                app = _create_leave_application(
+                    client, body.employee, "Leave Without Pay",
+                    body.from_date, body.to_date, body.description,
+                    leave_approver=leave_approver)
+                return {"created": [app], "split": True}
+
             include_holiday = _leave_type_includes_holidays(client, "Casual Leave")
             casual_to_date = lwp_from_date = requested = None
 
@@ -253,7 +262,7 @@ def apply_leave(body: LeaveApplyRequest):
                 start_d = date.fromisoformat(body.from_date)
                 end_d   = date.fromisoformat(body.to_date)
                 requested = (end_d - start_d).days + 1
-                if balance_int > 0 and balance_int < requested:
+                if balance_int < requested:
                     casual_to_date = (start_d + timedelta(days=balance_int - 1)).isoformat()
                     lwp_from_date  = (date.fromisoformat(casual_to_date) + timedelta(days=1)).isoformat()
             else:
@@ -261,13 +270,12 @@ def apply_leave(body: LeaveApplyRequest):
                 weekly_off = _get_weekly_off(client, holiday_list) if holiday_list else 6
                 holidays = _get_holidays_in_range(client, holiday_list, body.from_date, body.to_date) if holiday_list else set()
                 requested = _count_leave_days(body.from_date, body.to_date, holidays, weekly_off)
-                if balance_int > 0 and balance_int < requested:
+                if balance_int < requested:
                     casual_to_date = _end_date_for_n_leave_days(body.from_date, balance_int, holidays, weekly_off)
                     lwp_from_date  = _next_leave_day(casual_to_date, holidays, weekly_off)
 
-            if balance_int > 0 and balance_int < requested:
+            if balance_int < requested:
                 # Split: use up remaining CL balance, rest goes to LWP
-
                 cl_app = _create_leave_application(
                     client, body.employee, "Casual Leave",
                     body.from_date, casual_to_date, body.description,
