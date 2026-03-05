@@ -297,7 +297,6 @@ export default function EmployeeDetailPage() {
     } else if (section === "contact") {
       setEditValues({
         company_email: employee.company_email || "",
-        cell_phone: employee.cell_phone || "",
       });
       setLinkUserEmail(employee.user_id || "");
       setLinkUserMessage(null);
@@ -615,10 +614,6 @@ export default function EmployeeDetailPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Email</span>
                   <span>{employee.company_email || "-"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Phone</span>
-                  <span>{employee.cell_phone || "-"}</span>
                 </div>
                 {employee.user_id && (
                   <div className="flex justify-between">
@@ -1153,10 +1148,6 @@ export default function EmployeeDetailPage() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-email">Email</Label>
                   <Input id="edit-email" type="email" value={editValues.company_email} onChange={(e) => setEditValues((prev) => ({ ...prev, company_email: e.target.value }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-phone">Phone</Label>
-                  <Input id="edit-phone" type="tel" value={editValues.cell_phone} onChange={(e) => setEditValues((prev) => ({ ...prev, cell_phone: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-link-user">Linked User</Label>

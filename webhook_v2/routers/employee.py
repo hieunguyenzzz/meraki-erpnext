@@ -37,7 +37,6 @@ ALLOWED_FIELDS = {
     "gender",
     "date_of_birth",
     "company_email",
-    "cell_phone",
     "designation",
     "department",
     "date_of_joining",
