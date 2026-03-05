@@ -86,7 +86,7 @@ export const MODULES: ModuleConfig[] = [
   },
 ];
 
-const ALL_ADMIN_ROLES = [...new Set([...CRM_ROLES, ...HR_ROLES, ...FINANCE_ROLES])];
+const ALL_ADMIN_ROLES = [...new Set([...CRM_ROLES, ...PLANNER_ROLES, ...HR_ROLES, ...FINANCE_ROLES])];
 
 export function hasModuleAccess(userRoles: string[], moduleRoles: string[]): boolean {
   if (userRoles.includes("Administrator")) return true;
