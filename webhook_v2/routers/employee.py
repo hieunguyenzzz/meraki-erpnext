@@ -31,6 +31,7 @@ ASSIGNABLE_ROLES_PY = [
 # Must match ALLOWED_FIELDS in migration/phases/v015_employee_set_value_script.py
 # (v016 adds user_id)
 ALLOWED_FIELDS = {
+    "employee_name",
     "first_name",
     "middle_name",
     "last_name",
@@ -74,6 +75,18 @@ async def update_employee(employee_id: str, request: EmployeeUpdateRequest):
     if not updates:
         raise HTTPException(status_code=400, detail="No valid fields to update")
 
+    # If first_name or last_name is changing, compute employee_name
+    if "first_name" in updates or "last_name" in updates:
+        try:
+            emp = client._get(f"/api/resource/Employee/{employee_id}")
+            current = emp.get("data", {})
+            first = updates.get("first_name", current.get("first_name", ""))
+            last = updates.get("last_name", current.get("last_name", ""))
+            full_name = f"{first} {last}".strip() if last else first
+            updates["employee_name"] = full_name
+        except Exception as e:
+            log.warning("employee_name_compute_failed", employee=employee_id, error=str(e))
+
     # If company_email is changing and the employee has a linked User, rename the User
     if "company_email" in updates:
         try:
@@ -99,7 +112,7 @@ async def update_employee(employee_id: str, request: EmployeeUpdateRequest):
     try:
         result = client._post(
             "/api/method/meraki_set_employee_fields",
-            {"employee_name": employee_id, **updates},
+            {"employee_id": employee_id, **updates},
         )
     except Exception as e:
         log.error("employee_update_failed", employee=employee_id, error=str(e))
