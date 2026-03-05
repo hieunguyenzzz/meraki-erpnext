@@ -4,6 +4,7 @@ Sets Employee.status and disables/enables the linked User account.
 """
 
 import re
+from datetime import date
 
 from fastapi import APIRouter, HTTPException
 from requests.exceptions import HTTPError
@@ -27,6 +28,13 @@ async def deactivate_employee(employee_name: str):
     user_id = emp.get("user_id")
 
     try:
+        # Set relieving_date first (required by ERPNext for "Left" status)
+        client._post("/api/method/frappe.client.set_value", {
+            "doctype": "Employee",
+            "name": employee_name,
+            "fieldname": "relieving_date",
+            "value": str(date.today()),
+        })
         client._post("/api/method/frappe.client.set_value", {
             "doctype": "Employee",
             "name": employee_name,
@@ -66,16 +74,7 @@ async def activate_employee(employee_name: str):
 
     user_id = emp.get("user_id")
 
-    try:
-        client._post("/api/method/frappe.client.set_value", {
-            "doctype": "Employee",
-            "name": employee_name,
-            "fieldname": "status",
-            "value": "Active",
-        })
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update employee status: {e}")
-
+    # Re-enable user BEFORE setting employee status (ERPNext validates user is enabled)
     user_enabled = False
     if user_id:
         try:
@@ -89,6 +88,23 @@ async def activate_employee(employee_name: str):
             log.info("user_enabled", user=user_id, employee=employee_name)
         except Exception as e:
             log.warning("user_enable_failed", user=user_id, error=str(e))
+
+    try:
+        client._post("/api/method/frappe.client.set_value", {
+            "doctype": "Employee",
+            "name": employee_name,
+            "fieldname": "status",
+            "value": "Active",
+        })
+        # Clear relieving_date after reactivation
+        client._post("/api/method/frappe.client.set_value", {
+            "doctype": "Employee",
+            "name": employee_name,
+            "fieldname": "relieving_date",
+            "value": "",
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update employee status: {e}")
 
     log.info("employee_activated", employee=employee_name, user_enabled=user_enabled)
     return {"status": "ok", "employee": employee_name, "new_status": "Active", "user_enabled": user_enabled}
