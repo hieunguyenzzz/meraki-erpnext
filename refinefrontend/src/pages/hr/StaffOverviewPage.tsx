@@ -553,34 +553,6 @@ export default function StaffOverviewPage() {
       },
       filterFn: "arrIncludesSome",
     },
-    {
-      id: "leave_balance",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Leave Balance" />,
-      cell: ({ row }) => {
-        const { leave_remaining, leave_allocated } = row.original;
-        if (leave_allocated === 0) {
-          return <span className="text-muted-foreground">No allocation</span>;
-        }
-        const variant = getLeaveBalanceVariant(leave_remaining, leave_allocated);
-        return (
-          <Link to={`/hr/leaves`} className="hover:underline">
-            <Badge variant={variant}>
-              {leave_remaining}/{leave_allocated} days
-            </Badge>
-          </Link>
-        );
-      },
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      cell: ({ row }) => (
-        <Button size="sm" variant="outline" onClick={() => openReviewDialog(row.original)}>
-          {row.original.custom_last_review_date ? "Edit Review" : "Add Review"}
-        </Button>
-      ),
-      enableSorting: false,
-    },
   ];
 
   const isLoading = employeesQuery.isLoading;
