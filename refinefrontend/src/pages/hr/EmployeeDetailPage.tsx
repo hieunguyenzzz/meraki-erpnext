@@ -411,6 +411,7 @@ export default function EmployeeDetailPage() {
       if (!res.ok) throw new Error(data.detail || `API error ${res.status}`);
       const msg = data.created ? "User created and linked" : "User linked";
       setLinkUserMessage({ type: "success", text: msg });
+      setEditValues((prev) => ({ ...prev, company_email: linkUserEmail.trim() }));
       invalidate({ resource: "Employee", id: employee.name, invalidates: ["detail"] });
     } catch (err: any) {
       setLinkUserMessage({ type: "error", text: err?.message || "Failed to link user" });
@@ -1145,10 +1146,6 @@ export default function EmployeeDetailPage() {
             )}
             {editSection === "contact" && (
               <>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-email">Email</Label>
-                  <Input id="edit-email" type="email" value={editValues.company_email} onChange={(e) => setEditValues((prev) => ({ ...prev, company_email: e.target.value }))} />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-link-user">Linked User</Label>
                   <div className="flex gap-2">
