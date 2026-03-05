@@ -71,6 +71,10 @@ export default function EmployeeDetailPage() {
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
 
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
   const { data: roles } = usePermissions<string[]>({});
@@ -526,6 +530,24 @@ export default function EmployeeDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!employee) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/inquiry-api/employee/${employee.name}/delete`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${res.status}`);
+      }
+      navigate("/hr/employees");
+    } catch (err: any) {
+      setDeleteError(err?.message || "Failed to delete employee");
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
   if (!employee) {
     return <DetailSkeleton />;
   }
@@ -555,6 +577,14 @@ export default function EmployeeDetailPage() {
             onClick={() => { setStatusError(null); setStatusDialogOpen(true); }}
           >
             {employee.status === "Active" ? "Deactivate" : "Activate"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-red-600 border-red-200 hover:bg-red-50"
+            onClick={() => { setDeleteError(null); setDeleteDialogOpen(true); }}
+          >
+            Delete
           </Button>
         </div>
         {(employee.designation || employee.department) && (
@@ -972,6 +1002,27 @@ export default function EmployeeDetailPage() {
               disabled={statusLoading}
             >
               {statusLoading ? "Saving..." : employee.status === "Active" ? "Deactivate" : "Activate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Employee Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {displayName(employee)}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will permanently delete {displayName(employee)} and their user account. This cannot be undone.
+          </p>
+          {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleteLoading}>
+              {deleteLoading ? "Deleting..." : "Delete permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>
