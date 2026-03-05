@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
-import { useOne, useList, useInvalidate, useCustomMutation } from "@refinedev/core";
+import { useOne, useList, useInvalidate, useCustomMutation, usePermissions } from "@refinedev/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { formatDate, formatVND, displayName } from "@/lib/format";
@@ -16,7 +16,7 @@ import { DetailSkeleton } from "@/components/detail-skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getLeaveBalanceVariant } from "@/lib/review-status";
-import { ASSIGNABLE_ROLES } from "@/lib/roles";
+import { ASSIGNABLE_ROLES, FINANCE_ROLES, hasModuleAccess } from "@/lib/roles";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Employee } from "@/lib/types";
 
@@ -73,6 +73,8 @@ export default function EmployeeDetailPage() {
 
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
+  const { data: roles } = usePermissions<string[]>({});
+  const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
 
   const { result: employee } = useOne<Employee>({ resource: "Employee", id: name! });
 
@@ -727,7 +729,8 @@ export default function EmployeeDetailPage() {
               </CardContent>
             </Card>
 
-            {/* Commission Structure */}
+            {/* Commission Structure (finance only) */}
+            {isFinance && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle>Commission Structure</CardTitle>
@@ -769,8 +772,10 @@ export default function EmployeeDetailPage() {
                 )}
               </CardContent>
             </Card>
+            )}
 
-            {/* Allowance Rates */}
+            {/* Allowance Rates (finance only) */}
+            {isFinance && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle>Allowance Rates</CardTitle>
@@ -811,6 +816,7 @@ export default function EmployeeDetailPage() {
                 </table>
               </CardContent>
             </Card>
+            )}
           </div>
         </TabsContent>
 
