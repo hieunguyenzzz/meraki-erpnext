@@ -82,7 +82,7 @@ async def update_employee(employee_id: str, request: EmployeeUpdateRequest):
             current = emp.get("data", {})
             user_id = current.get("user_id")
             new_email = updates["company_email"]
-            if user_id and user_id != new_email:
+            if user_id and new_email and user_id != new_email:
                 try:
                     client._post("/api/method/frappe.client.rename_doc", {
                         "doctype": "User",
