@@ -488,6 +488,13 @@ export default function StaffOverviewPage() {
       },
     },
     {
+      accessorKey: "user_id",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Email" />,
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">{row.original.user_id || "—"}</span>
+      ),
+    },
+    {
       accessorKey: "designation",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
     },
