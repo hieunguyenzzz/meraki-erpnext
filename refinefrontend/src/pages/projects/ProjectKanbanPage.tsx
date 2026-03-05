@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useList } from "@refinedev/core";
+import { useList, usePermissions } from "@refinedev/core";
 import { LayoutGrid, LayoutList, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { type ColumnDef } from "@tanstack/react-table";
@@ -19,6 +19,7 @@ import {
 } from "@/lib/projectKanban";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
 import { displayName } from "@/lib/format";
+import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
 
 export default function ProjectKanbanPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -26,6 +27,8 @@ export default function ProjectKanbanPage() {
     (localStorage.getItem("wedding-view-mode") as "kanban" | "list") || "list"
   );
   const [yearFilter, setYearFilter] = useState<string | null>(String(new Date().getFullYear()));
+  const { data: roles } = usePermissions<string[]>({});
+  const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
 
   const handleViewChange = (mode: "kanban" | "list") => {
     setViewMode(mode);
@@ -171,80 +174,87 @@ export default function ProjectKanbanPage() {
     return items.filter((p) => p.expected_end_date?.startsWith(yearFilter));
   }, [items, yearFilter]);
 
-  const columns = useMemo<ColumnDef<ProjectKanbanItem>[]>(() => [
-    {
-      accessorKey: "customer_name",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Couple" />,
-      cell: ({ row }) => (
-        <Link
-          to={`/projects/${row.original.id}`}
-          className="font-medium hover:underline"
-        >
-          {row.getValue("customer_name")}
-        </Link>
-      ),
-    },
-    {
-      accessorKey: "expected_end_date",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Wedding Date" />,
-      cell: ({ row }) => {
-        const date = row.getValue("expected_end_date") as string;
-        if (!date) return <span className="text-muted-foreground">—</span>;
-        const { text, color } = formatDaysUntilWedding(date);
-        return (
-          <div className="flex items-center gap-2">
-            <span>{new Date(date).toLocaleDateString("vi-VN")}</span>
-            <Badge variant="outline" className={`text-${color}-600 border-${color}-200`}>{text}</Badge>
-          </div>
-        );
+  const columns = useMemo<ColumnDef<ProjectKanbanItem>[]>(() => {
+    const cols: ColumnDef<ProjectKanbanItem>[] = [
+      {
+        accessorKey: "customer_name",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Couple" />,
+        cell: ({ row }) => (
+          <Link
+            to={`/projects/${row.original.id}`}
+            className="font-medium hover:underline"
+          >
+            {row.getValue("customer_name")}
+          </Link>
+        ),
       },
-    },
-    {
-      accessorKey: "custom_project_stage",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Stage" />,
-      cell: ({ row }) => <Badge variant="secondary">{row.getValue("custom_project_stage")}</Badge>,
-      filterFn: "arrIncludesSome",
-    },
-    {
-      accessorKey: "venue_name",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Venue" />,
-      cell: ({ row }) => row.getValue("venue_name") ?? <span className="text-muted-foreground">—</span>,
-    },
-    {
-      accessorKey: "lead_planner_name",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Lead Planner" />,
-      cell: ({ row }) => row.getValue("lead_planner_name") ?? <span className="text-muted-foreground">—</span>,
-    },
-    {
-      accessorKey: "package_amount",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Package" />,
-      cell: ({ row }) => {
-        const amount = row.getValue("package_amount") as number | undefined;
-        return amount
-          ? <span>{amount.toLocaleString("vi-VN")} ₫</span>
-          : <span className="text-muted-foreground">—</span>;
+      {
+        accessorKey: "expected_end_date",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Wedding Date" />,
+        cell: ({ row }) => {
+          const date = row.getValue("expected_end_date") as string;
+          if (!date) return <span className="text-muted-foreground">—</span>;
+          const { text, color } = formatDaysUntilWedding(date);
+          return (
+            <div className="flex items-center gap-2">
+              <span>{new Date(date).toLocaleDateString("vi-VN")}</span>
+              <Badge variant="outline" className={`text-${color}-600 border-${color}-200`}>{text}</Badge>
+            </div>
+          );
+        },
       },
-    },
-    {
-      accessorKey: "per_billed",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Paid" />,
-      cell: ({ row }) => {
-        const pct = row.getValue("per_billed") as number | undefined;
-        if (pct == null) return <span className="text-muted-foreground">—</span>;
-        const rounded = Math.round(pct);
-        const color = rounded >= 100 ? "text-green-600" : rounded >= 50 ? "text-amber-600" : "text-muted-foreground";
-        return <span className={`font-medium ${color}`}>{rounded}%</span>;
+      {
+        accessorKey: "custom_project_stage",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Stage" />,
+        cell: ({ row }) => <Badge variant="secondary">{row.getValue("custom_project_stage")}</Badge>,
+        filterFn: "arrIncludesSome",
       },
-    },
-    {
+      {
+        accessorKey: "venue_name",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Venue" />,
+        cell: ({ row }) => row.getValue("venue_name") ?? <span className="text-muted-foreground">—</span>,
+      },
+      {
+        accessorKey: "lead_planner_name",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Lead Planner" />,
+        cell: ({ row }) => row.getValue("lead_planner_name") ?? <span className="text-muted-foreground">—</span>,
+      },
+    ];
+    if (isFinance) {
+      cols.push(
+        {
+          accessorKey: "package_amount",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Package" />,
+          cell: ({ row }) => {
+            const amount = row.getValue("package_amount") as number | undefined;
+            return amount
+              ? <span>{amount.toLocaleString("vi-VN")} ₫</span>
+              : <span className="text-muted-foreground">—</span>;
+          },
+        },
+        {
+          accessorKey: "per_billed",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Paid" />,
+          cell: ({ row }) => {
+            const pct = row.getValue("per_billed") as number | undefined;
+            if (pct == null) return <span className="text-muted-foreground">—</span>;
+            const rounded = Math.round(pct);
+            const color = rounded >= 100 ? "text-green-600" : rounded >= 50 ? "text-amber-600" : "text-muted-foreground";
+            return <span className={`font-medium ${color}`}>{rounded}%</span>;
+          },
+        },
+      );
+    }
+    cols.push({
       id: "actions",
       cell: ({ row }) => (
         <Button variant="ghost" size="sm" asChild>
           <Link to={`/projects/${row.original.id}`}>View →</Link>
         </Button>
       ),
-    },
-  ], []);
+    });
+    return cols;
+  }, [isFinance]);
 
   const filterableColumns: FilterableColumn[] = useMemo(() => [
     {

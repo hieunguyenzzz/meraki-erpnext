@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useOne, useList, useUpdate, useInvalidate, useNavigation } from "@refinedev/core";
+import { useOne, useList, useUpdate, useInvalidate, useNavigation, usePermissions } from "@refinedev/core";
 import * as Popover from "@radix-ui/react-popover";
 import { formatDate, formatVND, displayName } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,6 +51,7 @@ import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
+import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 const WEDDING_PHASES = [
@@ -145,6 +146,8 @@ export default function ProjectDetailPage() {
   const invalidate = useInvalidate();
   const { mutateAsync: updateRecord } = useUpdate();
   const { list } = useNavigation();
+  const { data: roles } = usePermissions<string[]>({});
+  const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
 
   // Fetch Project
   const { result: project } = useOne({
@@ -764,7 +767,7 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
-                    {totalValue > 0 && (
+                    {isFinance && totalValue > 0 && (
                       <div className="flex items-start gap-3 text-sm">
                         <DollarSign className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                         <div>
@@ -780,7 +783,7 @@ export default function ProjectDetailPage() {
                           {addOnItems.map((item) => (
                             <div key={item.name} className="flex justify-between text-sm">
                               <span>{item.item_name}</span>
-                              <span className="text-muted-foreground">{formatVND(item.amount)}</span>
+                              {isFinance && <span className="text-muted-foreground">{formatVND(item.amount)}</span>}
                             </div>
                           ))}
                         </div>
@@ -791,6 +794,7 @@ export default function ProjectDetailPage() {
               )}
 
               {/* Payment Milestones */}
+              {isFinance && (
               <Card>
                 <CardHeader>
                   <CardTitle>Payment Milestones</CardTitle>
@@ -893,6 +897,7 @@ export default function ProjectDetailPage() {
                   </Button>
                 </CardContent>
               </Card>
+              )}
 
               {/* Team */}
               {(project.custom_lead_planner || project.custom_support_planner || assistants.length > 0) && (
