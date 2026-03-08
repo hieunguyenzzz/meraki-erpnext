@@ -10,8 +10,8 @@ from core.erpnext_client import ERPNextClient
 from runner import run_pending
 
 
-def wait_for_erpnext(config: dict, max_wait: int = 120) -> None:
-    """Poll ERPNext until it responds with a valid auth (200 or 404), not 401/503."""
+def wait_for_erpnext(config: dict, max_wait: int = 180) -> None:
+    """Poll ERPNext until it responds with valid JSON (not HTML proxy errors)."""
     url = config['url'].rstrip('/')
     headers = {'Authorization': f"token {config['api_key']}:{config['api_secret']}"}
     deadline = time.time() + max_wait
@@ -19,10 +19,15 @@ def wait_for_erpnext(config: dict, max_wait: int = 120) -> None:
     while time.time() < deadline:
         attempt += 1
         try:
-            r = requests.get(f"{url}/api/resource/Item", headers=headers, timeout=10)
-            if r.status_code in (200, 404):
-                print(f"ERPNext ready (attempt {attempt}, status {r.status_code})")
-                return
+            r = requests.get(f"{url}/api/method/frappe.ping", headers=headers, timeout=10)
+            if r.status_code == 200:
+                try:
+                    data = r.json()
+                    if data.get("message") == "pong":
+                        print(f"ERPNext ready (attempt {attempt})")
+                        return
+                except ValueError:
+                    pass
             print(f"Waiting for ERPNext... attempt {attempt}, status {r.status_code}")
         except Exception as e:
             print(f"Waiting for ERPNext... attempt {attempt}, error: {e}")
