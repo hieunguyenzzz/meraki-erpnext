@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import sys
 import time
 import requests
@@ -13,7 +14,10 @@ from runner import run_pending
 def wait_for_erpnext(config: dict, max_wait: int = 180) -> None:
     """Poll ERPNext until it responds with valid JSON (not HTML proxy errors)."""
     url = config['url'].rstrip('/')
+    site_name = os.environ.get('SITE_NAME', '')
     headers = {'Authorization': f"token {config['api_key']}:{config['api_secret']}"}
+    if site_name:
+        headers['Host'] = site_name
     deadline = time.time() + max_wait
     attempt = 0
     while time.time() < deadline:

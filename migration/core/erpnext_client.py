@@ -5,6 +5,7 @@ Provides a clean interface for interacting with ERPNext REST API.
 """
 
 import json
+import os
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -44,11 +45,15 @@ class ERPNextClient:
         return session
 
     def _get_headers(self) -> dict:
-        """Get authorization headers."""
-        return {
+        """Get authorization headers (includes Host for multi-site Frappe)."""
+        headers = {
             'Authorization': f'token {self.api_key}:{self.api_secret}',
             'Content-Type': 'application/json',
         }
+        site_name = os.environ.get('SITE_NAME', '')
+        if site_name:
+            headers['Host'] = site_name
+        return headers
 
     def get(self, doctype: str, name: str) -> Optional[dict]:
         """Get a single document by name.
