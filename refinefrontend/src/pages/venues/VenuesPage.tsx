@@ -235,7 +235,7 @@ export default function VenuesPage() {
                           {v.custom_venue_city}
                         </p>
                       )}
-                      {(v.custom_capacity_min || v.custom_capacity_max) && (
+                      {(Number(v.custom_capacity_min) > 0 || Number(v.custom_capacity_max) > 0) && (
                         <p className="text-sm text-muted-foreground flex items-center gap-1">
                           <Users className="h-3.5 w-3.5 shrink-0" />
                           {v.custom_capacity_min && v.custom_capacity_max

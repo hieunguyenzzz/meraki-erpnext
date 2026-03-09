@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useList, useInvalidate, useApiUrl } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 import { formatVND, formatDate } from "@/lib/format";
 import { extractErrorMessage } from "@/lib/errors";
@@ -18,6 +18,12 @@ function endOfMonth(d: Date) {
 }
 function docstatusLabel(ds: number) { return ds === 0 ? "Draft" : ds === 1 ? "Submitted" : ds === 2 ? "Cancelled" : "Unknown"; }
 function docstatusBadge(ds: number) { return ds === 1 ? "success" as const : ds === 2 ? "destructive" as const : "secondary" as const; }
+
+/** Parse "YYYY-MM-DD" into a Date (local timezone) */
+function parseDate(s: string) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
 
 interface SalarySlipEarning {
   salary_component: string;
@@ -144,38 +150,12 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDe
   ];
 }
 
-const historyColumns: ColumnDef<PayrollEntry, unknown>[] = [
-  {
-    accessorKey: "start_date",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Period" />,
-    cell: ({ row }) => <span className="font-medium">{formatDate(row.original.start_date)} - {formatDate(row.original.end_date)}</span>,
-  },
-  {
-    accessorKey: "number_of_employees",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Employees" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{row.original.number_of_employees ?? "-"}</div>,
-  },
-  {
-    accessorKey: "docstatus",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-    cell: ({ row }) => (
-      <Badge variant={docstatusBadge(row.original.docstatus)}>
-        {row.original.status || docstatusLabel(row.original.docstatus)}
-      </Badge>
-    ),
-  },
-  {
-    accessorKey: "posting_date",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Posted" />,
-    cell: ({ row }) => formatDate(row.original.posting_date),
-  },
-];
-
 export default function PayrollPage() {
   const today = now();
-  const start = firstOfMonth(today);
-  const end = endOfMonth(today);
+  const currentMonthStart = firstOfMonth(today);
+  const currentMonthEnd = endOfMonth(today);
 
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStart);
   const [isRunning, setIsRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -186,34 +166,67 @@ export default function PayrollPage() {
   const apiUrl = useApiUrl();
   const invalidate = useInvalidate();
 
-  const { result: peResult, query: peQuery } = useList({
+  const isCurrentMonth = selectedMonth === currentMonthStart;
+
+  // Fetch ALL payroll entries (for month selector + finding selected PE)
+  const { result: allEntriesResult } = useList({
     resource: "Payroll Entry",
     pagination: { mode: "off" },
-    filters: [
-      { field: "start_date", operator: "eq", value: start },
-      { field: "company", operator: "eq", value: "Meraki Wedding Planner" },
-    ],
-    sorters: [{ field: "creation", order: "desc" }],
+    sorters: [{ field: "start_date", order: "desc" }],
     meta: { fields: ["name", "posting_date", "start_date", "end_date", "docstatus", "status", "number_of_employees"] },
   });
 
-  const payrollEntries = peResult?.data ?? [];
-  const currentPE = payrollEntries.length > 0 ? (payrollEntries[0] as any) : null;
+  const allEntries = (allEntriesResult?.data ?? []) as PayrollEntry[];
 
+  // Build month options from allEntries, deduplicated by start_date, sorted newest first
+  const monthOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+
+    // Always include current month
+    seen.add(currentMonthStart);
+    opts.push({ value: currentMonthStart, label: monthLabel(today) });
+
+    for (const entry of allEntries) {
+      if (!seen.has(entry.start_date)) {
+        seen.add(entry.start_date);
+        const d = parseDate(entry.start_date);
+        opts.push({ value: entry.start_date, label: monthLabel(d) });
+      }
+    }
+
+    // Sort newest first
+    opts.sort((a, b) => b.value.localeCompare(a.value));
+    return opts;
+  }, [allEntries, currentMonthStart]);
+
+  // Find the Payroll Entry for the selected month
+  const selectedPE = useMemo(() => {
+    return allEntries.find(e => e.start_date === selectedMonth) ?? null;
+  }, [allEntries, selectedMonth]);
+
+  // Compute end date for the selected month
+  const selectedEnd = useMemo(() => {
+    if (selectedPE) return selectedPE.end_date;
+    const d = parseDate(selectedMonth);
+    return endOfMonth(d);
+  }, [selectedPE, selectedMonth]);
+
+  // Fetch salary slips for selected Payroll Entry
   const { result: slipsResult, query: slipsQuery } = useList({
     resource: "Salary Slip",
     pagination: { mode: "off" },
-    filters: currentPE
-      ? [{ field: "payroll_entry", operator: "eq", value: currentPE.name }]
+    filters: selectedPE
+      ? [{ field: "payroll_entry", operator: "eq", value: selectedPE.name }]
       : [{ field: "name", operator: "eq", value: "__never__" }],
     sorters: [{ field: "employee_name", order: "asc" }],
     meta: { fields: ["name", "employee", "employee_name", "gross_pay", "total_deduction", "net_pay", "posting_date", "docstatus"] },
-    queryOptions: { enabled: !!currentPE },
+    queryOptions: { enabled: !!selectedPE },
   });
 
   const basicSlips = (slipsResult?.data ?? []) as SalarySlip[];
 
-  // Fetch detailed salary slips with earnings child table
+  // Fetch detailed salary slips with earnings/deductions child tables
   useEffect(() => {
     async function fetchDetails() {
       if (basicSlips.length === 0) {
@@ -253,16 +266,7 @@ export default function PayrollPage() {
 
   const salarySlips = detailedSlips.length > 0 ? detailedSlips : basicSlips;
   const hasDraftSlips = salarySlips.some((s) => s.docstatus === 0);
-  const allSlipsSubmitted = currentPE && salarySlips.length > 0 && salarySlips.every((s) => s.docstatus === 1);
-
-  const { result: histResult } = useList({
-    resource: "Payroll Entry",
-    pagination: { mode: "off" },
-    sorters: [{ field: "posting_date", order: "desc" }],
-    meta: { fields: ["name", "posting_date", "start_date", "end_date", "docstatus", "status", "number_of_employees"] },
-  });
-
-  const allEntries = (histResult?.data ?? []) as PayrollEntry[];
+  const allSlipsSubmitted = selectedPE && salarySlips.length > 0 && salarySlips.every((s) => s.docstatus === 1);
 
   const { result: empResult } = useList({
     resource: "Employee",
@@ -273,18 +277,18 @@ export default function PayrollPage() {
 
   const activeCount = empResult?.data?.length ?? 0;
 
-  // Fetch Wedding Allowance Additional Salary records for current period
+  // Fetch Wedding Allowance Additional Salary records for selected period
   const { result: additionalSalariesResult } = useList({
     resource: "Additional Salary",
     pagination: { mode: "off" },
     filters: [
       { field: "salary_component", operator: "eq", value: "Wedding Allowance" },
-      { field: "payroll_date", operator: "gte", value: start },
-      { field: "payroll_date", operator: "lte", value: end },
+      { field: "payroll_date", operator: "gte", value: selectedMonth },
+      { field: "payroll_date", operator: "lte", value: selectedEnd },
       { field: "docstatus", operator: "eq", value: 1 },
     ],
     meta: { fields: ["name", "employee", "amount", "custom_wedding_project"] },
-    queryOptions: { enabled: !!start && !!end },
+    queryOptions: { enabled: !!selectedMonth && !!selectedEnd },
   });
 
   const weddingAllowanceMap = useMemo(() => {
@@ -304,7 +308,7 @@ export default function PayrollPage() {
       const res = await fetch("/inquiry-api/generate-payroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ start_date: start, end_date: end }),
+        body: JSON.stringify({ start_date: currentMonthStart, end_date: currentMonthEnd }),
       });
       if (!res.ok) throw new Error(`Payroll generation failed: ${res.status}`);
       invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
@@ -319,14 +323,14 @@ export default function PayrollPage() {
   }
 
   async function handleSubmitAll() {
-    if (!currentPE) return;
+    if (!selectedPE) return;
     setSubmitting(true);
     setError(null);
     try {
       const resp = await fetch("/inquiry-api/payroll/submit-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payroll_entry: currentPE.name }),
+        body: JSON.stringify({ payroll_entry: selectedPE.name }),
       });
 
       if (!resp.ok) {
@@ -348,8 +352,7 @@ export default function PayrollPage() {
     }
   }
 
-  const isLoading = peQuery?.isLoading || slipsQuery?.isLoading || loadingDetails;
-  const peHasNoSlips = currentPE && salarySlips.length === 0 && !isLoading;
+  const isLoading = slipsQuery?.isLoading || loadingDetails;
 
   return (
     <div className="space-y-4">
@@ -358,18 +361,30 @@ export default function PayrollPage() {
           <h1 className="text-2xl font-bold tracking-tight">Payroll</h1>
           <p className="text-muted-foreground">Salary processing and history</p>
         </div>
-        <div className="flex gap-2">
-          {!isLoading && !allSlipsSubmitted && (
+        <div className="flex items-center gap-3">
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isCurrentMonth && !isLoading && !allSlipsSubmitted && (
             <Button onClick={handleGenerate} disabled={isRunning || submitting}>
-              {isRunning ? "Generating..." : currentPE ? `Recalculate ${monthLabel(today)}` : `Generate for ${monthLabel(today)}`}
+              {isRunning ? "Generating..." : selectedPE ? `Recalculate` : `Generate`}
             </Button>
           )}
-          {currentPE && hasDraftSlips && (
+          {isCurrentMonth && selectedPE && hasDraftSlips && (
             <Button onClick={handleSubmitAll} disabled={submitting || isRunning}>
               {submitting ? "Submitting..." : "Submit All"}
             </Button>
           )}
-          {allSlipsSubmitted && (
+          {isCurrentMonth && allSlipsSubmitted && (
             <Badge variant="success" className="px-3 py-1.5 text-sm">Payroll Submitted</Badge>
           )}
         </div>
@@ -382,42 +397,25 @@ export default function PayrollPage() {
         </div>
       )}
 
-      <Tabs defaultValue="current">
-        <TabsList>
-          <TabsTrigger value="current">Current Month</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="current">
-          {!isLoading && !currentPE ? (
-            <Card>
-              <CardContent className="py-8">
-                <p className="text-muted-foreground text-center">
-                  No payroll entry for {monthLabel(today)}. Click "Generate" to create one for {activeCount} active employees.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <DataTable
-              columns={slipColumns}
-              data={salarySlips}
-              isLoading={isLoading}
-              searchKey="employee_name"
-              searchPlaceholder="Search by employee..."
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="history">
-          <DataTable
-            columns={historyColumns}
-            data={allEntries}
-            isLoading={false}
-            searchKey="start_date"
-            searchPlaceholder="Search by period..."
-          />
-        </TabsContent>
-      </Tabs>
+      {!isLoading && !selectedPE ? (
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-muted-foreground text-center">
+              {isCurrentMonth
+                ? `No payroll entry for ${monthLabel(today)}. Click "Generate" to create one for ${activeCount} active employees.`
+                : `No payroll entry for ${monthOptions.find(o => o.value === selectedMonth)?.label ?? selectedMonth}.`}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <DataTable
+          columns={slipColumns}
+          data={salarySlips}
+          isLoading={isLoading}
+          searchKey="employee_name"
+          searchPlaceholder="Search by employee..."
+        />
+      )}
     </div>
   );
 }

@@ -43,6 +43,7 @@ import MyLeavesPage from "@/pages/self-service/MyLeavesPage";
 import MyAttendancePage from "@/pages/self-service/MyAttendancePage";
 import SettingsPage from "@/pages/admin/SettingsPage";
 import VenuesPage from "@/pages/venues/VenuesPage";
+import LeaveReportPage from "@/pages/hr/LeaveReportPage";
 import VenueDetailPage from "@/pages/venues/VenueDetailPage";
 
 const queryClient = new QueryClient({
@@ -153,6 +154,7 @@ export default function App() {
               <Route path="/hr/employees" element={<EmployeesPage />} />
               <Route path="/hr/employees/:name" element={<EmployeeDetailPage />} />
               <Route path="/hr/payroll" element={<PayrollPage />} />
+              <Route path="/hr/leaves" element={<LeaveReportPage />} />
 
               {/* Finance */}
               <Route path="/finance/invoices" element={<InvoicesPage />} />
