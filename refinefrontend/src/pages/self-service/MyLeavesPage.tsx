@@ -118,116 +118,27 @@ export default function MyLeavesPage() {
   });
   const leaveApps = (appsResult?.data ?? []) as LeaveApplication[];
 
-  // Fetch leave allocations for this employee
-  const { result: allocsResult } = useList<LeaveAllocation>({
-    resource: "Leave Allocation",
-    filters: employeeId
-      ? [
-          { field: "employee", operator: "eq", value: employeeId },
-          { field: "docstatus", operator: "eq", value: 1 },
-        ]
-      : [],
-    pagination: { mode: "off" },
-    meta: {
-      fields: [
-        "name",
-        "leave_type",
-        "total_leaves_allocated",
-        "new_leaves_allocated",
-        "from_date",
-        "to_date",
-      ],
-    },
-    queryOptions: { enabled: !!employeeId },
-  });
-  const allocations = (allocsResult?.data ?? []) as LeaveAllocation[];
+  // Fetch leave balances from backend (computed as admin, avoids field permission issues)
+  const [balanceData, setBalanceData] = useState<{ data: any[]; before_august: boolean } | null>(null);
+  useEffect(() => {
+    if (!employeeId) return;
+    fetch(`/inquiry-api/leave/balance?employee=${employeeId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then(setBalanceData)
+      .catch(() => setBalanceData(null));
+  }, [employeeId]);
 
-  // Calculate leave balances with period-aware breakdown
   const leaveBalances = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    const beforeAugust = new Date() < new Date(currentYear, 7, 1); // Before Aug 1
-    const oldCutoff = new Date(currentYear, 7, 1); // Aug 1
+    if (!balanceData?.data) return [];
+    const beforeAugust = balanceData.before_august;
 
-    // Check if from_date is available on allocations (requires read permission)
-    const hasFromDate = allocations.some((a) => !!a.from_date);
-
-    // Separate allocations into old (before Aug 1) and new (Aug 1+) periods
-    const oldAllocs = hasFromDate
-      ? allocations.filter((a) => a.from_date && parseDate(a.from_date) < oldCutoff)
-      : [];
-    const newAllocs = hasFromDate
-      ? allocations.filter((a) => a.from_date && parseDate(a.from_date) >= oldCutoff)
-      : [];
-
-    // Count taken/pending per leave type per period
-    const countByPeriod = (apps: LeaveApplication[], period: "old" | "new") => {
-      const taken = new Map<string, number>();
-      const pending = new Map<string, number>();
-      for (const app of apps) {
-        if (app.status === "Rejected" || app.docstatus === 2) continue;
-        const appDate = parseDate(app.from_date);
-        const inOld = appDate < oldCutoff;
-        if ((period === "old" && !inOld) || (period === "new" && inOld)) continue;
-        const days = app.total_leave_days ?? 0;
-        if (app.status === "Approved" || app.docstatus === 1) {
-          taken.set(app.leave_type, (taken.get(app.leave_type) ?? 0) + days);
-        } else {
-          pending.set(app.leave_type, (pending.get(app.leave_type) ?? 0) + days);
-        }
-      }
-      return { taken, pending };
-    };
-
-    // Fallback: simple total (no period breakdown) when from_date not available
-    if (!hasFromDate) {
-      const takenByType = new Map<string, number>();
-      const pendingByType = new Map<string, number>();
-      for (const app of leaveApps) {
-        if (app.status === "Rejected" || app.docstatus === 2) continue;
-        const days = app.total_leave_days ?? 0;
-        if (app.status === "Approved" || app.docstatus === 1) {
-          takenByType.set(app.leave_type, (takenByType.get(app.leave_type) ?? 0) + days);
-        } else {
-          pendingByType.set(app.leave_type, (pendingByType.get(app.leave_type) ?? 0) + days);
-        }
-      }
-      // Sum allocations by leave type
-      const allocByType = new Map<string, number>();
-      for (const alloc of allocations) {
-        const days = alloc.new_leaves_allocated ?? alloc.total_leaves_allocated ?? 0;
-        allocByType.set(alloc.leave_type, (allocByType.get(alloc.leave_type) ?? 0) + days);
-      }
-      return [...allocByType.entries()].map(([leaveType, allocated]) => {
-        const taken = takenByType.get(leaveType) ?? 0;
-        const pending = pendingByType.get(leaveType) ?? 0;
-        return {
-          leaveType,
-          showOldPeriod: false,
-          oldAllocDays: 0, oldTaken: 0, oldPending: 0, oldBalance: 0,
-          newAllocDays: allocated, newTaken: taken, newPending: pending,
-          newBalance: allocated - taken - pending,
-          totalBalance: allocated - taken - pending,
-        };
-      });
-    }
-
-    const oldCounts = countByPeriod(leaveApps, "old");
-    const newCounts = countByPeriod(leaveApps, "new");
-
-    // Get unique leave types
-    const leaveTypes = [...new Set(allocations.map((a) => a.leave_type))];
-
-    return leaveTypes.map((leaveType) => {
-      const oldAlloc = oldAllocs.find((a) => a.leave_type === leaveType);
-      const newAlloc = newAllocs.find((a) => a.leave_type === leaveType);
-
-      const oldAllocDays = oldAlloc?.new_leaves_allocated ?? 0;
-      const newAllocDays = newAlloc?.new_leaves_allocated ?? 0;
-
-      const rawOldTaken = oldCounts.taken.get(leaveType) ?? 0;
-      const oldPending = oldCounts.pending.get(leaveType) ?? 0;
-      const newTaken = newCounts.taken.get(leaveType) ?? 0;
-      const newPending = newCounts.pending.get(leaveType) ?? 0;
+    return balanceData.data.map((item: any) => {
+      const oldAllocDays = item.old_allocation ?? 0;
+      const newAllocDays = item.new_allocation ?? 0;
+      const rawOldTaken = item.old_taken ?? 0;
+      const oldPending = item.old_pending ?? 0;
+      const newTaken = item.new_taken ?? 0;
+      const newPending = item.new_pending ?? 0;
 
       // Apply overflow: cap old taken at old allocation
       const cappedOldTaken = Math.min(rawOldTaken, oldAllocDays);
@@ -238,23 +149,20 @@ export default function MyLeavesPage() {
       const newBalance = newAllocDays - effectiveNewTaken - newPending;
 
       return {
-        leaveType,
-        // Old period (shown only before Aug 1)
+        leaveType: item.leave_type,
         showOldPeriod: beforeAugust && oldAllocDays > 0,
         oldAllocDays,
         oldTaken: cappedOldTaken,
         oldPending,
         oldBalance: Math.max(0, oldBalance),
-        // New period
         newAllocDays,
         newTaken: effectiveNewTaken,
         newPending,
         newBalance,
-        // Total
         totalBalance: Math.max(0, oldBalance) + newBalance,
       };
     });
-  }, [allocations, leaveApps]);
+  }, [balanceData]);
 
   // Backend-driven split preview for Casual Leave (holiday-aware)
   const [splitPreview, setSplitPreview] = useState<{

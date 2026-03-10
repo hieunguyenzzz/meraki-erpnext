@@ -371,3 +371,75 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
         casual_to_date=casual_to_date,
         lwp_from_date=lwp_from_date,
     )
+
+
+@router.get("/leave/balance")
+def get_leave_balance(employee: str):
+    """Return leave allocations and taken days for an employee, computed server-side.
+
+    This avoids field-level permission issues when the frontend queries as Employee Self Service.
+    """
+    client = ERPNextClient()
+    current_year = date.today().year
+    old_cutoff = date(current_year, 8, 1)  # Aug 1
+
+    # Fetch all submitted allocations for this employee
+    allocs = client._get("/api/resource/Leave Allocation", params={
+        "filters": f'[["employee","=","{employee}"],["docstatus","=",1]]',
+        "fields": '["name","leave_type","from_date","to_date","new_leaves_allocated"]',
+        "limit_page_length": 100,
+    }).get("data", [])
+
+    # Fetch all non-cancelled leave applications
+    apps = client._get("/api/resource/Leave Application", params={
+        "filters": f'[["employee","=","{employee}"],["docstatus","!=",2]]',
+        "fields": '["name","leave_type","from_date","total_leave_days","status","docstatus"]',
+        "limit_page_length": 500,
+    }).get("data", [])
+
+    # Group allocations by leave type and period
+    result = {}
+    for alloc in allocs:
+        lt = alloc.get("leave_type", "")
+        fd = alloc.get("from_date", "")[:10] if alloc.get("from_date") else ""
+        alloc_days = float(alloc.get("new_leaves_allocated", 0))
+        is_old = fd and date.fromisoformat(fd) < old_cutoff
+
+        if lt not in result:
+            result[lt] = {
+                "leave_type": lt,
+                "old_allocation": 0, "new_allocation": 0,
+                "old_taken": 0, "old_pending": 0,
+                "new_taken": 0, "new_pending": 0,
+            }
+        if is_old:
+            result[lt]["old_allocation"] += alloc_days
+        else:
+            result[lt]["new_allocation"] += alloc_days
+
+    # Count taken/pending per period
+    for app in apps:
+        lt = app.get("leave_type", "")
+        status = app.get("status", "")
+        if status == "Rejected":
+            continue
+        if lt not in result:
+            continue
+
+        fd = app.get("from_date", "")[:10] if app.get("from_date") else ""
+        days = float(app.get("total_leave_days", 0))
+        is_old = fd and date.fromisoformat(fd) < old_cutoff
+        is_taken = status == "Approved" or app.get("docstatus") == 1
+
+        if is_old:
+            if is_taken:
+                result[lt]["old_taken"] += days
+            else:
+                result[lt]["old_pending"] += days
+        else:
+            if is_taken:
+                result[lt]["new_taken"] += days
+            else:
+                result[lt]["new_pending"] += days
+
+    return {"data": list(result.values()), "before_august": date.today() < old_cutoff}
