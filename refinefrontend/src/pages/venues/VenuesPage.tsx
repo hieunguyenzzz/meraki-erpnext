@@ -48,9 +48,6 @@ export default function VenuesPage() {
         "name",
         "supplier_name",
         "custom_venue_city",
-        "custom_capacity_min",
-        "custom_capacity_max",
-        "custom_price_range",
       ],
     },
   });
