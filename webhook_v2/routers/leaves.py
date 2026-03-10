@@ -7,6 +7,7 @@ POST /wfh/{req_id}/approve        — submit Attendance Request
 POST /wfh/{req_id}/reject         — set workflow_state=Rejected + submit
 """
 
+import math
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -15,6 +16,14 @@ from webhook_v2.core.logging import get_logger
 
 log = get_logger(__name__)
 router = APIRouter()
+
+
+def _compute_accrued(allocation_days: float, period_from: date, today: date) -> float:
+    """Months fully completed since period start → ceil(allocation × elapsed / 12)."""
+    elapsed = (today.year - period_from.year) * 12 + (today.month - period_from.month)
+    if elapsed <= 0:
+        return 0.0
+    return min(allocation_days, math.ceil(allocation_days * elapsed / 12))
 
 
 def _submit_doc(client: ERPNextClient, doctype: str, name: str) -> None:
@@ -255,7 +264,22 @@ def apply_leave(body: LeaveApplyRequest):
 
         # Auto-split Casual Leave when balance is insufficient
         if body.leave_type == "Casual Leave":
-            balance = _get_erp_leave_balance(client, body.employee, "Casual Leave", body.from_date)
+            balance_resp = get_leave_balance(employee=body.employee)
+            leave_row = next(
+                (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
+            )
+            if leave_row:
+                if balance_resp["before_august"]:
+                    accrued_avail = (
+                        leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"]
+                    )
+                else:
+                    accrued_avail = (
+                        leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"]
+                    )
+                balance = max(accrued_avail, 0)
+            else:
+                balance = 0.0
             balance_int = int(balance)
 
             # Zero balance: convert entire request to LWP — never create a CL draft with no balance
@@ -340,7 +364,24 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
     weekly_off      = _get_weekly_off(client, holiday_list) if holiday_list else 6
     holidays        = _get_holidays_in_range(client, holiday_list, from_date, to_date) if holiday_list else set()
     holiday_details = _get_holiday_details_in_range(client, holiday_list, from_date, to_date) if holiday_list else []
-    balance         = _get_erp_leave_balance(client, employee, "Casual Leave", from_date)
+
+    # Use accrual-aware balance
+    balance_resp = get_leave_balance(employee=employee)
+    leave_row = next(
+        (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
+    )
+    if leave_row:
+        if balance_resp["before_august"]:
+            accrued_avail = (
+                leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"]
+            )
+        else:
+            accrued_avail = (
+                leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"]
+            )
+        balance = max(accrued_avail, 0)
+    else:
+        balance = 0.0
     balance_int     = int(balance)
     include_holiday = _leave_type_includes_holidays(client, "Casual Leave")
 
@@ -409,13 +450,14 @@ def get_leave_balance(employee: str):
         "limit_page_length": 500,
     }).get("data", [])
 
-    # Group allocations by leave type and period
+    # Group allocations by leave type and period; also track earliest from_date per period
     result = {}
+    period_starts: dict[str, dict[str, date]] = {}
     for alloc in allocs:
         lt = alloc.get("leave_type", "")
-        fd = alloc.get("from_date", "")[:10] if alloc.get("from_date") else ""
+        fd_str = (alloc.get("from_date") or "")[:10]
         alloc_days = float(alloc.get("new_leaves_allocated", 0))
-        is_old = fd and date.fromisoformat(fd) < old_cutoff
+        is_old = bool(fd_str) and date.fromisoformat(fd_str) < old_cutoff
 
         if lt not in result:
             result[lt] = {
@@ -428,6 +470,14 @@ def get_leave_balance(employee: str):
             result[lt]["old_allocation"] += alloc_days
         else:
             result[lt]["new_allocation"] += alloc_days
+
+        # Track earliest from_date per period for accrual calculation
+        if fd_str:
+            fd = date.fromisoformat(fd_str)
+            period_key = "old" if is_old else "new"
+            ps = period_starts.setdefault(lt, {})
+            if period_key not in ps or fd < ps[period_key]:
+                ps[period_key] = fd
 
     # Count taken/pending per period
     for app in apps:
@@ -454,4 +504,19 @@ def get_leave_balance(employee: str):
             else:
                 result[lt]["new_pending"] += days
 
-    return {"data": list(result.values()), "before_august": date.today() < old_cutoff}
+    # Compute accrued amounts based on period start dates
+    today = date.today()
+    for lt, data in result.items():
+        ps = period_starts.get(lt, {})
+        old_start = ps.get("old")
+        new_start = ps.get("new")
+        data["old_accrued"] = (
+            _compute_accrued(data["old_allocation"], old_start, today)
+            if old_start else data["old_allocation"]
+        )
+        data["new_accrued"] = (
+            _compute_accrued(data["new_allocation"], new_start, today)
+            if new_start else data["new_allocation"]
+        )
+
+    return {"data": list(result.values()), "before_august": today < old_cutoff}

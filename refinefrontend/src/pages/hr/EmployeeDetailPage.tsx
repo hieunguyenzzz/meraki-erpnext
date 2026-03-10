@@ -108,7 +108,7 @@ export default function EmployeeDetailPage() {
       { field: "docstatus", operator: "eq", value: 1 },
     ],
     meta: {
-      fields: ["name", "employee", "leave_type", "total_leaves_allocated", "new_leaves_allocated"],
+      fields: ["name", "employee", "leave_type", "new_leaves_allocated", "from_date"],
     },
     queryOptions: { enabled: !!name },
   });
@@ -198,7 +198,7 @@ export default function EmployeeDetailPage() {
     let taken = 0;
 
     for (const alloc of allocations) {
-      allocated += alloc.total_leaves_allocated ?? alloc.new_leaves_allocated ?? 0;
+      allocated += alloc.new_leaves_allocated ?? 0;
     }
     for (const app of applications) {
       taken += app.total_leave_days ?? 0;
@@ -218,12 +218,29 @@ export default function EmployeeDetailPage() {
     );
   }, [employee]);
 
-  function openLeaveDialog() {
-    if (allocations.length === 0) return;
-    const alloc = allocations[0];
-    const allocated = alloc.total_leaves_allocated ?? alloc.new_leaves_allocated ?? 0;
-    const taken = leaveBalance.taken;
-    setLeaveAllocEdit({ name: alloc.name, allocated, taken });
+  // Group allocations by period (old = before Aug 1 of current year, new = after)
+  const perPeriodAllocations = useMemo(() => {
+    const cutoff = new Date(new Date().getFullYear(), 7, 1); // Aug 1
+    const old: any[] = [];
+    const newPeriod: any[] = [];
+    for (const alloc of allocations) {
+      const fd = alloc.from_date ? new Date(alloc.from_date + "T00:00:00") : null;
+      if (!fd) continue;
+      if (fd < cutoff) old.push(alloc);
+      else newPeriod.push(alloc);
+    }
+    const year = new Date().getFullYear();
+    const groups = [];
+    if (old.length > 0) groups.push({ label: `Before Aug ${year}`, allocs: old });
+    if (newPeriod.length > 0) groups.push({ label: `Aug ${year} onwards`, allocs: newPeriod });
+    return groups;
+  }, [allocations]);
+
+  function openLeaveDialog(alloc?: any) {
+    const target = alloc ?? (allocations.length > 0 ? allocations[0] : null);
+    if (!target) return;
+    const allocated = target.new_leaves_allocated ?? 0;
+    setLeaveAllocEdit({ name: target.name, allocated, taken: leaveBalance.taken });
     setLeaveError(null);
     setLeaveDialogOpen(true);
   }
@@ -717,12 +734,6 @@ export default function EmployeeDetailPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle>Leave Balance</CardTitle>
-                {leaveBalance.allocated > 0 && (
-                  <Button size="sm" variant="outline" onClick={openLeaveDialog}>
-                    <Pencil className="h-3 w-3 mr-1" />
-                    Edit
-                  </Button>
-                )}
               </CardHeader>
               <CardContent className="space-y-3">
                 {leaveBalance.allocated > 0 ? (
@@ -748,6 +759,31 @@ export default function EmployeeDetailPage() {
                       <span>Used: {leaveBalance.taken} days</span>
                       <span>Remaining: {leaveBalance.remaining} days</span>
                     </div>
+                    {perPeriodAllocations.length > 0 && (
+                      <div className="border-t pt-2 space-y-2">
+                        {perPeriodAllocations.map(({ label, allocs }) => (
+                          <div key={label} className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                            {allocs.map((alloc: any) => (
+                              <div key={alloc.name} className="flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground">{alloc.leave_type}</span>
+                                <div className="flex items-center gap-2">
+                                  <span>{alloc.new_leaves_allocated} days</span>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6"
+                                    onClick={() => openLeaveDialog(alloc)}
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <p className="text-muted-foreground">No leave allocation found</p>

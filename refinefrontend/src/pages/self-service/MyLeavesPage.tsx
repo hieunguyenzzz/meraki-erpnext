@@ -142,26 +142,33 @@ export default function MyLeavesPage() {
       const newTaken = item.new_taken ?? 0;
       const newPending = item.new_pending ?? 0;
 
+      // Accrued amounts from backend (fall back to full allocation if missing)
+      const oldAccrued = item.old_accrued ?? oldAllocDays;
+      const newAccrued = item.new_accrued ?? newAllocDays;
+
       // Apply overflow: cap old taken at old allocation
       const cappedOldTaken = Math.min(rawOldTaken, oldAllocDays);
       const overflow = rawOldTaken - cappedOldTaken;
 
-      const oldBalance = oldAllocDays - cappedOldTaken - oldPending;
+      // Cap usable at accrued amount
+      const oldBalance = Math.min(oldAccrued, oldAllocDays) - cappedOldTaken - oldPending;
       const effectiveNewTaken = newTaken + overflow;
-      const newBalance = newAllocDays - effectiveNewTaken - newPending;
+      const newBalance = Math.min(newAccrued, newAllocDays) - effectiveNewTaken - newPending;
 
       return {
         leaveType: item.leave_type,
         showOldPeriod: beforeAugust && oldAllocDays > 0,
         oldAllocDays,
+        oldAccrued,
         oldTaken: cappedOldTaken,
         oldPending,
         oldBalance: Math.max(0, oldBalance),
         newAllocDays,
+        newAccrued,
         newTaken: effectiveNewTaken,
         newPending,
-        newBalance,
-        totalBalance: Math.max(0, oldBalance) + newBalance,
+        newBalance: Math.max(0, newBalance),
+        totalBalance: Math.max(0, oldBalance) + Math.max(0, newBalance),
       };
     });
   }, [balanceData]);
@@ -447,7 +454,10 @@ export default function MyLeavesPage() {
                   <div className="text-xs text-muted-foreground border-t pt-2 space-y-0.5">
                     <div className="flex justify-between">
                       <span>2025 period</span>
-                      <span>{balance.oldBalance} / {balance.oldAllocDays} days</span>
+                      <span>{balance.oldBalance} / {balance.oldAccrued} days</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] opacity-60">
+                      <span className="pl-2">of {balance.oldAllocDays} annual</span>
                     </div>
                     {balance.oldTaken > 0 && (
                       <div className="flex justify-between text-[11px]">
@@ -466,7 +476,10 @@ export default function MyLeavesPage() {
                 <div className="text-xs text-muted-foreground border-t pt-2 space-y-0.5">
                   <div className="flex justify-between">
                     <span>2026 period</span>
-                    <span>{balance.newBalance} / {balance.newAllocDays} days</span>
+                    <span>{balance.newBalance} / {balance.newAccrued} days</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] opacity-60">
+                    <span className="pl-2">of {balance.newAllocDays} annual</span>
                   </div>
                   {balance.newTaken > 0 && (
                     <div className="flex justify-between text-[11px]">
