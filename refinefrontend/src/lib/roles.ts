@@ -62,7 +62,7 @@ export const MODULES: ModuleConfig[] = [
     roles: HR_ROLES,
     children: [
       { label: "Staff Overview", path: "/hr/staff-overview", icon: LayoutDashboard },
-      { label: "Recruiting", path: "/hr/recruiting", icon: Users },
+      { label: "Recruiting", path: "/hr/recruiting/pipeline", icon: Users },
       { label: "Payroll", path: "/hr/payroll", icon: Banknote },
     ],
   },
