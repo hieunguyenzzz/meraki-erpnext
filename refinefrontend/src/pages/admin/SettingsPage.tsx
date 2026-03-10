@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router";
 import { useList, useCreate, useDelete, useCustomMutation, useInvalidate, useUpdate, useOne } from "@refinedev/core";
 import {
   Pencil, Trash2, Plus, Loader2, AlertCircle, Mail, Bell, Cake, Trophy,
-  CalendarDays, FileCheck, Banknote, CheckCircle2, Send,
+  CalendarDays, FileCheck, Banknote, CheckCircle2, Send, Info, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -992,6 +992,240 @@ function NotificationsTab() {
 }
 
 // ---------------------------------------------------------------------------
+// Holidays Tab
+// ---------------------------------------------------------------------------
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+interface Holiday {
+  date: string;
+  description: string;
+  weekday: string;
+  month: number;
+}
+
+function HolidaysTab() {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addDate, setAddDate] = useState("");
+  const [addName, setAddName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingDate, setDeletingDate] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchHolidays = useCallback(async (y: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/inquiry-api/settings/holidays?year=${y}`);
+      const json = await res.json();
+      setHolidays(json.data ?? []);
+    } catch {
+      setError("Failed to load holidays.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchHolidays(year); }, [year, fetchHolidays]);
+
+  const byMonth = useMemo(() => {
+    const map: Record<number, Holiday[]> = {};
+    for (const h of holidays) {
+      if (!map[h.month]) map[h.month] = [];
+      map[h.month].push(h);
+    }
+    return map;
+  }, [holidays]);
+
+  async function handleAdd() {
+    if (!addDate || !addName.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/inquiry-api/settings/holidays", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ holiday_date: addDate, description: addName.trim() }),
+      });
+      if (res.status === 409) { setError("A holiday already exists on this date."); return; }
+      if (!res.ok) { const j = await res.json(); setError(j.detail ?? "Failed to add holiday."); return; }
+      await fetchHolidays(year);
+      setAddOpen(false);
+      setAddDate("");
+      setAddName("");
+    } catch {
+      setError("Failed to add holiday.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(date: string) {
+    setDeletingDate(date);
+    try {
+      await fetch(`/inquiry-api/settings/holidays/${date}`, { method: "DELETE" });
+      setHolidays((prev) => prev.filter((h) => h.date !== date));
+    } finally {
+      setDeletingDate(null);
+    }
+  }
+
+  const activeMonths = Object.keys(byMonth).map(Number).sort((a, b) => a - b);
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground">Year</span>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setYear(y => y - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-semibold w-10 text-center">{year}</span>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setYear(y => y + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <Button size="sm" onClick={() => setAddOpen(true)}>
+          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Holiday
+        </Button>
+      </div>
+
+      {/* Info banner */}
+      <div className="flex items-start gap-2.5 rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+        <Info className="h-4 w-4 mt-0.5 shrink-0" />
+        <span>Weekends (Saturday &amp; Sunday) are automatically excluded from all leave calculations. Only public holidays appear here.</span>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {/* Holiday list */}
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : holidays.length === 0 ? (
+            <div className="py-16 text-center text-sm text-muted-foreground">
+              No public holidays found for {year}.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {activeMonths.map((monthIdx) => {
+                const monthHolidays = byMonth[monthIdx];
+                return (
+                  <div key={monthIdx}>
+                    {/* Month header */}
+                    <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        {MONTH_NAMES[monthIdx - 1]}
+                      </span>
+                      <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                        {monthHolidays.length}
+                      </Badge>
+                    </div>
+                    {/* Holidays in this month */}
+                    {monthHolidays.map((h) => {
+                      const day = h.date.slice(8); // DD
+                      const isDeleting = deletingDate === h.date;
+                      return (
+                        <div
+                          key={h.date}
+                          className="group flex items-center gap-4 px-5 py-3 hover:bg-muted/20 transition-colors"
+                        >
+                          {/* Date pill */}
+                          <div className="flex items-center gap-1.5 shrink-0 w-24">
+                            <span className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-sm font-bold">
+                              {day}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{h.weekday.slice(0, 3)}</span>
+                          </div>
+                          {/* Name */}
+                          <span className="flex-1 text-sm">{h.description}</span>
+                          {/* Delete */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDelete(h.date)}
+                            disabled={isDeleting}
+                          >
+                            {isDeleting
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Trash2 className="h-3.5 w-3.5" />
+                            }
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add Holiday Dialog */}
+      <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) { setAddDate(""); setAddName(""); setError(null); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add Public Holiday</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="holiday-date">Date</Label>
+              <Input
+                id="holiday-date"
+                type="date"
+                value={addDate}
+                onChange={(e) => setAddDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="holiday-name">Holiday Name</Label>
+              <Input
+                id="holiday-name"
+                placeholder="e.g. Company Anniversary"
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              />
+            </div>
+            {error && (
+              <p className="text-xs text-destructive flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5" /> {error}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button onClick={handleAdd} disabled={!addDate || !addName.trim() || saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Add Holiday
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Settings Page
 // ---------------------------------------------------------------------------
 
@@ -1003,13 +1237,14 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">Manage designations, notifications, and system configuration.</p>
+        <p className="text-muted-foreground">Manage designations, notifications, holidays, and system configuration.</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={(val) => setSearchParams({ tab: val })}>
         <TabsList>
           <TabsTrigger value="designations">Designations</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="holidays">Holidays</TabsTrigger>
         </TabsList>
 
         <TabsContent value="designations" className="mt-6">
@@ -1018,6 +1253,10 @@ export default function SettingsPage() {
 
         <TabsContent value="notifications" className="mt-6">
           <NotificationsTab />
+        </TabsContent>
+
+        <TabsContent value="holidays" className="mt-6">
+          <HolidaysTab />
         </TabsContent>
       </Tabs>
     </div>
