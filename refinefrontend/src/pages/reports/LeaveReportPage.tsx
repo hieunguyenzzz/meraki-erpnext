@@ -166,6 +166,9 @@ export default function LeaveReportPage() {
         return Math.round(total * 10) / 10;
       });
 
+      const rawOldBalance = oldAllocationDays - oldTaken;
+      const overflow = rawOldBalance < 0 ? Math.abs(rawOldBalance) : 0;
+
       return {
         employee: emp.name,
         employeeName: [emp.first_name, emp.last_name].filter(Boolean).join(" ") || emp.employee_name || emp.name,
@@ -174,10 +177,10 @@ export default function LeaveReportPage() {
         monthlyLeave,
         oldAllocationDays,
         oldTaken,
-        oldBalance: oldAllocationDays - oldTaken,
+        oldBalance: Math.max(0, rawOldBalance),
         newAllocationDays,
-        newTaken,
-        newBalance: newAllocationDays - newTaken,
+        newTaken: newTaken + overflow,
+        newBalance: newAllocationDays - (newTaken + overflow),
       };
     });
   }, [employees, allocations, applications, currentYear]);
