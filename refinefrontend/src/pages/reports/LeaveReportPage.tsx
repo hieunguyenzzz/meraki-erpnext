@@ -210,8 +210,6 @@ export default function LeaveReportPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="sticky left-0 z-10 bg-muted/50 min-w-[180px]">Employee</TableHead>
-                    <TableHead className="text-center min-w-[90px]">Start Date</TableHead>
-                    <TableHead className="text-center min-w-[70px]">Seniority</TableHead>
                     {MONTHS.map((m) => (
                       <TableHead key={m} className="text-center min-w-[50px]">{m}</TableHead>
                     ))}
@@ -240,12 +238,6 @@ export default function LeaveReportPage() {
                     <TableRow key={row.employee}>
                       <TableCell className="sticky left-0 z-10 bg-background font-medium">
                         {row.employeeName}
-                      </TableCell>
-                      <TableCell className="text-center text-sm text-muted-foreground">
-                        {row.dateOfJoining ? new Date(row.dateOfJoining).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }) : "-"}
-                      </TableCell>
-                      <TableCell className="text-center text-sm">
-                        {row.seniorityYears}y
                       </TableCell>
                       {row.monthlyLeave.map((days, i) => (
                         <TableCell key={i} className="text-center text-sm">
