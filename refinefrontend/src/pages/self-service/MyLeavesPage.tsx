@@ -148,9 +148,16 @@ export default function MyLeavesPage() {
     const beforeAugust = new Date() < new Date(currentYear, 7, 1); // Before Aug 1
     const oldCutoff = new Date(currentYear, 7, 1); // Aug 1
 
+    // Check if from_date is available on allocations (requires read permission)
+    const hasFromDate = allocations.some((a) => !!a.from_date);
+
     // Separate allocations into old (before Aug 1) and new (Aug 1+) periods
-    const oldAllocs = allocations.filter((a) => a.from_date && parseDate(a.from_date) < oldCutoff);
-    const newAllocs = allocations.filter((a) => a.from_date && parseDate(a.from_date) >= oldCutoff);
+    const oldAllocs = hasFromDate
+      ? allocations.filter((a) => a.from_date && parseDate(a.from_date) < oldCutoff)
+      : [];
+    const newAllocs = hasFromDate
+      ? allocations.filter((a) => a.from_date && parseDate(a.from_date) >= oldCutoff)
+      : [];
 
     // Count taken/pending per leave type per period
     const countByPeriod = (apps: LeaveApplication[], period: "old" | "new") => {
@@ -170,6 +177,39 @@ export default function MyLeavesPage() {
       }
       return { taken, pending };
     };
+
+    // Fallback: simple total (no period breakdown) when from_date not available
+    if (!hasFromDate) {
+      const takenByType = new Map<string, number>();
+      const pendingByType = new Map<string, number>();
+      for (const app of leaveApps) {
+        if (app.status === "Rejected" || app.docstatus === 2) continue;
+        const days = app.total_leave_days ?? 0;
+        if (app.status === "Approved" || app.docstatus === 1) {
+          takenByType.set(app.leave_type, (takenByType.get(app.leave_type) ?? 0) + days);
+        } else {
+          pendingByType.set(app.leave_type, (pendingByType.get(app.leave_type) ?? 0) + days);
+        }
+      }
+      // Sum allocations by leave type
+      const allocByType = new Map<string, number>();
+      for (const alloc of allocations) {
+        const days = alloc.new_leaves_allocated ?? alloc.total_leaves_allocated ?? 0;
+        allocByType.set(alloc.leave_type, (allocByType.get(alloc.leave_type) ?? 0) + days);
+      }
+      return [...allocByType.entries()].map(([leaveType, allocated]) => {
+        const taken = takenByType.get(leaveType) ?? 0;
+        const pending = pendingByType.get(leaveType) ?? 0;
+        return {
+          leaveType,
+          showOldPeriod: false,
+          oldAllocDays: 0, oldTaken: 0, oldPending: 0, oldBalance: 0,
+          newAllocDays: allocated, newTaken: taken, newPending: pending,
+          newBalance: allocated - taken - pending,
+          totalBalance: allocated - taken - pending,
+        };
+      });
+    }
 
     const oldCounts = countByPeriod(leaveApps, "old");
     const newCounts = countByPeriod(leaveApps, "new");
