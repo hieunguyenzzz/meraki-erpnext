@@ -231,6 +231,9 @@ export default function LeaveReportPage() {
                     <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
                       <div className="text-xs leading-tight">2026<br />Balance</div>
                     </TableHead>
+                    <TableHead className="text-center min-w-[80px] bg-purple-50 dark:bg-purple-950/30">
+                      <div className="text-xs leading-tight font-semibold">Total<br />Balance</div>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -271,6 +274,14 @@ export default function LeaveReportPage() {
                         <Badge variant={row.newBalance < 0 ? "destructive" : row.newBalance > 0 ? "success" : "secondary"} className="text-xs">
                           {row.newBalance}
                         </Badge>
+                      </TableCell>
+                      {/* Total balance */}
+                      <TableCell className="text-center text-sm bg-purple-50/50 dark:bg-purple-950/20">
+                        {(() => { const total = row.oldBalance + row.newBalance; return (
+                          <Badge variant={total < 0 ? "destructive" : total > 0 ? "success" : "secondary"} className="text-xs font-semibold">
+                            {total}
+                          </Badge>
+                        ); })()}
                       </TableCell>
                     </TableRow>
                   ))}
