@@ -72,6 +72,8 @@ const initialForm = {
   leave_type: "",
   from_date: "",
   to_date: "",
+  half_day: false,
+  half_day_period: "" as "" | "AM" | "PM",
   description: "",
 };
 
@@ -331,6 +333,8 @@ export default function MyLeavesPage() {
       from_date: form.from_date,
       to_date: form.to_date,
       description: form.description,
+      half_day: form.half_day,
+      half_day_period: form.half_day ? form.half_day_period : "",
     };
 
     try {
@@ -570,7 +574,11 @@ export default function MyLeavesPage() {
                     type="date"
                     value={form.from_date}
                     onChange={(e) =>
-                      setForm((prev) => ({ ...prev, from_date: e.target.value }))
+                      setForm((prev) => ({
+                        ...prev,
+                        from_date: e.target.value,
+                        ...(prev.half_day ? { to_date: e.target.value } : {}),
+                      }))
                     }
                   />
                 </div>
@@ -585,6 +593,45 @@ export default function MyLeavesPage() {
                     }
                   />
                 </div>
+              </div>
+
+              {/* Half Day toggle */}
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.half_day}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setForm((prev) => ({
+                        ...prev,
+                        half_day: checked,
+                        half_day_period: checked ? "AM" : "",
+                        // Half day = single day, sync to_date
+                        ...(checked && prev.from_date ? { to_date: prev.from_date } : {}),
+                      }));
+                    }}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm font-medium">Half Day</span>
+                </label>
+                {form.half_day && (
+                  <div className="flex gap-2">
+                    {(["AM", "PM"] as const).map((period) => (
+                      <label key={period} className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="half_day_period"
+                          value={period}
+                          checked={form.half_day_period === period}
+                          onChange={() => setForm((prev) => ({ ...prev, half_day_period: period }))}
+                          className="h-3.5 w-3.5"
+                        />
+                        <span className="text-sm">{period}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {previewLoading && form.leave_type === "Casual Leave" && form.from_date && form.to_date && (

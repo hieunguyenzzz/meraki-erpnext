@@ -100,6 +100,8 @@ class LeaveApplyRequest(BaseModel):
     from_date: str   # YYYY-MM-DD
     to_date: str     # YYYY-MM-DD
     description: str = ""
+    half_day: bool = False
+    half_day_period: str = ""  # "AM" or "PM"
 
 
 def _leave_type_includes_holidays(client: ERPNextClient, leave_type: str) -> bool:
@@ -217,6 +219,7 @@ def _create_leave_application(
     employee: str, leave_type: str,
     from_date: str, to_date: str, description: str,
     leave_approver: str | None = None,
+    half_day: bool = False,
 ) -> dict:
     payload = {
         "employee": employee, "leave_type": leave_type,
@@ -225,6 +228,8 @@ def _create_leave_application(
     }
     if leave_approver:
         payload["leave_approver"] = leave_approver
+    if half_day:
+        payload["half_day"] = 1
     result = client._post("/api/resource/Leave Application", payload)
     return result.get("data", {})
 
@@ -234,6 +239,13 @@ def apply_leave(body: LeaveApplyRequest):
     """Create leave application(s). For Casual Leave with insufficient balance,
     automatically splits into Casual Leave + Leave Without Pay."""
     client = ERPNextClient()
+
+    # Prepend half-day AM/PM to description so it shows in notifications
+    description = body.description
+    if body.half_day and body.half_day_period:
+        prefix = f"Half Day ({body.half_day_period})"
+        description = f"{prefix} — {description}" if description else prefix
+
     try:
         details = client._get(
             "/api/method/hrms.hr.doctype.leave_application.leave_application.get_leave_details",
@@ -250,8 +262,8 @@ def apply_leave(body: LeaveApplyRequest):
             if balance_int == 0:
                 app = _create_leave_application(
                     client, body.employee, "Leave Without Pay",
-                    body.from_date, body.to_date, body.description,
-                    leave_approver=leave_approver)
+                    body.from_date, body.to_date, description,
+                    leave_approver=leave_approver, half_day=body.half_day)
                 return {"created": [app], "split": True}
 
             include_holiday = _leave_type_includes_holidays(client, "Casual Leave")
@@ -278,18 +290,18 @@ def apply_leave(body: LeaveApplyRequest):
                 # Split: use up remaining CL balance, rest goes to LWP
                 cl_app = _create_leave_application(
                     client, body.employee, "Casual Leave",
-                    body.from_date, casual_to_date, body.description,
+                    body.from_date, casual_to_date, description,
                     leave_approver=leave_approver)
                 lwp_app = _create_leave_application(
                     client, body.employee, "Leave Without Pay",
-                    lwp_from_date, body.to_date, body.description,
+                    lwp_from_date, body.to_date, description,
                     leave_approver=leave_approver)
                 return {"created": [cl_app, lwp_app], "split": True}
 
         app = _create_leave_application(
             client, body.employee, body.leave_type,
-            body.from_date, body.to_date, body.description,
-            leave_approver=leave_approver)
+            body.from_date, body.to_date, description,
+            leave_approver=leave_approver, half_day=body.half_day)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"created": [app], "split": False}
