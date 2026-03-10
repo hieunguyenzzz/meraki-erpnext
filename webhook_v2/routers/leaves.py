@@ -269,13 +269,16 @@ def apply_leave(body: LeaveApplyRequest):
                 (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
             )
             if leave_row:
-                old_avail = (
-                    leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"]
+                old_avail = max(
+                    leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"], 0
                 )
-                new_avail = (
-                    leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"]
+                new_avail = max(
+                    leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
                 )
-                balance = max(old_avail, 0) + max(new_avail, 0)
+                # Use only the allocation period that covers the leave dates —
+                # old allocation (Jan–Jul) cannot be used for Aug+ dates in ERPNext
+                old_cutoff = date(date.today().year, 8, 1)
+                balance = old_avail if date.fromisoformat(body.from_date) < old_cutoff else new_avail
             else:
                 balance = 0.0
             balance_int = int(balance)
@@ -369,13 +372,15 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
         (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
     )
     if leave_row:
-        old_avail = (
-            leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"]
+        old_avail = max(
+            leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"], 0
         )
-        new_avail = (
-            leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"]
+        new_avail = max(
+            leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
         )
-        balance = max(old_avail, 0) + max(new_avail, 0)
+        # Use only the allocation period that covers the leave dates
+        old_cutoff = date(date.today().year, 8, 1)
+        balance = old_avail if date.fromisoformat(from_date) < old_cutoff else new_avail
     else:
         balance = 0.0
     balance_int     = int(balance)
