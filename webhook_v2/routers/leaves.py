@@ -281,12 +281,13 @@ def apply_leave(body: LeaveApplyRequest):
                 balance = old_avail if date.fromisoformat(body.from_date).month < 8 else new_avail
             else:
                 balance = 0.0
-            # Round to nearest 0.5 so half-day balances (0.5) aren't truncated to 0
+            # Round down to nearest 0.5 so half-day balances aren't truncated to 0
             balance_usable = math.floor(balance * 2) / 2
-            balance_days   = int(balance_usable)   # whole days for split date calculation
+            balance_days   = int(balance_usable)   # whole days available for CL split
 
-            # Zero balance: convert entire request to LWP
-            if balance_usable < 0.5:
+            # Zero/fractional-only balance: if no whole days available, send all to LWP
+            # (0.5 balance cannot cover even a single whole working day in a split)
+            if balance_days == 0:
                 app = _create_leave_application(
                     client, body.employee, "Leave Without Pay",
                     body.from_date, body.to_date, description,
@@ -314,16 +315,21 @@ def apply_leave(body: LeaveApplyRequest):
                     lwp_from_date  = _next_leave_day(casual_to_date, holidays, weekly_off)
 
             if balance_days < requested:
-                # Split: CL for available whole days, rest LWP — preserve half_day flag on both
+                # Split: CL for available whole days, rest LWP
+                # Only pass half_day to single-day segments — multi-day with half_day=1
+                # would tell ERPNext the entire segment is 0.5 days, which is wrong
+                is_single_day = body.from_date == body.to_date
                 cl_app = _create_leave_application(
                     client, body.employee, "Casual Leave",
                     body.from_date, casual_to_date, description,
-                    leave_approver=leave_approver, half_day=body.half_day)
+                    leave_approver=leave_approver,
+                    half_day=body.half_day if is_single_day else False)
                 try:
                     lwp_app = _create_leave_application(
                         client, body.employee, "Leave Without Pay",
                         lwp_from_date, body.to_date, description,
-                        leave_approver=leave_approver, half_day=body.half_day)
+                        leave_approver=leave_approver,
+                        half_day=body.half_day if is_single_day else False)
                 except Exception:
                     # Rollback: delete the CL application if LWP creation fails
                     try:
@@ -393,7 +399,7 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
     else:
         balance = 0.0
     balance_usable  = math.floor(balance * 2) / 2   # nearest 0.5 for half-day precision
-    balance_days    = int(balance_usable)
+    balance_days    = int(balance_usable)            # whole days available for CL
     include_holiday = _leave_type_includes_holidays(client, "Casual Leave")
 
     if include_holiday:
