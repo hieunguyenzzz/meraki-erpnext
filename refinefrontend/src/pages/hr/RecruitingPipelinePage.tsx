@@ -4,7 +4,7 @@ import { useList } from "@refinedev/core";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { RecruitingCard } from "@/components/recruiting/RecruitingCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CalendarDays, ChevronDown, List } from "lucide-react";
+import { CalendarDays, ChevronDown, List } from "lucide-react";
 import {
   PIPELINE_COLUMNS,
   buildRecruitingItems,
@@ -107,12 +107,6 @@ export default function RecruitingPipelinePage() {
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
             <CalendarDays className="h-4 w-4" /> Interviews
-          </Link>
-          <Link
-            to="/hr/recruiting"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-          >
-            <ArrowLeft className="h-4 w-4" /> CV Inbox
           </Link>
         </div>
       </div>
