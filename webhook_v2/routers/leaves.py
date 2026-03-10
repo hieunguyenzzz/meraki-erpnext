@@ -511,8 +511,8 @@ def get_leave_balance(employee: str):
         ps = period_starts.get(lt, {})
         old_start = ps.get("old")
         new_start = ps.get("new")
-        # Old period = 2025 carry-over: fully available, no monthly accrual
-        data["old_accrued"] = data["old_allocation"]
+        # Old period = 2025 carry-over: fully available before Aug 1, forfeited after
+        data["old_accrued"] = data["old_allocation"] if today < old_cutoff else data["old_taken"]
         # New period = 2026 annual: accrues from Jan 1 of current year (not from Aug 1)
         data["new_accrued"] = _compute_accrued(
             data["new_allocation"], date(current_year, 1, 1), today
