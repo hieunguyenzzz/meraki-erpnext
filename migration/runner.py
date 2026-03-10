@@ -35,6 +35,7 @@ ORDERED_PHASES = [
     "v030_employee_name_field_in_script",
     "v031_leave_year_july_reset",
     "v032_leave_year_aug_reset",
+    "v033_leave_allocation_self_service_permission",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run

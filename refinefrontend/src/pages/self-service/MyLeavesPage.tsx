@@ -38,6 +38,12 @@ interface LeaveApplication {
   docstatus: number;
 }
 
+/** Parse YYYY-MM-DD → Date in local timezone */
+function parseDate(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 interface LeaveType {
   name: string;
 }
@@ -47,6 +53,8 @@ interface LeaveAllocation {
   leave_type: string;
   total_leaves_allocated: number;
   new_leaves_allocated: number;
+  from_date: string;
+  to_date: string;
 }
 
 function statusVariant(status: string) {
@@ -126,37 +134,84 @@ export default function MyLeavesPage() {
         "leave_type",
         "total_leaves_allocated",
         "new_leaves_allocated",
+        "from_date",
+        "to_date",
       ],
     },
     queryOptions: { enabled: !!employeeId },
   });
   const allocations = (allocsResult?.data ?? []) as LeaveAllocation[];
 
-  // Calculate leave balances
+  // Calculate leave balances with period-aware breakdown
   const leaveBalances = useMemo(() => {
-    const takenByType = new Map<string, number>();
-    const pendingByType = new Map<string, number>();
-    for (const app of leaveApps) {
-      if (app.status === "Rejected" || app.docstatus === 2) continue;
-      const days = app.total_leave_days ?? 0;
-      if (app.status === "Approved" && app.docstatus === 1) {
-        takenByType.set(app.leave_type, (takenByType.get(app.leave_type) ?? 0) + days);
-      } else {
-        pendingByType.set(app.leave_type, (pendingByType.get(app.leave_type) ?? 0) + days);
-      }
-    }
+    const currentYear = new Date().getFullYear();
+    const beforeAugust = new Date() < new Date(currentYear, 7, 1); // Before Aug 1
+    const oldCutoff = new Date(currentYear, 7, 1); // Aug 1
 
-    return allocations.map((alloc) => {
-      const allocated =
-        alloc.total_leaves_allocated ?? alloc.new_leaves_allocated ?? 0;
-      const taken = takenByType.get(alloc.leave_type) ?? 0;
-      const pending = pendingByType.get(alloc.leave_type) ?? 0;
+    // Separate allocations into old (before Aug 1) and new (Aug 1+) periods
+    const oldAllocs = allocations.filter((a) => a.from_date && parseDate(a.from_date) < oldCutoff);
+    const newAllocs = allocations.filter((a) => a.from_date && parseDate(a.from_date) >= oldCutoff);
+
+    // Count taken/pending per leave type per period
+    const countByPeriod = (apps: LeaveApplication[], period: "old" | "new") => {
+      const taken = new Map<string, number>();
+      const pending = new Map<string, number>();
+      for (const app of apps) {
+        if (app.status === "Rejected" || app.docstatus === 2) continue;
+        const appDate = parseDate(app.from_date);
+        const inOld = appDate < oldCutoff;
+        if ((period === "old" && !inOld) || (period === "new" && inOld)) continue;
+        const days = app.total_leave_days ?? 0;
+        if (app.status === "Approved" || app.docstatus === 1) {
+          taken.set(app.leave_type, (taken.get(app.leave_type) ?? 0) + days);
+        } else {
+          pending.set(app.leave_type, (pending.get(app.leave_type) ?? 0) + days);
+        }
+      }
+      return { taken, pending };
+    };
+
+    const oldCounts = countByPeriod(leaveApps, "old");
+    const newCounts = countByPeriod(leaveApps, "new");
+
+    // Get unique leave types
+    const leaveTypes = [...new Set(allocations.map((a) => a.leave_type))];
+
+    return leaveTypes.map((leaveType) => {
+      const oldAlloc = oldAllocs.find((a) => a.leave_type === leaveType);
+      const newAlloc = newAllocs.find((a) => a.leave_type === leaveType);
+
+      const oldAllocDays = oldAlloc?.new_leaves_allocated ?? 0;
+      const newAllocDays = newAlloc?.new_leaves_allocated ?? 0;
+
+      const rawOldTaken = oldCounts.taken.get(leaveType) ?? 0;
+      const oldPending = oldCounts.pending.get(leaveType) ?? 0;
+      const newTaken = newCounts.taken.get(leaveType) ?? 0;
+      const newPending = newCounts.pending.get(leaveType) ?? 0;
+
+      // Apply overflow: cap old taken at old allocation
+      const cappedOldTaken = Math.min(rawOldTaken, oldAllocDays);
+      const overflow = rawOldTaken - cappedOldTaken;
+
+      const oldBalance = oldAllocDays - cappedOldTaken - oldPending;
+      const effectiveNewTaken = newTaken + overflow;
+      const newBalance = newAllocDays - effectiveNewTaken - newPending;
+
       return {
-        leaveType: alloc.leave_type,
-        allocated,
-        taken,
-        pending,
-        remaining: allocated - taken - pending,
+        leaveType,
+        // Old period (shown only before Aug 1)
+        showOldPeriod: beforeAugust && oldAllocDays > 0,
+        oldAllocDays,
+        oldTaken: cappedOldTaken,
+        oldPending,
+        oldBalance: Math.max(0, oldBalance),
+        // New period
+        newAllocDays,
+        newTaken: effectiveNewTaken,
+        newPending,
+        newBalance,
+        // Total
+        totalBalance: Math.max(0, oldBalance) + newBalance,
       };
     });
   }, [allocations, leaveApps]);
@@ -431,19 +486,49 @@ export default function MyLeavesPage() {
                   {balance.leaveType}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold">{balance.remaining}</span>
-                  <span className="text-sm text-muted-foreground">
-                    / {balance.allocated} days
-                  </span>
+                  <span className="text-2xl font-bold">{balance.totalBalance}</span>
+                  <span className="text-sm text-muted-foreground">days available</span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {balance.taken} days taken
-                  {balance.pending > 0 && (
-                    <span className="ml-2 text-yellow-600">· {balance.pending} pending</span>
+                {balance.showOldPeriod && (
+                  <div className="text-xs text-muted-foreground border-t pt-2 space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>2025 period</span>
+                      <span>{balance.oldBalance} / {balance.oldAllocDays} days</span>
+                    </div>
+                    {balance.oldTaken > 0 && (
+                      <div className="flex justify-between text-[11px]">
+                        <span className="pl-2">taken</span>
+                        <span>{balance.oldTaken}</span>
+                      </div>
+                    )}
+                    {balance.oldPending > 0 && (
+                      <div className="flex justify-between text-[11px] text-yellow-600">
+                        <span className="pl-2">pending</span>
+                        <span>{balance.oldPending}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground border-t pt-2 space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>2026 period</span>
+                    <span>{balance.newBalance} / {balance.newAllocDays} days</span>
+                  </div>
+                  {balance.newTaken > 0 && (
+                    <div className="flex justify-between text-[11px]">
+                      <span className="pl-2">taken</span>
+                      <span>{balance.newTaken}</span>
+                    </div>
                   )}
-                </p>
+                  {balance.newPending > 0 && (
+                    <div className="flex justify-between text-[11px] text-yellow-600">
+                      <span className="pl-2">pending</span>
+                      <span>{balance.newPending}</span>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
