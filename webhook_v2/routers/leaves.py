@@ -184,7 +184,7 @@ def _get_holiday_details_in_range(client: ERPNextClient, holiday_list: str, from
             continue
         # Only include actual public holidays, not weekly-off days added to the list
         day_obj = date.fromisoformat(d)
-        if day_obj.weekday() != 6:  # exclude Sundays (always weekly off)
+        if day_obj.weekday() < 5:  # exclude Sat/Sun — only show actual public holidays
             result.append({"date": d, "description": h.get("description", "Holiday")})
     return sorted(result, key=lambda x: x["date"])
 
