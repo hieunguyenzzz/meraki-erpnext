@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { ArrowLeft, ArrowRight, CalendarDays, Star, X } from "lucide-react";
+import { ArrowRight, CalendarDays, Star, X } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { extractErrorMessage } from "@/lib/errors";
 
@@ -238,12 +238,6 @@ export default function ApplicantsListPage() {
           <p className="text-muted-foreground">Every applicant across all stages</p>
         </div>
         <div className="flex items-center gap-3">
-          <Link
-            to="/hr/recruiting"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-          >
-            <ArrowLeft className="h-4 w-4" /> CV Scanner
-          </Link>
           <Link
             to="/hr/recruiting/pipeline"
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"

@@ -24,7 +24,6 @@ import ProjectDetailPage from "@/pages/projects/ProjectDetailPage";
 import EmployeesPage from "@/pages/hr/EmployeesPage";
 import EmployeeDetailPage from "@/pages/hr/EmployeeDetailPage";
 import PayrollPage from "@/pages/hr/PayrollPage";
-import RecruitingScannerPage from "@/pages/hr/RecruitingScannerPage";
 import StaffOverviewPage from "@/pages/hr/StaffOverviewPage";
 import RecruitingPipelinePage from "@/pages/hr/RecruitingPipelinePage";
 import ApplicantDetailPage from "@/pages/hr/ApplicantDetailPage";
@@ -92,7 +91,7 @@ export default function App() {
           resources={[
             { name: "Lead", list: "/crm", show: "/crm/leads/:name" },
             { name: "Opportunity", list: "/crm", show: "/crm/opportunities/:name" },
-            { name: "Job Applicant", list: "/hr/recruiting", show: "/hr/recruiting/:name" },
+            { name: "Job Applicant", list: "/hr/recruiting/pipeline", show: "/hr/recruiting/:name" },
             { name: "Job Opening" },
             { name: "Interview", list: "/hr/recruiting/interviews" },
             { name: "Interview Round" },
@@ -146,7 +145,6 @@ export default function App() {
 
               {/* HR */}
               <Route path="/hr/staff-overview" element={<StaffOverviewPage />} />
-              <Route path="/hr/recruiting" element={<RecruitingScannerPage />} />
               <Route path="/hr/recruiting/pipeline" element={<RecruitingPipelinePage />} />
               <Route path="/hr/recruiting/all" element={<ApplicantsListPage />} />
               <Route path="/hr/recruiting/interviews" element={<InterviewSchedulingPage />} />
