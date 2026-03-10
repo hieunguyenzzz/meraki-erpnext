@@ -413,8 +413,8 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
         casual_to_date = (start_d + timedelta(days=casual_days - 1)).isoformat() if casual_days > 0 else None
         lwp_from_date  = (date.fromisoformat(casual_to_date) + timedelta(days=1)).isoformat() if casual_to_date else from_date
     else:
+        total_weekdays = _count_leave_days(from_date, to_date, set(), weekly_off)
         requested      = _count_leave_days(from_date, to_date, holidays, weekly_off)
-        total_weekdays = requested  # weekends + holidays both excluded
         casual_days    = min(balance_days, requested)
         lwp_days       = requested - casual_days
         casual_to_date = _end_date_for_n_leave_days(from_date, casual_days, holidays, weekly_off) if casual_days > 0 else None
