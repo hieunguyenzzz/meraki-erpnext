@@ -540,7 +540,7 @@ export default function EmployeeDetailPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `API error ${res.status}`);
       }
-      navigate("/hr/employees");
+      navigate("/hr/staff-overview");
     } catch (err: any) {
       setDeleteError(err?.message || "Failed to delete employee");
     } finally {
