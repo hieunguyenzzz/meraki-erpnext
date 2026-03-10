@@ -33,6 +33,8 @@ function seniority(dateOfJoining: string): number {
 interface Employee {
   name: string;
   employee_name: string;
+  first_name: string;
+  last_name: string;
   date_of_joining: string;
   status: string;
 }
@@ -101,7 +103,7 @@ export default function LeaveReportPage() {
     pagination: { mode: "off" },
     filters: [{ field: "status", operator: "eq", value: "Active" }],
     sorters: [{ field: "employee_name", order: "asc" }],
-    meta: { fields: ["name", "employee_name", "date_of_joining", "status"] },
+    meta: { fields: ["name", "employee_name", "first_name", "last_name", "date_of_joining", "status"] },
   });
 
   // Fetch all leave allocations (both periods)
@@ -166,7 +168,7 @@ export default function LeaveReportPage() {
 
       return {
         employee: emp.name,
-        employeeName: emp.employee_name,
+        employeeName: [emp.first_name, emp.last_name].filter(Boolean).join(" ") || emp.employee_name || emp.name,
         dateOfJoining: emp.date_of_joining,
         seniorityYears: seniority(emp.date_of_joining),
         monthlyLeave,
