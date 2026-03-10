@@ -231,8 +231,8 @@ export default function EmployeeDetailPage() {
     }
     const year = new Date().getFullYear();
     const groups = [];
-    if (old.length > 0) groups.push({ label: `Before Aug ${year}`, allocs: old });
-    if (newPeriod.length > 0) groups.push({ label: `Aug ${year} onwards`, allocs: newPeriod });
+    if (old.length > 0) groups.push({ label: `${year - 1} carry-over`, allocs: old });
+    if (newPeriod.length > 0) groups.push({ label: `${year} allocation`, allocs: newPeriod });
     return groups;
   }, [allocations]);
 

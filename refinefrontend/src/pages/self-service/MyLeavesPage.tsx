@@ -453,11 +453,8 @@ export default function MyLeavesPage() {
                 {balance.showOldPeriod && (
                   <div className="text-xs text-muted-foreground border-t pt-2 space-y-0.5">
                     <div className="flex justify-between">
-                      <span>2025 period</span>
-                      <span>{balance.oldBalance} / {balance.oldAccrued} days</span>
-                    </div>
-                    <div className="flex justify-between text-[11px] opacity-60">
-                      <span className="pl-2">of {balance.oldAllocDays} annual</span>
+                      <span>{new Date().getFullYear() - 1} carry-over</span>
+                      <span>{balance.oldBalance} / {balance.oldAllocDays} days</span>
                     </div>
                     {balance.oldTaken > 0 && (
                       <div className="flex justify-between text-[11px]">
@@ -475,7 +472,7 @@ export default function MyLeavesPage() {
                 )}
                 <div className="text-xs text-muted-foreground border-t pt-2 space-y-0.5">
                   <div className="flex justify-between">
-                    <span>2026 period</span>
+                    <span>{new Date().getFullYear()} allocation</span>
                     <span>{balance.newBalance} / {balance.newAccrued} days</span>
                   </div>
                   <div className="flex justify-between text-[11px] opacity-60">

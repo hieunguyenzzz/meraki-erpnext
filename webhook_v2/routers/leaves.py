@@ -269,15 +269,13 @@ def apply_leave(body: LeaveApplyRequest):
                 (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
             )
             if leave_row:
-                if balance_resp["before_august"]:
-                    accrued_avail = (
-                        leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"]
-                    )
-                else:
-                    accrued_avail = (
-                        leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"]
-                    )
-                balance = max(accrued_avail, 0)
+                old_avail = (
+                    leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"]
+                )
+                new_avail = (
+                    leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"]
+                )
+                balance = max(old_avail, 0) + max(new_avail, 0)
             else:
                 balance = 0.0
             balance_int = int(balance)
@@ -371,15 +369,13 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
         (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
     )
     if leave_row:
-        if balance_resp["before_august"]:
-            accrued_avail = (
-                leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"]
-            )
-        else:
-            accrued_avail = (
-                leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"]
-            )
-        balance = max(accrued_avail, 0)
+        old_avail = (
+            leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"]
+        )
+        new_avail = (
+            leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"]
+        )
+        balance = max(old_avail, 0) + max(new_avail, 0)
     else:
         balance = 0.0
     balance_int     = int(balance)
@@ -510,13 +506,11 @@ def get_leave_balance(employee: str):
         ps = period_starts.get(lt, {})
         old_start = ps.get("old")
         new_start = ps.get("new")
-        data["old_accrued"] = (
-            _compute_accrued(data["old_allocation"], old_start, today)
-            if old_start else data["old_allocation"]
-        )
-        data["new_accrued"] = (
-            _compute_accrued(data["new_allocation"], new_start, today)
-            if new_start else data["new_allocation"]
+        # Old period = 2025 carry-over: fully available, no monthly accrual
+        data["old_accrued"] = data["old_allocation"]
+        # New period = 2026 annual: accrues from Jan 1 of current year (not from Aug 1)
+        data["new_accrued"] = _compute_accrued(
+            data["new_allocation"], date(current_year, 1, 1), today
         )
 
     return {"data": list(result.values()), "before_august": today < old_cutoff}
