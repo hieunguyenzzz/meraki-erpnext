@@ -79,6 +79,16 @@ function leaveDaysInMonth(app: LeaveApplication, year: number, month: number): n
   return Math.round((overlapDays / appTotalDays) * app.total_leave_days * 10) / 10;
 }
 
+/** Compute accrued days to date: ceil(allocation × elapsed_months / 12), capped at allocation */
+function computeAccrued(allocation: number, accrualStart: Date, today: Date): number {
+  if (allocation <= 0) return 0;
+  const y1 = accrualStart.getFullYear(), m1 = accrualStart.getMonth();
+  const y2 = today.getFullYear(), m2 = today.getMonth();
+  const elapsedMonths = (y2 - y1) * 12 + (m2 - m1);
+  if (elapsedMonths <= 0) return 0;
+  return Math.min(allocation, Math.ceil(allocation * elapsedMonths / 12));
+}
+
 interface EmployeeRow {
   employee: string;
   employeeName: string;
@@ -91,6 +101,8 @@ interface EmployeeRow {
   newAllocationDays: number;   // 2026 period allocation
   newTaken: number;            // taken from 2026 period
   newBalance: number;          // 2026 remaining
+  newAccrued: number;          // accrued so far for 2026 (from Jan 1)
+  newUsable: number;           // newAccrued - newTaken (clamped to 0)
 }
 
 export default function LeaveReportPage() {
@@ -169,6 +181,13 @@ export default function LeaveReportPage() {
       // Cap old taken at allocation; overflow spills into new period
       const cappedOldTaken = Math.min(oldTaken, oldAllocationDays);
       const overflow = oldTaken - cappedOldTaken;
+      const effectiveNewTaken = newTaken + overflow;
+
+      // 2026 accrual: from Jan 1 of current year
+      const today = new Date();
+      const accrualStart = new Date(currentYear, 0, 1); // Jan 1
+      const newAccrued = computeAccrued(newAllocationDays, accrualStart, today);
+      const newUsable = Math.max(0, newAccrued - effectiveNewTaken);
 
       return {
         employee: emp.name,
@@ -180,8 +199,10 @@ export default function LeaveReportPage() {
         oldTaken: cappedOldTaken,
         oldBalance: oldAllocationDays - cappedOldTaken,
         newAllocationDays,
-        newTaken: newTaken + overflow,
-        newBalance: newAllocationDays - (newTaken + overflow),
+        newTaken: effectiveNewTaken,
+        newBalance: newAllocationDays - effectiveNewTaken,
+        newAccrued,
+        newUsable,
       };
     });
   }, [employees, allocations, applications, currentYear]);
@@ -235,6 +256,9 @@ export default function LeaveReportPage() {
                     <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
                       <div className="text-xs leading-tight">2026<br />Balance</div>
                     </TableHead>
+                    <TableHead className="text-center min-w-[90px] bg-orange-50 dark:bg-orange-950/30">
+                      <div className="text-xs leading-tight font-semibold">2026<br />Usable</div>
+                    </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-purple-50 dark:bg-purple-950/30">
                       <div className="text-xs leading-tight font-semibold">Total<br />Balance</div>
                     </TableHead>
@@ -279,6 +303,12 @@ export default function LeaveReportPage() {
                           {row.newBalance}
                         </Badge>
                       </TableCell>
+                      {/* 2026 Usable (accrued so far minus taken) */}
+                      <TableCell className="text-center text-sm bg-orange-50/50 dark:bg-orange-950/20">
+                        <Badge variant={row.newUsable > 0 ? "success" : "secondary"} className="text-xs font-semibold">
+                          {row.newUsable}
+                        </Badge>
+                      </TableCell>
                       {/* Total balance */}
                       <TableCell className="text-center text-sm bg-purple-50/50 dark:bg-purple-950/20">
                         {(() => { const total = row.oldBalance + row.newBalance; return (
@@ -291,7 +321,7 @@ export default function LeaveReportPage() {
                   ))}
                   {rows.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={18 + MONTHS.length} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={19 + MONTHS.length} className="text-center text-muted-foreground py-8">
                         No active employees found
                       </TableCell>
                     </TableRow>
