@@ -23,6 +23,7 @@ export const CRM_ROLES = ["System Manager", "Sales Manager", "Sales User"];
 export const PLANNER_ROLES = [...CRM_ROLES, "Projects User"];
 export const HR_ROLES = ["System Manager", "HR Manager", "HR User"];
 export const FINANCE_ROLES = ["System Manager", "Accounts Manager", "Accounts User"];
+export const REPORT_ROLES = ["System Manager"];
 export const DIRECTOR_ROLES = ["System Manager"];
 
 export type DashboardOption = "personal" | "director";
@@ -63,7 +64,6 @@ export const MODULES: ModuleConfig[] = [
       { label: "Staff Overview", path: "/hr/staff-overview", icon: LayoutDashboard },
       { label: "Recruiting", path: "/hr/recruiting", icon: Users },
       { label: "Payroll", path: "/hr/payroll", icon: Banknote },
-      { label: "Leave Report", path: "/hr/leaves", icon: CalendarDays },
     ],
   },
   {
@@ -75,6 +75,14 @@ export const MODULES: ModuleConfig[] = [
       { label: "Expenses", path: "/finance/expenses", icon: Receipt },
       { label: "Payments", path: "/finance/payments", icon: CreditCard },
       { label: "Journal Entries", path: "/finance/journals", icon: BookOpen },
+    ],
+  },
+  {
+    label: "Reports",
+    path: "/reports",
+    roles: REPORT_ROLES,
+    children: [
+      { label: "Leave Report", path: "/reports/leaves", icon: CalendarDays },
     ],
   },
   {

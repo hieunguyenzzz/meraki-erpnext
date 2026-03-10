@@ -123,14 +123,70 @@ async def delete_employee(employee_name: str):
 
     user_id = emp.get("user_id")
 
-    # Delete linked docs that block employee deletion
+    # Step 1: Remove employee from Payroll Entries (or cancel+delete if submitted)
+    # Child table (Payroll Employee Detail) returns 403 on direct query,
+    # so we list all PEs and check each one's employees list.
+    try:
+        all_pe = client._get("/api/resource/Payroll Entry", params={
+            "fields": '["name","docstatus"]',
+            "limit_page_length": 0,
+        }).get("data", [])
+        for pe_summary in all_pe:
+            pe_name = pe_summary["name"]
+            try:
+                pe = client._get(f"/api/resource/Payroll Entry/{pe_name}").get("data", {})
+                emp_rows = [r for r in pe.get("employees", []) if r.get("employee") == employee_name]
+                if not emp_rows:
+                    continue
+                if pe.get("docstatus") == 1:
+                    # Submitted: must cancel + delete the whole PE
+                    client._post("/api/method/frappe.client.cancel", {
+                        "doctype": "Payroll Entry", "name": pe_name,
+                    })
+                    client._delete(f"/api/resource/Payroll Entry/{pe_name}")
+                    log.info("payroll_entry_cancelled_deleted", name=pe_name, employee=employee_name)
+                else:
+                    # Draft: remove only this employee's row from the PE
+                    remaining = [r for r in pe.get("employees", []) if r.get("employee") != employee_name]
+                    client._put(f"/api/resource/Payroll Entry/{pe_name}", {
+                        "employees": remaining,
+                    })
+                    log.info("payroll_entry_row_removed", name=pe_name, employee=employee_name)
+            except Exception as e:
+                log.warning("payroll_entry_cleanup_failed", name=pe_name, error=str(e))
+    except Exception as e:
+        log.warning("payroll_entry_list_failed", error=str(e))
+
+    # Step 2: Clear employee references from Projects (custom link fields)
+    PROJECT_EMPLOYEE_FIELDS = [
+        "custom_lead_planner", "custom_support_planner",
+        "custom_assistant_1", "custom_assistant_2",
+    ]
+    for field in PROJECT_EMPLOYEE_FIELDS:
+        try:
+            projects = client._get("/api/resource/Project", params={
+                "filters": f'[["{field}","=","{employee_name}"]]',
+                "fields": '["name"]',
+                "limit_page_length": 0,
+            }).get("data", [])
+            for proj in projects:
+                try:
+                    client._put(f"/api/resource/Project/{proj['name']}", {field: ""})
+                    log.info("project_employee_ref_cleared", project=proj["name"], field=field)
+                except Exception as e:
+                    log.warning("project_ref_clear_failed", project=proj["name"], field=field, error=str(e))
+        except Exception:
+            pass
+
+    # Step 3: Delete remaining per-employee linked docs
     LINKED_DOCTYPES = [
         "Attendance Request",
         "Leave Application",
         "Leave Allocation",
         "Attendance",
         "Salary Slip",
-        "Payroll Employee Detail",
+        "Salary Structure Assignment",
+        "Additional Salary",
     ]
     for doctype in LINKED_DOCTYPES:
         try:
@@ -141,9 +197,8 @@ async def delete_employee(employee_name: str):
             })
             for doc in result.get("data", []):
                 try:
-                    # Cancel submitted docs before deleting
                     if doc.get("docstatus") == 1:
-                        client._post(f"/api/method/frappe.client.cancel", {
+                        client._post("/api/method/frappe.client.cancel", {
                             "doctype": doctype, "name": doc["name"],
                         })
                     client._delete(f"/api/resource/{doctype}/{doc['name']}")
