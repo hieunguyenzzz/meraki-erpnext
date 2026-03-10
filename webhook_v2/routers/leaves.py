@@ -189,8 +189,9 @@ def _get_holiday_details_in_range(client: ERPNextClient, holiday_list: str, from
     return sorted(result, key=lambda x: x["date"])
 
 
-def _is_working_day(d: date, holidays: set, weekly_off: int) -> bool:
-    return d.weekday() != weekly_off and d.isoformat() not in holidays
+def _is_working_day(d: date, holidays: set, weekly_off: int = 6) -> bool:
+    # Always exclude Sat (5) and Sun (6) — plus any holiday list entries
+    return d.weekday() < 5 and d.isoformat() not in holidays
 
 
 def _count_leave_days(from_str: str, to_str: str, holidays: set, weekly_off: int = 6) -> int:
@@ -276,15 +277,16 @@ def apply_leave(body: LeaveApplyRequest):
                     leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
                 )
                 # Use only the allocation period that covers the leave dates —
-                # old allocation (Jan–Jul) cannot be used for Aug+ dates in ERPNext
-                old_cutoff = date(date.today().year, 8, 1)
-                balance = old_avail if date.fromisoformat(body.from_date) < old_cutoff else new_avail
+                # H1 (Jan–Jul) = old/carry-over; H2 (Aug+) = new annual
+                balance = old_avail if date.fromisoformat(body.from_date).month < 8 else new_avail
             else:
                 balance = 0.0
-            balance_int = int(balance)
+            # Round to nearest 0.5 so half-day balances (0.5) aren't truncated to 0
+            balance_usable = math.floor(balance * 2) / 2
+            balance_days   = int(balance_usable)   # whole days for split date calculation
 
-            # Zero balance: convert entire request to LWP — never create a CL draft with no balance
-            if balance_int == 0:
+            # Zero balance: convert entire request to LWP
+            if balance_usable < 0.5:
                 app = _create_leave_application(
                     client, body.employee, "Leave Without Pay",
                     body.from_date, body.to_date, description,
@@ -299,28 +301,36 @@ def apply_leave(body: LeaveApplyRequest):
                 start_d = date.fromisoformat(body.from_date)
                 end_d   = date.fromisoformat(body.to_date)
                 requested = (end_d - start_d).days + 1
-                if balance_int < requested:
-                    casual_to_date = (start_d + timedelta(days=balance_int - 1)).isoformat()
+                if balance_days < requested:
+                    casual_to_date = (start_d + timedelta(days=balance_days - 1)).isoformat()
                     lwp_from_date  = (date.fromisoformat(casual_to_date) + timedelta(days=1)).isoformat()
             else:
                 holiday_list = _get_employee_holiday_list(client, body.employee)
                 weekly_off = _get_weekly_off(client, holiday_list) if holiday_list else 6
                 holidays = _get_holidays_in_range(client, holiday_list, body.from_date, body.to_date) if holiday_list else set()
                 requested = _count_leave_days(body.from_date, body.to_date, holidays, weekly_off)
-                if balance_int < requested:
-                    casual_to_date = _end_date_for_n_leave_days(body.from_date, balance_int, holidays, weekly_off)
+                if balance_days < requested:
+                    casual_to_date = _end_date_for_n_leave_days(body.from_date, balance_days, holidays, weekly_off)
                     lwp_from_date  = _next_leave_day(casual_to_date, holidays, weekly_off)
 
-            if balance_int < requested:
-                # Split: use up remaining CL balance, rest goes to LWP
+            if balance_days < requested:
+                # Split: CL for available whole days, rest LWP — preserve half_day flag on both
                 cl_app = _create_leave_application(
                     client, body.employee, "Casual Leave",
                     body.from_date, casual_to_date, description,
-                    leave_approver=leave_approver)
-                lwp_app = _create_leave_application(
-                    client, body.employee, "Leave Without Pay",
-                    lwp_from_date, body.to_date, description,
-                    leave_approver=leave_approver)
+                    leave_approver=leave_approver, half_day=body.half_day)
+                try:
+                    lwp_app = _create_leave_application(
+                        client, body.employee, "Leave Without Pay",
+                        lwp_from_date, body.to_date, description,
+                        leave_approver=leave_approver, half_day=body.half_day)
+                except Exception:
+                    # Rollback: delete the CL application if LWP creation fails
+                    try:
+                        client._delete(f"/api/resource/Leave Application/{cl_app.get('name', '')}")
+                    except Exception:
+                        pass
+                    raise
                 return {"created": [cl_app, lwp_app], "split": True}
 
         app = _create_leave_application(
@@ -378,12 +388,12 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
         new_avail = max(
             leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
         )
-        # Use only the allocation period that covers the leave dates
-        old_cutoff = date(date.today().year, 8, 1)
-        balance = old_avail if date.fromisoformat(from_date) < old_cutoff else new_avail
+        # Use only the allocation period that covers the leave dates (H1 = old, H2 = new)
+        balance = old_avail if date.fromisoformat(from_date).month < 8 else new_avail
     else:
         balance = 0.0
-    balance_int     = int(balance)
+    balance_usable  = math.floor(balance * 2) / 2   # nearest 0.5 for half-day precision
+    balance_days    = int(balance_usable)
     include_holiday = _leave_type_includes_holidays(client, "Casual Leave")
 
     if include_holiday:
@@ -392,14 +402,14 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
         end_d   = date.fromisoformat(to_date)
         requested      = (end_d - start_d).days + 1
         total_weekdays = requested  # all calendar days
-        casual_days    = min(balance_int, requested)
+        casual_days    = min(balance_days, requested)
         lwp_days       = requested - casual_days
         casual_to_date = (start_d + timedelta(days=casual_days - 1)).isoformat() if casual_days > 0 else None
         lwp_from_date  = (date.fromisoformat(casual_to_date) + timedelta(days=1)).isoformat() if casual_to_date else from_date
     else:
         requested      = _count_leave_days(from_date, to_date, holidays, weekly_off)
         total_weekdays = requested  # weekends + holidays both excluded
-        casual_days    = min(balance_int, requested)
+        casual_days    = min(balance_days, requested)
         lwp_days       = requested - casual_days
         casual_to_date = _end_date_for_n_leave_days(from_date, casual_days, holidays, weekly_off) if casual_days > 0 else None
         lwp_from_date  = _next_leave_day(casual_to_date, holidays, weekly_off) if casual_to_date else from_date
@@ -434,8 +444,7 @@ def get_leave_balance(employee: str):
     This avoids field-level permission issues when the frontend queries as Employee Self Service.
     """
     client = ERPNextClient()
-    current_year = date.today().year
-    old_cutoff = date(current_year, 8, 1)  # Aug 1
+    today = date.today()
 
     # Fetch all submitted allocations for this employee
     allocs = client._get("/api/resource/Leave Allocation", params={
@@ -458,7 +467,8 @@ def get_leave_balance(employee: str):
         lt = alloc.get("leave_type", "")
         fd_str = (alloc.get("from_date") or "")[:10]
         alloc_days = float(alloc.get("new_leaves_allocated", 0))
-        is_old = bool(fd_str) and date.fromisoformat(fd_str) < old_cutoff
+        # H1 allocations (Jan–Jul, month < 8) = carry-over; H2 (Aug+) = new annual
+        is_old = bool(fd_str) and date.fromisoformat(fd_str).month < 8
 
         if lt not in result:
             result[lt] = {
@@ -491,7 +501,8 @@ def get_leave_balance(employee: str):
 
         fd = app.get("from_date", "")[:10] if app.get("from_date") else ""
         days = float(app.get("total_leave_days", 0))
-        is_old = fd and date.fromisoformat(fd) < old_cutoff
+        # Leave taken before Aug = charged to carry-over; Aug+ = charged to new annual
+        is_old = bool(fd) and date.fromisoformat(fd).month < 8
         is_taken = status == "Approved" or app.get("docstatus") == 1
 
         if is_old:
@@ -505,17 +516,20 @@ def get_leave_balance(employee: str):
             else:
                 result[lt]["new_pending"] += days
 
-    # Compute accrued amounts based on period start dates
-    today = date.today()
+    # Compute accrued amounts
     for lt, data in result.items():
         ps = period_starts.get(lt, {})
-        old_start = ps.get("old")
-        new_start = ps.get("new")
-        # Old period = 2025 carry-over: fully available before Aug 1, forfeited after
-        data["old_accrued"] = data["old_allocation"] if today < old_cutoff else data["old_taken"]
-        # New period = 2026 annual: accrues from Jan 1 of current year (not from Aug 1)
+        new_alloc_start = ps.get("new")  # e.g. date(2026, 8, 1)
+
+        # Old (carry-over H1): fully available while we're still in H1 (month < 8), forfeited in H2
+        old_expired = today.month >= 8
+        data["old_accrued"] = data["old_taken"] if old_expired else data["old_allocation"]
+
+        # New (annual H2): accrues from Jan 1 of the year the allocation starts in
+        # e.g. Aug 2026 allocation → accrual from Jan 1 2026; Aug 2027 → from Jan 1 2027
+        accrual_year = new_alloc_start.year if new_alloc_start else today.year
         data["new_accrued"] = _compute_accrued(
-            data["new_allocation"], date(current_year, 1, 1), today
+            data["new_allocation"], date(accrual_year, 1, 1), today
         )
 
-    return {"data": list(result.values()), "before_august": today < old_cutoff}
+    return {"data": list(result.values()), "before_august": today.month < 8}
