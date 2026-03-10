@@ -166,8 +166,9 @@ export default function LeaveReportPage() {
         return Math.round(total * 10) / 10;
       });
 
-      const rawOldBalance = oldAllocationDays - oldTaken;
-      const overflow = rawOldBalance < 0 ? Math.abs(rawOldBalance) : 0;
+      // Cap old taken at allocation; overflow spills into new period
+      const cappedOldTaken = Math.min(oldTaken, oldAllocationDays);
+      const overflow = oldTaken - cappedOldTaken;
 
       return {
         employee: emp.name,
@@ -176,8 +177,8 @@ export default function LeaveReportPage() {
         seniorityYears: seniority(emp.date_of_joining),
         monthlyLeave,
         oldAllocationDays,
-        oldTaken,
-        oldBalance: Math.max(0, rawOldBalance),
+        oldTaken: cappedOldTaken,
+        oldBalance: oldAllocationDays - cappedOldTaken,
         newAllocationDays,
         newTaken: newTaken + overflow,
         newBalance: newAllocationDays - (newTaken + overflow),
