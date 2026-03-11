@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router";
 import { useList, useCreate, useUpdate, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { Briefcase, CalendarDays, Check, Copy, List, Plus } from "lucide-react";
+import { Briefcase, Check, Copy, Plus } from "lucide-react";
 import { formatDate } from "@/lib/format";
 
 interface JobOpening {
@@ -268,54 +267,9 @@ export default function JobOpeningsPage() {
             Manage open positions and share application links
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            to="/hr/recruiting/pipeline"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-          >
-            Pipeline
-          </Link>
-          <Link
-            to="/hr/recruiting/all"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-          >
-            <List className="h-4 w-4" /> All Applicants
-          </Link>
-          <Link
-            to="/hr/recruiting/interviews"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-          >
-            <CalendarDays className="h-4 w-4" /> Interviews
-          </Link>
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> New Position
-          </Button>
-        </div>
-      </div>
-
-      {/* Active tab indicator */}
-      <div className="flex items-center gap-1 border-b">
-        <Link
-          to="/hr/recruiting/pipeline"
-          className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-        >
-          Pipeline
-        </Link>
-        <Link
-          to="/hr/recruiting/all"
-          className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-        >
-          All Applicants
-        </Link>
-        <Link
-          to="/hr/recruiting/interviews"
-          className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-        >
-          Interviews
-        </Link>
-        <span className="px-3 py-2 text-sm font-medium border-b-2 border-primary text-primary">
-          Jobs
-        </span>
+        <Button size="sm" onClick={() => setDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" /> New Position
+        </Button>
       </div>
 
       {/* Table */}
