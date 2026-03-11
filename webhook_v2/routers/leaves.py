@@ -265,7 +265,7 @@ def apply_leave(body: LeaveApplyRequest):
 
         # Auto-split Casual Leave when balance is insufficient
         if body.leave_type == "Casual Leave":
-            balance_resp = get_leave_balance(employee=body.employee)
+            balance_resp = get_leave_balance(employee=body.employee, as_of=date.fromisoformat(body.from_date))
             leave_row = next(
                 (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
             )
@@ -276,9 +276,7 @@ def apply_leave(body: LeaveApplyRequest):
                 new_avail = max(
                     leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
                 )
-                # Use only the allocation period that covers the leave dates —
-                # H1 (Jan–Jul) = old/carry-over; H2 (Aug+) = new annual
-                balance = old_avail if date.fromisoformat(body.from_date).month < 8 else new_avail
+                balance = old_avail + new_avail  # combined: carry-over + accrued annual
             else:
                 balance = 0.0
             # Round down to nearest 0.5 so half-day balances aren't truncated to 0
@@ -383,7 +381,7 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
     holiday_details = _get_holiday_details_in_range(client, holiday_list, from_date, to_date) if holiday_list else []
 
     # Use accrual-aware balance
-    balance_resp = get_leave_balance(employee=employee)
+    balance_resp = get_leave_balance(employee=employee, as_of=date.fromisoformat(from_date))
     leave_row = next(
         (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
     )
@@ -394,8 +392,7 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
         new_avail = max(
             leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
         )
-        # Use only the allocation period that covers the leave dates (H1 = old, H2 = new)
-        balance = old_avail if date.fromisoformat(from_date).month < 8 else new_avail
+        balance = old_avail + new_avail  # combined: carry-over + accrued annual
     else:
         balance = 0.0
     balance_usable  = math.floor(balance * 2) / 2   # nearest 0.5 for half-day precision
