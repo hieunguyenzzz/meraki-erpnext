@@ -6,7 +6,7 @@ USER root
 
 # Install HRMS by cloning and installing
 RUN cd /home/frappe/frappe-bench/apps && \
-    git clone --depth 1 --branch version-15 https://github.com/frappe/hrms && \
+    git clone --depth 1 --branch v15.58.2 https://github.com/frappe/hrms && \
     cd /home/frappe/frappe-bench && \
     /home/frappe/frappe-bench/env/bin/pip install -e apps/hrms && \
     cd apps/hrms && yarn install && \
