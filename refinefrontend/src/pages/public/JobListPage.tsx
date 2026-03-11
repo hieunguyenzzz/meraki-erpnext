@@ -1,16 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { MapPin, Clock, Briefcase } from "lucide-react";
-
-interface Job {
-  name: string;
-  job_title: string;
-  status: string;
-  location: string;
-  closes_on: string;
-  custom_application_level: string;
-  description: string;
-}
+import { type Job, formatClosesOn } from "@/lib/jobs";
 
 const LEVEL_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   Intern: {
@@ -56,15 +47,6 @@ function SkeletonCard() {
   );
 }
 
-function formatClosesOn(dateStr: string): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 function JobCard({ job, onApply }: { job: Job; onApply: (job: Job) => void }) {
   const snippet = job.description

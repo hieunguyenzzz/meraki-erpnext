@@ -1,16 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { Upload, ArrowLeft, ArrowRight, Check, Briefcase, MapPin, Clock } from "lucide-react";
-
-interface Job {
-  name: string;
-  job_title: string;
-  status: string;
-  location: string;
-  closes_on: string;
-  custom_application_level: string;
-  description: string;
-}
+import { type Job, formatClosesOn } from "@/lib/jobs";
 
 type Level = "Intern" | "Standard" | "Senior";
 
@@ -44,14 +35,6 @@ const INITIAL_FORM: FormValues = {
   cover_letter: "",
 };
 
-function formatClosesOn(dateStr: string): string {
-  if (!dateStr) return "";
-  return new Date(dateStr).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 // ─── Styled sub-components ──────────────────────────────────────────────────
 
@@ -782,17 +765,19 @@ export default function JobApplyPage() {
           )}
 
           {/* Single-page form: Intern */}
-          {!isSenior && (
+          {!isSenior && !isStandard && (
             <div className="space-y-8">
               <PersonalSection />
               <DocumentsSection />
             </div>
           )}
 
-          {/* Single-page form: Standard */}
+          {/* Single-page form: Standard — Education before Documents */}
           {isStandard && (
-            <div className="space-y-8 mt-8">
+            <div className="space-y-8">
+              <PersonalSection />
               <EducationSection />
+              <DocumentsSection />
             </div>
           )}
 
