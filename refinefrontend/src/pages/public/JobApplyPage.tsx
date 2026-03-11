@@ -399,12 +399,12 @@ export default function JobApplyPage() {
       fd.append("job_title", jobParam);
       if (form.custom_city.trim()) fd.append("custom_city", form.custom_city.trim());
       if (form.education_degree.trim())
-        fd.append("education_degree", form.education_degree.trim());
-      if (form.institution.trim()) fd.append("institution", form.institution.trim());
+        fd.append("custom_education_degree", form.education_degree.trim());
+      if (form.institution.trim()) fd.append("custom_education_institution", form.institution.trim());
       if (form.graduation_year.trim())
-        fd.append("graduation_year", form.graduation_year.trim());
+        fd.append("custom_education_graduation_year", form.graduation_year.trim());
       if (form.work_experience.trim())
-        fd.append("work_experience", form.work_experience.trim());
+        fd.append("custom_work_experience", form.work_experience.trim());
       if (form.lower_range.trim()) fd.append("lower_range", form.lower_range.trim());
       if (form.custom_linkedin_url.trim())
         fd.append("custom_linkedin_url", form.custom_linkedin_url.trim());

@@ -5,12 +5,18 @@ GET  /jobs           — list open Job Openings (no auth required)
 POST /jobs/apply     — submit a job application (no auth required)
 """
 
+import re
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
 import requests
 
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
+
+_ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx"}
+_CV_MAX_BYTES = 10 * 1024 * 1024        # 10 MB
+_PORTFOLIO_MAX_BYTES = 20 * 1024 * 1024  # 20 MB
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -46,6 +52,29 @@ async def apply_for_job(
     portfolio_file: Optional[UploadFile] = File(None),
 ):
     """Create a Job Applicant from public form submission."""
+    # Validate email format
+    if not _EMAIL_RE.match(email_id):
+        raise HTTPException(status_code=422, detail="Invalid email address.")
+
+    # Validate CV file
+    import os
+    cv_ext = os.path.splitext(cv_file.filename or "")[1].lower()
+    if cv_ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=422, detail="CV must be a PDF, DOC, or DOCX file.")
+    cv_content = await cv_file.read()
+    if len(cv_content) > _CV_MAX_BYTES:
+        raise HTTPException(status_code=422, detail="CV file must be under 10 MB.")
+
+    # Validate portfolio if provided
+    portfolio_content = None
+    if portfolio_file and portfolio_file.filename:
+        port_ext = os.path.splitext(portfolio_file.filename)[1].lower()
+        if port_ext not in _ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=422, detail="Portfolio must be a PDF, DOC, or DOCX file.")
+        portfolio_content = await portfolio_file.read()
+        if len(portfolio_content) > _PORTFOLIO_MAX_BYTES:
+            raise HTTPException(status_code=422, detail="Portfolio file must be under 20 MB.")
+
     client = ERPNextClient()
 
     doc = {
@@ -79,26 +108,36 @@ async def apply_for_job(
         applicant_docname = applicant["data"]["name"]
     except Exception as e:
         log.error("create_applicant_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to create applicant: {e}")
+        raise HTTPException(status_code=500, detail="Failed to submit application. Please try again.")
 
-    await _upload_file(client, cv_file, "Job Applicant", applicant_docname)
+    # Upload pre-read files (content already in memory from validation above)
+    cv_ok = _upload_raw(client, cv_content, cv_file.filename, cv_file.content_type, "Job Applicant", applicant_docname)
+    if not cv_ok:
+        log.error("cv_upload_failed", applicant=applicant_docname)
+        # Attempt cleanup — delete the orphaned applicant record
+        try:
+            client._delete(f"/api/resource/Job Applicant/{applicant_docname}")
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail="CV upload failed. Please try again.")
 
-    if portfolio_file and portfolio_file.filename:
-        await _upload_file(client, portfolio_file, "Job Applicant", applicant_docname)
+    if portfolio_content is not None:
+        _upload_raw(client, portfolio_content, portfolio_file.filename, portfolio_file.content_type, "Job Applicant", applicant_docname)
 
     log.info("applicant_created", name=applicant_docname, job=job_title)
     return {"success": True, "name": applicant_docname}
 
 
-async def _upload_file(client: ERPNextClient, upload_file: UploadFile, doctype: str, docname: str):
-    """Upload a file attachment to an ERPNext document."""
-    content = await upload_file.read()
+def _upload_raw(client: ERPNextClient, content: bytes, filename: str, content_type: str | None, doctype: str, docname: str) -> bool:
+    """Upload pre-read file bytes to an ERPNext document. Returns True on success."""
     resp = requests.post(
         client.url + "/api/method/upload_file",
-        files={"file": (upload_file.filename, content, upload_file.content_type or "application/octet-stream")},
+        files={"file": (filename, content, content_type or "application/octet-stream")},
         data={"is_private": 1, "doctype": doctype, "docname": docname, "folder": "Home/Attachments"},
-        headers={k: v for k, v in client._auth_headers.items() if k != "Content-Type"},
+        headers=client._auth_headers,
         timeout=60,
     )
     if resp.status_code not in (200, 201):
-        log.warning("file_upload_failed", filename=upload_file.filename, status=resp.status_code)
+        log.warning("file_upload_failed", filename=filename, status=resp.status_code)
+        return False
+    return True
