@@ -444,13 +444,13 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
 
 
 @router.get("/leave/balance")
-def get_leave_balance(employee: str):
+def get_leave_balance(employee: str, as_of: date | None = None):
     """Return leave allocations and taken days for an employee, computed server-side.
 
     This avoids field-level permission issues when the frontend queries as Employee Self Service.
     """
     client = ERPNextClient()
-    today = date.today()
+    today = as_of if as_of is not None else date.today()
 
     # Fetch all submitted allocations for this employee
     allocs = client._get("/api/resource/Leave Allocation", params={
@@ -473,8 +473,12 @@ def get_leave_balance(employee: str):
         lt = alloc.get("leave_type", "")
         fd_str = (alloc.get("from_date") or "")[:10]
         alloc_days = float(alloc.get("new_leaves_allocated", 0))
-        # H1 allocations (Jan–Jul, month < 8) = carry-over; H2 (Aug+) = new annual
-        is_old = bool(fd_str) and date.fromisoformat(fd_str).month < 8
+        # Old = expires same year it starts (e.g. Jan–Jul); New = spans into next year
+        td_str = (alloc.get("to_date") or "")[:10]
+        is_old = (
+            bool(fd_str) and bool(td_str)
+            and date.fromisoformat(fd_str).year == date.fromisoformat(td_str).year
+        )
 
         if lt not in result:
             result[lt] = {
@@ -521,6 +525,14 @@ def get_leave_balance(employee: str):
                 result[lt]["new_taken"] += days
             else:
                 result[lt]["new_pending"] += days
+
+    # Overflow: if old_taken exceeds old_allocation (employee used new-period days in H1),
+    # re-attribute the excess to new_taken for accurate balance display.
+    for lt, data in result.items():
+        overflow = max(0.0, data["old_taken"] - data["old_allocation"])
+        if overflow > 0:
+            data["old_taken"]  = data["old_allocation"]
+            data["new_taken"] += overflow
 
     # Compute accrued amounts
     for lt, data in result.items():
