@@ -30,7 +30,6 @@ import ApplicantDetailPage from "@/pages/hr/ApplicantDetailPage";
 import ApplicantsListPage from "@/pages/hr/ApplicantsListPage";
 import InterviewSchedulingPage from "@/pages/hr/InterviewSchedulingPage";
 import JobOpeningsPage from "@/pages/hr/JobOpeningsPage";
-import JobListPage from "@/pages/public/JobListPage";
 import JobApplyPage from "@/pages/public/JobApplyPage";
 import InvoicesPage from "@/pages/finance/InvoicesPage";
 import InvoiceDetailPage from "@/pages/finance/InvoiceDetailPage";
@@ -119,7 +118,6 @@ export default function App() {
             <Route path="/login" element={<ThemeProvider><LoginPage /></ThemeProvider>} />
           <Route path="/update-password" element={<ThemeProvider><UpdatePasswordPage /></ThemeProvider>} />
             <Route path="/inquiry" element={<InquiryPage />} />
-            <Route path="/jobs" element={<JobListPage />} />
             <Route path="/apply" element={<JobApplyPage />} />
 
             {/* Admin: full app with sidebar */}

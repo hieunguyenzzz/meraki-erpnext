@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams, useNavigate } from "react-router";
+import { useSearchParams } from "react-router";
 import { Upload, ArrowLeft, ArrowRight, Check, Briefcase, MapPin, Clock } from "lucide-react";
 import { type Job, formatClosesOn } from "@/lib/jobs";
 
@@ -230,7 +230,6 @@ function StepIndicator({ step, total }: { step: number; total: number }) {
 // ─── Success screen ──────────────────────────────────────────────────────────
 
 function SuccessScreen({ jobTitle }: { jobTitle: string }) {
-  const navigate = useNavigate();
   return (
     <div className="max-w-md mx-auto text-center py-16 px-4">
       <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 mb-6">
@@ -246,13 +245,7 @@ function SuccessScreen({ jobTitle }: { jobTitle: string }) {
       <p className="text-stone-500 text-sm mb-8">
         We'll review your application and be in touch soon.
       </p>
-      <button
-        onClick={() => navigate("/jobs")}
-        className="inline-flex items-center gap-2 rounded-full bg-amber-800 hover:bg-amber-900 text-white text-sm font-medium px-6 py-2.5 transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to all positions
-      </button>
+      <p className="text-stone-400 text-sm mt-2">You may now close this page.</p>
     </div>
   );
 }
@@ -261,7 +254,6 @@ function SuccessScreen({ jobTitle }: { jobTitle: string }) {
 
 export default function JobApplyPage() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const jobParam = searchParams.get("job") ?? "";
 
   const [job, setJob] = useState<Job | null>(null);
@@ -450,13 +442,7 @@ export default function JobApplyPage() {
         <p className="text-stone-400 text-sm">
           This job opening may have been closed or removed.
         </p>
-        <button
-          onClick={() => navigate("/jobs")}
-          className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-800 hover:bg-amber-900 text-white text-sm font-medium px-5 py-2 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          View all positions
-        </button>
+        <p className="mt-2 text-stone-400 text-sm">Please contact us if you believe this is an error.</p>
       </div>
     );
   }
@@ -718,13 +704,7 @@ export default function JobApplyPage() {
       {/* Nav */}
       <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-stone-100">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <button
-            onClick={() => navigate("/jobs")}
-            className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            All positions
-          </button>
+          <div className="w-24" />
           <span className="font-serif text-lg font-bold text-stone-800 tracking-wide">
             Meraki
           </span>
