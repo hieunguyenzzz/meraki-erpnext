@@ -17,9 +17,14 @@ Each employee has **two separate Leave Allocation records** per leave year:
 | Period | `from_date` | `to_date` | Meaning |
 |--------|------------|----------|---------|
 | **Old (carry-over)** | `Jan 1` of current year | `Jul 31` of current year | Unused leave carried over from the previous year |
-| **New (annual)** | `Aug 1` of current year | `Jul 31` of next year | Fresh annual allocation for the current leave year |
+| **New (annual)** | `Jan 1` of current year | `Jul 31` of next year | Fresh annual allocation for the current leave year |
 
-**Classification rule:** An allocation (or leave application) is "old" if its `from_date` is in January–July (`month < 8`). It is "new" if `from_date` is in August–December (`month >= 8`). This rule is stable across year boundaries.
+**Classification rule:** An allocation is "old" (carry-over) if its `to_date` year equals its `from_date` year (i.e., it expires within the same calendar year). It is "new" (annual) if `to_date` is in a later year than `from_date`. This rule is stable across all year boundaries.
+
+- Old: `from=2026-01-01`, `to=2026-07-31` → same year → carry-over
+- New: `from=2026-01-01`, `to=2027-07-31` → spans into next year → annual
+
+Both allocations start on Jan 1, but the Old allocation expires Jul 31 of the **same** year while the New allocation extends to Jul 31 of the **following** year. This allows ERPNext to count both allocations for H1 (Jan–Jul) leaves, enabling employees to draw from their full combined balance.
 
 ---
 
@@ -57,12 +62,21 @@ new_available = max(new_accrued - new_taken - new_pending, 0)
 
 `old_pending` and `new_pending` count Open (not yet approved) leave applications.
 
-**Period selection for apply/preview:** only the balance of the period that covers the leave `from_date` is used — they are not combined:
+**Combined balance for apply/preview:** `old_available + new_available` — both periods contribute. The `new_accrued` is computed as of the leave's `from_date`, not today, so a March preview of a May leave correctly reflects 4 months accrued (not 2).
 
-- `from_date` in Jan–Jul → use `old_available`
-- `from_date` in Aug–Dec → use `new_available`
+Since both allocations now cover H1 dates (Old: Jan–Jul; New: Jan–Jul+), ERPNext can accept CL applications up to the full combined balance for any date in the year.
 
-This matches ERPNext behaviour: each Leave Allocation covers a specific date range, and ERPNext deducts from the allocation whose dates cover the leave.
+### Overflow tracking
+
+If `old_taken > old_allocation` (employee exhausted carry-over and used new-period days in H1), the excess is re-attributed to `new_taken`:
+
+```
+overflow = max(0, old_taken − old_allocation)
+old_taken  = min(old_taken, old_allocation)
+new_taken += overflow
+```
+
+This keeps the per-period balance display accurate.
 
 ---
 
