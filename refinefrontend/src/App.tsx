@@ -29,6 +29,9 @@ import RecruitingPipelinePage from "@/pages/hr/RecruitingPipelinePage";
 import ApplicantDetailPage from "@/pages/hr/ApplicantDetailPage";
 import ApplicantsListPage from "@/pages/hr/ApplicantsListPage";
 import InterviewSchedulingPage from "@/pages/hr/InterviewSchedulingPage";
+import JobOpeningsPage from "@/pages/hr/JobOpeningsPage";
+import JobListPage from "@/pages/public/JobListPage";
+import JobApplyPage from "@/pages/public/JobApplyPage";
 import InvoicesPage from "@/pages/finance/InvoicesPage";
 import InvoiceDetailPage from "@/pages/finance/InvoiceDetailPage";
 import ExpensesPage from "@/pages/finance/ExpensesPage";
@@ -116,6 +119,8 @@ export default function App() {
             <Route path="/login" element={<ThemeProvider><LoginPage /></ThemeProvider>} />
           <Route path="/update-password" element={<ThemeProvider><UpdatePasswordPage /></ThemeProvider>} />
             <Route path="/inquiry" element={<InquiryPage />} />
+            <Route path="/jobs" element={<JobListPage />} />
+            <Route path="/apply" element={<JobApplyPage />} />
 
             {/* Admin: full app with sidebar */}
             <Route
@@ -148,6 +153,7 @@ export default function App() {
               <Route path="/hr/recruiting/pipeline" element={<RecruitingPipelinePage />} />
               <Route path="/hr/recruiting/all" element={<ApplicantsListPage />} />
               <Route path="/hr/recruiting/interviews" element={<InterviewSchedulingPage />} />
+              <Route path="/hr/recruiting/jobs" element={<JobOpeningsPage />} />
               <Route path="/hr/recruiting/:name" element={<ApplicantDetailPage />} />
               <Route path="/hr/employees" element={<EmployeesPage />} />
               <Route path="/hr/employees/:name" element={<EmployeeDetailPage />} />
