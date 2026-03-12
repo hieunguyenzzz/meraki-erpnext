@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   useOne,
   useList,
@@ -6,6 +6,7 @@ import {
   useUpdate,
   useInvalidate,
 } from "@refinedev/core";
+import { MentionsInput, Mention } from "react-mentions";
 import {
   Sheet,
   SheetContent,
@@ -13,7 +14,6 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import {
   Popover,
@@ -55,19 +55,56 @@ function formatCommentDate(creation: string) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function renderCommentContent(content: string) {
-  const parts = content.split(/(@\S+)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("@")) {
-      return (
-        <span key={i} className="text-primary font-medium">
-          {part}
-        </span>
-      );
-    }
-    return <span key={i}>{part}</span>;
-  });
+function toFrappeHTML(value: string): string {
+  return value.replace(
+    /@\[([^\]]+)\]\(([^)]+)\)/g,
+    (_, display, id) =>
+      `<span class="mention" data-id="${id}" data-value="${display}" data-denotation-char="@">` +
+      `<span class="ql-mention-denotation-char">@</span>${display}</span>`
+  );
 }
+
+function renderCommentContent(content: string) {
+  const processed = content.replace(
+    /<span class="mention"[^>]*data-value="([^"]+)"[^>]*>[\s\S]*?<\/span>\s*<\/span>/g,
+    '<mark class="text-primary font-medium bg-transparent">@$1</mark>'
+  );
+  const html = processed.replace(/<br\s*\/?>/gi, "\n");
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+const mentionInputStyle = {
+  control: {
+    fontSize: "14px",
+  },
+  input: {
+    padding: "8px 12px",
+    border: "1px solid hsl(var(--input))",
+    borderRadius: "6px",
+    fontSize: "14px",
+    outline: "none",
+    minHeight: "80px",
+    resize: "none" as const,
+    width: "100%",
+    fontFamily: "inherit",
+    lineHeight: "1.5",
+  },
+  suggestions: {
+    list: {
+      backgroundColor: "hsl(var(--popover))",
+      border: "1px solid hsl(var(--border))",
+      borderRadius: "6px",
+      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+      overflow: "hidden",
+      zIndex: 50,
+    },
+    item: {
+      padding: "6px 12px",
+      fontSize: "14px",
+      cursor: "pointer",
+    },
+  },
+};
 
 export function CVReviewSheet({
   applicantId,
@@ -75,14 +112,11 @@ export function CVReviewSheet({
   onClose,
   onNavigate,
 }: CVReviewSheetProps) {
-  const [commentText, setCommentText] = useState("");
-  const [mentionSearch, setMentionSearch] = useState<string | null>(null);
-  const [mentionPopoverOpen, setMentionPopoverOpen] = useState(false);
+  const [commentValue, setCommentValue] = useState("");
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [applicantTags, setApplicantTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const currentIdx = screeningItems.findIndex((i) => i.id === applicantId);
 
@@ -126,13 +160,21 @@ export function CVReviewSheet({
   });
   const comments = commentsResult?.data ?? [];
 
-  // Fetch employees for @mention
+  // Fetch employees for @mention (only those with a user_id can receive notifications)
   const { result: employeesResult } = useList({
     resource: "Employee",
     pagination: { mode: "off" },
-    meta: { fields: ["name", "employee_name"] },
+    meta: { fields: ["name", "employee_name", "user_id"] },
   });
   const employees = employeesResult?.data ?? [];
+
+  const mentionUsers = useMemo(
+    () =>
+      employees
+        .filter((e: any) => !!e.user_id)
+        .map((e: any) => ({ id: e.user_id, display: e.employee_name ?? e.name })),
+    [employees]
+  );
 
   const { mutateAsync: createComment } = useCreate();
   const [isCreatingComment, setIsCreatingComment] = useState(false);
@@ -158,9 +200,7 @@ export function CVReviewSheet({
 
   // Reset comment when switching applicants
   useEffect(() => {
-    setCommentText("");
-    setMentionSearch(null);
-    setMentionPopoverOpen(false);
+    setCommentValue("");
   }, [applicantId]);
 
   function goToPrev() {
@@ -185,7 +225,7 @@ export function CVReviewSheet({
   }
 
   async function handleAddComment() {
-    if (!commentText.trim() || !applicantId) return;
+    if (!commentValue.trim() || !applicantId) return;
     setIsCreatingComment(true);
     try {
       await createComment({
@@ -194,10 +234,10 @@ export function CVReviewSheet({
           reference_doctype: "Job Applicant",
           reference_name: applicantId,
           comment_type: "Comment",
-          content: commentText.trim(),
+          content: toFrappeHTML(commentValue),
         },
       });
-      setCommentText("");
+      setCommentValue("");
       commentsQuery?.refetch?.();
     } finally {
       setIsCreatingComment(false);
@@ -224,44 +264,6 @@ export function CVReviewSheet({
     );
     setApplicantTags((prev) => prev.filter((t) => t !== tag));
   }
-
-  function handleCommentChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const value = e.target.value;
-    setCommentText(value);
-
-    // Detect @mention: find the word under cursor
-    const cursorPos = e.target.selectionStart ?? value.length;
-    const textUpToCursor = value.slice(0, cursorPos);
-    const match = textUpToCursor.match(/@(\w*)$/);
-    if (match) {
-      setMentionSearch(match[1]);
-      setMentionPopoverOpen(true);
-    } else {
-      setMentionSearch(null);
-      setMentionPopoverOpen(false);
-    }
-  }
-
-  function handleMentionSelect(employeeName: string) {
-    if (!textareaRef.current) return;
-    const cursorPos = textareaRef.current.selectionStart ?? commentText.length;
-    const textUpToCursor = commentText.slice(0, cursorPos);
-    const textAfterCursor = commentText.slice(cursorPos);
-    // Replace @partial with @EmployeeName
-    const replaced = textUpToCursor.replace(/@(\w*)$/, `@${employeeName} `);
-    setCommentText(replaced + textAfterCursor);
-    setMentionSearch(null);
-    setMentionPopoverOpen(false);
-    // Restore focus
-    setTimeout(() => textareaRef.current?.focus(), 0);
-  }
-
-  const filteredEmployees = employees.filter((emp: any) => {
-    if (!mentionSearch) return true;
-    return (emp.employee_name ?? emp.name)
-      .toLowerCase()
-      .includes(mentionSearch.toLowerCase());
-  });
 
   const resumeUrl = applicant?.resume_attachment
     ? applicant.resume_attachment.startsWith("/")
@@ -533,39 +535,44 @@ export function CVReviewSheet({
 
               {/* Add comment */}
               <div className="mt-4 space-y-2">
-                <div className="relative">
-                  <Textarea
-                    ref={textareaRef}
-                    placeholder="Add a comment... type @ to mention"
-                    value={commentText}
-                    onChange={handleCommentChange}
-                    rows={3}
-                    className="text-sm resize-none"
+                <MentionsInput
+                  value={commentValue}
+                  onChange={(e) => setCommentValue(e.target.value)}
+                  placeholder="Add a comment... type @ to mention"
+                  style={mentionInputStyle}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAddComment();
+                    }
+                  }}
+                >
+                  <Mention
+                    trigger="@"
+                    markup="@[__display__](__id__)"
+                    data={mentionUsers}
+                    displayTransform={(_id, display) => `@${display}`}
+                    renderSuggestion={(s, _search, _highlight, _idx, focused) => (
+                      <div
+                        style={{
+                          padding: "6px 12px",
+                          fontSize: "14px",
+                          cursor: "pointer",
+                          backgroundColor: focused ? "hsl(var(--accent))" : "transparent",
+                        }}
+                      >
+                        <span style={{ fontWeight: 500 }}>{s.display}</span>
+                      </div>
+                    )}
+                    style={{ backgroundColor: "hsl(var(--primary) / 0.1)", borderRadius: "3px" }}
+                    appendSpaceOnAdd
                   />
-                  {mentionPopoverOpen && filteredEmployees.length > 0 && (
-                    <div className="absolute bottom-full left-0 mb-1 z-50 w-56 rounded-md border bg-popover shadow-md">
-                      <Command>
-                        <CommandList>
-                          {filteredEmployees.slice(0, 8).map((emp: any) => (
-                            <CommandItem
-                              key={emp.name}
-                              value={emp.employee_name ?? emp.name}
-                              onSelect={() => handleMentionSelect(emp.employee_name ?? emp.name)}
-                              className="cursor-pointer"
-                            >
-                              {emp.employee_name ?? emp.name}
-                            </CommandItem>
-                          ))}
-                        </CommandList>
-                      </Command>
-                    </div>
-                  )}
-                </div>
+                </MentionsInput>
                 <div className="flex justify-end">
                   <Button
                     size="sm"
                     onClick={handleAddComment}
-                    disabled={!commentText.trim() || isCreatingComment}
+                    disabled={!commentValue.trim() || isCreatingComment}
                   >
                     Add Comment
                   </Button>
