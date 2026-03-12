@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useList } from "@refinedev/core";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { RecruitingCard } from "@/components/recruiting/RecruitingCard";
+import { CVReviewSheet } from "@/components/recruiting/CVReviewSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarDays, ChevronDown, List } from "lucide-react";
 import {
@@ -18,6 +19,7 @@ const PIPELINE_STAGES = ["Screening", "Interview", "Offer", "Hired", "Rejected"]
 
 export default function RecruitingPipelinePage() {
   const [jobFilter, setJobFilter] = useState("");
+  const [selectedApplicantId, setSelectedApplicantId] = useState<string | null>(null);
 
   // Job Openings for filter
   const { result: jobOpeningsResult } = useList({
@@ -69,9 +71,18 @@ export default function RecruitingPipelinePage() {
 
   const isLoading = applicantsQuery?.isLoading;
 
+  const screeningItems = useMemo(
+    () => items.filter((i) => i.stage === "Screening"),
+    [items]
+  );
+
   const renderCard = useCallback(
     (item: any) => (
-      <RecruitingCard key={item.id} item={item} />
+      <RecruitingCard
+        key={item.id}
+        item={item}
+        onOpenSheet={item.stage === "Screening" ? setSelectedApplicantId : undefined}
+      />
     ),
     []
   );
@@ -133,6 +144,13 @@ export default function RecruitingPipelinePage() {
           </div>
         </div>
       )}
+
+      <CVReviewSheet
+        applicantId={selectedApplicantId}
+        screeningItems={screeningItems}
+        onClose={() => setSelectedApplicantId(null)}
+        onNavigate={setSelectedApplicantId}
+      />
     </div>
   );
 }
