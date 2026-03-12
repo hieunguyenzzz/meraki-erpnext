@@ -13,13 +13,6 @@ import {
   SheetTitle,
   SheetFooter,
 } from "@/components/ui/sheet";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 import { Briefcase, Check, Copy, Plus } from "lucide-react";
 import { formatDate } from "@/lib/format";
@@ -30,16 +23,9 @@ interface JobOpening {
   status: string;
   location: string;
   closes_on: string;
-  custom_application_level: string;
   designation: string;
   description: string;
 }
-
-const LEVEL_VARIANT: Record<string, "info" | "default" | "warning"> = {
-  Intern: "info",
-  Standard: "default",
-  Senior: "warning",
-};
 
 const STATUS_VARIANT: Record<string, "success" | "secondary"> = {
   Open: "success",
@@ -49,7 +35,6 @@ const STATUS_VARIANT: Record<string, "success" | "secondary"> = {
 interface PositionForm {
   job_title: string;
   designation: string;
-  custom_application_level: string;
   location: string;
   closes_on: string;
   description: string;
@@ -58,7 +43,6 @@ interface PositionForm {
 const INITIAL_FORM: PositionForm = {
   job_title: "",
   designation: "",
-  custom_application_level: "",
   location: "",
   closes_on: "",
   description: "",
@@ -118,7 +102,6 @@ export default function JobOpeningsPage() {
         "status",
         "location",
         "closes_on",
-        "custom_application_level",
         "designation",
         "description",
       ],
@@ -142,7 +125,6 @@ export default function JobOpeningsPage() {
     setForm({
       job_title: job.job_title ?? "",
       designation: job.designation ?? "",
-      custom_application_level: job.custom_application_level ?? "",
       location: job.location ?? "",
       closes_on: job.closes_on ?? "",
       description: job.description ?? "",
@@ -183,19 +165,6 @@ export default function JobOpeningsPage() {
         cell: ({ row }) => (
           <span className="font-medium">{row.original.job_title}</span>
         ),
-      },
-      {
-        accessorKey: "custom_application_level",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Level" />
-        ),
-        cell: ({ row }) => {
-          const level = row.original.custom_application_level;
-          if (!level) return <span className="text-muted-foreground">—</span>;
-          return (
-            <Badge variant={LEVEL_VARIANT[level] ?? "default"}>{level}</Badge>
-          );
-        },
       },
       {
         accessorKey: "status",
@@ -266,12 +235,9 @@ export default function JobOpeningsPage() {
     setFormError("");
     setSubmitting(true);
 
-    const level = form.custom_application_level === "__none__" ? "" : form.custom_application_level;
-
     const fields = {
       job_title: form.job_title.trim(),
       ...(form.designation.trim() && { designation: form.designation.trim() }),
-      ...(level && { custom_application_level: level }),
       ...(form.location.trim() && { location: form.location.trim() }),
       ...(form.closes_on && { closes_on: form.closes_on }),
       ...(form.description.trim() && { description: form.description.trim() }),
@@ -379,30 +345,6 @@ export default function JobOpeningsPage() {
                     placeholder="e.g. Ho Chi Minh City"
                   />
                 </div>
-              </div>
-
-              {/* Application Level — optional */}
-              <div className="space-y-1.5">
-                <Label>Application Level</Label>
-                <Select
-                  value={form.custom_application_level || "__none__"}
-                  onValueChange={(v) =>
-                    setForm((f) => ({
-                      ...f,
-                      custom_application_level: v === "__none__" ? "" : v,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Not specified (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Not specified</SelectItem>
-                    <SelectItem value="Intern">Intern</SelectItem>
-                    <SelectItem value="Standard">Standard</SelectItem>
-                    <SelectItem value="Senior">Senior</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               {/* Closes On */}
