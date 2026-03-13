@@ -263,6 +263,7 @@ export function CVReviewSheet({
       body: JSON.stringify({ tag }),
     });
     setApplicantTags((prev) => [...prev, tag]);
+    if (!availableTags.includes(tag)) setAvailableTags((prev) => [...prev, tag]);
     setTagPopoverOpen(false);
     setTagSearch("");
   }
@@ -320,9 +321,7 @@ export function CVReviewSheet({
               )}
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
-            <X className="h-4 w-4" />
-          </Button>
+          {/* Close button provided by SheetContent */}
         </div>
 
         {/* Scrollable body */}
@@ -485,16 +484,16 @@ export function CVReviewSheet({
                         onValueChange={setTagSearch}
                       />
                       <CommandList>
-                        <CommandEmpty>
+                        <CommandEmpty className="p-0">
                           {tagSearch ? (
                             <button
-                              className="w-full px-3 py-2 text-sm text-left hover:bg-accent"
-                              onClick={() => handleAddTag(tagSearch)}
+                              className="w-full px-3 py-2 text-sm text-left hover:bg-accent cursor-pointer"
+                              onMouseDown={(e) => { e.preventDefault(); handleAddTag(tagSearch); }}
                             >
-                              Create "{tagSearch}"
+                              Create &ldquo;{tagSearch}&rdquo;
                             </button>
                           ) : (
-                            <span className="px-3 py-2 text-xs text-muted-foreground">No tags</span>
+                            <span className="block px-3 py-2 text-xs text-muted-foreground">No tags</span>
                           )}
                         </CommandEmpty>
                         {availableTags
