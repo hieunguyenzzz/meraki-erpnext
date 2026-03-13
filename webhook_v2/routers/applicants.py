@@ -30,7 +30,7 @@ class BatchStageRequest(BaseModel):
 def get_available_tags():
     """Get all tags used on Job Applicant doctype."""
     client = ERPNextClient()
-    result = client._get("/api/method/frappe.desk.tags.get_tags", params={"doctype": "Job Applicant", "txt": ""})
+    result = client._get("/api/method/frappe.desk.doctype.tag.tag.get_tags", params={"doctype": "Job Applicant", "txt": ""})
     tags = result.get("message", []) if isinstance(result, dict) else []
     return {"tags": tags}
 
@@ -49,7 +49,7 @@ def get_applicant_tags(name: str):
 def add_applicant_tag(name: str, req: TagRequest):
     """Add a tag to a Job Applicant."""
     client = ERPNextClient()
-    client._post("/api/method/frappe.desk.tags.add_tag", {"dt": "Job Applicant", "dn": name, "tag": req.tag})
+    client._post("/api/method/frappe.desk.doctype.tag.tag.add_tag", {"dt": "Job Applicant", "dn": name, "tag": req.tag})
     return {"ok": True}
 
 
@@ -57,7 +57,7 @@ def add_applicant_tag(name: str, req: TagRequest):
 def remove_applicant_tag(name: str, tag: str = Query(...)):
     """Remove a tag from a Job Applicant."""
     client = ERPNextClient()
-    client._post("/api/method/frappe.desk.tags.remove_tag", {"dt": "Job Applicant", "dn": name, "tag": tag})
+    client._post("/api/method/frappe.desk.doctype.tag.tag.remove_tag", {"dt": "Job Applicant", "dn": name, "tag": tag})
     return {"ok": True}
 
 
