@@ -134,16 +134,14 @@ def add_applicant_comment(name: str, req: CommentRequest):
 
         for mention in mentions:
             try:
-                client._post("/api/resource/Communication", {
-                    "communication_type": "Communication",
-                    "communication_medium": "Email",
+                client._post("/api/method/frappe.core.doctype.communication.email.make", {
+                    "doctype": "Job Applicant",
+                    "name": name,
                     "subject": f"You were mentioned in a comment on {applicant_name}",
                     "content": req.content,
-                    "sender": "noreply@merakiweddingplanner.com",
                     "recipients": mention["email"],
-                    "reference_doctype": "Job Applicant",
-                    "reference_name": name,
                     "send_email": 1,
+                    "communication_medium": "Email",
                     "sent_or_received": "Sent",
                 })
                 comms_created += 1
