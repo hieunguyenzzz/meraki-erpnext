@@ -76,6 +76,7 @@ function renderCommentContent(content: string) {
 const mentionInputStyle = {
   control: {
     fontSize: "14px",
+    minHeight: "80px",
   },
   input: {
     padding: "8px 12px",
