@@ -76,7 +76,16 @@ function renderCommentContent(content: string) {
 const mentionInputStyle = {
   control: {
     fontSize: "14px",
+    minHeight: "96px",
+  },
+  highlighter: {
+    padding: "8px 12px",
+    fontSize: "14px",
+    fontFamily: "inherit",
+    lineHeight: "1.5",
     minHeight: "80px",
+    border: "1px solid transparent",
+    boxSizing: "border-box" as const,
   },
   input: {
     padding: "8px 12px",
@@ -89,6 +98,7 @@ const mentionInputStyle = {
     width: "100%",
     fontFamily: "inherit",
     lineHeight: "1.5",
+    boxSizing: "border-box" as const,
   },
   suggestions: {
     list: {
