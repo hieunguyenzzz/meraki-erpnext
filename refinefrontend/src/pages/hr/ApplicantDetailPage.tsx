@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router";
-import { useOne, useList, useDelete, useNavigation, useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useOne, useList, useCreate, useDelete, useNavigation, useCustomMutation, useInvalidate } from "@refinedev/core";
+import { MentionsInput, Mention } from "react-mentions";
 import { formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,56 @@ function stageBadgeVariant(stage: string) {
     default: return "secondary" as const;
   }
 }
+
+function toFrappeHTML(value: string): string {
+  return value.replace(
+    /@\[([^\]]+)\]\(([^)]+)\)/g,
+    (_, display, id) =>
+      `<span class="mention" data-id="${id}" data-value="${display}" data-denotation-char="@">` +
+      `<span class="ql-mention-denotation-char">@</span>${display}</span>`
+  );
+}
+
+function renderCommentContent(content: string) {
+  // Content comes from ERPNext Comment doctype (trusted internal source, same as CVReviewSheet.tsx)
+  const processed = content.replace(
+    /<span class="mention"[^>]*data-value="([^"]+)"[^>]*>[\s\S]*?<\/span>\s*<\/span>/g,
+    '<mark class="text-primary font-medium bg-transparent">@$1</mark>'
+  );
+  const html = processed.replace(/<br\s*\/?>/gi, "\n");
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+const mentionInputStyle = {
+  control: { fontSize: "14px" },
+  input: {
+    padding: "8px 12px",
+    border: "1px solid hsl(var(--input))",
+    borderRadius: "6px",
+    fontSize: "14px",
+    outline: "none",
+    minHeight: "80px",
+    resize: "none" as const,
+    width: "100%",
+    fontFamily: "inherit",
+    lineHeight: "1.5",
+  },
+  suggestions: {
+    list: {
+      backgroundColor: "hsl(var(--popover))",
+      border: "1px solid hsl(var(--border))",
+      borderRadius: "6px",
+      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+      overflow: "hidden",
+      zIndex: 50,
+    },
+    item: {
+      padding: "6px 12px",
+      fontSize: "14px",
+      cursor: "pointer",
+    },
+  },
+};
 
 export default function ApplicantDetailPage() {
   const { name } = useParams<{ name: string }>();
@@ -62,6 +113,54 @@ export default function ApplicantDetailPage() {
     meta: { fields: ["name", "designation", "offer_date", "status"] },
   });
   const offers = offersResult?.data ?? [];
+
+  // Comments
+  const [commentValue, setCommentValue] = useState("");
+  const [isCreatingComment, setIsCreatingComment] = useState(false);
+  const { mutateAsync: createComment } = useCreate();
+
+  const { result: commentsResult, query: commentsQuery } = useList({
+    resource: "Comment",
+    pagination: { mode: "off" },
+    sorters: [{ field: "creation", order: "asc" }],
+    filters: [
+      { field: "reference_doctype", operator: "eq", value: "Job Applicant" },
+      { field: "reference_name", operator: "eq", value: name! },
+      { field: "comment_type", operator: "eq", value: "Comment" },
+    ],
+    meta: { fields: ["name", "content", "owner", "creation"] },
+  });
+  const comments = commentsResult?.data ?? [];
+
+  const { result: mentionUsersResult } = useList({
+    resource: "Employee",
+    pagination: { mode: "off" },
+    filters: [{ field: "status", operator: "eq", value: "Active" }],
+    meta: { fields: ["name", "employee_name", "user_id"] },
+  });
+  const mentionUsers = (mentionUsersResult?.data ?? [])
+    .filter((e: any) => e.user_id)
+    .map((e: any) => ({ id: e.user_id, display: e.employee_name }));
+
+  async function handleAddComment() {
+    if (!commentValue.trim() || !name) return;
+    setIsCreatingComment(true);
+    try {
+      await createComment({
+        resource: "Comment",
+        values: {
+          reference_doctype: "Job Applicant",
+          reference_name: name,
+          comment_type: "Comment",
+          content: toFrappeHTML(commentValue),
+        },
+      });
+      setCommentValue("");
+      commentsQuery?.refetch?.();
+    } finally {
+      setIsCreatingComment(false);
+    }
+  }
 
   async function handleDelete() {
     await deleteRecord({ resource: "Job Applicant", id: name! });
@@ -249,6 +348,71 @@ export default function ApplicantDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Comments */}
+      <Card>
+        <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
+        <CardContent>
+          <div className="space-y-3 mb-4">
+            {comments.length === 0 && (
+              <p className="text-xs text-muted-foreground">No comments yet.</p>
+            )}
+            {comments.map((comment: any) => (
+              <div key={comment.name} className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">{comment.owner}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {formatDate(comment.creation)}
+                  </span>
+                </div>
+                <p className="text-sm leading-relaxed">
+                  {renderCommentContent(comment.content)}
+                </p>
+              </div>
+            ))}
+          </div>
+          <MentionsInput
+            value={commentValue}
+            onChange={(e) => setCommentValue(e.target.value)}
+            placeholder="Add a comment... type @ to mention"
+            style={mentionInputStyle}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleAddComment();
+              }
+            }}
+          >
+            <Mention
+              trigger="@"
+              markup="@[__display__](__id__)"
+              data={mentionUsers}
+              displayTransform={(_id: string, display: string) => `@${display}`}
+              renderSuggestion={(s, _search, _highlight, _idx, focused) => (
+                <div style={{
+                  padding: "6px 12px",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  backgroundColor: focused ? "hsl(var(--accent))" : "transparent",
+                }}>
+                  <span style={{ fontWeight: 500 }}>{s.display}</span>
+                </div>
+              )}
+              style={{ backgroundColor: "hsl(var(--primary) / 0.1)", borderRadius: "3px" }}
+              appendSpaceOnAdd
+            />
+          </MentionsInput>
+          <div className="flex justify-end mt-2">
+            <Button
+              size="sm"
+              onClick={handleAddComment}
+              disabled={!commentValue.trim() || isCreatingComment}
+            >
+              Add Comment
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
