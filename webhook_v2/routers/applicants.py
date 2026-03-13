@@ -6,8 +6,10 @@ GET  /applicants/{name}/tags          — get tags for a specific applicant
 POST /applicants/{name}/tags          — add a tag to an applicant
 DELETE /applicants/{name}/tags        — remove a tag from an applicant
 POST /applicants/batch-stage          — update recruiting stage for multiple applicants
+POST /applicants/{name}/comment       — add comment with @mention → Communication + email
 """
 
+import re
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
@@ -24,6 +26,10 @@ class TagRequest(BaseModel):
 class BatchStageRequest(BaseModel):
     applicant_names: list[str]
     stage: str
+
+
+class CommentRequest(BaseModel):
+    content: str  # raw HTML with <span class="mention" data-id="email"> tags
 
 
 @router.get("/applicants/available-tags")
@@ -89,3 +95,60 @@ def batch_update_stage(req: BatchStageRequest):
 
     log.info("batch_stage_updated", count=updated, stage=req.stage)
     return {"updated": updated, "errors": errors}
+
+
+def _extract_mentions(html: str) -> list[dict]:
+    """Extract mentioned user emails and display names from Frappe mention HTML."""
+    pattern = r'<span class="mention"[^>]*data-id="([^"]+)"[^>]*data-value="([^"]+)"'
+    return [{"email": m[0], "display": m[1]} for m in re.findall(pattern, html)]
+
+
+@router.post("/applicants/{name}/comment")
+def add_applicant_comment(name: str, req: CommentRequest):
+    """
+    Add a comment to a Job Applicant and create Communications for @mentions.
+
+    1. Creates a Comment doc (triggers Frappe's notify_mentions for Notification Log)
+    2. For each @mention, creates a Communication doc (shows in timeline + sends email)
+    """
+    client = ERPNextClient()
+
+    # 1. Create the Comment
+    client._post("/api/resource/Comment", {
+        "reference_doctype": "Job Applicant",
+        "reference_name": name,
+        "comment_type": "Comment",
+        "content": req.content,
+    })
+
+    # 2. Extract mentions and create Communications
+    mentions = _extract_mentions(req.content)
+    comms_created = 0
+
+    if mentions:
+        # Get applicant name for the subject line
+        applicant = client._get(f"/api/resource/Job Applicant/{name}", params={
+            "fields": '["applicant_name"]',
+        })
+        applicant_name = (applicant.get("data") or {}).get("applicant_name", name)
+
+        for mention in mentions:
+            try:
+                client._post("/api/resource/Communication", {
+                    "communication_type": "Communication",
+                    "communication_medium": "Email",
+                    "subject": f"You were mentioned in a comment on {applicant_name}",
+                    "content": req.content,
+                    "sender": "noreply@merakiweddingplanner.com",
+                    "recipients": mention["email"],
+                    "reference_doctype": "Job Applicant",
+                    "reference_name": name,
+                    "send_email": 1,
+                    "sent_or_received": "Sent",
+                })
+                comms_created += 1
+            except Exception as e:
+                log.warning("mention_communication_failed", email=mention["email"], error=str(e))
+
+    log.info("applicant_comment_created", applicant=name, mentions=len(mentions), communications=comms_created)
+    return {"ok": True, "mentions": len(mentions), "communications": comms_created}

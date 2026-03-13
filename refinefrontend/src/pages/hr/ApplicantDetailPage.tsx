@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router";
-import { useOne, useList, useCreate, useDelete, useNavigation, useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useOne, useList, useDelete, useNavigation, useCustomMutation, useInvalidate } from "@refinedev/core";
 import { MentionsInput, Mention } from "react-mentions";
 import { formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,8 +127,6 @@ export default function ApplicantDetailPage() {
   // Comments
   const [commentValue, setCommentValue] = useState("");
   const [isCreatingComment, setIsCreatingComment] = useState(false);
-  const { mutateAsync: createComment } = useCreate();
-
   const { result: commentsResult, query: commentsQuery } = useList({
     resource: "Comment",
     pagination: { mode: "off" },
@@ -156,14 +154,10 @@ export default function ApplicantDetailPage() {
     if (!commentValue.trim() || !name) return;
     setIsCreatingComment(true);
     try {
-      await createComment({
-        resource: "Comment",
-        values: {
-          reference_doctype: "Job Applicant",
-          reference_name: name,
-          comment_type: "Comment",
-          content: toFrappeHTML(commentValue),
-        },
+      await fetch(`/inquiry-api/applicants/${name}/comment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: toFrappeHTML(commentValue) }),
       });
       setCommentValue("");
       commentsQuery?.refetch?.();

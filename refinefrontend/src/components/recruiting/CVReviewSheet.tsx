@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import {
   useOne,
   useList,
-  useCreate,
   useUpdate,
   useInvalidate,
 } from "@refinedev/core";
@@ -187,7 +186,6 @@ export function CVReviewSheet({
     [employees]
   );
 
-  const { mutateAsync: createComment } = useCreate();
   const [isCreatingComment, setIsCreatingComment] = useState(false);
   const { mutateAsync: updateApplicant } = useUpdate();
   const invalidate = useInvalidate();
@@ -239,14 +237,10 @@ export function CVReviewSheet({
     if (!commentValue.trim() || !applicantId) return;
     setIsCreatingComment(true);
     try {
-      await createComment({
-        resource: "Comment",
-        values: {
-          reference_doctype: "Job Applicant",
-          reference_name: applicantId,
-          comment_type: "Comment",
-          content: toFrappeHTML(commentValue),
-        },
+      await fetch(`/inquiry-api/applicants/${applicantId}/comment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: toFrappeHTML(commentValue) }),
       });
       setCommentValue("");
       commentsQuery?.refetch?.();
