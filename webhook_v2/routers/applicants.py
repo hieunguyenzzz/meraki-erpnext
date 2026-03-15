@@ -148,5 +148,18 @@ def add_applicant_comment(name: str, req: CommentRequest):
             except Exception as e:
                 log.warning("mention_communication_failed", email=mention["email"], error=str(e))
 
+            # Create PWA Notification (shows in React frontend bell icon)
+            try:
+                client._post("/api/resource/PWA Notification", {
+                    "to_user": mention["email"],
+                    "from_user": "Administrator",
+                    "message": f"<b>{mention['display']}</b> you were mentioned in a comment on <b>{applicant_name}</b>",
+                    "read": 0,
+                    "reference_document_type": "Job Applicant",
+                    "reference_document_name": name,
+                })
+            except Exception as e:
+                log.warning("mention_pwa_notification_failed", email=mention["email"], error=str(e))
+
     log.info("applicant_comment_created", applicant=name, mentions=len(mentions), communications=comms_created)
     return {"ok": True, "mentions": len(mentions), "communications": comms_created}
