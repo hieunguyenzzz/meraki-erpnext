@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import {
   usePermissions,
   useCustom,
@@ -36,7 +37,15 @@ export function NotificationCenter() {
   return <NotificationBell />;
 }
 
+const DOC_ROUTES: Record<string, (name: string) => string> = {
+  "Job Applicant": (name) => `/hr/recruiting/${encodeURIComponent(name)}`,
+  "Lead": (name) => `/crm/leads/${encodeURIComponent(name)}`,
+  "Employee": (name) => `/hr/employees/${encodeURIComponent(name)}`,
+  "Project": (name) => `/projects/${encodeURIComponent(name)}`,
+};
+
 function NotificationBell() {
+  const navigate = useNavigate();
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -102,12 +111,24 @@ function NotificationBell() {
               const isLeave = notif.reference_document_type === "Leave Application";
               const isProcessing = processingId === notif.name;
 
+              const routeFn = DOC_ROUTES[notif.reference_document_type];
+              const targetUrl = routeFn ? routeFn(notif.reference_document_name) : null;
+
               return (
                 <div key={notif.name} className="border-b px-3 py-2.5 last:border-0">
-                  <p className="text-sm leading-snug">{stripHtml(notif.message)}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {formatDate(notif.creation)}
-                  </p>
+                  <div
+                    className={targetUrl ? "cursor-pointer hover:text-primary transition-colors" : ""}
+                    onClick={() => {
+                      if (!targetUrl) return;
+                      handleAction(notif.name, "read");
+                      navigate(targetUrl);
+                    }}
+                  >
+                    <p className="text-sm leading-snug">{stripHtml(notif.message)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatDate(notif.creation)}
+                    </p>
+                  </div>
                   <div className="mt-2 flex gap-1.5">
                     {isLeave && (
                       <>
