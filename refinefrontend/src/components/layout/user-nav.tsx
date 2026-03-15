@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useGetIdentity, useLogout, useList, useCreate, useInvalidate } from "@refinedev/core";
-import { LogOut, User, Calendar, Home } from "lucide-react";
+import { LogOut, User, Calendar, Home, Bell } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -211,6 +211,12 @@ export function UserNav() {
             <Link to="/my-profile">
               <User className="mr-2 h-4 w-4" />
               My Profile
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/notifications">
+              <Bell className="mr-2 h-4 w-4" />
+              Notifications
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setLeaveDialogOpen(true)}>

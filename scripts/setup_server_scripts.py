@@ -45,33 +45,69 @@ SERVER_SCRIPTS = [
         ),
     },
     {
+        "name": "get_all_notifications",
+        "script_type": "API",
+        "api_method": "get_all_notifications",
+        "allow_guest": 0,
+        "script": (
+            'page = int(frappe.form_dict.get("page", 1))\n'
+            'page_size = int(frappe.form_dict.get("page_size", 50))\n'
+            'offset = (page - 1) * page_size\n'
+            '\n'
+            'notifications = frappe.get_all(\n'
+            '    "PWA Notification",\n'
+            '    filters={"to_user": frappe.session.user},\n'
+            '    fields=["name", "from_user", "message", "read", "reference_document_type", "reference_document_name", "creation"],\n'
+            '    order_by="creation desc",\n'
+            '    limit_start=offset,\n'
+            '    limit_page_length=page_size,\n'
+            ')\n'
+            '\n'
+            'total = frappe.db.count("PWA Notification", {"to_user": frappe.session.user})\n'
+            'unread = frappe.db.count("PWA Notification", {"to_user": frappe.session.user, "read": 0})\n'
+            '\n'
+            'frappe.response["message"] = {\n'
+            '    "notifications": notifications,\n'
+            '    "total": total,\n'
+            '    "unread": unread,\n'
+            '    "page": page,\n'
+            '    "page_size": page_size,\n'
+            '}\n'
+        ),
+    },
+    {
         "name": "handle_notification_action",
         "script_type": "API",
         "api_method": "handle_notification_action",
         "allow_guest": 0,
         "script": (
-            'notif_name = frappe.form_dict.notif_name\n'
-            'action = frappe.form_dict.action  # "read" | "approve" | "reject"\n'
+            'notif_name = frappe.form_dict.get("notif_name", "")\n'
+            'action = frappe.form_dict.get("action", "")  # "read" | "approve" | "reject" | "read_all"\n'
             '\n'
-            'notif = frappe.db.get_value(\n'
-            '    "PWA Notification",\n'
-            '    {"name": notif_name, "to_user": frappe.session.user},\n'
-            '    ["name", "reference_document_type", "reference_document_name"],\n'
-            '    as_dict=True\n'
-            ')\n'
-            'if not notif:\n'
-            '    frappe.throw("Notification not found", frappe.DoesNotExistError)\n'
-            '\n'
-            'if action in ("approve", "reject"):\n'
-            '    if notif.reference_document_type != "Leave Application":\n'
-            '        frappe.throw("Invalid document type for this action")\n'
-            '    status = "Approved" if action == "approve" else "Rejected"\n'
-            '    frappe.db.set_value("Leave Application", notif.reference_document_name, "status", status)\n'
-            '\n'
-            'frappe.db.set_value("PWA Notification", notif_name, "read", 1)\n'
-            'frappe.db.commit()\n'
-            '\n'
-            'frappe.response["message"] = {"success": True}\n'
+            'if action == "read_all":\n'
+            '    frappe.db.sql(\n'
+            '        "UPDATE `tabPWA Notification` SET `read`=1 WHERE to_user=%s AND `read`=0",\n'
+            '        frappe.session.user\n'
+            '    )\n'
+            '    frappe.db.commit()\n'
+            '    frappe.response["message"] = {"success": True}\n'
+            'else:\n'
+            '    notif = frappe.db.get_value(\n'
+            '        "PWA Notification",\n'
+            '        {"name": notif_name, "to_user": frappe.session.user},\n'
+            '        ["name", "reference_document_type", "reference_document_name"],\n'
+            '        as_dict=True\n'
+            '    )\n'
+            '    if not notif:\n'
+            '        frappe.throw("Notification not found", frappe.DoesNotExistError)\n'
+            '    if action in ("approve", "reject"):\n'
+            '        if notif.reference_document_type != "Leave Application":\n'
+            '            frappe.throw("Invalid document type for this action")\n'
+            '        status = "Approved" if action == "approve" else "Rejected"\n'
+            '        frappe.db.set_value("Leave Application", notif.reference_document_name, "status", status)\n'
+            '    frappe.db.set_value("PWA Notification", notif_name, "read", 1)\n'
+            '    frappe.db.commit()\n'
+            '    frappe.response["message"] = {"success": True}\n'
         ),
     },
 ]

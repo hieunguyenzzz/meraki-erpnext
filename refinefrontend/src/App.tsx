@@ -46,6 +46,7 @@ import SettingsPage from "@/pages/admin/SettingsPage";
 import VenuesPage from "@/pages/venues/VenuesPage";
 import LeaveReportPage from "@/pages/reports/LeaveReportPage";
 import VenueDetailPage from "@/pages/venues/VenueDetailPage";
+import NotificationsPage from "@/pages/NotificationsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -169,6 +170,9 @@ export default function App() {
               <Route path="/finance/payments/:name" element={<PaymentDetailPage />} />
               <Route path="/finance/journals" element={<JournalsPage />} />
               <Route path="/finance/overview" element={<OverviewPage />} />
+
+              {/* Notifications */}
+              <Route path="/notifications" element={<NotificationsPage />} />
 
               {/* Admin / Settings */}
               <Route path="/admin/settings" element={<SettingsPage />} />
