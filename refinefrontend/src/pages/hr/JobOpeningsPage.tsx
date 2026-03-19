@@ -13,8 +13,22 @@ import {
   SheetTitle,
   SheetFooter,
 } from "@/components/ui/sheet";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { Briefcase, Check, Copy, Plus } from "lucide-react";
+import { Briefcase, Check, ChevronsUpDown, Copy, Loader2, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 
 interface JobOpening {
@@ -112,6 +126,74 @@ export default function JobOpeningsPage() {
     () => (result?.data ?? []) as JobOpening[],
     [result]
   );
+
+  // Fetch existing locations and designations for combobox
+  const { result: locationsResult, query: locationsQuery } = useList({
+    resource: "Location",
+    pagination: { mode: "off" },
+    meta: { fields: ["name"] },
+  });
+  const locations = (locationsResult?.data ?? []) as any[];
+
+  const { result: designationsResult, query: designationsQuery } = useList({
+    resource: "Designation",
+    pagination: { mode: "off" },
+    meta: { fields: ["name"] },
+  });
+  const designations = (designationsResult?.data ?? []) as any[];
+
+  // Combobox state
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [locationSearch, setLocationSearch] = useState("");
+  const [creatingLocation, setCreatingLocation] = useState(false);
+
+  const [designationOpen, setDesignationOpen] = useState(false);
+  const [designationSearch, setDesignationSearch] = useState("");
+  const [creatingDesignation, setCreatingDesignation] = useState(false);
+
+  const handleCreateLocation = async (name: string) => {
+    setCreatingLocation(true);
+    try {
+      const resp = await fetch("/api/resource/Location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": "erp.merakiwp.com" },
+        credentials: "include",
+        body: JSON.stringify({ location_name: name }),
+      });
+      if (!resp.ok) throw new Error("Failed to create location");
+      const result = await resp.json();
+      setForm((f) => ({ ...f, location: result?.data?.name ?? name }));
+      setLocationOpen(false);
+      setLocationSearch("");
+      locationsQuery.refetch();
+    } catch {
+      setFormError("Failed to create location.");
+    } finally {
+      setCreatingLocation(false);
+    }
+  };
+
+  const handleCreateDesignation = async (name: string) => {
+    setCreatingDesignation(true);
+    try {
+      const resp = await fetch("/api/resource/Designation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": "erp.merakiwp.com" },
+        credentials: "include",
+        body: JSON.stringify({ designation: name }),
+      });
+      if (!resp.ok) throw new Error("Failed to create designation");
+      const result = await resp.json();
+      setForm((f) => ({ ...f, designation: result?.data?.name ?? name }));
+      setDesignationOpen(false);
+      setDesignationSearch("");
+      designationsQuery.refetch();
+    } catch {
+      setFormError("Failed to create designation.");
+    } finally {
+      setCreatingDesignation(false);
+    }
+  };
 
   function openCreate() {
     setEditingJob(null);
@@ -324,26 +406,144 @@ export default function JobOpeningsPage() {
               {/* Designation + Location — two columns */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="designation">Designation</Label>
-                  <Input
-                    id="designation"
-                    value={form.designation}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, designation: e.target.value }))
-                    }
-                    placeholder="e.g. Coordinator"
-                  />
+                  <Label>Designation</Label>
+                  <Popover open={designationOpen} onOpenChange={setDesignationOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        role="combobox"
+                        aria-expanded={designationOpen}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded-md border px-3 h-9 text-sm transition-colors",
+                          "border-input bg-background hover:bg-accent focus:outline-none",
+                          !form.designation && "text-muted-foreground"
+                        )}
+                      >
+                        {form.designation || "Select designation..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput
+                          placeholder="Search designations..."
+                          value={designationSearch}
+                          onValueChange={setDesignationSearch}
+                        />
+                        <CommandList>
+                          <CommandEmpty>No designations found.</CommandEmpty>
+                          <CommandGroup>
+                            {designations.map((d) => (
+                              <CommandItem
+                                key={d.name}
+                                value={d.name}
+                                onSelect={() => {
+                                  setForm((f) => ({ ...f, designation: d.name }));
+                                  setDesignationOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    form.designation === d.name ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {d.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                          {designationSearch.length > 1 && !designations.some(
+                            (d) => d.name.toLowerCase() === designationSearch.toLowerCase()
+                          ) && (
+                            <CommandGroup>
+                              <CommandItem
+                                value={`__create__${designationSearch}`}
+                                onSelect={() => handleCreateDesignation(designationSearch)}
+                                disabled={creatingDesignation}
+                              >
+                                {creatingDesignation ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Plus className="mr-2 h-4 w-4" />
+                                )}
+                                Create "{designationSearch}"
+                              </CommandItem>
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="location">Location</Label>
-                  <Input
-                    id="location"
-                    value={form.location}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, location: e.target.value }))
-                    }
-                    placeholder="e.g. Ho Chi Minh City"
-                  />
+                  <Label>Location</Label>
+                  <Popover open={locationOpen} onOpenChange={setLocationOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        role="combobox"
+                        aria-expanded={locationOpen}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded-md border px-3 h-9 text-sm transition-colors",
+                          "border-input bg-background hover:bg-accent focus:outline-none",
+                          !form.location && "text-muted-foreground"
+                        )}
+                      >
+                        {form.location || "Select location..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput
+                          placeholder="Search locations..."
+                          value={locationSearch}
+                          onValueChange={setLocationSearch}
+                        />
+                        <CommandList>
+                          <CommandEmpty>No locations found.</CommandEmpty>
+                          <CommandGroup>
+                            {locations.map((l) => (
+                              <CommandItem
+                                key={l.name}
+                                value={l.name}
+                                onSelect={() => {
+                                  setForm((f) => ({ ...f, location: l.name }));
+                                  setLocationOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    form.location === l.name ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {l.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                          {locationSearch.length > 1 && !locations.some(
+                            (l) => l.name.toLowerCase() === locationSearch.toLowerCase()
+                          ) && (
+                            <CommandGroup>
+                              <CommandItem
+                                value={`__create__${locationSearch}`}
+                                onSelect={() => handleCreateLocation(locationSearch)}
+                                disabled={creatingLocation}
+                              >
+                                {creatingLocation ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Plus className="mr-2 h-4 w-4" />
+                                )}
+                                Create "{locationSearch}"
+                              </CommandItem>
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
 
