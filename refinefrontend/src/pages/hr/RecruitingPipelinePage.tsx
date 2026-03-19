@@ -34,7 +34,7 @@ export default function RecruitingPipelinePage() {
     { field: "custom_recruiting_stage", operator: "in", value: PIPELINE_STAGES },
   ];
   if (jobFilter) {
-    applicantFilters.push({ field: "job_title", operator: "contains", value: jobFilter });
+    applicantFilters.push({ field: "job_title", operator: "eq", value: jobFilter });
   }
 
   const { result: applicantsResult, query: applicantsQuery } = useList({
@@ -102,7 +102,7 @@ export default function RecruitingPipelinePage() {
             >
               <option value="">All Positions</option>
               {jobOpenings.map((jo: any) => (
-                <option key={jo.name} value={jo.job_title}>{jo.job_title}</option>
+                <option key={jo.name} value={jo.name}>{jo.job_title}</option>
               ))}
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
