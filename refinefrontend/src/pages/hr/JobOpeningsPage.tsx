@@ -127,11 +127,11 @@ export default function JobOpeningsPage() {
 
   // Fetch existing locations and designations for combobox
   const { result: locationsResult, query: locationsQuery } = useList({
-    resource: "Location",
+    resource: "Branch",
     pagination: { mode: "off" },
     meta: { fields: ["name"] },
   });
-  const locations = (locationsResult?.data ?? []) as any[];
+  const branches = (locationsResult?.data ?? []) as any[];
 
   const { result: designationsResult, query: designationsQuery } = useList({
     resource: "Designation",
@@ -152,20 +152,20 @@ export default function JobOpeningsPage() {
   const handleCreateLocation = async (name: string) => {
     setCreatingLocation(true);
     try {
-      const resp = await fetch("/api/resource/Location", {
+      const resp = await fetch("/api/resource/Branch", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Frappe-Site-Name": "erp.merakiwp.com" },
         credentials: "include",
-        body: JSON.stringify({ location_name: name }),
+        body: JSON.stringify({ branch: name }),
       });
-      if (!resp.ok) throw new Error("Failed to create location");
+      if (!resp.ok) throw new Error("Failed to create branch");
       const result = await resp.json();
       setForm((f) => ({ ...f, location: result?.data?.name ?? name }));
       setLocationOpen(false);
       setLocationSearch("");
       locationsQuery.refetch();
     } catch {
-      setFormError("Failed to create location.");
+      setFormError("Failed to create branch.");
     } finally {
       setCreatingLocation(false);
     }
@@ -484,9 +484,9 @@ export default function JobOpeningsPage() {
                           onValueChange={setLocationSearch}
                         />
                         <CommandList>
-                          <CommandEmpty>No locations found.</CommandEmpty>
+                          <CommandEmpty>No branches found.</CommandEmpty>
                           <CommandGroup>
-                            {locations.map((l) => (
+                            {branches.map((l) => (
                               <CommandItem
                                 key={l.name}
                                 value={l.name}
@@ -505,7 +505,7 @@ export default function JobOpeningsPage() {
                               </CommandItem>
                             ))}
                           </CommandGroup>
-                          {locationSearch.length > 1 && !locations.some(
+                          {locationSearch.length > 1 && !branches.some(
                             (l) => l.name.toLowerCase() === locationSearch.toLowerCase()
                           ) && (
                             <CommandGroup>
