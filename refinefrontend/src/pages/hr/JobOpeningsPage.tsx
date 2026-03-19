@@ -47,7 +47,6 @@ const STATUS_VARIANT: Record<string, "success" | "secondary"> = {
 };
 
 interface PositionForm {
-  job_title: string;
   designation: string;
   location: string;
   closes_on: string;
@@ -55,7 +54,6 @@ interface PositionForm {
 }
 
 const INITIAL_FORM: PositionForm = {
-  job_title: "",
   designation: "",
   location: "",
   closes_on: "",
@@ -205,7 +203,6 @@ export default function JobOpeningsPage() {
   function openEdit(job: JobOpening) {
     setEditingJob(job);
     setForm({
-      job_title: job.job_title ?? "",
       designation: job.designation ?? "",
       location: job.location ?? "",
       closes_on: job.closes_on ?? "",
@@ -310,16 +307,16 @@ export default function JobOpeningsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.job_title.trim()) {
-      setFormError("Job title is required.");
+    if (!form.designation.trim()) {
+      setFormError("Designation is required.");
       return;
     }
     setFormError("");
     setSubmitting(true);
 
     const fields = {
-      job_title: form.job_title.trim(),
-      ...(form.designation.trim() && { designation: form.designation.trim() }),
+      job_title: form.designation.trim(),
+      designation: form.designation.trim(),
       ...(form.location.trim() && { location: form.location.trim() }),
       ...(form.closes_on && { closes_on: form.closes_on }),
       ...(form.description.trim() && { description: form.description.trim() }),
@@ -387,26 +384,12 @@ export default function JobOpeningsPage() {
 
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {/* Job Title */}
-              <div className="space-y-1.5">
-                <Label htmlFor="job_title">
-                  Job Title <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="job_title"
-                  value={form.job_title}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, job_title: e.target.value }))
-                  }
-                  placeholder="e.g. Event Coordinator"
-                  required
-                />
-              </div>
-
               {/* Designation + Location — two columns */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Designation</Label>
+                  <Label>
+                    Designation <span className="text-destructive">*</span>
+                  </Label>
                   <Popover open={designationOpen} onOpenChange={setDesignationOpen}>
                     <PopoverTrigger asChild>
                       <button
