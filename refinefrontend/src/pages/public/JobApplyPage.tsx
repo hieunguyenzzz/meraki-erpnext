@@ -747,34 +747,34 @@ export default function JobApplyPage() {
           {/* Single-page form: Intern */}
           {!isSenior && !isStandard && (
             <div className="space-y-8">
-              <PersonalSection />
-              <DocumentsSection />
+              {PersonalSection()}
+              {DocumentsSection()}
             </div>
           )}
 
           {/* Single-page form: Standard — Education before Documents */}
           {isStandard && (
             <div className="space-y-8">
-              <PersonalSection />
-              <EducationSection />
-              <DocumentsSection />
+              {PersonalSection()}
+              {EducationSection()}
+              {DocumentsSection()}
             </div>
           )}
 
           {/* Multi-step: Senior */}
           {isSenior && step === 1 && (
             <div className="space-y-8">
-              <PersonalSection />
-              <EducationSection />
-              <SeniorExtraSection />
+              {PersonalSection()}
+              {EducationSection()}
+              {SeniorExtraSection()}
             </div>
           )}
           {isSenior && step === 2 && (
             <div className="space-y-8">
-              <DocumentsSection />
+              {DocumentsSection()}
             </div>
           )}
-          {isSenior && step === 3 && <ReviewSection />}
+          {isSenior && step === 3 && ReviewSection()}
 
           {/* Errors */}
           {validationError && (
