@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { useList, useInvalidate, usePermissions } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck, GripVertical } from "lucide-react";
+import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,20 +24,8 @@ import {
   type ReviewStatus,
 } from "@/lib/review-status";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  arrayMove,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { arrayMove } from "@dnd-kit/sortable";
+import type { DragEndEvent } from "@dnd-kit/core";
 
 interface StaffRow {
   name: string;
@@ -59,30 +47,6 @@ interface StaffRow {
 }
 
 
-function SortableStaffRow({ emp, onEdit }: { emp: StaffRow; onEdit: (emp: StaffRow) => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: emp.name });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-3 bg-card border rounded-md mb-2">
-      <button
-        {...attributes}
-        {...listeners}
-        className="cursor-grab text-muted-foreground hover:text-foreground touch-none"
-        type="button"
-      >
-        <GripVertical className="h-5 w-5" />
-      </button>
-      <span className="flex-1 font-medium">{displayName(emp)}</span>
-      <span className="text-sm text-muted-foreground">{emp.designation || "-"}</span>
-    </div>
-  );
-}
-
 type SummaryFilter = "all" | "overdue" | "due-soon" | "up-to-date";
 
 export default function StaffOverviewPage() {
@@ -97,8 +61,6 @@ export default function StaffOverviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [rolesMap, setRolesMap] = useState<Record<string, string[]>>({});
 
-  // Arrange mode state
-  const [arrangeMode, setArrangeMode] = useState(false);
   const [orderedIds, setOrderedIds] = useState<string[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -117,9 +79,6 @@ export default function StaffOverviewPage() {
   const canManageRoles = (userRoles ?? []).some(r => r === "System Manager" || r === "Administrator");
 
   const invalidate = useInvalidate();
-
-  // DnD sensors
-  const sensors = useSensors(useSensor(PointerSensor));
 
   // Invite staff dialog state
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
@@ -271,7 +230,7 @@ export default function StaffOverviewPage() {
     }, 400);
   }
 
-  function handleDragEnd(event: any) {
+  function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     setOrderedIds((ids) => {
@@ -568,16 +527,10 @@ export default function StaffOverviewPage() {
           <h1 className="text-2xl font-bold tracking-tight">Staff Overview</h1>
           <p className="text-muted-foreground">Employee status, reviews, and leave balances at a glance</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setArrangeMode(v => !v)}>
-            <GripVertical className="h-4 w-4 mr-1" />
-            {arrangeMode ? "Done" : "Arrange Order"}
-          </Button>
-          <Button onClick={() => setInviteDialogOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Invite Staff
-          </Button>
-        </div>
+        <Button onClick={() => setInviteDialogOpen(true)}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Invite Staff
+        </Button>
       </div>
 
       {/* Summary Cards */}
@@ -635,52 +588,44 @@ export default function StaffOverviewPage() {
         </Card>
       </div>
 
-      {/* Staff Table or Arrange Mode */}
-      {arrangeMode ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
-            <div className="space-y-1">
-              {orderedStaff.map((emp) => (
-                <SortableStaffRow key={emp.name} emp={emp} onEdit={openReviewDialog} />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={filteredData}
-          isLoading={isLoading}
-          searchKey="employee_name"
-          searchPlaceholder="Search by name..."
-          filterableColumns={[
-            {
-              id: "staff_roles",
-              title: "Role",
-              options: ASSIGNABLE_ROLES.map((r) => ({ label: r.label, value: r.role })),
-            },
-            {
-              id: "department",
-              title: "Department",
-              options: [
-                { label: "Operations", value: "Operations" },
-                { label: "Management", value: "Management" },
-                { label: "Administration", value: "Administration" },
-              ],
-            },
-            {
-              id: "review_status",
-              title: "Review Status",
-              options: [
-                { label: "Overdue", value: "overdue" },
-                { label: "Never Reviewed", value: "never-reviewed" },
-                { label: "Due Soon", value: "due-soon" },
-                { label: "Up to Date", value: "up-to-date" },
-              ],
-            },
-          ]}
-        />
-      )}
+      {/* Staff Table */}
+      <DataTable
+        columns={columns}
+        data={filteredData}
+        isLoading={isLoading}
+        searchKey="employee_name"
+        searchPlaceholder="Search by name..."
+        getRowId={(row: StaffRow) => row.name}
+        sortable
+        sortableItems={filteredData.map((r) => r.name)}
+        onDragEnd={handleDragEnd}
+        filterableColumns={[
+          {
+            id: "staff_roles",
+            title: "Role",
+            options: ASSIGNABLE_ROLES.map((r) => ({ label: r.label, value: r.role })),
+          },
+          {
+            id: "department",
+            title: "Department",
+            options: [
+              { label: "Operations", value: "Operations" },
+              { label: "Management", value: "Management" },
+              { label: "Administration", value: "Administration" },
+            ],
+          },
+          {
+            id: "review_status",
+            title: "Review Status",
+            options: [
+              { label: "Overdue", value: "overdue" },
+              { label: "Never Reviewed", value: "never-reviewed" },
+              { label: "Due Soon", value: "due-soon" },
+              { label: "Up to Date", value: "up-to-date" },
+            ],
+          },
+        ]}
+      />
 
       {/* Review Sheet */}
       <Sheet open={reviewDialogOpen} onOpenChange={(open) => { if (!open) tryClose(isReviewDirty, () => setReviewDialogOpen(false)); }}>

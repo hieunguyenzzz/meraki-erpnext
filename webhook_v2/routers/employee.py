@@ -228,23 +228,41 @@ async def invite_staff(request: InviteStaffRequest):
     first_name = name_parts[0]
     last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
 
-    # 1. Create User
+    # 1. Create User (or reuse existing)
+    email = request.email.strip()
     try:
-        user_values = {
-            "email": request.email.strip(),
-            "first_name": first_name,
-            "enabled": 1,
-            "new_password": password,
-            "send_welcome_email": 0,
-            "roles": [{"role": "Employee Self Service"}],
-        }
-        if last_name:
-            user_values["last_name"] = last_name
-        client._post("/api/resource/User", user_values)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to create user: {e}")
-
-    log.info("staff_user_created", email=request.email)
+        existing_user = client._get(f"/api/resource/User/{email}")
+        # User exists — check if already linked to an Employee
+        existing_emps = client._get("/api/resource/Employee", params={
+            "filters": _json.dumps([["user_id", "=", email]]),
+            "fields": _json.dumps(["name"]),
+            "limit_page_length": 1,
+        }).get("data", [])
+        if existing_emps:
+            raise HTTPException(
+                status_code=409,
+                detail=f"User {email} is already linked to employee {existing_emps[0]['name']}",
+            )
+        log.info("staff_user_reused", email=email)
+    except HTTPException:
+        raise
+    except Exception:
+        # User doesn't exist — create it
+        try:
+            user_values = {
+                "email": email,
+                "first_name": first_name,
+                "enabled": 1,
+                "new_password": password,
+                "send_welcome_email": 0,
+                "roles": [{"role": "Employee Self Service"}],
+            }
+            if last_name:
+                user_values["last_name"] = last_name
+            client._post("/api/resource/User", user_values)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to create user: {e}")
+        log.info("staff_user_created", email=email)
 
     # 2. Fetch max custom_meraki_id
     try:
@@ -263,7 +281,7 @@ async def invite_staff(request: InviteStaffRequest):
             "first_name": first_name,
             "employee_name": request.full_name.strip(),
             "company": "Meraki Wedding Planner",
-            "user_id": request.email.strip(),
+            "user_id": email,
             "date_of_joining": request.date_of_joining,
             "gender": request.gender,
             "date_of_birth": request.date_of_birth,
@@ -281,7 +299,7 @@ async def invite_staff(request: InviteStaffRequest):
 
     return {
         "employee_name": employee_name,
-        "user_id": request.email.strip(),
+        "user_id": email,
         "password": password,
     }
 

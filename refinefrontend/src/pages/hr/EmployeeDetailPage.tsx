@@ -369,23 +369,17 @@ export default function EmployeeDetailPage() {
     setEditError(null);
     try {
       const values = { ...editValues };
-      // Convert ctc to number if present
-      if ("ctc" in values && values.ctc !== "") {
-        values.ctc = Number(values.ctc);
-      }
-      if ("custom_insurance_salary" in values && values.custom_insurance_salary !== "") {
-        values.custom_insurance_salary = Number(values.custom_insurance_salary);
-      }
-      const allowanceFields = ["custom_allowance_hcm_full", "custom_allowance_hcm_partial", "custom_allowance_dest_full", "custom_allowance_dest_partial"];
-      for (const field of allowanceFields) {
-        if (field in values && values[field] !== "") {
-          values[field] = Number(values[field]);
-        }
-      }
-      const commissionFields = ["custom_lead_commission_pct", "custom_support_commission_pct", "custom_assistant_commission_pct", "custom_sales_commission_pct"];
-      for (const field of commissionFields) {
-        if (field in values && values[field] !== "") {
-          values[field] = Number(values[field]);
+      // Convert numeric fields — empty string → 0
+      const numericFields = [
+        "ctc", "custom_insurance_salary",
+        "custom_allowance_hcm_full", "custom_allowance_hcm_partial",
+        "custom_allowance_dest_full", "custom_allowance_dest_partial",
+        "custom_lead_commission_pct", "custom_support_commission_pct",
+        "custom_assistant_commission_pct", "custom_sales_commission_pct",
+      ];
+      for (const field of numericFields) {
+        if (field in values) {
+          values[field] = values[field] === "" ? 0 : Number(values[field]);
         }
       }
       const res = await fetch(`/inquiry-api/employee/${employee.name}`, {
