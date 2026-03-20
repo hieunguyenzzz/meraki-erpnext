@@ -16,6 +16,17 @@ from webhook_v2.core.logging import get_logger
 log = get_logger(__name__)
 router = APIRouter()
 
+
+def _should_send_welcome_email(client: ERPNextClient) -> int:
+    """Read HR Settings toggle for welcome email on invite."""
+    try:
+        hr = client._get("/api/resource/HR Settings/HR Settings", params={
+            "fields": '["custom_send_welcome_email_on_invite"]',
+        }).get("data", {})
+        return int(hr.get("custom_send_welcome_email_on_invite", 0))
+    except Exception:
+        return 0
+
 ASSIGNABLE_ROLES_PY = [
     {"role": "System Manager",   "label": "Admin"},
     {"role": "Sales Manager",    "label": "Sales Manager"},
@@ -165,12 +176,13 @@ async def link_user_to_employee(employee_id: str, request: LinkUserRequest):
 
     # 3. Create user if not found
     if not user_exists:
+        send_welcome = _should_send_welcome_email(client)
         try:
             client._post("/api/resource/User", {
                 "email": email,
                 "first_name": employee_name,
                 "enabled": 1,
-                "send_welcome_email": 0,
+                "send_welcome_email": send_welcome,
                 "roles": [{"role": "Employee Self Service"}],
             })
             created = True
@@ -248,13 +260,14 @@ async def invite_staff(request: InviteStaffRequest):
         raise
     except Exception:
         # User doesn't exist — create it
+        send_welcome = _should_send_welcome_email(client)
         try:
             user_values = {
                 "email": email,
                 "first_name": first_name,
                 "enabled": 1,
                 "new_password": password,
-                "send_welcome_email": 0,
+                "send_welcome_email": send_welcome,
                 "roles": [{"role": "Employee Self Service"}],
             }
             if last_name:

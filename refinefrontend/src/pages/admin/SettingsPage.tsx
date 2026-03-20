@@ -46,6 +46,7 @@ interface HRSettings {
   send_work_anniversary_reminders: number;
   send_holiday_reminders: number;
   send_leave_notification: number;
+  custom_send_welcome_email_on_invite: number;
 }
 
 interface PayrollSettings {
@@ -713,6 +714,7 @@ function NotificationsTab() {
         "send_work_anniversary_reminders",
         "send_holiday_reminders",
         "send_leave_notification",
+        "custom_send_welcome_email_on_invite",
       ],
     },
   });
@@ -728,6 +730,7 @@ function NotificationsTab() {
     send_work_anniversary_reminders: 0,
     send_holiday_reminders: 0,
     send_leave_notification: 0,
+    custom_send_welcome_email_on_invite: 0,
   });
   const [payrollEmailSlip, setPayrollEmailSlip] = useState(0);
   const [savingHR, setSavingHR] = useState<string | null>(null);
@@ -739,6 +742,7 @@ function NotificationsTab() {
         send_work_anniversary_reminders: hrSettings.send_work_anniversary_reminders ?? 0,
         send_holiday_reminders: hrSettings.send_holiday_reminders ?? 0,
         send_leave_notification: hrSettings.send_leave_notification ?? 0,
+        custom_send_welcome_email_on_invite: hrSettings.custom_send_welcome_email_on_invite ?? 0,
       });
     }
   }, [hrSettings]);
@@ -975,6 +979,31 @@ function NotificationsTab() {
                   checked={!!payrollEmailSlip}
                   onChange={togglePayroll}
                   saving={savingHR === "payroll"}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Staff Onboarding</CardTitle>
+              <CardDescription className="text-xs">
+                Emails sent when new staff members are invited.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="divide-y">
+              {!hrSettingsLoaded ? (
+                <div className="py-6 flex justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <HRSettingRow
+                  icon={Mail}
+                  title="Welcome Email"
+                  description="Send a welcome email with a registration link when inviting new staff."
+                  checked={!!hrState.custom_send_welcome_email_on_invite}
+                  onChange={(v) => toggleHR("custom_send_welcome_email_on_invite", v)}
+                  saving={savingHR === "custom_send_welcome_email_on_invite"}
                 />
               )}
             </CardContent>
