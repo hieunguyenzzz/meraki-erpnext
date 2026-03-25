@@ -67,6 +67,38 @@ function getEmployerBHXH(deductions: SalarySlipEarning[] | undefined): number {
   return employeeTotal > 0 ? Math.round(employeeTotal / 10.5 * 21.5) : 0;
 }
 
+// Vietnam PIT constants (2026 — new deductions, old 7 brackets until July 2026)
+const PIT_PERSONAL_DEDUCTION = 15_500_000;
+const PIT_DEPENDENT_DEDUCTION = 6_200_000;
+
+const PIT_BRACKETS: { limit: number; rate: number; qd: number }[] = [
+  { limit: 5_000_000, rate: 0.05, qd: 0 },
+  { limit: 10_000_000, rate: 0.10, qd: 250_000 },
+  { limit: 18_000_000, rate: 0.15, qd: 750_000 },
+  { limit: 32_000_000, rate: 0.20, qd: 1_650_000 },
+  { limit: 52_000_000, rate: 0.25, qd: 3_250_000 },
+  { limit: 80_000_000, rate: 0.30, qd: 5_850_000 },
+  { limit: Infinity, rate: 0.35, qd: 9_850_000 },
+];
+
+function calcTaxReduction(dependents: number): number {
+  return PIT_PERSONAL_DEDUCTION + dependents * PIT_DEPENDENT_DEDUCTION;
+}
+
+function calcEstPIT(grossPay: number, siDeductions: number, dependents: number): number {
+  const taxReduction = calcTaxReduction(dependents);
+  const taxable = grossPay - siDeductions - taxReduction;
+  if (taxable <= 0) return 0;
+  const bracket = PIT_BRACKETS.find(b => taxable <= b.limit) ?? PIT_BRACKETS[PIT_BRACKETS.length - 1];
+  return Math.round(taxable * bracket.rate - bracket.qd);
+}
+
+function getTotalSI(deductions: SalarySlipEarning[] | undefined): number {
+  return getDeductionAmount(deductions, "BHXH (Employee)")
+    + getDeductionAmount(deductions, "BHYT (Employee)")
+    + getDeductionAmount(deductions, "BHTN (Employee)");
+}
+
 interface PayrollEntry {
   name: string;
   posting_date: string;
@@ -77,7 +109,7 @@ interface PayrollEntry {
   number_of_employees: number;
 }
 
-function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDef<SalarySlip, unknown>[] {
+function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependentsMap: Record<string, number>): ColumnDef<SalarySlip, unknown>[] {
   return [
     {
       accessorKey: "employee_name",
@@ -132,6 +164,24 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDe
       id: "employer_bhxh",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Employer BHXH" className="text-right" />,
       cell: ({ row }) => <div className="text-right text-amber-600 dark:text-amber-400">{formatVND(getEmployerBHXH(row.original.deductions))}</div>,
+    },
+    {
+      id: "tax_reduction",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Tax Reduction" className="text-right" />,
+      cell: ({ row }) => {
+        const deps = dependentsMap[row.original.employee] ?? 0;
+        return <div className="text-right text-muted-foreground">{formatVND(calcTaxReduction(deps))}</div>;
+      },
+    },
+    {
+      id: "est_pit",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Est. PIT" className="text-right" />,
+      cell: ({ row }) => {
+        const deps = dependentsMap[row.original.employee] ?? 0;
+        const si = getTotalSI(row.original.deductions);
+        const pit = calcEstPIT(row.original.gross_pay, si, deps);
+        return <div className="text-right text-red-600 dark:text-red-400">{pit > 0 ? formatVND(pit) : <span className="text-muted-foreground">-</span>}</div>;
+      },
     },
     {
       accessorKey: "net_pay",
@@ -277,6 +327,21 @@ export default function PayrollPage() {
 
   const activeCount = empResult?.data?.length ?? 0;
 
+  const { result: empDepsResult } = useList({
+    resource: "Employee",
+    pagination: { mode: "off" },
+    filters: [{ field: "status", operator: "eq", value: "Active" }],
+    meta: { fields: ["name", "custom_number_of_dependents"] },
+  });
+
+  const dependentsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const emp of (empDepsResult?.data ?? []) as any[]) {
+      map[emp.name] = emp.custom_number_of_dependents ?? 0;
+    }
+    return map;
+  }, [empDepsResult?.data]);
+
   // Fetch Wedding Allowance Additional Salary records for selected period
   const { result: additionalSalariesResult } = useList({
     resource: "Additional Salary",
@@ -299,7 +364,7 @@ export default function PayrollPage() {
     return map;
   }, [additionalSalariesResult?.data]);
 
-  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap), [weddingAllowanceMap]);
+  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap, dependentsMap), [weddingAllowanceMap, dependentsMap]);
 
   async function handleGenerate() {
     setIsRunning(true);

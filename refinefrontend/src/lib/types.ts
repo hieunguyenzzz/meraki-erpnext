@@ -22,6 +22,7 @@ export interface Employee {
   custom_assistant_commission_pct?: number;
   custom_sales_commission_pct?: number;
   custom_insurance_salary?: number;
+  custom_number_of_dependents?: number;
   relieving_date?: string;
   leave_approver?: string;
   custom_allowance_hcm_full?: number;

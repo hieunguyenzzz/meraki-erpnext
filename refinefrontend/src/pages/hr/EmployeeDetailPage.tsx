@@ -341,6 +341,7 @@ export default function EmployeeDetailPage() {
         date_of_joining: employee.date_of_joining || "",
         ctc: employee.ctc ?? "",
         custom_insurance_salary: employee.custom_insurance_salary ?? "",
+        custom_number_of_dependents: employee.custom_number_of_dependents ?? 0,
         leave_approver: employee.leave_approver || "",
       });
       // Fetch current ERPNext user roles if a user is linked
@@ -371,7 +372,7 @@ export default function EmployeeDetailPage() {
       const values = { ...editValues };
       // Convert numeric fields — empty string → 0
       const numericFields = [
-        "ctc", "custom_insurance_salary",
+        "ctc", "custom_insurance_salary", "custom_number_of_dependents",
         "custom_allowance_hcm_full", "custom_allowance_hcm_partial",
         "custom_allowance_dest_full", "custom_allowance_dest_partial",
         "custom_lead_commission_pct", "custom_support_commission_pct",
@@ -713,6 +714,12 @@ export default function EmployeeDetailPage() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Insurance Salary (BHXH)</span>
                     <span>{formatVND(employee.custom_insurance_salary)}</span>
+                  </div>
+                )}
+                {employee.custom_number_of_dependents != null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tax Dependents</span>
+                    <span>{employee.custom_number_of_dependents}</span>
                   </div>
                 )}
                 {employee.leave_approver && (
@@ -1312,6 +1319,10 @@ export default function EmployeeDetailPage() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-insurance-salary">Insurance Salary / BHXH (VND)</Label>
                   <Input id="edit-insurance-salary" type="number" value={editValues.custom_insurance_salary} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_insurance_salary: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-dependents">Tax Dependents (PIT)</Label>
+                  <Input id="edit-dependents" type="number" min="0" value={editValues.custom_number_of_dependents} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_number_of_dependents: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
                   <Label>Leave Approver</Label>
