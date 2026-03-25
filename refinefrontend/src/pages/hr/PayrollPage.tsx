@@ -164,6 +164,16 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependent
       },
     },
     {
+      id: "taxable_income",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Taxable Income" className="text-right" />,
+      cell: ({ row }) => {
+        const deps = dependentsMap[row.original.employee] ?? 0;
+        const si = getTotalSI(row.original.deductions);
+        const taxable = row.original.gross_pay - si - calcTaxReduction(deps);
+        return <div className="text-right">{taxable > 0 ? formatVND(taxable) : <span className="text-muted-foreground">-</span>}</div>;
+      },
+    },
+    {
       id: "est_pit",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Est. PIT" className="text-right" />,
       cell: ({ row }) => {
