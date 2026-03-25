@@ -723,6 +723,15 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
+                    {isFinance && totalValue > 0 && (
+                      <div className="flex items-start gap-3 text-sm">
+                        <DollarSign className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Commission Base</p>
+                          <p className="font-medium">{formatVND(salesOrder?.custom_commission_base || salesOrder?.grand_total || 0)}</p>
+                        </div>
+                      </div>
+                    )}
                     {addOnItems.length > 0 && (
                       <div className="pt-2 border-t">
                         <p className="text-xs text-muted-foreground mb-2">Add-ons</p>
