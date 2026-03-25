@@ -109,12 +109,12 @@ interface PayrollEntry {
   number_of_employees: number;
 }
 
-function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependentsMap: Record<string, number>): ColumnDef<SalarySlip, unknown>[] {
+function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependentsMap: Record<string, number>, empNameMap: Record<string, string>): ColumnDef<SalarySlip, unknown>[] {
   return [
     {
       accessorKey: "employee_name",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
-      cell: ({ row }) => <span className="font-medium">{row.original.employee_name}</span>,
+      cell: ({ row }) => <span className="font-medium">{empNameMap[row.original.employee] || row.original.employee_name}</span>,
       filterFn: "includesString",
     },
     {
@@ -146,19 +146,9 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependent
       cell: ({ row }) => <div className="text-right">{formatVND(row.original.gross_pay)}</div>,
     },
     {
-      id: "bhxh",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="BHXH 8%" className="text-right" />,
-      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHXH (Employee)"))}</div>,
-    },
-    {
-      id: "bhyt",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="BHYT 1.5%" className="text-right" />,
-      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHYT (Employee)"))}</div>,
-    },
-    {
-      id: "bhtn",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="BHTN 1%" className="text-right" />,
-      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getDeductionAmount(row.original.deductions, "BHTN (Employee)"))}</div>,
+      id: "si_employee",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="SI 10.5%" className="text-right" />,
+      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getTotalSI(row.original.deductions))}</div>,
     },
     {
       id: "employer_bhxh",
@@ -331,13 +321,21 @@ export default function PayrollPage() {
     resource: "Employee",
     pagination: { mode: "off" },
     filters: [{ field: "status", operator: "eq", value: "Active" }],
-    meta: { fields: ["name", "custom_number_of_dependents"] },
+    meta: { fields: ["name", "first_name", "last_name", "employee_name", "custom_number_of_dependents"] },
   });
 
   const dependentsMap = useMemo(() => {
     const map: Record<string, number> = {};
     for (const emp of (empDepsResult?.data ?? []) as any[]) {
       map[emp.name] = emp.custom_number_of_dependents ?? 0;
+    }
+    return map;
+  }, [empDepsResult?.data]);
+
+  const empNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const emp of (empDepsResult?.data ?? []) as any[]) {
+      map[emp.name] = emp.employee_name || [emp.last_name, emp.first_name].filter(Boolean).join(" ") || emp.name;
     }
     return map;
   }, [empDepsResult?.data]);
@@ -364,7 +362,7 @@ export default function PayrollPage() {
     return map;
   }, [additionalSalariesResult?.data]);
 
-  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap, dependentsMap), [weddingAllowanceMap, dependentsMap]);
+  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap, dependentsMap, empNameMap), [weddingAllowanceMap, dependentsMap, empNameMap]);
 
   async function handleGenerate() {
     setIsRunning(true);
