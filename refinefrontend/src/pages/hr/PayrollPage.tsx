@@ -335,7 +335,9 @@ export default function PayrollPage() {
   const empNameMap = useMemo(() => {
     const map: Record<string, string> = {};
     for (const emp of (empDepsResult?.data ?? []) as any[]) {
-      map[emp.name] = emp.employee_name || [emp.last_name, emp.first_name].filter(Boolean).join(" ") || emp.name;
+      const fromParts = [emp.last_name, emp.first_name].filter(Boolean).join(" ");
+      const displayName = emp.employee_name?.startsWith("HR-EMP-") ? "" : emp.employee_name;
+      map[emp.name] = fromParts || displayName || emp.name;
     }
     return map;
   }, [empDepsResult?.data]);
