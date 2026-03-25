@@ -508,6 +508,46 @@ export default function PayrollPage() {
           searchPlaceholder="Search by employee..."
         />
       )}
+
+      {!isLoading && salarySlips.length > 0 && (() => {
+        const commissionRows = salarySlips
+          .map(s => {
+            const lead = getEarningAmount(s.earnings, "Lead Planner Commission");
+            const support = getEarningAmount(s.earnings, "Support Planner Commission");
+            const assistant = getEarningAmount(s.earnings, "Assistant Commission");
+            if (lead + support + assistant === 0) return null;
+            return { name: empNameMap[s.employee] || s.employee_name, lead, support, assistant, total: lead + support + assistant };
+          })
+          .filter(Boolean) as { name: string; lead: number; support: number; assistant: number; total: number }[];
+        if (commissionRows.length === 0) return null;
+        return (
+          <div className="text-xs text-muted-foreground mt-2">
+            <p className="font-medium mb-1">Commission Breakdown</p>
+            <table className="w-auto">
+              <thead>
+                <tr className="text-left">
+                  <th className="pr-4 font-normal">Employee</th>
+                  <th className="pr-4 font-normal text-right">Lead</th>
+                  <th className="pr-4 font-normal text-right">Support</th>
+                  <th className="pr-4 font-normal text-right">Assistant</th>
+                  <th className="font-normal text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {commissionRows.map(r => (
+                  <tr key={r.name}>
+                    <td className="pr-4">{r.name}</td>
+                    <td className="pr-4 text-right">{r.lead > 0 ? formatVND(r.lead) : "-"}</td>
+                    <td className="pr-4 text-right">{r.support > 0 ? formatVND(r.support) : "-"}</td>
+                    <td className="pr-4 text-right">{r.assistant > 0 ? formatVND(r.assistant) : "-"}</td>
+                    <td className="text-right">{formatVND(r.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
     </div>
   );
 }
