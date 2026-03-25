@@ -156,6 +156,23 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependent
       cell: ({ row }) => <div className="text-right text-amber-600 dark:text-amber-400">{formatVND(getEmployerBHXH(row.original.deductions))}</div>,
     },
     {
+      id: "dependents",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Dependents" className="text-right" />,
+      cell: ({ row }) => {
+        const deps = dependentsMap[row.original.employee] ?? 0;
+        return <div className="text-right">{deps > 0 ? deps : <span className="text-muted-foreground">0</span>}</div>;
+      },
+    },
+    {
+      id: "dep_deduction",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Dep. Deduction" className="text-right" />,
+      cell: ({ row }) => {
+        const deps = dependentsMap[row.original.employee] ?? 0;
+        const amount = deps * PIT_DEPENDENT_DEDUCTION;
+        return <div className="text-right text-muted-foreground">{amount > 0 ? formatVND(amount) : <span>-</span>}</div>;
+      },
+    },
+    {
       id: "tax_reduction",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Tax Reduction" className="text-right" />,
       cell: ({ row }) => {
