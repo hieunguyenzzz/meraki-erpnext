@@ -398,14 +398,22 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update add-ons: {e}")
 
-    # 4. Recalculate commission_base
+    # 4. Recalculate commission_base (use net_rate = pre-tax when VAT included)
+    # Re-fetch SO to get updated net_rate values after tax/item changes
+    so = client._get(f"/api/resource/Sales Order/{so_name}").get("data", {})
+    updated_items = so.get("items", [])
+    has_tax = bool(so.get("taxes"))
+    rate_field = "net_rate" if has_tax else "rate"
     package_rate = next(
-        (item["rate"] for item in original_items if item.get("item_code") == "Wedding Planning Service"),
+        (item[rate_field] for item in updated_items if item.get("item_code") == "Wedding Planning Service"),
         0,
     )
-    commission_base = package_rate + sum(
-        a.rate for a in req.addons if a.include_in_commission
+    addon_commission = sum(
+        item[rate_field] for item in updated_items
+        if item.get("item_code") != "Wedding Planning Service"
+        and item.get("item_code") in {a.item_code for a in req.addons if a.include_in_commission}
     )
+    commission_base = package_rate + addon_commission
     try:
         client._post("/api/method/frappe.client.set_value", {
             "doctype": "Sales Order",
