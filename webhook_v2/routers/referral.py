@@ -120,8 +120,14 @@ def record_referral(req: RecordReferralRequest):
             "income_account": "Referral Commission Income - MWP",
         }],
     }
+    # Build remarks (project can't go on invoice — customer mismatch with wedding project)
+    remarks_parts = []
     if req.project:
-        inv_payload["project"] = req.project
+        remarks_parts.append(f"Referral commission for wedding {req.project}")
+    if req.note:
+        remarks_parts.append(req.note)
+    if remarks_parts:
+        inv_payload["remarks"] = " — ".join(remarks_parts)
 
     inv = client._post("/api/resource/Sales Invoice", inv_payload).get("data", {})
     inv_name = inv["name"]
@@ -154,6 +160,9 @@ def record_referral(req: RecordReferralRequest):
                 "outstanding_amount": actual_amount,
             }],
         }).get("data", {})
+        pe_name = pe["name"]
+        full_pe = client._get(f"/api/resource/Payment Entry/{pe_name}").get("data", {})
+        client._post("/api/method/frappe.client.submit", {"doc": full_pe})
     except Exception as e:
         # Rollback: cancel + delete the orphaned invoice
         _cancel(client, "Sales Invoice", inv_name)
@@ -163,11 +172,7 @@ def record_referral(req: RecordReferralRequest):
             client._delete(f"/api/resource/Sales Invoice/{inv_name}")
         except Exception:
             pass
-        raise HTTPException(status_code=400, detail=f"Payment Entry creation failed: {str(e)}")
-
-    pe_name = pe["name"]
-    full_pe = client._get(f"/api/resource/Payment Entry/{pe_name}").get("data", {})
-    client._post("/api/method/frappe.client.submit", {"doc": full_pe})
+        raise HTTPException(status_code=400, detail=f"Payment Entry failed: {str(e)}")
 
     log.info("referral_recorded", invoice=inv_name, payment_entry=pe_name, partner=req.partner, amount=req.amount)
     return {"success": True, "invoice": inv_name, "payment_entry": pe_name}
