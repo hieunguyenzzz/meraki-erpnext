@@ -130,6 +130,9 @@ export default function ProjectDetailPage() {
     assistant3: "",
     assistant4: "",
     assistant5: "",
+    leadCommissionPct: "",
+    supportCommissionPct: "",
+    assistantCommissionPct: "",
     addOns: [] as { itemCode: string; itemName: string; qty: number; rate: number; includeInCommission: boolean }[],
     taxType: "tax_free" as "tax_free" | "vat_included",
   });
@@ -165,6 +168,9 @@ export default function ProjectDetailPage() {
         "custom_assistant_3",
         "custom_assistant_4",
         "custom_assistant_5",
+        "custom_lead_commission_pct",
+        "custom_support_commission_pct",
+        "custom_assistant_commission_pct",
       ],
     },
   });
@@ -392,6 +398,9 @@ export default function ProjectDetailPage() {
       assistant3: project.custom_assistant_3 || "",
       assistant4: project.custom_assistant_4 || "",
       assistant5: project.custom_assistant_5 || "",
+      leadCommissionPct: project.custom_lead_commission_pct ? String(project.custom_lead_commission_pct) : "",
+      supportCommissionPct: project.custom_support_commission_pct ? String(project.custom_support_commission_pct) : "",
+      assistantCommissionPct: project.custom_assistant_commission_pct ? String(project.custom_assistant_commission_pct) : "",
     }));
   }
 
@@ -453,6 +462,9 @@ export default function ProjectDetailPage() {
           custom_assistant_3: editForm.assistant3 || null,
           custom_assistant_4: editForm.assistant4 || null,
           custom_assistant_5: editForm.assistant5 || null,
+          custom_lead_commission_pct: editForm.leadCommissionPct ? parseFloat(editForm.leadCommissionPct) : null,
+          custom_support_commission_pct: editForm.supportCommissionPct ? parseFloat(editForm.supportCommissionPct) : null,
+          custom_assistant_commission_pct: editForm.assistantCommissionPct ? parseFloat(editForm.assistantCommissionPct) : null,
         },
       });
       invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
@@ -922,20 +934,29 @@ export default function ProjectDetailPage() {
                     {project.custom_lead_planner && (
                       <ReadOnlyField
                         label="Lead Planner"
-                        value={getEmployeeNameById(project.custom_lead_planner) || project.custom_lead_planner}
+                        value={
+                          (getEmployeeNameById(project.custom_lead_planner) || project.custom_lead_planner) +
+                          (project.custom_lead_commission_pct ? ` (${project.custom_lead_commission_pct}%)` : "")
+                        }
                       />
                     )}
                     {project.custom_support_planner && (
                       <ReadOnlyField
                         label="Support Planner"
-                        value={getEmployeeNameById(project.custom_support_planner) || project.custom_support_planner}
+                        value={
+                          (getEmployeeNameById(project.custom_support_planner) || project.custom_support_planner) +
+                          (project.custom_support_commission_pct ? ` (${project.custom_support_commission_pct}%)` : "")
+                        }
                       />
                     )}
                     {assistants.map((asst: any, i) => (
                       <ReadOnlyField
                         key={i}
                         label={`Assistant ${i + 1}`}
-                        value={getEmployeeNameById(asst) || asst}
+                        value={
+                          (getEmployeeNameById(asst) || asst) +
+                          (i === 0 && project.custom_assistant_commission_pct ? ` (${project.custom_assistant_commission_pct}%)` : "")
+                        }
                       />
                     ))}
                   </CardContent>
@@ -1596,33 +1617,9 @@ export default function ProjectDetailPage() {
                 <div className="space-y-2">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Lead Planner</Label>
-                    <Select value={editForm.leadPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, leadPlanner: v === "__none__" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {employees.map((emp) => (
-                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Support Planner</Label>
-                    <Select value={editForm.supportPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, supportPlanner: v === "__none__" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {employees.map((emp) => (
-                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {(["assistant1", "assistant2", "assistant3", "assistant4", "assistant5"] as const).map((field, i) => (
-                    <div key={field} className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Assistant {i + 1}</Label>
-                      <Select value={editForm[field] || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, [field]: v === "__none__" ? "" : v })}>
-                        <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                    <div className="flex items-center gap-2">
+                      <Select value={editForm.leadPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, leadPlanner: v === "__none__" ? "" : v })}>
+                        <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">None</SelectItem>
                           {employees.map((emp) => (
@@ -1630,8 +1627,82 @@ export default function ProjectDetailPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      <div className="w-20 shrink-0">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          placeholder="%"
+                          value={editForm.leadCommissionPct}
+                          onChange={(e) => setEditForm({ ...editForm, leadCommissionPct: e.target.value })}
+                          className="text-right text-sm"
+                        />
+                      </div>
                     </div>
-                  ))}
+                    <p className="text-[10px] text-muted-foreground">Blank = use employee default rate</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Support Planner</Label>
+                    <div className="flex items-center gap-2">
+                      <Select value={editForm.supportPlanner || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, supportPlanner: v === "__none__" ? "" : v })}>
+                        <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {employees.map((emp) => (
+                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="w-20 shrink-0">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          placeholder="%"
+                          value={editForm.supportCommissionPct}
+                          onChange={(e) => setEditForm({ ...editForm, supportCommissionPct: e.target.value })}
+                          className="text-right text-sm"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Blank = use employee default rate</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Assistants</Label>
+                    {(["assistant1", "assistant2", "assistant3", "assistant4", "assistant5"] as const).map((field, i) => (
+                      <div key={field}>
+                        <div className="flex items-center gap-2">
+                          <Select value={editForm[field] || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, [field]: v === "__none__" ? "" : v })}>
+                            <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">None</SelectItem>
+                              {employees.map((emp) => (
+                                <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[10px] text-muted-foreground flex-1">Assistant commission override</span>
+                      <div className="w-20 shrink-0">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          placeholder="%"
+                          value={editForm.assistantCommissionPct}
+                          onChange={(e) => setEditForm({ ...editForm, assistantCommissionPct: e.target.value })}
+                          className="text-right text-sm"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Blank = use employee default rate</p>
+                  </div>
                 </div>
               </div>
             </div>

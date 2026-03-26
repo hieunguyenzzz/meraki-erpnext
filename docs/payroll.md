@@ -47,20 +47,31 @@ The "Recalculate Commissions" and "Submit All" buttons are only shown when a Pay
 
 This is **custom Meraki logic** — ERPNext has no built-in commission feature. It calculates how much commission each employee earned from weddings delivered that month.
 
+### Commission Rate Priority
+
+Commission rates can be set at two levels:
+
+1. **Per-wedding** (Project custom fields) — highest priority
+2. **Per-employee** (Employee custom fields) — default fallback
+
+If a Project has `custom_lead_commission_pct` set, that rate is used for that wedding. Otherwise, the Employee's default rate is used. This allows freelancers or special arrangements to have different rates per wedding.
+
 ### Steps
 
 1. **Fetch Sales Orders** for the month
    - Filter: `delivery_date between [start, end]` AND `docstatus = 1` (submitted only)
-   - Each SO represents a wedding; `net_total` is the wedding value
+   - Each SO represents a wedding; `custom_commission_base` (or `net_total`) is the wedding value
 
 2. **Fetch Projects** linked to those SOs
    - Each Project has four employee fields: `custom_lead_planner`, `custom_support_planner`, `custom_assistant_1`, `custom_assistant_2`
+   - Each Project can optionally have per-wedding commission rate overrides
 
-3. **Fetch employee commission rates**
+3. **Fetch employee commission rates** (default fallback)
    - Each Employee has: `custom_lead_commission_pct`, `custom_support_commission_pct`, `custom_assistant_commission_pct`
 
 4. **Calculate commission totals per employee**
-   - For each wedding: `commission = net_total × employee_commission_pct / 100`
+   - For each wedding: `commission = commission_base × rate / 100`
+   - Rate = project-level override if set, else employee-level default
    - Summed across all weddings the employee worked on that month
    - An employee can earn multiple commission types (e.g. lead on one wedding, support on another)
 
@@ -82,25 +93,29 @@ Wedding SOs may be submitted after payroll is generated (e.g. a wedding happens 
 
 **Button:** `Submit All` — shown while any slips are in Draft.
 
-Submits each draft Salary Slip individually. Once all slips are submitted, this button (and "Recalculate Commissions") disappears.
+Uses ERPNext's native `submit_salary_slips` method on the Payroll Entry, which:
+1. Submits all draft Salary Slips
+2. Creates an **accrual Journal Entry** recording salary as company expense
 
-### Steps
+### Accounting entries created
 
-For each draft slip (`docstatus = 0`):
-1. Fetch the **full Salary Slip document** from `/api/resource/Salary Slip/{name}`
-2. Call `frappe.client.submit(doc)` with the full document
+The accrual JV (auto-submitted, dated end of pay period):
 
-### Why fetch the full doc first?
+| Account | Debit | Credit |
+|---------|-------|--------|
+| Salary - MWP | Gross earnings | |
+| Social Insurance Expense - MWP | Employer BHXH/BHYT/BHTN | |
+| | | Payroll Payable - MWP (per employee) |
+| | | BHXH/BHYT/BHTN Payable accounts |
 
-`frappe.client.submit(doc)` calls `frappe.get_doc(dict)` — it constructs a Document object **from the passed dict**, it does NOT re-fetch from the database. Passing a partial document (e.g. just `{doctype, name}`) causes ERPNext validation to fail because required fields like `employee`, `joining_date`, etc. are missing from the constructed object.
+**Per-employee breakdown**: `Payroll Settings → Process Payroll Accounting Entry Based on Employee` is enabled, so the Payroll Payable credit is split into one line per employee with their Employee ID as party.
 
 ### Effect of submission
 
-Submitting a Salary Slip in ERPNext:
-- Sets `docstatus = 1`
-- **Locks the slip** — it can no longer be edited
-- Makes it an official payroll record visible in reports
-- To make changes after submission you must Cancel → Amend
+- Salary Slips set to `docstatus = 1` (locked)
+- Salary recorded as company expense in GL/P&L
+- Payroll Payable liability created per employee
+- To make changes after submission: Cancel → Amend
 
 ---
 
@@ -131,11 +146,32 @@ Submitting a Salary Slip in ERPNext:
 | `custom_support_planner` | Employee who was Support Planner |
 | `custom_assistant_1` | First assistant |
 | `custom_assistant_2` | Second assistant |
+| `custom_lead_commission_pct` | Per-wedding override for lead commission % (null = use employee default) |
+| `custom_support_commission_pct` | Per-wedding override for support commission % (null = use employee default) |
+| `custom_assistant_commission_pct` | Per-wedding override for assistant commission % (null = use employee default) |
 
 ### Salary Components (commission earning rows)
 - `Lead Planner Commission`
 - `Support Planner Commission`
 - `Assistant Commission`
+
+---
+
+## Freelancers / Commission-Only Staff
+
+Freelancers (e.g. an external lead planner for a specific wedding) are treated as **regular Employees** with:
+
+- **`base = 0`** in Salary Structure Assignment (no fixed salary)
+- **`custom_insurance_salary = 0`** (no BHXH/BHYT/BHTN — formulas produce 0)
+- **Commission rates** set per wedding via Project-level overrides, or per employee as defaults
+- **No PIT** deduction (not implemented in the system)
+
+The monthly payroll flow handles them automatically:
+- Salary Slip created with 0 base + 0 deductions
+- Commission recalculation adds wedding commissions
+- Net pay = commission only
+
+Set `employment_type = "Freelance"` on the Employee for labeling.
 
 ---
 

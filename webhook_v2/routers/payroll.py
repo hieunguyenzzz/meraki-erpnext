@@ -168,6 +168,8 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
                 "name", "sales_order",
                 "custom_lead_planner", "custom_support_planner",
                 "custom_assistant_1", "custom_assistant_2",
+                "custom_lead_commission_pct", "custom_support_commission_pct",
+                "custom_assistant_commission_pct",
             ]),
             "limit_page_length": 500,
         }).get("data", [])
@@ -207,22 +209,27 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
     # Build commission totals per employee
     comm_totals: dict[str, dict[str, float]] = {}
 
-    def add_comm(emp_id: str, role: str, net_total: float):
+    def add_comm(emp_id: str, role: str, net_total: float, proj: dict):
         if not emp_id:
             return
         if emp_id not in comm_totals:
             comm_totals[emp_id] = {"lead": 0.0, "support": 0.0, "assistant": 0.0}
-        pct = emp_comm_map.get(emp_id, {}).get(role, 0)
+        # Project-level override takes priority, fall back to employee default
+        proj_pct = proj.get(f"custom_{role}_commission_pct")
+        if proj_pct is not None and proj_pct > 0:
+            pct = float(proj_pct)
+        else:
+            pct = emp_comm_map.get(emp_id, {}).get(role, 0)
         comm_totals[emp_id][role] += net_total * pct / 100
 
     for proj in projects:
         net_total = so_net_map.get(proj["sales_order"], 0)
         if not net_total:
             continue
-        add_comm(proj.get("custom_lead_planner"), "lead", net_total)
-        add_comm(proj.get("custom_support_planner"), "support", net_total)
-        add_comm(proj.get("custom_assistant_1"), "assistant", net_total)
-        add_comm(proj.get("custom_assistant_2"), "assistant", net_total)
+        add_comm(proj.get("custom_lead_planner"), "lead", net_total, proj)
+        add_comm(proj.get("custom_support_planner"), "support", net_total, proj)
+        add_comm(proj.get("custom_assistant_1"), "assistant", net_total, proj)
+        add_comm(proj.get("custom_assistant_2"), "assistant", net_total, proj)
 
     # Update each draft salary slip
     applied = 0
