@@ -265,6 +265,7 @@ def update_addons(project_name: str, req: AddonsRequest):
             "qty": addon.qty,
             "rate": addon.rate,
             "conversion_factor": 1,
+            "warehouse": "Stores - MWP",
         }
         # If this item_code already exists on the SO, pass its docname so it's
         # treated as an update rather than a new insert.
@@ -383,6 +384,7 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
             "qty": addon.qty,
             "rate": addon.rate,
             "conversion_factor": 1,
+            "warehouse": "Stores - MWP",
         }
         if addon.item_code in existing_addon_by_code:
             row["docname"] = existing_addon_by_code[addon.item_code]["name"]
