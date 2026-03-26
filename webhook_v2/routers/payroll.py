@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
-from webhook_v2.routers.allowance import _get_rate, _get_project_data, _get_assigned_employees
+from webhook_v2.routers.allowance import _get_rate, _get_project_data
 
 log = get_logger(__name__)
 router = APIRouter()
