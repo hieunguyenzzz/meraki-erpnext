@@ -273,47 +273,71 @@ class SubmitPayrollRequest(BaseModel):
 async def submit_payroll(request: SubmitPayrollRequest):
     """
     Submit all draft Salary Slips for a Payroll Entry + create GL accrual JV.
-    1. Fetch all draft Salary Slips for the given Payroll Entry
-    2. For each: fetch full doc → submit (collect errors)
-    3. Call create_payroll_accrual_jv for GL entries
-    Returns {submitted, failed, jv_name}
+
+    Uses ERPNext's native submit_salary_slips method which:
+    1. Submits all draft slips
+    2. Creates the accrual Journal Entry (Debit: Salary Expense, Credit: Payroll Payable)
+    This records salary as a company expense in the GL.
     """
     client = ERPNextClient()
     pe_name = request.payroll_entry
 
-    # 1. Fetch draft salary slips
+    # Count draft slips before submission
     draft_slips = client._get("/api/resource/Salary Slip", params={
         "filters": json.dumps([["payroll_entry", "=", pe_name], ["docstatus", "=", 0]]),
-        "fields": json.dumps(["name", "employee_name"]),
+        "fields": json.dumps(["name"]),
         "limit_page_length": 200,
     }).get("data", [])
 
-    submitted = 0
-    failed: list[str] = []
+    if not draft_slips:
+        return {"submitted": 0, "failed": [], "jv_name": None, "message": "No draft slips to submit"}
 
-    # 2. Submit each slip
-    for slip in draft_slips:
-        try:
-            full_slip = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
-            # Skip if already submitted (stale state)
-            if full_slip.get("docstatus") != 0:
-                continue
-            client._post("/api/method/frappe.client.submit", {"doc": full_slip})
-            submitted += 1
-        except Exception as e:
-            failed.append(f"{slip.get('employee_name', slip['name'])}: {e}")
+    # Use ERPNext's native method: submits slips + creates accrual JV in one call.
+    # This calls submit_salary_slips_for_employees which:
+    #   - Submits each draft slip
+    #   - Calls make_accrual_jv_entry() to create GL entries
+    #   - Sets salary_slips_submitted=1 on the PE
+    try:
+        resp = client._post("/api/method/run_doc_method", {
+            "dt": "Payroll Entry",
+            "dn": pe_name,
+            "method": "submit_salary_slips",
+        })
+    except Exception as e:
+        error_msg = str(e)
+        log.error("submit_salary_slips_failed", pe=pe_name, error=error_msg)
+        return {"submitted": 0, "failed": [error_msg], "jv_name": None}
 
+    # Count how many were actually submitted
+    submitted_slips = client._get("/api/resource/Salary Slip", params={
+        "filters": json.dumps([["payroll_entry", "=", pe_name], ["docstatus", "=", 1]]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 200,
+    }).get("data", [])
+
+    # Check if accrual JV was created
     jv_name = None
-    if not failed:
-        # 3. Create GL accrual JV
-        try:
-            jv_resp = client._post("/api/method/create_payroll_accrual_jv", {
-                "payroll_entry": pe_name,
-            })
-            jv_name = jv_resp.get("message") or jv_resp.get("data", {}).get("name")
-        except Exception as e:
-            log.warning("payroll_accrual_jv_failed", pe=pe_name, error=str(e))
-            # Not fatal — slips are already submitted
+    pe_doc = client._get(f"/api/resource/Payroll Entry/{pe_name}").get("data", {})
+    if pe_doc.get("salary_slips_submitted"):
+        # ERPNext stores PE dates in user_remark like "Accrual JE for salaries from X to Y"
+        start = pe_doc.get("start_date", "")
+        end = pe_doc.get("end_date", "")
+        jvs = client._get("/api/resource/Journal Entry", params={
+            "filters": json.dumps([
+                ["user_remark", "like", f"%{start}%{end}%"],
+                ["voucher_type", "=", "Journal Entry"],
+                ["docstatus", "=", 1],
+            ]),
+            "fields": json.dumps(["name"]),
+            "limit_page_length": 1,
+            "order_by": "creation desc",
+        }).get("data", [])
+        if jvs:
+            jv_name = jvs[0]["name"]
 
-    log.info("payroll_submitted", pe=pe_name, submitted=submitted, failed=len(failed))
-    return {"submitted": submitted, "failed": failed, "jv_name": jv_name}
+    log.info("payroll_submitted", pe=pe_name, submitted=len(submitted_slips), jv=jv_name)
+    return {
+        "submitted": len(submitted_slips),
+        "failed": [],
+        "jv_name": jv_name,
+    }
