@@ -135,6 +135,7 @@ export default function ProjectDetailPage() {
   });
   const [editAddonSearch, setEditAddonSearch] = useState<string[]>([]);
   const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
+  const [isCreatingAddon, setIsCreatingAddon] = useState(false);
 
 
   const invalidate = useInvalidate();
@@ -332,6 +333,44 @@ export default function ProjectDetailPage() {
     setEditAddonDropdownOpen(currentAddOns.map(() => false));
     const v = venues.find((v) => v.name === salesOrder?.custom_venue);
     setEditVenueDisplayName(v?.supplier_name || salesOrder?.custom_venue || "");
+  }
+
+  async function handleCreateEditAddon(rowIndex: number, addonName: string, includeInCommission: boolean) {
+    if (!addonName.trim()) return;
+    setIsCreatingAddon(true);
+    try {
+      const resp = await fetch("/inquiry-api/wedding/addon-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ item_name: addonName.trim() }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        const detail = err.detail;
+        const msg = Array.isArray(detail)
+          ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
+          : detail || "Failed to create add-on";
+        throw new Error(msg);
+      }
+      const item = await resp.json();
+      const itemCode = item.name ?? addonName;
+      const itemName = item.item_name ?? addonName;
+      const updated = editForm.addOns.map((a, i) =>
+        i === rowIndex ? { ...a, itemCode, itemName, includeInCommission } : a
+      );
+      setEditForm({ ...editForm, addOns: updated });
+      const newSearch = [...editAddonSearch];
+      newSearch[rowIndex] = itemName;
+      setEditAddonSearch(newSearch);
+      const newOpen = [...editAddonDropdownOpen];
+      newOpen[rowIndex] = false;
+      setEditAddonDropdownOpen(newOpen);
+    } catch (err: any) {
+      setEditError(err?.message || "Failed to create add-on");
+    } finally {
+      setIsCreatingAddon(false);
+    }
   }
 
   // Populate staff form (lead/support/assistants)
@@ -1439,6 +1478,23 @@ export default function ProjectDetailPage() {
                                 {item.item_name}
                               </div>
                             ))}
+                          {(editAddonSearch[i] ?? "").length > 0 &&
+                            !availableAddOns.some((item) => item.item_name.toLowerCase() === (editAddonSearch[i] ?? "").toLowerCase()) && (
+                            <div
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleCreateEditAddon(i, editAddonSearch[i] ?? "", addon.includeInCommission);
+                              }}
+                              className="px-3 py-2 text-sm cursor-pointer hover:bg-muted flex items-center gap-2 text-[#C4A962]"
+                            >
+                              {isCreatingAddon ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Plus className="h-3 w-3" />
+                              )}
+                              Create "{editAddonSearch[i]}"
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

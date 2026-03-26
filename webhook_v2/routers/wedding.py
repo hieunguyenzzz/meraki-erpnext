@@ -257,6 +257,8 @@ def update_addons(project_name: str, req: AddonsRequest):
 
     addon_rows = []
     for addon in req.items:
+        if not addon.item_code:
+            continue
         row = {
             "item_code": addon.item_code,
             "item_name": addon.item_name,
@@ -373,6 +375,8 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
 
     addon_rows = []
     for addon in req.addons:
+        if not addon.item_code:
+            continue
         row = {
             "item_code": addon.item_code,
             "item_name": addon.item_name,
