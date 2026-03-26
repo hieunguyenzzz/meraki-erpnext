@@ -301,6 +301,7 @@ class UpdateDetailsAddonItem(BaseModel):
 class UpdateWeddingDetailsRequest(BaseModel):
     venue: str | None = None
     addons: list[UpdateDetailsAddonItem] = []
+    tax_type: str | None = None  # "vat" or "none", None = no change
 
 
 @router.put("/wedding/{project_name}/details")
@@ -337,7 +338,19 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to update venue: {e}")
 
-    # 2. Update add-on items via update_child_qty_rate
+    # 2. Update tax type via server script
+    if req.tax_type in ("vat", "none"):
+        try:
+            client._post("/api/method/meraki_update_so_taxes", {
+                "so_name": so_name,
+                "tax_type": req.tax_type,
+            })
+            # Re-fetch SO after tax change (totals changed)
+            so = client._get(f"/api/resource/Sales Order/{so_name}").get("data", {})
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to update tax: {e}")
+
+    # 3. Update add-on items via update_child_qty_rate
     original_items = so.get("items", [])
     planning_service_rows = [
         {
@@ -385,7 +398,7 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update add-ons: {e}")
 
-    # 3. Recalculate commission_base
+    # 4. Recalculate commission_base
     package_rate = next(
         (item["rate"] for item in original_items if item.get("item_code") == "Wedding Planning Service"),
         0,

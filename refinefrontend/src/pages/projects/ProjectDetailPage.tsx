@@ -131,6 +131,7 @@ export default function ProjectDetailPage() {
     assistant4: "",
     assistant5: "",
     addOns: [] as { itemCode: string; itemName: string; qty: number; rate: number; includeInCommission: boolean }[],
+    taxType: "tax_free" as "tax_free" | "vat_included",
   });
   const [editAddonSearch, setEditAddonSearch] = useState<string[]>([]);
   const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
@@ -182,6 +183,7 @@ export default function ProjectDetailPage() {
         "per_billed",
         "per_delivered",
         "status",
+        "total_taxes_and_charges",
       ],
     },
     queryOptions: { enabled: !!project?.sales_order },
@@ -324,6 +326,7 @@ export default function ProjectDetailPage() {
       ...prev,
       venue: salesOrder?.custom_venue || "",
       addOns: currentAddOns,
+      taxType: (salesOrder?.total_taxes_and_charges > 0) ? "vat_included" : "tax_free",
     }));
     setEditAddonSearch(currentAddOns.map((a) => a.itemName));
     setEditAddonDropdownOpen(currentAddOns.map(() => false));
@@ -357,6 +360,7 @@ export default function ProjectDetailPage() {
         credentials: "include",
         body: JSON.stringify({
           venue: editForm.venue || null,
+          tax_type: editForm.taxType === "vat_included" ? "vat" : "none",
           addons: editForm.addOns.map((a) => ({
             item_code: a.itemCode,
             item_name: a.itemName,
@@ -1344,6 +1348,31 @@ export default function ProjectDetailPage() {
                     </Command>
                   </ShadcnPopoverContent>
                 </ShadcnPopover>
+              </div>
+
+              {/* Tax Type */}
+              <div className="space-y-2">
+                <Label>Tax</Label>
+                <div className="flex gap-3">
+                  {[
+                    { value: "tax_free" as const, label: "Tax Free" },
+                    { value: "vat_included" as const, label: "VAT Included (8%)" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, taxType: opt.value })}
+                      className={cn(
+                        "flex-1 py-2 px-3 rounded-md border text-sm font-medium transition-all",
+                        editForm.taxType === opt.value
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Add-ons */}
