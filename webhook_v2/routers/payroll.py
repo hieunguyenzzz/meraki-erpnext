@@ -23,6 +23,46 @@ class GeneratePayrollRequest(BaseModel):
 COMMISSION_COMPONENTS = ["Lead Planner Commission", "Support Planner Commission", "Assistant Commission"]
 
 
+def _ensure_salary_structure_assignments(client: ERPNextClient):
+    """Create SSA (base=0) for any active employee who doesn't have one yet."""
+    active_emps = client._get("/api/resource/Employee", params={
+        "filters": json.dumps([["status", "=", "Active"]]),
+        "fields": json.dumps(["name", "date_of_joining"]),
+        "limit_page_length": 200,
+    }).get("data", [])
+
+    existing_ssas = client._get("/api/resource/Salary Structure Assignment", params={
+        "filters": json.dumps([["docstatus", "=", 1]]),
+        "fields": json.dumps(["employee"]),
+        "limit_page_length": 500,
+    }).get("data", [])
+    has_ssa = {s["employee"] for s in existing_ssas}
+
+    created = 0
+    for emp in active_emps:
+        if emp["name"] in has_ssa:
+            continue
+        try:
+            from_date = emp.get("date_of_joining") or "2026-01-01"
+            ssa = client._post("/api/resource/Salary Structure Assignment", {
+                "employee": emp["name"],
+                "salary_structure": "Monthly Salary",
+                "from_date": from_date,
+                "base": 0,
+                "company": "Meraki Wedding Planner",
+            })
+            client._post("/api/method/frappe.client.submit", {
+                "doc": json.dumps(ssa["data"]),
+            })
+            created += 1
+            log.info("ssa_auto_created", employee=emp["name"])
+        except Exception as e:
+            log.error("ssa_auto_create_failed", employee=emp["name"], error=str(e))
+
+    if created:
+        log.info("ssa_auto_created_total", count=created)
+
+
 @router.post("/generate-payroll")
 async def generate_payroll(request: GeneratePayrollRequest):
     """
@@ -65,6 +105,9 @@ async def generate_payroll(request: GeneratePayrollRequest):
         pe_name = pe_resp["data"]["name"]
         is_new = True
         log.info("payroll_entry_created", pe=pe_name)
+
+    # Step 1b: Auto-create Salary Structure Assignments for employees missing one
+    _ensure_salary_structure_assignments(client)
 
     # Step 2: Fill employees + create salary slips
     if is_new:

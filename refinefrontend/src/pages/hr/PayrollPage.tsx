@@ -331,8 +331,10 @@ export default function PayrollPage() {
     fetchDetails();
   }, [basicSlips.map(s => s.name).join(","), apiUrl, detailRefreshKey]);
 
-  const salarySlips = detailedSlips.length > 0 ? detailedSlips : basicSlips;
-  const hasDraftSlips = salarySlips.some((s) => s.docstatus === 0);
+  const allSlips = detailedSlips.length > 0 ? detailedSlips : basicSlips;
+  // Hide draft slips with zero pay (freelancers with no weddings this month)
+  const salarySlips = allSlips.filter((s) => s.docstatus === 1 || s.gross_pay > 0);
+  const hasDraftSlips = allSlips.some((s) => s.docstatus === 0);
   const allSlipsSubmitted = selectedPE && salarySlips.length > 0 && salarySlips.every((s) => s.docstatus === 1);
 
   const { result: empResult } = useList({
