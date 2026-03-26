@@ -437,11 +437,21 @@ class AddonItemCreateRequest(BaseModel):
 
 @router.post("/wedding/addon-item")
 def create_addon_item(req: AddonItemCreateRequest):
-    """Create a new add-on Item in ERPNext using server-side API key auth."""
+    """Create a new add-on Item in ERPNext, or return the existing one."""
     client = ERPNextClient()
+    item_name = req.item_name.strip()
+    # Check if item already exists
+    existing = client._get("/api/resource/Item", params={
+        "filters": json.dumps([["item_code", "=", item_name]]),
+        "fields": '["name","item_name"]',
+        "limit_page_length": 1,
+    })
+    if existing.get("data"):
+        item = existing["data"][0]
+        return {"name": item["name"], "item_name": item["item_name"]}
     result = client._post("/api/resource/Item", {
-        "item_name": req.item_name.strip(),
-        "item_code": req.item_name.strip(),
+        "item_name": item_name,
+        "item_code": item_name,
         "item_group": "Add-on Services",
         "is_sales_item": 1,
         "is_stock_item": 0,

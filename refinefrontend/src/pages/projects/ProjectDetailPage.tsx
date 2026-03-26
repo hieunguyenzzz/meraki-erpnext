@@ -366,6 +366,8 @@ export default function ProjectDetailPage() {
       const newOpen = [...editAddonDropdownOpen];
       newOpen[rowIndex] = false;
       setEditAddonDropdownOpen(newOpen);
+      // Refresh addon list so the new item appears in future dropdowns
+      invalidate({ resource: "Item", invalidates: ["list"] });
     } catch (err: any) {
       setEditError(err?.message || "Failed to create add-on");
     } finally {
