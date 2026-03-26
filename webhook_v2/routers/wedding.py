@@ -235,6 +235,7 @@ def update_addons(project_name: str, req: AddonsRequest):
     # 3. Build trans_items: keep all "Wedding Planning Service" rows (with their name/docname
     #    so update_child_qty_rate treats them as existing rows, not new ones) + new add-on rows.
     original_items = so.get("items", [])
+    default_wh = "Stores - MWP"
     planning_service_rows = [
         {
             "docname": item["name"],
@@ -243,6 +244,7 @@ def update_addons(project_name: str, req: AddonsRequest):
             "qty": item["qty"],
             "rate": item["rate"],
             "conversion_factor": item.get("conversion_factor", 1),
+            "warehouse": item.get("warehouse") or default_wh,
         }
         for item in original_items
         if item.get("item_code") == "Wedding Planning Service"
@@ -259,18 +261,19 @@ def update_addons(project_name: str, req: AddonsRequest):
     for addon in req.items:
         if not addon.item_code:
             continue
+        existing = existing_addon_by_code.get(addon.item_code)
         row = {
             "item_code": addon.item_code,
             "item_name": addon.item_name,
             "qty": addon.qty,
             "rate": addon.rate,
             "conversion_factor": 1,
-            "warehouse": "Stores - MWP",
+            "warehouse": (existing.get("warehouse") if existing else None) or default_wh,
         }
         # If this item_code already exists on the SO, pass its docname so it's
         # treated as an update rather than a new insert.
-        if addon.item_code in existing_addon_by_code:
-            row["docname"] = existing_addon_by_code[addon.item_code]["name"]
+        if existing:
+            row["docname"] = existing["name"]
         addon_rows.append(row)
 
     trans_items = planning_service_rows + addon_rows
@@ -355,6 +358,7 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
 
     # 3. Update add-on items via update_child_qty_rate
     original_items = so.get("items", [])
+    default_wh = "Stores - MWP"
     planning_service_rows = [
         {
             "docname": item["name"],
@@ -363,6 +367,7 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
             "qty": item["qty"],
             "rate": item["rate"],
             "conversion_factor": item.get("conversion_factor", 1),
+            "warehouse": item.get("warehouse") or default_wh,
         }
         for item in original_items
         if item.get("item_code") == "Wedding Planning Service"
@@ -378,16 +383,17 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
     for addon in req.addons:
         if not addon.item_code:
             continue
+        existing = existing_addon_by_code.get(addon.item_code)
         row = {
             "item_code": addon.item_code,
             "item_name": addon.item_name,
             "qty": addon.qty,
             "rate": addon.rate,
             "conversion_factor": 1,
-            "warehouse": "Stores - MWP",
+            "warehouse": (existing.get("warehouse") if existing else None) or default_wh,
         }
-        if addon.item_code in existing_addon_by_code:
-            row["docname"] = existing_addon_by_code[addon.item_code]["name"]
+        if existing:
+            row["docname"] = existing["name"]
         addon_rows.append(row)
 
     trans_items = planning_service_rows + addon_rows
