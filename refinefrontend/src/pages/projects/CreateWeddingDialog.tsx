@@ -155,18 +155,16 @@ export function CreateWeddingDialog({
   });
   const venues = (venuesResult?.data ?? []) as { name: string; supplier_name: string }[];
 
-  // Fetch add-on items from ERPNext
-  const { result: addOnItemsResult } = useList({
-    resource: "Item",
-    pagination: { mode: "off" },
-    filters: [{ field: "item_group", operator: "eq", value: "Add-on Services" }],
-    meta: { fields: ["name", "item_name", "custom_include_in_commission"] },
-  });
-  const addOnItems = (addOnItemsResult?.data ?? []) as {
-    name: string;
-    item_name: string;
-    custom_include_in_commission: 0 | 1;
-  }[];
+  // Fetch add-on items via backend (avoids ERPNext 403)
+  const [addOnItems, setAddOnItems] = useState<{ name: string; item_name: string; custom_include_in_commission: 0 | 1 }[]>([]);
+  const fetchAddonItems = useCallback(async () => {
+    try {
+      const res = await fetch("/inquiry-api/wedding/addon-items", { credentials: "include" });
+      const json = await res.json();
+      setAddOnItems(json.data ?? []);
+    } catch { setAddOnItems([]); }
+  }, []);
+  useEffect(() => { fetchAddonItems(); }, [fetchAddonItems]);
 
   // Fetch active employees for team selection
   const { result: employeesResult } = useList({
@@ -392,6 +390,7 @@ export function CreateWeddingDialog({
       const newOpen = [...addonDropdownOpen];
       newOpen[rowIndex] = false;
       setAddonDropdownOpen(newOpen);
+      fetchAddonItems();
     } catch (err: any) {
       setAddonCreateError(err?.message || "Failed to create add-on");
     } finally {

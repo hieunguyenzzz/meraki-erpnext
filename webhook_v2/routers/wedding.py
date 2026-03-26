@@ -435,6 +435,17 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
 class AddonItemCreateRequest(BaseModel):
     item_name: str
 
+@router.get("/wedding/addon-items")
+def list_addon_items():
+    """Return all Items in the 'Add-on Services' group."""
+    client = ERPNextClient()
+    data = client._get("/api/resource/Item", params={
+        "filters": json.dumps([["item_group", "=", "Add-on Services"]]),
+        "fields": json.dumps(["name", "item_name", "custom_include_in_commission"]),
+        "limit_page_length": 0,
+    }).get("data", [])
+    return {"data": data}
+
 @router.post("/wedding/addon-item")
 def create_addon_item(req: AddonItemCreateRequest):
     """Create a new add-on Item in ERPNext, or return the existing one."""
