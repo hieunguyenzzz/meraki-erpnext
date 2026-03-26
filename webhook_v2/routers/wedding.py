@@ -436,6 +436,20 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
     except Exception as e:
         log.warning("commission_base_update_failed", so=so_name, error=str(e))
 
+    # 5. Persist include_in_commission flag on each addon Item
+    for addon in req.addons:
+        if not addon.item_code or addon.item_code == "Wedding Planning Service":
+            continue
+        try:
+            client._post("/api/method/frappe.client.set_value", {
+                "doctype": "Item",
+                "name": addon.item_code,
+                "fieldname": "custom_include_in_commission",
+                "value": 1 if addon.include_in_commission else 0,
+            })
+        except Exception:
+            pass  # non-critical, best-effort
+
     log.info("wedding_details_updated", project=project_name, so=so_name, commission_base=commission_base)
     return {"success": True, "commission_base": commission_base}
 
