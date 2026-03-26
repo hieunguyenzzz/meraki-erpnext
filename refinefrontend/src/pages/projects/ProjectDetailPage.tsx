@@ -301,8 +301,10 @@ export default function ProjectDetailPage() {
     try {
       const res = await fetch("/inquiry-api/wedding/addon-items", { credentials: "include" });
       const json = await res.json();
-      setAvailableAddOns(json.data ?? []);
-    } catch { setAvailableAddOns([]); }
+      const items = json.data ?? [];
+      setAvailableAddOns(items);
+      return items;
+    } catch { setAvailableAddOns([]); return []; }
   }, []);
   useEffect(() => { fetchAddonItems(); }, [fetchAddonItems]);
 
@@ -313,10 +315,11 @@ export default function ProjectDetailPage() {
   }
 
   // Populate details form (venue + add-ons)
-  function populateDetailsForm() {
+  function populateDetailsForm(freshAddOns?: typeof availableAddOns) {
     if (!project) return;
+    const addOnsLookup = freshAddOns ?? availableAddOns;
     const currentAddOns = addOnItems.map((i) => {
-      const itemMeta = availableAddOns.find((a) => a.name === i.item_code);
+      const itemMeta = addOnsLookup.find((a) => a.name === i.item_code);
       return {
         itemCode: i.item_code,
         itemName: i.item_name,
@@ -737,7 +740,7 @@ export default function ProjectDetailPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => { populateDetailsForm(); setEditDetailsOpen(true); }}
+                      onClick={async () => { const fresh = await fetchAddonItems(); populateDetailsForm(fresh); setEditDetailsOpen(true); }}
                     >
                       <Pencil className="h-3 w-3 mr-1" /> Edit
                     </Button>
