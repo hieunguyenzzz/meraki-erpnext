@@ -207,6 +207,9 @@ export default function LeaveReportPage() {
     });
   }, [employees, allocations, applications, currentYear]);
 
+  // Hide employees with no leave allocations (freelancers / no-salary staff)
+  const filteredRows = rows.filter((r) => r.oldAllocationDays > 0 || r.newAllocationDays > 0);
+
   const isLoading = empQuery?.isLoading;
 
   return (
@@ -221,7 +224,7 @@ export default function LeaveReportPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">
-            {employees.length} Active Employees
+            {filteredRows.length} Employees
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -265,7 +268,7 @@ export default function LeaveReportPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((row) => (
+                  {filteredRows.map((row) => (
                     <TableRow key={row.employee}>
                       <TableCell className="sticky left-0 z-10 bg-background font-medium">
                         {row.employeeName}
@@ -319,7 +322,7 @@ export default function LeaveReportPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {rows.length === 0 && (
+                  {filteredRows.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={19 + MONTHS.length} className="text-center text-muted-foreground py-8">
                         No active employees found
