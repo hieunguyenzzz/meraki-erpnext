@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
-from webhook_v2.routers.allowance import generate_allowances_for_period
+from webhook_v2.routers.allowance import _get_rate, _get_project_data, _get_assigned_employees
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -158,13 +158,9 @@ async def generate_payroll(request: GeneratePayrollRequest):
         })
         log.info("salary_slips_regenerated", pe=pe_name, deleted=len(existing_slips))
 
-    # Step 3: Auto-generate wedding allowances (idempotent)
-    allowance_result = generate_allowances_for_period(client, start_date, end_date)
-    log.info("allowances_generated", **allowance_result)
-
-    # Step 4: Recalculate commissions
-    commissions_result = _apply_commissions(client, pe_name, start_date, end_date)
-    log.info("commissions_applied", **commissions_result)
+    # Step 3: Apply allowances + commissions directly to draft salary slips
+    extras_result = _apply_allowances_and_commissions(client, pe_name, start_date, end_date)
+    log.info("extras_applied", **extras_result)
 
     # Final slip count
     slips = client._get("/api/resource/Salary Slip", params={
@@ -178,13 +174,16 @@ async def generate_payroll(request: GeneratePayrollRequest):
         "payroll_entry": pe_name,
         "is_new": is_new,
         "slips_count": len(slips),
-        "allowances": allowance_result,
-        "commissions": commissions_result,
+        "extras": extras_result,
     }
 
 
-def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end_date: str) -> dict:
-    """Calculate and apply commission earnings to all draft salary slips for this PE."""
+def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start_date: str, end_date: str) -> dict:
+    """Calculate and apply wedding allowances + commissions to all draft salary slips.
+
+    Both are written directly as earning rows on the slip (no Additional Salary docs).
+    This is idempotent — old rows are stripped and fresh ones written each time.
+    """
 
     # Fetch submitted SOs with delivery_date in period
     so_data = client._get("/api/resource/Sales Order", params={
@@ -225,9 +224,9 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
     }).get("data", [])
 
     if not draft_slips:
-        return {"applied": 0, "employees_with_commission": 0}
+        return {"applied": 0, "commissions": 0, "allowances": 0}
 
-    # Fetch employee commission percentages
+    # Fetch employee data (commission rates + allowance rates)
     employee_ids = [s["employee"] for s in draft_slips]
     emp_data = client._get("/api/resource/Employee", params={
         "filters": json.dumps([["name", "in", employee_ids]]),
@@ -236,9 +235,15 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
             "custom_lead_commission_pct",
             "custom_support_commission_pct",
             "custom_assistant_commission_pct",
+            "custom_allowance_hcm_full",
+            "custom_allowance_hcm_partial",
+            "custom_allowance_dest_full",
+            "custom_allowance_dest_partial",
         ]),
         "limit_page_length": 200,
     }).get("data", [])
+
+    emp_map: dict[str, dict] = {emp["name"]: emp for emp in emp_data}
 
     emp_comm_map: dict[str, dict] = {
         emp["name"]: {
@@ -249,7 +254,7 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
         for emp in emp_data
     }
 
-    # Build commission totals per employee
+    # --- Build commission totals per employee ---
     comm_totals: dict[str, dict[str, float]] = {}
 
     def add_comm(emp_id: str, role: str, net_total: float, proj: dict):
@@ -257,7 +262,6 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
             return
         if emp_id not in comm_totals:
             comm_totals[emp_id] = {"lead": 0.0, "support": 0.0, "assistant": 0.0}
-        # Project-level override takes priority, fall back to employee default
         proj_pct = proj.get(f"custom_{role}_commission_pct")
         if proj_pct is not None and proj_pct > 0:
             pct = float(proj_pct)
@@ -274,23 +278,50 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
         add_comm(proj.get("custom_assistant_1"), "assistant", net_total, proj)
         add_comm(proj.get("custom_assistant_2"), "assistant", net_total, proj)
 
-    # Update each draft salary slip
+    # --- Build allowance totals per employee ---
+    allowance_totals: dict[str, float] = {}
+
+    for proj in projects:
+        proj_name = proj["name"]
+        try:
+            proj_detail = _get_project_data(client, proj_name)
+        except Exception:
+            continue
+        wedding_type = proj_detail["wedding_type"]
+        service_type = proj_detail["service_type"]
+
+        for field in ["custom_lead_planner", "custom_support_planner",
+                      "custom_assistant_1", "custom_assistant_2"]:
+            emp_id = proj.get(field)
+            if not emp_id or emp_id not in emp_map:
+                continue
+            rate = _get_rate(emp_map[emp_id], wedding_type, service_type)
+            if rate > 0:
+                allowance_totals[emp_id] = allowance_totals.get(emp_id, 0.0) + rate
+
+    # --- Write earnings to each draft salary slip ---
+    STRIP_COMPONENTS = set(COMMISSION_COMPONENTS + ["Wedding Allowance"])
     applied = 0
     employees_with_commission = 0
+    employees_with_allowance = 0
+
     for slip in draft_slips:
         try:
             full_slip = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
             current_deductions = full_slip.get("deductions", [])
 
-            # Strip old commission rows, keep everything else
+            # Strip old commission + allowance rows, keep base salary rows
             base_earnings = [
                 e for e in full_slip.get("earnings", [])
-                if e.get("salary_component") not in COMMISSION_COMPONENTS
+                if e.get("salary_component") not in STRIP_COMPONENTS
             ]
 
             new_earnings = list(base_earnings)
+            emp_id = slip["employee"]
+
+            # Add commissions
             has_commission = False
-            totals = comm_totals.get(slip["employee"])
+            totals = comm_totals.get(emp_id)
             if totals:
                 if totals["lead"] > 0:
                     new_earnings.append({"salary_component": "Lead Planner Commission", "amount": round(totals["lead"])})
@@ -302,6 +333,13 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
                     new_earnings.append({"salary_component": "Assistant Commission", "amount": round(totals["assistant"])})
                     has_commission = True
 
+            # Add wedding allowance
+            has_allowance = False
+            allowance_amt = allowance_totals.get(emp_id, 0)
+            if allowance_amt > 0:
+                new_earnings.append({"salary_component": "Wedding Allowance", "amount": round(allowance_amt)})
+                has_allowance = True
+
             client._put(f"/api/resource/Salary Slip/{slip['name']}", {
                 "earnings": new_earnings,
                 "deductions": current_deductions,
@@ -309,10 +347,12 @@ def _apply_commissions(client: ERPNextClient, pe_name: str, start_date: str, end
             applied += 1
             if has_commission:
                 employees_with_commission += 1
+            if has_allowance:
+                employees_with_allowance += 1
         except Exception as e:
-            log.error("commission_apply_failed", slip=slip["name"], error=str(e))
+            log.error("extras_apply_failed", slip=slip["name"], error=str(e))
 
-    return {"applied": applied, "employees_with_commission": employees_with_commission}
+    return {"applied": applied, "commissions": employees_with_commission, "allowances": employees_with_allowance}
 
 
 class SubmitPayrollRequest(BaseModel):
