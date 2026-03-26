@@ -1,47 +1,9 @@
 import json, os, tempfile
 from pathlib import Path
 
-# Append-only — never reorder or remove entries
+# Old phases (v001–v039) removed — their setup is baked into the DB dump.
+# New phases start fresh from here.
 ORDERED_PHASES = [
-    "v001_wedding_venues",
-    "v002_wedding_service_item",
-    "v003_wedding_service_item_fix",
-    "v004_remove_meraki_id_unique_constraint",
-    "v005_bhxh_insurance_setup",
-    "v006_employer_bhxh",
-    "v007_fix_jv_and_bh_accounts",
-    "v008_fix_venue_unique_constraint",
-    "v009_more_assistant_fields",
-    "v010_link_projects_to_sales_orders",
-    "v011_backfill_venue_and_lead_planner",
-    "v012_addon_fields",
-    "v013_sales_role",
-    "v014_fix_addon_items_non_stock",
-    "v015_employee_set_value_script",
-    "v016_update_employee_script",
-    "v017_stock_settings_default_warehouse",
-    "v018_review_history_doctype",
-    "v019_clear_middle_names",
-    "v020_wedding_allowance",
-    "v021_venue_custom_fields",
-    "v022_venue_type_field",
-    "v023_fix_casual_leave_max_days",
-    "v024_employee_supplier_read",
-    "v025_planner_role_permissions",
-    "v026_planner_role_permissions_fix",
-    "v027_sales_bypass_user_permissions",
-    "v028_fix_employee_user_permission_scope",
-    "v029_delete_employee_user_permissions",
-    "v030_employee_name_field_in_script",
-    "v031_leave_year_july_reset",
-    "v032_leave_year_aug_reset",
-    "v033_leave_allocation_self_service_permission",
-    "v034_fix_new_cl_allocation_from_date",
-    "v035_job_application_custom_fields",
-    "v036_welcome_email_setting",
-    "v037_employee_dependents_field",
-    "v038_wedding_allowance_account",
-    "v039_project_commission_fields",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -71,48 +33,7 @@ def save_state(state_file: Path, applied: list) -> None:
 
 
 def run_pending(client) -> int:
-    from phases import v001_wedding_venues, v002_wedding_service_item, v003_wedding_service_item_fix, v004_remove_meraki_id_unique_constraint, v005_bhxh_insurance_setup, v006_employer_bhxh, v007_fix_jv_and_bh_accounts, v008_fix_venue_unique_constraint, v009_more_assistant_fields, v010_link_projects_to_sales_orders, v011_backfill_venue_and_lead_planner, v012_addon_fields, v013_sales_role, v014_fix_addon_items_non_stock, v015_employee_set_value_script, v016_update_employee_script, v017_stock_settings_default_warehouse, v018_review_history_doctype, v019_clear_middle_names, v020_wedding_allowance, v021_venue_custom_fields, v022_venue_type_field, v023_fix_casual_leave_max_days, v024_employee_supplier_read, v025_planner_role_permissions, v026_planner_role_permissions_fix, v027_sales_bypass_user_permissions, v028_fix_employee_user_permission_scope, v029_delete_employee_user_permissions, v030_employee_name_field_in_script, v031_leave_year_july_reset, v032_leave_year_aug_reset, v033_leave_allocation_self_service_permission, v034_fix_new_cl_allocation_from_date, v035_job_application_custom_fields, v036_welcome_email_setting, v037_employee_dependents_field, v038_wedding_allowance_account, v039_project_commission_fields
-
     phase_fns = {
-        "v001_wedding_venues": v001_wedding_venues.run,
-        "v002_wedding_service_item": v002_wedding_service_item.run,
-        "v003_wedding_service_item_fix": v003_wedding_service_item_fix.run,
-        "v004_remove_meraki_id_unique_constraint": v004_remove_meraki_id_unique_constraint.run,
-        "v005_bhxh_insurance_setup": v005_bhxh_insurance_setup.run,
-        "v006_employer_bhxh": v006_employer_bhxh.run,
-        "v007_fix_jv_and_bh_accounts": v007_fix_jv_and_bh_accounts.run,
-        "v008_fix_venue_unique_constraint": v008_fix_venue_unique_constraint.run,
-        "v009_more_assistant_fields": v009_more_assistant_fields.run,
-        "v010_link_projects_to_sales_orders": v010_link_projects_to_sales_orders.run,
-        "v011_backfill_venue_and_lead_planner": v011_backfill_venue_and_lead_planner.run,
-        "v012_addon_fields": v012_addon_fields.run,
-        "v013_sales_role": v013_sales_role.run,
-        "v014_fix_addon_items_non_stock": v014_fix_addon_items_non_stock.run,
-        "v015_employee_set_value_script": v015_employee_set_value_script.run,
-        "v016_update_employee_script": v016_update_employee_script.run,
-        "v017_stock_settings_default_warehouse": v017_stock_settings_default_warehouse.run,
-        "v018_review_history_doctype": v018_review_history_doctype.run,
-        "v019_clear_middle_names": v019_clear_middle_names.run,
-        "v020_wedding_allowance": v020_wedding_allowance.run,
-        "v021_venue_custom_fields": v021_venue_custom_fields.run,
-        "v022_venue_type_field": v022_venue_type_field.run,
-        "v023_fix_casual_leave_max_days": v023_fix_casual_leave_max_days.run,
-        "v024_employee_supplier_read": v024_employee_supplier_read.run,
-        "v025_planner_role_permissions": v025_planner_role_permissions.run,
-        "v026_planner_role_permissions_fix": v026_planner_role_permissions_fix.run,
-        "v027_sales_bypass_user_permissions": v027_sales_bypass_user_permissions.run,
-        "v028_fix_employee_user_permission_scope": v028_fix_employee_user_permission_scope.run,
-        "v029_delete_employee_user_permissions": v029_delete_employee_user_permissions.run,
-        "v030_employee_name_field_in_script": v030_employee_name_field_in_script.run,
-        "v031_leave_year_july_reset": v031_leave_year_july_reset.run,
-        "v032_leave_year_aug_reset": v032_leave_year_aug_reset.run,
-        "v033_leave_allocation_self_service_permission": v033_leave_allocation_self_service_permission.run,
-        "v034_fix_new_cl_allocation_from_date": v034_fix_new_cl_allocation_from_date.run,
-        "v035_job_application_custom_fields": v035_job_application_custom_fields.run,
-        "v036_welcome_email_setting": v036_welcome_email_setting.run,
-        "v037_employee_dependents_field": v037_employee_dependents_field.run,
-        "v038_wedding_allowance_account": v038_wedding_allowance_account.run,
-        "v039_project_commission_fields": v039_project_commission_fields.run,
     }
 
     state_file = get_state_file()
