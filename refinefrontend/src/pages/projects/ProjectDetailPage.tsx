@@ -65,6 +65,21 @@ const WEDDING_PHASES = [
 
 const PRIORITY_OPTIONS = ["Low", "Medium", "High", "Urgent"];
 
+const VENDOR_CATEGORIES = [
+  "Decoration / Floral",
+  "Photography",
+  "Videography",
+  "Makeup & Hair",
+  "MC / Emcee",
+  "Music / DJ / Band",
+  "Catering",
+  "Wedding Cake",
+  "Invitation / Stationery",
+  "Bridal Attire",
+  "Transportation",
+  "Lighting / Effects",
+];
+
 function stageBadgeVariant(stage: string) {
   switch (stage) {
     case "Onboarding": return "info" as const;
@@ -140,6 +155,15 @@ export default function ProjectDetailPage() {
   const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
   const [isCreatingAddon, setIsCreatingAddon] = useState(false);
 
+  // Vendor tab state
+  const [vendors, setVendors] = useState<{category: string; supplier: string; supplierName: string; notes: string}[]>([]);
+  const [addingVendor, setAddingVendor] = useState(false);
+  const [newVendor, setNewVendor] = useState({ category: "", supplier: "", notes: "" });
+  const [vendorSupplierOpen, setVendorSupplierOpen] = useState(false);
+  const [vendorSupplierSearch, setVendorSupplierSearch] = useState("");
+  const [isSavingVendors, setIsSavingVendors] = useState(false);
+  const [vendorError, setVendorError] = useState<string | null>(null);
+  const [isCreatingVendorSupplier, setIsCreatingVendorSupplier] = useState(false);
 
   const invalidate = useInvalidate();
   const { mutateAsync: updateRecord } = useUpdate();
@@ -171,6 +195,7 @@ export default function ProjectDetailPage() {
         "custom_lead_commission_pct",
         "custom_support_commission_pct",
         "custom_assistant_commission_pct",
+        "custom_wedding_vendors",
       ],
     },
   });
@@ -301,6 +326,17 @@ export default function ProjectDetailPage() {
   });
   const venues = (venuesResult?.data ?? []) as { name: string; supplier_name: string }[];
 
+  // Fetch all Suppliers for vendor selection
+  const { result: allSuppliersResult } = useList({
+    resource: "Supplier",
+    pagination: { mode: "off" as const },
+    meta: { fields: ["name", "supplier_name"] },
+  });
+  const allSuppliers = useMemo(
+    () => (allSuppliersResult?.data ?? []) as { name: string; supplier_name: string }[],
+    [allSuppliersResult?.data]
+  );
+
   // Fetch available add-on items via backend (avoids ERPNext 403)
   const [availableAddOns, setAvailableAddOns] = useState<{ name: string; item_name: string; custom_include_in_commission?: number }[]>([]);
   const fetchAddonItems = useCallback(async () => {
@@ -313,6 +349,89 @@ export default function ProjectDetailPage() {
     } catch { setAvailableAddOns([]); return []; }
   }, []);
   useEffect(() => { fetchAddonItems(); }, [fetchAddonItems]);
+
+  // Sync vendors from project data
+  useEffect(() => {
+    if (project?.custom_wedding_vendors) {
+      setVendors(project.custom_wedding_vendors.map((v: any) => ({
+        category: v.category,
+        supplier: v.supplier,
+        supplierName: allSuppliers.find(s => s.name === v.supplier)?.supplier_name || v.supplier,
+        notes: v.notes || "",
+      })));
+    }
+  }, [project?.custom_wedding_vendors, allSuppliers]);
+
+  async function saveVendors(updatedVendors: typeof vendors) {
+    setIsSavingVendors(true);
+    setVendorError(null);
+    try {
+      const resp = await fetch(`/inquiry-api/wedding/${name}/vendors`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vendors: updatedVendors.map(v => ({
+            category: v.category,
+            supplier: v.supplier,
+            notes: v.notes,
+          })),
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to save vendors");
+      }
+      invalidate({ resource: "Project", invalidates: ["detail"], id: name });
+    } catch (error) {
+      setVendorError(error instanceof Error ? error.message : "Failed to save vendors");
+    } finally {
+      setIsSavingVendors(false);
+    }
+  }
+
+  function handleAddVendor() {
+    if (!newVendor.category || !newVendor.supplier) return;
+    const supplierObj = allSuppliers.find(s => s.name === newVendor.supplier);
+    const updated = [...vendors, {
+      category: newVendor.category,
+      supplier: newVendor.supplier,
+      supplierName: supplierObj?.supplier_name || newVendor.supplier,
+      notes: newVendor.notes,
+    }];
+    setVendors(updated);
+    saveVendors(updated);
+    setNewVendor({ category: "", supplier: "", notes: "" });
+    setAddingVendor(false);
+    setVendorSupplierSearch("");
+  }
+
+  function handleDeleteVendor(index: number) {
+    const updated = vendors.filter((_, i) => i !== index);
+    setVendors(updated);
+    saveVendors(updated);
+  }
+
+  async function handleCreateVendorSupplier() {
+    if (!vendorSupplierSearch.trim()) return;
+    setIsCreatingVendorSupplier(true);
+    try {
+      const resp = await fetch("/inquiry-api/wedding/vendors/create-supplier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplier_name: vendorSupplierSearch.trim() }),
+      });
+      if (!resp.ok) throw new Error("Failed to create supplier");
+      const created = await resp.json();
+      // Refresh suppliers list
+      invalidate({ resource: "Supplier", invalidates: ["list"] });
+      setNewVendor({ ...newVendor, supplier: created.name });
+      setVendorSupplierOpen(false);
+    } catch (error) {
+      setVendorError(error instanceof Error ? error.message : "Failed to create supplier");
+    } finally {
+      setIsCreatingVendorSupplier(false);
+    }
+  }
 
   function getEmployeeNameById(id: string | null | undefined): string | null {
     if (!id) return null;
@@ -734,6 +853,9 @@ export default function ProjectDetailPage() {
               <TabsTrigger value="overview" className="flex-1 lg:flex-none">
                 Overview
               </TabsTrigger>
+              <TabsTrigger value="vendors" className="flex-1 lg:flex-none">
+                Vendors
+              </TabsTrigger>
               <TabsTrigger value="tasks" className="flex-1 lg:flex-none">
                 Tasks
               </TabsTrigger>
@@ -962,6 +1084,149 @@ export default function ProjectDetailPage() {
                   </CardContent>
                 </Card>
               )}
+            </TabsContent>
+
+            {/* Vendors Tab */}
+            <TabsContent value="vendors" className="mt-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                  <CardTitle>Wedding Vendors</CardTitle>
+                  <Button size="sm" onClick={() => setAddingVendor(true)} disabled={addingVendor}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Vendor
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {vendorError && (
+                    <div className="flex items-center gap-2 p-3 mb-4 text-sm text-destructive bg-destructive/10 rounded-md">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      {vendorError}
+                    </div>
+                  )}
+                  <div className="border rounded-md">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="px-3 py-2 text-left font-medium">Category</th>
+                          <th className="px-3 py-2 text-left font-medium">Vendor</th>
+                          <th className="px-3 py-2 text-left font-medium">Notes</th>
+                          <th className="px-3 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vendors.map((v, i) => (
+                          <tr key={i} className="border-b last:border-b-0">
+                            <td className="px-3 py-2">{v.category}</td>
+                            <td className="px-3 py-2">{v.supplierName}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{v.notes}</td>
+                            <td className="px-3 py-2">
+                              <Button variant="ghost" size="icon" className="h-7 w-7"
+                                onClick={() => handleDeleteVendor(i)} disabled={isSavingVendors}>
+                                <X className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                        {addingVendor && (
+                          <tr className="border-b last:border-b-0 bg-muted/30">
+                            <td className="px-3 py-2">
+                              <Select value={newVendor.category}
+                                onValueChange={(v) => setNewVendor({ ...newVendor, category: v })}>
+                                <SelectTrigger className="h-8"><SelectValue placeholder="Category" /></SelectTrigger>
+                                <SelectContent>
+                                  {VENDOR_CATEGORIES.map(c => (
+                                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-3 py-2">
+                              <ShadcnPopover open={vendorSupplierOpen} onOpenChange={setVendorSupplierOpen}>
+                                <ShadcnPopoverTrigger asChild>
+                                  <button type="button"
+                                    className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm h-8">
+                                    <span className={newVendor.supplier ? "" : "text-muted-foreground"}>
+                                      {newVendor.supplier
+                                        ? (allSuppliers.find(s => s.name === newVendor.supplier)?.supplier_name ?? newVendor.supplier)
+                                        : "Select vendor..."}
+                                    </span>
+                                    <ChevronsUpDown className="h-3 w-3 opacity-50" />
+                                  </button>
+                                </ShadcnPopoverTrigger>
+                                <ShadcnPopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                  <Command>
+                                    <CommandInput placeholder="Search vendors..." value={vendorSupplierSearch} onValueChange={setVendorSupplierSearch} />
+                                    <CommandList>
+                                      <CommandEmpty>
+                                        <div className="py-2 text-center">
+                                          <p className="text-sm text-muted-foreground mb-2">No vendors found</p>
+                                          {vendorSupplierSearch.trim() && (
+                                            <Button type="button" variant="outline" size="sm"
+                                              onClick={handleCreateVendorSupplier} disabled={isCreatingVendorSupplier}>
+                                              <Plus className="h-3 w-3 mr-1" />
+                                              {isCreatingVendorSupplier ? "Creating..." : `Create "${vendorSupplierSearch.trim()}"`}
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </CommandEmpty>
+                                      <CommandGroup>
+                                        {allSuppliers
+                                          .filter(s => !vendorSupplierSearch || s.supplier_name.toLowerCase().includes(vendorSupplierSearch.toLowerCase()))
+                                          .map(s => (
+                                            <CommandItem key={s.name} value={s.supplier_name}
+                                              onSelect={() => {
+                                                setNewVendor({ ...newVendor, supplier: s.name });
+                                                setVendorSupplierOpen(false);
+                                              }}>
+                                              <Check className={cn("mr-2 h-4 w-4", newVendor.supplier === s.name ? "opacity-100" : "opacity-0")} />
+                                              {s.supplier_name}
+                                            </CommandItem>
+                                          ))}
+                                      </CommandGroup>
+                                      {vendorSupplierSearch.trim() && allSuppliers.some(s => s.supplier_name.toLowerCase().includes(vendorSupplierSearch.toLowerCase())) && (
+                                        <CommandGroup heading="Create new">
+                                          <CommandItem value={`__create_${vendorSupplierSearch}`} onSelect={handleCreateVendorSupplier}>
+                                            <Plus className="mr-2 h-4 w-4" />
+                                            Create "{vendorSupplierSearch.trim()}"
+                                          </CommandItem>
+                                        </CommandGroup>
+                                      )}
+                                    </CommandList>
+                                  </Command>
+                                </ShadcnPopoverContent>
+                              </ShadcnPopover>
+                            </td>
+                            <td className="px-3 py-2">
+                              <Input className="h-8" placeholder="Notes (optional)"
+                                value={newVendor.notes}
+                                onChange={e => setNewVendor({ ...newVendor, notes: e.target.value })} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex gap-1">
+                                <Button variant="ghost" size="icon" className="h-7 w-7"
+                                  onClick={handleAddVendor} disabled={!newVendor.category || !newVendor.supplier || isSavingVendors}>
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7"
+                                  onClick={() => { setAddingVendor(false); setNewVendor({ category: "", supplier: "", notes: "" }); setVendorSupplierSearch(""); }}>
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {vendors.length === 0 && !addingVendor && (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                              No vendors added yet
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* Tasks Tab */}
