@@ -4,6 +4,7 @@ from pathlib import Path
 # Old phases (v001–v039) removed — their setup is baked into the DB dump.
 # New phases start fresh from here.
 ORDERED_PHASES = [
+    "v041_wedding_vendors",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -33,7 +34,10 @@ def save_state(state_file: Path, applied: list) -> None:
 
 
 def run_pending(client) -> int:
+    from migration.phases import v041_wedding_vendors
+
     phase_fns = {
+        "v041_wedding_vendors": v041_wedding_vendors.run,
     }
 
     state_file = get_state_file()

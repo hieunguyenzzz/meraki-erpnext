@@ -454,6 +454,69 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
     return {"success": True, "commission_base": commission_base}
 
 
+class VendorItem(BaseModel):
+    category: str
+    supplier: str
+    notes: str = ""
+
+
+class VendorsRequest(BaseModel):
+    vendors: list[VendorItem]
+
+
+@router.put("/wedding/{project_name}/vendors")
+def update_vendors(project_name: str, req: VendorsRequest):
+    """Overwrite the custom_wedding_vendors child table on a Project."""
+    client = ERPNextClient()
+
+    # Fetch full project doc, replace child table, save via PUT
+    project = client._get(f"/api/resource/Project/{project_name}").get("data", {})
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_name}")
+
+    project["custom_wedding_vendors"] = [
+        {"category": v.category, "supplier": v.supplier, "notes": v.notes}
+        for v in req.vendors
+    ]
+
+    try:
+        client._put(f"/api/resource/Project/{project_name}", project)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to update vendors: {e}")
+
+    log.info("vendors_updated", project=project_name, count=len(req.vendors))
+    return {"success": True, "count": len(req.vendors)}
+
+
+class CreateSupplierRequest(BaseModel):
+    supplier_name: str
+
+
+@router.post("/wedding/vendors/create-supplier")
+def create_vendor_supplier(req: CreateSupplierRequest):
+    """Create a Supplier in the 'Wedding Vendors' group."""
+    client = ERPNextClient()
+    supplier_name = req.supplier_name.strip()
+
+    # Return existing supplier if already present
+    existing = client._get("/api/resource/Supplier", params={
+        "filters": json.dumps([["supplier_name", "=", supplier_name]]),
+        "fields": json.dumps(["name", "supplier_name"]),
+        "limit_page_length": 1,
+    }).get("data", [])
+    if existing:
+        s = existing[0]
+        return {"name": s["name"], "supplier_name": s["supplier_name"]}
+
+    result = client._post("/api/resource/Supplier", {
+        "supplier_name": supplier_name,
+        "supplier_group": "Wedding Vendors",
+        "supplier_type": "Company",
+    }).get("data", {})
+
+    return {"name": result.get("name"), "supplier_name": result.get("supplier_name")}
+
+
 class AddonItemCreateRequest(BaseModel):
     item_name: str
 
