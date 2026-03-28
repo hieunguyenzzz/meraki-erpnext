@@ -138,6 +138,7 @@ export default function ProjectDetailPage() {
   const [editVenueDisplayName, setEditVenueDisplayName] = useState("");
   const [editForm, setEditForm] = useState({
     venue: "",
+    totalBudget: "",
     leadPlanner: "",
     supportPlanner: "",
     assistant1: "",
@@ -156,9 +157,9 @@ export default function ProjectDetailPage() {
   const [isCreatingAddon, setIsCreatingAddon] = useState(false);
 
   // Vendor tab state
-  const [vendors, setVendors] = useState<{category: string; supplier: string; supplierName: string; notes: string}[]>([]);
+  const [vendors, setVendors] = useState<{category: string; supplier: string; supplierName: string; amount: number; notes: string}[]>([]);
   const [addingVendor, setAddingVendor] = useState(false);
-  const [newVendor, setNewVendor] = useState({ category: "", supplier: "", notes: "" });
+  const [newVendor, setNewVendor] = useState({ category: "", supplier: "", amount: "", notes: "" });
   const [vendorSupplierOpen, setVendorSupplierOpen] = useState(false);
   const [vendorSupplierSearch, setVendorSupplierSearch] = useState("");
   const [isSavingVendors, setIsSavingVendors] = useState(false);
@@ -196,6 +197,7 @@ export default function ProjectDetailPage() {
         "custom_support_commission_pct",
         "custom_assistant_commission_pct",
         "custom_wedding_vendors",
+        "custom_total_budget",
       ],
     },
   });
@@ -357,6 +359,7 @@ export default function ProjectDetailPage() {
         category: v.category,
         supplier: v.supplier,
         supplierName: allSuppliers.find(s => s.name === v.supplier)?.supplier_name || v.supplier,
+        amount: v.amount || 0,
         notes: v.notes || "",
       })));
     }
@@ -373,6 +376,7 @@ export default function ProjectDetailPage() {
           vendors: updatedVendors.map(v => ({
             category: v.category,
             supplier: v.supplier,
+            amount: v.amount,
             notes: v.notes,
           })),
         }),
@@ -396,11 +400,12 @@ export default function ProjectDetailPage() {
       category: newVendor.category,
       supplier: newVendor.supplier,
       supplierName: supplierObj?.supplier_name || newVendor.supplier,
+      amount: parseFloat(newVendor.amount) || 0,
       notes: newVendor.notes,
     }];
     setVendors(updated);
     saveVendors(updated);
-    setNewVendor({ category: "", supplier: "", notes: "" });
+    setNewVendor({ category: "", supplier: "", amount: "", notes: "" });
     setAddingVendor(false);
     setVendorSupplierSearch("");
   }
@@ -456,6 +461,7 @@ export default function ProjectDetailPage() {
     setEditForm((prev) => ({
       ...prev,
       venue: salesOrder?.custom_venue || "",
+      totalBudget: project?.custom_total_budget ? String(project.custom_total_budget) : "",
       addOns: currentAddOns,
       taxType: (salesOrder?.total_taxes_and_charges > 0) ? "vat_included" : "tax_free",
     }));
@@ -551,6 +557,15 @@ export default function ProjectDetailPage() {
           ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
           : detail || "Failed to save details";
         throw new Error(msg);
+      }
+      // Save total budget on Project if changed
+      const budgetVal = editForm.totalBudget ? parseFloat(editForm.totalBudget) : 0;
+      if (budgetVal !== (project?.custom_total_budget || 0)) {
+        await updateRecord({
+          resource: "Project",
+          id: name!,
+          values: { custom_total_budget: budgetVal },
+        });
       }
       invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
       invalidate({ resource: "Sales Order", invalidates: ["detail"], id: project?.sales_order! });
@@ -916,6 +931,15 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
+                    {project?.custom_total_budget > 0 && (
+                      <div className="flex items-start gap-3 text-sm">
+                        <DollarSign className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Total Wedding Budget</p>
+                          <p className="font-medium">{formatVND(project.custom_total_budget)}</p>
+                        </div>
+                      </div>
+                    )}
                     {addOnItems.length > 0 && (
                       <div className="pt-2 border-t">
                         <p className="text-xs text-muted-foreground mb-2">Add-ons</p>
@@ -1109,6 +1133,7 @@ export default function ProjectDetailPage() {
                         <tr className="border-b bg-muted/50">
                           <th className="px-3 py-2 text-left font-medium">Category</th>
                           <th className="px-3 py-2 text-left font-medium">Vendor</th>
+                          <th className="px-3 py-2 text-right font-medium">Amount</th>
                           <th className="px-3 py-2 text-left font-medium">Notes</th>
                           <th className="px-3 py-2 w-10"></th>
                         </tr>
@@ -1118,6 +1143,7 @@ export default function ProjectDetailPage() {
                           <tr key={i} className="border-b last:border-b-0">
                             <td className="px-3 py-2">{v.category}</td>
                             <td className="px-3 py-2">{v.supplierName}</td>
+                            <td className="px-3 py-2 text-right">{v.amount ? formatVND(v.amount) : "—"}</td>
                             <td className="px-3 py-2 text-muted-foreground">{v.notes}</td>
                             <td className="px-3 py-2">
                               <Button variant="ghost" size="icon" className="h-7 w-7"
@@ -1197,6 +1223,11 @@ export default function ProjectDetailPage() {
                               </ShadcnPopover>
                             </td>
                             <td className="px-3 py-2">
+                              <Input className="h-8 w-28 text-right" type="number" min="0" step="1" placeholder="Amount"
+                                value={newVendor.amount}
+                                onChange={e => setNewVendor({ ...newVendor, amount: e.target.value })} />
+                            </td>
+                            <td className="px-3 py-2">
                               <Input className="h-8" placeholder="Notes (optional)"
                                 value={newVendor.notes}
                                 onChange={e => setNewVendor({ ...newVendor, notes: e.target.value })} />
@@ -1208,7 +1239,7 @@ export default function ProjectDetailPage() {
                                   <Check className="h-4 w-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-7 w-7"
-                                  onClick={() => { setAddingVendor(false); setNewVendor({ category: "", supplier: "", notes: "" }); setVendorSupplierSearch(""); }}>
+                                  onClick={() => { setAddingVendor(false); setNewVendor({ category: "", supplier: "", amount: "", notes: "" }); setVendorSupplierSearch(""); }}>
                                   <X className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -1217,7 +1248,7 @@ export default function ProjectDetailPage() {
                         )}
                         {vendors.length === 0 && !addingVendor && (
                           <tr>
-                            <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                            <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
                               No vendors added yet
                             </td>
                           </tr>
@@ -1680,6 +1711,20 @@ export default function ProjectDetailPage() {
                     </Command>
                   </ShadcnPopoverContent>
                 </ShadcnPopover>
+              </div>
+
+              {/* Total Wedding Budget */}
+              <div className="space-y-2">
+                <Label htmlFor="edit-total-budget">Total Wedding Budget (VND)</Label>
+                <Input
+                  id="edit-total-budget"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 500000000"
+                  value={editForm.totalBudget}
+                  onChange={(e) => setEditForm({ ...editForm, totalBudget: e.target.value })}
+                />
               </div>
 
               {/* Tax Type */}

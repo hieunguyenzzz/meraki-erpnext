@@ -457,6 +457,7 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
 class VendorItem(BaseModel):
     category: str
     supplier: str
+    amount: float = 0
     notes: str = ""
 
 
@@ -475,7 +476,7 @@ def update_vendors(project_name: str, req: VendorsRequest):
         raise HTTPException(status_code=404, detail=f"Project not found: {project_name}")
 
     project["custom_wedding_vendors"] = [
-        {"category": v.category, "supplier": v.supplier, "notes": v.notes}
+        {"category": v.category, "supplier": v.supplier, "amount": v.amount, "notes": v.notes}
         for v in req.vendors
     ]
 
