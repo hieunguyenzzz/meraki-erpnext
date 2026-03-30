@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Plus, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X } from "lucide-react";
+import { Plus, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X, Trash2 } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +34,25 @@ interface Partner {
 }
 
 const columns: ColumnDef<Invoice, unknown>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
   {
     accessorKey: "name",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Invoice" />,
@@ -85,6 +105,11 @@ const initialReferralForm = {
 
 export default function InvoicesPage() {
   const invalidate = useInvalidate();
+
+  // Row selection state
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Referral sheet state
   const [referralOpen, setReferralOpen] = useState(false);
@@ -219,6 +244,39 @@ export default function InvoicesPage() {
     }
   }
 
+  const selectedNames = Object.keys(rowSelection).filter((k) => rowSelection[k]);
+  const selectedCount = selectedNames.length;
+
+  async function handleDeleteSelected() {
+    if (selectedCount === 0) return;
+    if (!confirm(`Delete ${selectedCount} invoice${selectedCount === 1 ? "" : "s"}? Submitted invoices will be cancelled first.`)) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const names = selectedNames.map((idx) => invoices[Number(idx)]?.name).filter(Boolean);
+      const res = await fetch("/inquiry-api/sales-invoices/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Delete failed: ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.failed?.length) {
+        setDeleteError(`Some invoices failed: ${data.failed.join(", ")}`);
+      }
+      setRowSelection({});
+      invalidate({ resource: "Sales Invoice", invalidates: ["list"] });
+    } catch (err: any) {
+      setDeleteError(err.message || "Failed to delete invoices");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -226,10 +284,18 @@ export default function InvoicesPage() {
           <h1 className="text-2xl font-bold tracking-tight">Sales Invoices</h1>
           <p className="text-muted-foreground">Track revenue and customer billing</p>
         </div>
-        <Button onClick={() => setReferralOpen(true)}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          Record Referral
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectedCount > 0 && (
+            <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={deleting}>
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              {deleting ? "Deleting..." : `Delete ${selectedCount} selected`}
+            </Button>
+          )}
+          <Button onClick={() => setReferralOpen(true)}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Record Referral
+          </Button>
+        </div>
       </div>
 
       {/* Record Referral Sheet */}
@@ -459,12 +525,22 @@ export default function InvoicesPage() {
         </SheetContent>
       </Sheet>
 
+      {deleteError && (
+        <div className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+          <span>{deleteError}</span>
+          <button onClick={() => setDeleteError(null)} className="ml-4 font-medium hover:text-red-900">&times;</button>
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         data={invoices}
         isLoading={isLoading}
         searchKey="customer_name"
         searchPlaceholder="Search by customer..."
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
         filterableColumns={[
           {
             id: "status",
