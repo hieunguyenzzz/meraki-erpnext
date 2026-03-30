@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
-from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries
+from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries, _delete_single_invoice
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -203,26 +203,14 @@ class DeleteSalesInvoicesRequest(BaseModel):
 
 @router.post("/sales-invoices/delete")
 def delete_sales_invoices(request: DeleteSalesInvoicesRequest):
-    """Delete sales invoices. Submitted ones are cancelled first, GL/payment ledger cleaned up."""
+    """Delete sales invoices with full cascade: Payment Entries, GL, Payment Ledger."""
     client = ERPNextClient()
     deleted = []
     failed = []
 
     for si_name in request.names:
         try:
-            si = client._get(f"/api/resource/Sales Invoice/{si_name}").get("data", {})
-            if not si:
-                failed.append(f"{si_name}: not found")
-                continue
-
-            docstatus = si.get("docstatus", 0)
-
-            if docstatus == 1:
-                _cancel(client, "Sales Invoice", si_name)
-                _delete_gl_entries(client, si_name)
-                _delete_payment_ledger_entries(client, si_name)
-
-            client._delete(f"/api/resource/Sales Invoice/{si_name}")
+            _delete_single_invoice(client, si_name)
             deleted.append(si_name)
         except Exception as e:
             failed.append(f"{si_name}: {e}")
