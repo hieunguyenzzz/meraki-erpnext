@@ -57,8 +57,24 @@ class WeddingExpenseRequest(BaseModel):
     date: str              # YYYY-MM-DD
     description: str
     amount: float
-    account: str           # e.g. "Travel Expenses - MWP"
+    category: str          # e.g. "Taxi", "Flight Ticket", "Hotel"
     supplier: str = "Company Expense"
+
+
+# Map wedding expense categories → GL expense accounts
+CATEGORY_TO_ACCOUNT = {
+    "Taxi": "Travel Expenses - MWP",
+    "Flight Ticket": "Travel Expenses - MWP",
+    "Hotel": "Travel Expenses - MWP",
+    "F&B": "Entertainment Expenses - MWP",
+    "Decoration": "Miscellaneous Expenses - MWP",
+    "Printing": "Office Expenses - MWP",
+    "Tips / Gratuity": "Miscellaneous Expenses - MWP",
+    "Equipment Rental": "Equipment Expenses - MWP",
+    "Gifts": "Entertainment Expenses - MWP",
+    "Other": "Miscellaneous Expenses - MWP",
+}
+DEFAULT_EXPENSE_ACCOUNT = "Miscellaneous Expenses - MWP"
 
 
 # ---------------------------------------------------------------------------
@@ -198,11 +214,22 @@ def list_expenses(project: str | None = None):
         items = pi_doc.get("items", [])
         first_item = items[0] if items else {}
 
+        item_name = first_item.get("item_name", "")
+        category = pi_doc.get("remarks", "")
+        # If no remarks, try to extract category from "Category: Description" format
+        if not category and ": " in item_name:
+            category = item_name.split(": ", 1)[0]
+        description = item_name
+        # Strip category prefix from description for cleaner display
+        if category and description.startswith(f"{category}: "):
+            description = description[len(f"{category}: "):]
+
         result.append({
             "name": pi["name"],
             "posting_date": pi["posting_date"],
             "amount": pi["grand_total"],
-            "description": first_item.get("item_name", ""),
+            "description": description,
+            "category": category,
             "account": first_item.get("expense_account", ""),
             "project": pi.get("project", ""),
             "supplier": pi.get("supplier", ""),
@@ -225,6 +252,10 @@ def create_wedding_expense(req: WeddingExpenseRequest):
 
     amount = round(req.amount)
 
+    expense_account = CATEGORY_TO_ACCOUNT.get(req.category, DEFAULT_EXPENSE_ACCOUNT)
+    # item_name stores "Category: Description" for display
+    item_name = f"{req.category}: {req.description}" if req.description else req.category
+
     pi_values = {
         "supplier": req.supplier,
         "posting_date": req.date,
@@ -232,11 +263,12 @@ def create_wedding_expense(req: WeddingExpenseRequest):
         "company": COMPANY,
         "project": req.project,
         "update_stock": 0,
+        "remarks": req.category,
         "items": [{
             "item_code": "EXPENSE-ITEM",
-            "item_name": req.description,
-            "description": req.description,
-            "expense_account": req.account,
+            "item_name": item_name,
+            "description": item_name,
+            "expense_account": expense_account,
             "qty": 1,
             "rate": amount,
             "project": req.project,

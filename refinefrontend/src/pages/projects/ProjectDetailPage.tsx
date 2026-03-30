@@ -52,7 +52,7 @@ import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
 import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
-import { EXPENSE_ACCOUNTS } from "@/lib/constants";
+import { WEDDING_EXPENSE_CATEGORIES } from "@/lib/constants";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
 
@@ -496,7 +496,7 @@ export default function ProjectDetailPage() {
           date: newExpense.date,
           description: newExpense.description,
           amount: parseFloat(newExpense.amount),
-          account: newExpense.category,
+          category: newExpense.category,
         }),
       });
       if (!resp.ok) {
@@ -1779,7 +1779,7 @@ export default function ProjectDetailPage() {
                               <td className="px-3 py-2">{formatDate(exp.posting_date)}</td>
                               <td className="px-3 py-2">{exp.description}</td>
                               <td className="px-3 py-2 text-muted-foreground">
-                                {EXPENSE_ACCOUNTS.find(a => a.name === exp.account)?.account_name || exp.account}
+                                {exp.category || "—"}
                               </td>
                               <td className="px-3 py-2 text-right">{formatVND(exp.amount)}</td>
                               <td className="px-3 py-2">
@@ -1826,8 +1826,8 @@ export default function ProjectDetailPage() {
                                   onValueChange={v => setNewExpense({ ...newExpense, category: v })}>
                                   <SelectTrigger className="h-8"><SelectValue placeholder="Category" /></SelectTrigger>
                                   <SelectContent>
-                                    {EXPENSE_ACCOUNTS.map(a => (
-                                      <SelectItem key={a.name} value={a.name}>{a.account_name}</SelectItem>
+                                    {WEDDING_EXPENSE_CATEGORIES.map(c => (
+                                      <SelectItem key={c} value={c}>{c}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
