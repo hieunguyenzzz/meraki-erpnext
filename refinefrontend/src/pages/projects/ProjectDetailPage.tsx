@@ -1764,10 +1764,10 @@ export default function ProjectDetailPage() {
                     <div className="border rounded-md overflow-x-auto">
                       <table className="w-full text-sm table-fixed">
                         <colgroup>
-                          <col className="w-[110px]" />
+                          <col className="w-[140px]" />
                           <col />
                           <col className="w-[140px]" />
-                          <col className="w-[120px]" />
+                          <col className="w-[150px]" />
                           <col className="w-[90px]" />
                           <col className="w-[80px]" />
                         </colgroup>
