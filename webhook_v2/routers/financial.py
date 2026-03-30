@@ -6,8 +6,10 @@ GET /financial-overview?year={year} — monthly P&L + KPI totals for a given yea
 
 import json
 from datetime import date
+from typing import List
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
 
@@ -154,3 +156,41 @@ def get_financial_overview(year: int = Query(default=None, description="Year (de
             "active_weddings_count": active_weddings_count,
         },
     }
+
+
+class DeleteJournalEntriesRequest(BaseModel):
+    names: List[str]
+
+
+@router.post("/journal-entries/delete")
+def delete_journal_entries(request: DeleteJournalEntriesRequest):
+    """Delete journal entries. Submitted ones are cancelled first, then deleted."""
+    client = ERPNextClient()
+    deleted = []
+    failed = []
+
+    for je_name in request.names:
+        try:
+            je = client._get(f"/api/resource/Journal Entry/{je_name}").get("data", {})
+            if not je:
+                failed.append(f"{je_name}: not found")
+                continue
+
+            docstatus = je.get("docstatus", 0)
+
+            if docstatus == 1:
+                # Cancel submitted JE first
+                client._post("/api/method/frappe.client.cancel", {"doctype": "Journal Entry", "name": je_name})
+
+            if docstatus <= 1:
+                client._delete(f"/api/resource/Journal Entry/{je_name}")
+                deleted.append(je_name)
+            else:
+                # Already cancelled — just delete
+                client._delete(f"/api/resource/Journal Entry/{je_name}")
+                deleted.append(je_name)
+        except Exception as e:
+            failed.append(f"{je_name}: {e}")
+
+    log.info("journal_entries_deleted", deleted=len(deleted), failed=len(failed))
+    return {"deleted": deleted, "failed": failed}
