@@ -1646,18 +1646,33 @@ export default function ProjectDetailPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="milestone-amount">Amount (VND) *</Label>
+                {(() => {
+                  const pkgRate = soItems.find((i) => i.item_code === "Wedding Planning Service")?.rate || 0;
+                  const travelFee = soItems.find((i) => i.item_code === "Travel Fee")?.amount || 0;
+                  const editingAmt = editingMilestone
+                    ? (invoices.find((i: any) => i.name === editingMilestone)?.grand_total || 0)
+                    : 0;
+                  const remaining = Math.max(0, totalValue - totalInvoiced + editingAmt);
+                  const presets = [
+                    { label: "50% Deposit", amount: Math.round(pkgRate * 0.5) },
+                    { label: "30% + Travel", amount: Math.round(pkgRate * 0.3) + travelFee },
+                    { label: "Remaining", amount: Math.round(remaining) },
+                  ];
+                  return (
                 <div className="flex gap-1.5">
-                  {[25, 30, 50, 100].map((pct) => (
+                  {presets.map((p) => (
                     <button
-                      key={pct}
+                      key={p.label}
                       type="button"
                       className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-                      onClick={() => setMilestoneForm({ ...milestoneForm, amount: String(Math.round(totalValue * pct / 100)) })}
+                      onClick={() => setMilestoneForm({ ...milestoneForm, amount: String(p.amount), label: p.label === "Remaining" ? "Final Payment" : p.label === "50% Deposit" ? "Deposit" : "Second Payment" })}
                     >
-                      {pct}%
+                      {p.label}
                     </button>
                   ))}
                 </div>
+                  );
+                })()}
                 <Input
                   id="milestone-amount"
                   type="number"
