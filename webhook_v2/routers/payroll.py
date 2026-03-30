@@ -24,10 +24,10 @@ COMMISSION_COMPONENTS = ["Lead Planner Commission", "Support Planner Commission"
 
 
 def _ensure_salary_structure_assignments(client: ERPNextClient):
-    """Create SSA (base=0) for any active employee who doesn't have one yet."""
+    """Create SSA for any active employee who doesn't have one yet (base from ctc)."""
     active_emps = client._get("/api/resource/Employee", params={
         "filters": json.dumps([["status", "=", "Active"]]),
-        "fields": json.dumps(["name", "date_of_joining"]),
+        "fields": json.dumps(["name", "date_of_joining", "ctc"]),
         "limit_page_length": 200,
     }).get("data", [])
 
@@ -48,7 +48,7 @@ def _ensure_salary_structure_assignments(client: ERPNextClient):
                 "employee": emp["name"],
                 "salary_structure": "Monthly Salary",
                 "from_date": from_date,
-                "base": 0,
+                "base": emp.get("ctc") or 0,
                 "company": "Meraki Wedding Planner",
             })
             client._post("/api/method/frappe.client.submit", {
