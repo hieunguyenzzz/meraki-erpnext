@@ -1761,8 +1761,16 @@ export default function ProjectDetailPage() {
                         {expenseError}
                       </div>
                     )}
-                    <div className="border rounded-md">
-                      <table className="w-full text-sm">
+                    <div className="border rounded-md overflow-x-auto">
+                      <table className="w-full text-sm table-fixed">
+                        <colgroup>
+                          <col className="w-[110px]" />
+                          <col />
+                          <col className="w-[140px]" />
+                          <col className="w-[120px]" />
+                          <col className="w-[90px]" />
+                          <col className="w-[80px]" />
+                        </colgroup>
                         <thead>
                           <tr className="border-b bg-muted/50">
                             <th className="px-3 py-2 text-left font-medium">Date</th>
@@ -1770,7 +1778,7 @@ export default function ProjectDetailPage() {
                             <th className="px-3 py-2 text-left font-medium">Category</th>
                             <th className="px-3 py-2 text-right font-medium">Amount</th>
                             <th className="px-3 py-2 text-left font-medium">Status</th>
-                            <th className="px-3 py-2 w-20"></th>
+                            <th className="px-3 py-2"></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1814,17 +1822,17 @@ export default function ProjectDetailPage() {
                           {addingExpense && (
                             <tr className="border-b last:border-b-0 bg-muted/30">
                               <td className="px-3 py-2">
-                                <Input className="h-8 w-32" type="date" value={newExpense.date}
+                                <Input className="h-8 w-full" type="date" value={newExpense.date}
                                   onChange={e => setNewExpense({ ...newExpense, date: e.target.value })} />
                               </td>
                               <td className="px-3 py-2">
-                                <Input className="h-8" placeholder="Description" value={newExpense.description}
+                                <Input className="h-8 w-full" placeholder="Description" value={newExpense.description}
                                   onChange={e => setNewExpense({ ...newExpense, description: e.target.value })} />
                               </td>
                               <td className="px-3 py-2">
                                 <Select value={newExpense.category}
                                   onValueChange={v => setNewExpense({ ...newExpense, category: v })}>
-                                  <SelectTrigger className="h-8"><SelectValue placeholder="Category" /></SelectTrigger>
+                                  <SelectTrigger className="h-8 w-full truncate"><SelectValue placeholder="Category" /></SelectTrigger>
                                   <SelectContent>
                                     {WEDDING_EXPENSE_CATEGORIES.map(c => (
                                       <SelectItem key={c} value={c}>{c}</SelectItem>
@@ -1833,7 +1841,7 @@ export default function ProjectDetailPage() {
                                 </Select>
                               </td>
                               <td className="px-3 py-2">
-                                <Input className="h-8 w-28 text-right" type="number" min="1" step="1" placeholder="Amount"
+                                <Input className="h-8 w-full text-right" type="number" min="1" step="1" placeholder="Amount"
                                   value={newExpense.amount}
                                   onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} />
                               </td>
