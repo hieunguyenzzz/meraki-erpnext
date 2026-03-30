@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useCustom, useCustomMutation } from "@refinedev/core";
-import { Bell, Trash2, CheckCheck, Inbox } from "lucide-react";
+import { Bell, Trash2, CheckCheck, Inbox, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/format";
@@ -162,6 +162,25 @@ export default function NotificationsPage() {
     }
   }
 
+  async function handleAction(notifName: string, action: "approve" | "reject") {
+    setProcessingId(notifName);
+    try {
+      await customMutation({
+        url: "/api/method/handle_notification_action",
+        method: "post",
+        values: { notif_name: notifName, action },
+      });
+      setAllNotifications((prev) =>
+        prev.map((n) => (n.name === notifName ? { ...n, read: 1 } : n)),
+      );
+      query.refetch();
+    } catch {
+      // user can retry
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
   function handleClick(notif: PwaNotification) {
     const routeFn = DOC_ROUTES[notif.reference_document_type];
     if (!routeFn) return;
@@ -216,6 +235,8 @@ export default function NotificationsPage() {
                   const isClickable = !!routeFn;
                   const isProcessing = processingId === notif.name;
 
+                  const isLeave = notif.reference_document_type === "Leave Application";
+
                   return (
                     <div
                       key={notif.name}
@@ -250,6 +271,31 @@ export default function NotificationsPage() {
                             {timeAgo(notif.creation)}
                           </span>
                         </div>
+                        {/* Approve / Reject for Leave Applications */}
+                        {isLeave && !notif.read && (
+                          <div className="mt-2 flex gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-7 px-2.5 text-xs"
+                              disabled={isProcessing}
+                              onClick={(e) => { e.stopPropagation(); handleAction(notif.name, "approve"); }}
+                            >
+                              <Check className="mr-1 h-3 w-3" />
+                              {isProcessing ? "..." : "Approve"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 px-2.5 text-xs"
+                              disabled={isProcessing}
+                              onClick={(e) => { e.stopPropagation(); handleAction(notif.name, "reject"); }}
+                            >
+                              <X className="mr-1 h-3 w-3" />
+                              Reject
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Dismiss button */}
