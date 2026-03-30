@@ -52,6 +52,8 @@ import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
 import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
+import { EXPENSE_ACCOUNTS } from "@/lib/constants";
+import { useMyEmployee } from "@/hooks/useMyEmployee";
 
 
 const WEDDING_PHASES = [
@@ -138,6 +140,7 @@ export default function ProjectDetailPage() {
   const [editVenueSearch, setEditVenueSearch] = useState("");
   const [editVenueDisplayName, setEditVenueDisplayName] = useState("");
   const [editForm, setEditForm] = useState({
+    weddingDate: "",
     venue: "",
     packageAmount: "",
     totalBudget: "",
@@ -168,11 +171,19 @@ export default function ProjectDetailPage() {
   const [vendorError, setVendorError] = useState<string | null>(null);
   const [isCreatingVendorSupplier, setIsCreatingVendorSupplier] = useState(false);
 
+  // Expense tab state
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [addingExpense, setAddingExpense] = useState(false);
+  const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "" });
+  const [isSavingExpense, setIsSavingExpense] = useState(false);
+  const [expenseError, setExpenseError] = useState<string | null>(null);
+
   const invalidate = useInvalidate();
   const { mutateAsync: updateRecord } = useUpdate();
   const { list } = useNavigation();
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
+  const { employeeId: myEmployeeId } = useMyEmployee();
 
   // Fetch Project
   const { result: project } = useOne({
@@ -312,8 +323,7 @@ export default function ProjectDetailPage() {
   const { result: employeesResult } = useList({
     resource: "Employee",
     pagination: { mode: "off" as const },
-    filters: [{ field: "status", operator: "eq", value: "Active" }],
-    meta: { fields: ["name", "employee_name", "first_name", "last_name", "user_id"] },
+    meta: { fields: ["name", "employee_name", "first_name", "last_name", "user_id", "status"] },
   });
   const employees = (employeesResult?.data ?? []).map((e: any) => ({
     id: e.name,
@@ -440,6 +450,108 @@ export default function ProjectDetailPage() {
     }
   }
 
+  // Expense tab logic
+  const isOnTeam = useMemo(() => {
+    if (!myEmployeeId || !project) return false;
+    return [
+      project.custom_lead_planner,
+      project.custom_support_planner,
+      project.custom_assistant_1,
+      project.custom_assistant_2,
+      project.custom_assistant_3,
+      project.custom_assistant_4,
+      project.custom_assistant_5,
+    ].includes(myEmployeeId);
+  }, [myEmployeeId, project]);
+
+  const showExpensesTab = isFinance || isOnTeam;
+
+  const fetchExpenses = useCallback(async (projectName: string) => {
+    try {
+      const res = await fetch(`/inquiry-api/expenses?project=${encodeURIComponent(projectName)}`, { credentials: "include" });
+      if (res.ok) setExpenses(await res.json());
+    } catch { setExpenses([]); }
+  }, []);
+
+  useEffect(() => {
+    if (name && showExpensesTab) fetchExpenses(name);
+  }, [name, showExpensesTab, fetchExpenses]);
+
+  const approvedExpensesTotal = useMemo(
+    () => expenses.filter(e => e.status === "Approved").reduce((sum, e) => sum + (e.amount || 0), 0),
+    [expenses]
+  );
+
+  async function handleAddExpense() {
+    if (!newExpense.description || !newExpense.amount || !newExpense.category) return;
+    setIsSavingExpense(true);
+    setExpenseError(null);
+    try {
+      const resp = await fetch("/inquiry-api/expense/wedding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          project: name,
+          date: newExpense.date,
+          description: newExpense.description,
+          amount: parseFloat(newExpense.amount),
+          account: newExpense.category,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to create expense");
+      }
+      setAddingExpense(false);
+      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "" });
+      fetchExpenses(name!);
+    } catch (error) {
+      setExpenseError(error instanceof Error ? error.message : "Failed to create expense");
+    } finally {
+      setIsSavingExpense(false);
+    }
+  }
+
+  async function handleApproveExpense(piName: string) {
+    try {
+      const resp = await fetch(`/inquiry-api/expense/${piName}/approve`, { method: "POST", credentials: "include" });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to approve");
+      }
+      fetchExpenses(name!);
+    } catch (error) {
+      setExpenseError(error instanceof Error ? error.message : "Failed to approve expense");
+    }
+  }
+
+  async function handleRejectExpense(piName: string) {
+    try {
+      const resp = await fetch(`/inquiry-api/expense/${piName}/reject`, { method: "POST", credentials: "include" });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to reject");
+      }
+      fetchExpenses(name!);
+    } catch (error) {
+      setExpenseError(error instanceof Error ? error.message : "Failed to reject expense");
+    }
+  }
+
+  async function handleDeleteExpense(piName: string) {
+    try {
+      const resp = await fetch(`/inquiry-api/expense/${piName}`, { method: "DELETE", credentials: "include" });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to delete");
+      }
+      fetchExpenses(name!);
+    } catch (error) {
+      setExpenseError(error instanceof Error ? error.message : "Failed to delete expense");
+    }
+  }
+
   function getEmployeeNameById(id: string | null | undefined): string | null {
     if (!id) return null;
     const emp = employees.find((e) => e.id === id);
@@ -463,6 +575,7 @@ export default function ProjectDetailPage() {
     const planningItem = soItems.find((i) => i.item_code === "Wedding Planning Service");
     setEditForm((prev) => ({
       ...prev,
+      weddingDate: project?.expected_end_date || "",
       venue: salesOrder?.custom_venue || "",
       packageAmount: planningItem ? String(planningItem.rate) : "",
       totalBudget: project?.custom_total_budget ? String(project.custom_total_budget) : "",
@@ -544,6 +657,7 @@ export default function ProjectDetailPage() {
         credentials: "include",
         body: JSON.stringify({
           venue: editForm.venue || null,
+          wedding_date: editForm.weddingDate || null,
           package_amount: editForm.packageAmount ? parseFloat(editForm.packageAmount) : null,
           tax_type: editForm.taxType === "vat_included" ? "vat" : "none",
           addons: editForm.addOns.map((a) => ({
@@ -938,6 +1052,11 @@ export default function ProjectDetailPage() {
               <TabsTrigger value="activity" className="flex-1 lg:flex-none">
                 Activity
               </TabsTrigger>
+              {showExpensesTab && (
+                <TabsTrigger value="expenses" className="flex-1 lg:flex-none">
+                  Expenses
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* Overview Tab */}
@@ -1618,6 +1737,140 @@ export default function ProjectDetailPage() {
                 references={[{ doctype: "Project", docName: name! }]}
               />
             </TabsContent>
+
+            {/* Expenses Tab */}
+            {showExpensesTab && (
+              <TabsContent value="expenses" className="mt-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                    <div>
+                      <CardTitle>Wedding Expenses</CardTitle>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Total approved: {formatVND(approvedExpensesTotal)}
+                      </p>
+                    </div>
+                    <Button size="sm" onClick={() => setAddingExpense(true)} disabled={addingExpense}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Expense
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {expenseError && (
+                      <div className="flex items-center gap-2 p-3 mb-4 text-sm text-destructive bg-destructive/10 rounded-md">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        {expenseError}
+                      </div>
+                    )}
+                    <div className="border rounded-md">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="px-3 py-2 text-left font-medium">Date</th>
+                            <th className="px-3 py-2 text-left font-medium">Description</th>
+                            <th className="px-3 py-2 text-left font-medium">Category</th>
+                            <th className="px-3 py-2 text-right font-medium">Amount</th>
+                            <th className="px-3 py-2 text-left font-medium">Status</th>
+                            <th className="px-3 py-2 w-20"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {expenses.map((exp) => (
+                            <tr key={exp.name} className="border-b last:border-b-0">
+                              <td className="px-3 py-2">{formatDate(exp.posting_date)}</td>
+                              <td className="px-3 py-2">{exp.description}</td>
+                              <td className="px-3 py-2 text-muted-foreground">
+                                {EXPENSE_ACCOUNTS.find(a => a.name === exp.account)?.account_name || exp.account}
+                              </td>
+                              <td className="px-3 py-2 text-right">{formatVND(exp.amount)}</td>
+                              <td className="px-3 py-2">
+                                <Badge variant={exp.status === "Approved" ? "success" : "warning"}>
+                                  {exp.status}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  {exp.status === "Pending" && isFinance && (
+                                    <>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                        onClick={() => handleApproveExpense(exp.name)} title="Approve">
+                                        <Check className="h-4 w-4" />
+                                      </Button>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        onClick={() => handleRejectExpense(exp.name)} title="Reject">
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {(exp.status === "Pending" || isFinance) && (
+                                    <Button variant="ghost" size="icon" className="h-7 w-7"
+                                      onClick={() => handleDeleteExpense(exp.name)} title="Delete">
+                                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                          {addingExpense && (
+                            <tr className="border-b last:border-b-0 bg-muted/30">
+                              <td className="px-3 py-2">
+                                <Input className="h-8 w-32" type="date" value={newExpense.date}
+                                  onChange={e => setNewExpense({ ...newExpense, date: e.target.value })} />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input className="h-8" placeholder="Description" value={newExpense.description}
+                                  onChange={e => setNewExpense({ ...newExpense, description: e.target.value })} />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Select value={newExpense.category}
+                                  onValueChange={v => setNewExpense({ ...newExpense, category: v })}>
+                                  <SelectTrigger className="h-8"><SelectValue placeholder="Category" /></SelectTrigger>
+                                  <SelectContent>
+                                    {EXPENSE_ACCOUNTS.map(a => (
+                                      <SelectItem key={a.name} value={a.name}>{a.account_name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input className="h-8 w-28 text-right" type="number" min="1" step="1" placeholder="Amount"
+                                  value={newExpense.amount}
+                                  onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} />
+                              </td>
+                              <td className="px-3 py-2"></td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7"
+                                    onClick={handleAddExpense}
+                                    disabled={!newExpense.description || !newExpense.amount || !newExpense.category || isSavingExpense}>
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7"
+                                    onClick={() => {
+                                      setAddingExpense(false);
+                                      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "" });
+                                      setExpenseError(null);
+                                    }}>
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          {expenses.length === 0 && !addingExpense && (
+                            <tr>
+                              <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                                No expenses yet
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
           </Tabs>
       </div>
 
@@ -1771,6 +2024,16 @@ export default function ProjectDetailPage() {
                   {editError}
                 </div>
               )}
+
+              {/* Wedding Date */}
+              <div className="space-y-2">
+                <Label>Wedding Date</Label>
+                <Input
+                  type="date"
+                  value={editForm.weddingDate}
+                  onChange={(e) => setEditForm({ ...editForm, weddingDate: e.target.value })}
+                />
+              </div>
 
               {/* Venue */}
               <div className="space-y-2">
