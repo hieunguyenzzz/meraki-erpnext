@@ -122,6 +122,7 @@ export default function ProjectDetailPage() {
   const [milestoneError, setMilestoneError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [editingMilestone, setEditingMilestone] = useState<string | null>(null);
   const [milestoneForm, setMilestoneForm] = useState({
     label: "",
     amount: "",
@@ -704,8 +705,12 @@ export default function ProjectDetailPage() {
     setIsSubmittingMilestone(true);
     setMilestoneError(null);
     try {
-      const res = await fetch(`/inquiry-api/wedding/${name}/milestone`, {
-        method: "POST",
+      const url = editingMilestone
+        ? `/inquiry-api/wedding/${name}/milestone/${editingMilestone}`
+        : `/inquiry-api/wedding/${name}/milestone`;
+      const method = editingMilestone ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
@@ -716,18 +721,70 @@ export default function ProjectDetailPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to create milestone");
+        throw new Error(err.detail || `Failed to ${editingMilestone ? "update" : "create"} milestone`);
       }
       setAddMilestoneOpen(false);
+      setEditingMilestone(null);
       setMilestoneForm({ label: "", amount: "", invoiceDate: new Date().toISOString().slice(0, 10) });
       if (name) fetchInvoices(name);
     } catch (err) {
-      setMilestoneError(err instanceof Error ? err.message : "Failed to create milestone");
+      setMilestoneError(err instanceof Error ? err.message : `Failed to ${editingMilestone ? "update" : "create"} milestone`);
     } finally {
       setIsSubmittingMilestone(false);
     }
   }
 
+  async function handleEditMilestoneClick(inv: any) {
+    // Fetch full SI doc to get item_name for label parsing
+    try {
+      const res = await fetch(`/api/resource/Sales Invoice/${inv.name}`, { credentials: "include" });
+      const data = await res.json();
+      const itemName = data.data?.items?.[0]?.item_name || "";
+      const separator = " \u2014 ";
+      const label = itemName.includes(separator) ? itemName.split(separator)[0] : "";
+      setEditingMilestone(inv.name);
+      setMilestoneForm({
+        label,
+        amount: String(inv.grand_total),
+        invoiceDate: inv.posting_date || new Date().toISOString().slice(0, 10),
+      });
+      setMilestoneError(null);
+      setAddMilestoneOpen(true);
+    } catch {
+      // Fallback: open with no label
+      setEditingMilestone(inv.name);
+      setMilestoneForm({
+        label: "",
+        amount: String(inv.grand_total),
+        invoiceDate: inv.posting_date || new Date().toISOString().slice(0, 10),
+      });
+      setMilestoneError(null);
+      setAddMilestoneOpen(true);
+    }
+  }
+
+  async function handleDeleteMilestone() {
+    if (!editingMilestone || !window.confirm("Delete this payment milestone? This cannot be undone.")) return;
+    setIsSubmittingMilestone(true);
+    setMilestoneError(null);
+    try {
+      const res = await fetch(`/inquiry-api/wedding/${name}/milestone/${editingMilestone}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to delete milestone");
+      }
+      setAddMilestoneOpen(false);
+      setEditingMilestone(null);
+      if (name) fetchInvoices(name);
+    } catch (err) {
+      setMilestoneError(err instanceof Error ? err.message : "Failed to delete milestone");
+    } finally {
+      setIsSubmittingMilestone(false);
+    }
+  }
 
   function getAssigneeFromTask(task: any) {
     try {
@@ -995,7 +1052,11 @@ export default function ProjectDetailPage() {
                         const pct = totalValue > 0 ? Math.round((inv.grand_total / totalValue) * 100) : 0;
                         const isLast = index === invoices.length - 1;
                         return (
-                          <div key={inv.name} className="flex gap-3">
+                          <div
+                            key={inv.name}
+                            className={cn("flex gap-3", isFinance && "cursor-pointer hover:bg-accent/50 rounded-md -mx-1 px-1")}
+                            onClick={isFinance ? () => handleEditMilestoneClick(inv) : undefined}
+                          >
                             {/* Timeline dot + connector */}
                             <div className="flex flex-col items-center">
                               <div
@@ -1047,6 +1108,7 @@ export default function ProjectDetailPage() {
                     size="sm"
                     className="w-full mt-2"
                     onClick={() => {
+                      setEditingMilestone(null);
                       setMilestoneForm({
                         label: "",
                         amount: "",
@@ -1556,10 +1618,10 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Add Payment Milestone Sheet */}
-      <Sheet open={addMilestoneOpen} onOpenChange={setAddMilestoneOpen}>
+      <Sheet open={addMilestoneOpen} onOpenChange={(open) => { setAddMilestoneOpen(open); if (!open) setEditingMilestone(null); }}>
         <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
           <SheetHeader className="px-6 py-4 border-b shrink-0">
-            <SheetTitle>Add Payment Milestone</SheetTitle>
+            <SheetTitle>{editingMilestone ? "Edit Payment Milestone" : "Add Payment Milestone"}</SheetTitle>
           </SheetHeader>
           <form onSubmit={handleAddMilestone} className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
@@ -1605,17 +1667,28 @@ export default function ProjectDetailPage() {
                     = {Math.round((parseFloat(milestoneForm.amount) / totalValue) * 100)}% of total
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  Remaining: {formatVND(Math.max(0, totalValue - totalInvoiced))}
-                </p>
-                {milestoneForm.amount &&
-                  totalValue > 0 &&
-                  parseFloat(milestoneForm.amount) > totalValue - totalInvoiced && (
-                    <p className="text-xs text-amber-600 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      Amount exceeds remaining unbilled ({formatVND(Math.max(0, totalValue - totalInvoiced))})
-                    </p>
-                  )}
+                {(() => {
+                  const editingAmount = editingMilestone
+                    ? (invoices.find((i: any) => i.name === editingMilestone)?.grand_total || 0)
+                    : 0;
+                  const adjustedInvoiced = totalInvoiced - editingAmount;
+                  const remaining = Math.max(0, totalValue - adjustedInvoiced);
+                  return (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        Remaining: {formatVND(remaining)}
+                      </p>
+                      {milestoneForm.amount &&
+                        totalValue > 0 &&
+                        parseFloat(milestoneForm.amount) > remaining && (
+                          <p className="text-xs text-amber-600 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            Amount exceeds remaining unbilled ({formatVND(remaining)})
+                          </p>
+                        )}
+                    </>
+                  );
+                })()}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="milestone-invoice-date">Payment Date</Label>
@@ -1628,6 +1701,18 @@ export default function ProjectDetailPage() {
               </div>
             </div>
             <SheetFooter className="px-6 py-4 border-t shrink-0">
+              {editingMilestone && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="mr-auto"
+                  disabled={isSubmittingMilestone}
+                  onClick={handleDeleteMilestone}
+                >
+                  <Trash2 className="h-4 w-4 mr-1.5" />
+                  Delete
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -1642,10 +1727,10 @@ export default function ProjectDetailPage() {
                 {isSubmittingMilestone ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Creating...
+                    {editingMilestone ? "Updating..." : "Creating..."}
                   </>
                 ) : (
-                  "Create Milestone"
+                  editingMilestone ? "Update Milestone" : "Create Milestone"
                 )}
               </Button>
             </SheetFooter>

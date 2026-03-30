@@ -65,6 +65,39 @@ def _delete_payment_ledger_entries(client: ERPNextClient, voucher_no: str) -> in
     return len(entries)
 
 
+def _delete_single_invoice(client: ERPNextClient, invoice_name: str) -> int:
+    """Delete a single Sales Invoice and its Payment Entries. Returns PE count deleted."""
+    pe_data = client._get("/api/resource/Payment Entry", params={
+        "filters": json.dumps([
+            ["Payment Entry Reference", "reference_name", "=", invoice_name],
+        ]),
+        "fields": json.dumps(["name", "docstatus"]),
+        "limit_page_length": 100,
+    }).get("data", [])
+
+    for pe in pe_data:
+        if pe["docstatus"] == 1:
+            _cancel(client, "Payment Entry", pe["name"])
+        _delete_gl_entries(client, pe["name"])
+        _delete_payment_ledger_entries(client, pe["name"])
+        try:
+            client._delete(f"/api/resource/Payment Entry/{pe['name']}")
+        except Exception as e:
+            log.warning("pe_delete_error", pe=pe["name"], error=str(e))
+
+    inv = client._get(f"/api/resource/Sales Invoice/{invoice_name}").get("data", {})
+    if inv.get("docstatus") == 1:
+        _cancel(client, "Sales Invoice", invoice_name)
+    _delete_gl_entries(client, invoice_name)
+    _delete_payment_ledger_entries(client, invoice_name)
+    try:
+        client._delete(f"/api/resource/Sales Invoice/{invoice_name}")
+    except Exception as e:
+        log.warning("invoice_delete_error", invoice=invoice_name, error=str(e))
+
+    return len(pe_data)
+
+
 @router.post("/wedding/{project_name}/delete")
 def delete_wedding(project_name: str):
     """Fully delete a wedding project and all linked documents."""
@@ -80,36 +113,7 @@ def delete_wedding(project_name: str):
     total_pe = 0
 
     for inv in invoices:
-        # 2. Find Payment Entries referencing this invoice
-        pe_data = client._get("/api/resource/Payment Entry", params={
-            "filters": json.dumps([
-                ["Payment Entry Reference", "reference_name", "=", inv["name"]],
-            ]),
-            "fields": json.dumps(["name", "docstatus"]),
-            "limit_page_length": 100,
-        }).get("data", [])
-
-        # 3. Cancel + delete GL/ledger entries + delete each Payment Entry
-        for pe in pe_data:
-            if pe["docstatus"] == 1:
-                _cancel(client, "Payment Entry", pe["name"])
-            _delete_gl_entries(client, pe["name"])
-            _delete_payment_ledger_entries(client, pe["name"])
-            try:
-                client._delete(f"/api/resource/Payment Entry/{pe['name']}")
-            except Exception as e:
-                log.warning("pe_delete_error", pe=pe["name"], error=str(e))
-            total_pe += 1
-
-        # 4. Cancel + delete GL/ledger entries + delete the Invoice
-        if inv["docstatus"] == 1:
-            _cancel(client, "Sales Invoice", inv["name"])
-        _delete_gl_entries(client, inv["name"])
-        _delete_payment_ledger_entries(client, inv["name"])
-        try:
-            client._delete(f"/api/resource/Sales Invoice/{inv['name']}")
-        except Exception as e:
-            log.warning("invoice_delete_error", invoice=inv["name"], error=str(e))
+        total_pe += _delete_single_invoice(client, inv["name"])
 
     # 5. Cancel + delete the Sales Order (no GL entries)
     so_name = None
@@ -200,6 +204,96 @@ def create_milestone(project_name: str, req: MilestoneRequest):
 
     log.info("milestone_created", project=project_name, invoice=inv_name, payment_entry=pe_name)
     return {"success": True, "invoice": inv_name, "payment_entry": pe_name}
+
+
+@router.put("/wedding/{project_name}/milestone/{invoice_name}")
+def edit_milestone(project_name: str, invoice_name: str, req: MilestoneRequest):
+    """Edit a payment milestone by deleting the old one and recreating with new values."""
+    client = ERPNextClient()
+
+    # Verify invoice belongs to this project
+    inv = client._get(f"/api/resource/Sales Invoice/{invoice_name}").get("data", {})
+    if inv.get("project") != project_name:
+        raise HTTPException(status_code=404, detail="Invoice not found for this project")
+
+    # Delete old invoice + payment entries
+    _delete_single_invoice(client, invoice_name)
+
+    # Recreate with new values (same logic as create_milestone)
+    project = client._get(f"/api/resource/Project/{project_name}").get("data", {})
+    customer = project.get("customer")
+
+    item_name = f"{req.label} \u2014 Wedding Planning Service" if req.label else "Wedding Planning Service"
+
+    new_inv = client._post("/api/resource/Sales Invoice", {
+        "customer": customer,
+        "company": "Meraki Wedding Planner",
+        "set_posting_time": 1,
+        "posting_date": req.invoice_date,
+        "due_date": req.invoice_date,
+        "currency": "VND",
+        "selling_price_list": "Standard Selling VND",
+        "project": project_name,
+        "items": [{"item_code": "Wedding Planning Service", "item_name": item_name, "qty": 1, "rate": req.amount}],
+    }).get("data", {})
+    new_inv_name = new_inv["name"]
+    full_inv = client._get(f"/api/resource/Sales Invoice/{new_inv_name}").get("data", {})
+    client._post("/api/method/frappe.client.submit", {"doc": full_inv})
+
+    submitted_inv = client._get(f"/api/resource/Sales Invoice/{new_inv_name}").get("data", {})
+    actual_amount = submitted_inv.get("outstanding_amount") or req.amount
+
+    try:
+        pe = client._post("/api/resource/Payment Entry", {
+            "payment_type": "Receive",
+            "party_type": "Customer",
+            "party": customer,
+            "paid_from": "Debtors - MWP",
+            "paid_to": "Cash - MWP",
+            "paid_from_account_currency": "VND",
+            "paid_to_account_currency": "VND",
+            "paid_amount": actual_amount,
+            "received_amount": actual_amount,
+            "posting_date": req.invoice_date,
+            "company": "Meraki Wedding Planner",
+            "references": [{
+                "reference_doctype": "Sales Invoice",
+                "reference_name": new_inv_name,
+                "allocated_amount": actual_amount,
+                "total_amount": actual_amount,
+                "outstanding_amount": actual_amount,
+            }],
+        }).get("data", {})
+    except Exception as e:
+        _cancel(client, "Sales Invoice", new_inv_name)
+        _delete_gl_entries(client, new_inv_name)
+        _delete_payment_ledger_entries(client, new_inv_name)
+        try:
+            client._delete(f"/api/resource/Sales Invoice/{new_inv_name}")
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=f"Payment Entry creation failed: {str(e)}")
+    pe_name = pe["name"]
+    full_pe = client._get(f"/api/resource/Payment Entry/{pe_name}").get("data", {})
+    client._post("/api/method/frappe.client.submit", {"doc": full_pe})
+
+    log.info("milestone_edited", project=project_name, old_invoice=invoice_name, new_invoice=new_inv_name, payment_entry=pe_name)
+    return {"success": True, "invoice": new_inv_name, "payment_entry": pe_name}
+
+
+@router.delete("/wedding/{project_name}/milestone/{invoice_name}")
+def delete_milestone(project_name: str, invoice_name: str):
+    """Delete a single payment milestone (Sales Invoice + Payment Entries)."""
+    client = ERPNextClient()
+
+    inv = client._get(f"/api/resource/Sales Invoice/{invoice_name}").get("data", {})
+    if inv.get("project") != project_name:
+        raise HTTPException(status_code=404, detail="Invoice not found for this project")
+
+    _delete_single_invoice(client, invoice_name)
+
+    log.info("milestone_deleted", project=project_name, invoice=invoice_name)
+    return {"success": True}
 
 
 class AddonItem(BaseModel):
