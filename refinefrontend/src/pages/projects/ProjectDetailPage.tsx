@@ -139,6 +139,7 @@ export default function ProjectDetailPage() {
   const [editVenueDisplayName, setEditVenueDisplayName] = useState("");
   const [editForm, setEditForm] = useState({
     venue: "",
+    packageAmount: "",
     totalBudget: "",
     leadPlanner: "",
     supportPlanner: "",
@@ -459,9 +460,11 @@ export default function ProjectDetailPage() {
         includeInCommission: !!(itemMeta?.custom_include_in_commission),
       };
     });
+    const planningItem = soItems.find((i) => i.item_code === "Wedding Planning Service");
     setEditForm((prev) => ({
       ...prev,
       venue: salesOrder?.custom_venue || "",
+      packageAmount: planningItem ? String(planningItem.rate) : "",
       totalBudget: project?.custom_total_budget ? String(project.custom_total_budget) : "",
       addOns: currentAddOns,
       taxType: (salesOrder?.total_taxes_and_charges > 0) ? "vat_included" : "tax_free",
@@ -541,6 +544,7 @@ export default function ProjectDetailPage() {
         credentials: "include",
         body: JSON.stringify({
           venue: editForm.venue || null,
+          package_amount: editForm.packageAmount ? parseFloat(editForm.packageAmount) : null,
           tax_type: editForm.taxType === "vat_included" ? "vat" : "none",
           addons: editForm.addOns.map((a) => ({
             item_code: a.itemCode,
@@ -1796,6 +1800,20 @@ export default function ProjectDetailPage() {
                     </Command>
                   </ShadcnPopoverContent>
                 </ShadcnPopover>
+              </div>
+
+              {/* Package Amount */}
+              <div className="space-y-2">
+                <Label htmlFor="edit-package-amount">Package Amount (VND)</Label>
+                <Input
+                  id="edit-package-amount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 150000000"
+                  value={editForm.packageAmount}
+                  onChange={(e) => setEditForm({ ...editForm, packageAmount: e.target.value })}
+                />
               </div>
 
               {/* Total Wedding Budget */}

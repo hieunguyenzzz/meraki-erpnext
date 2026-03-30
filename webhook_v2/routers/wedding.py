@@ -402,6 +402,7 @@ class UpdateWeddingDetailsRequest(BaseModel):
     venue: str | None = None
     addons: list[UpdateDetailsAddonItem] = []
     tax_type: str | None = None  # "vat" or "none", None = no change
+    package_amount: float | None = None  # Override Wedding Planning Service rate
 
 
 @router.put("/wedding/{project_name}/details")
@@ -459,7 +460,7 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
             "item_code": item["item_code"],
             "item_name": item["item_name"],
             "qty": item["qty"],
-            "rate": item["rate"],
+            "rate": req.package_amount if req.package_amount is not None else item["rate"],
             "conversion_factor": item.get("conversion_factor", 1),
             "warehouse": item.get("warehouse") or default_wh,
         }
