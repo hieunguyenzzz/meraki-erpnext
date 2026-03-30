@@ -3,7 +3,7 @@ import {
   Columns3, MessageSquare,
   Banknote, Users, LayoutDashboard,
   FileText, Receipt, CreditCard, BookOpen,
-  FolderKanban, Settings, MapPin, CalendarDays, Briefcase,
+  FolderKanban, Settings, MapPin, CalendarDays, Briefcase, Store,
 } from "lucide-react";
 
 export interface ModuleChild {
@@ -54,6 +54,7 @@ export const MODULES: ModuleConfig[] = [
     children: [
       { label: "Kanban", path: "/projects", icon: FolderKanban },
       { label: "Venues", path: "/venues",   icon: MapPin },
+      { label: "Vendors", path: "/vendors", icon: Store },
     ],
   },
   {
@@ -104,7 +105,8 @@ export function hasModuleAccess(userRoles: string[], moduleRoles: string[]): boo
 }
 
 export function isEmployeeSelfServiceOnly(roles: string[]): boolean {
-  if (!roles.includes("Employee Self Service")) return false;
+  const hasESS = roles.includes("Employee Self Service") || roles.includes("Employee");
+  if (!hasESS) return false;
   if (roles.includes("Administrator")) return false;
   return !ALL_ADMIN_ROLES.some((r) => roles.includes(r));
 }

@@ -63,7 +63,7 @@ export default function ProjectKanbanPage() {
     pagination: { mode: "off" },
     filters: [{ field: "docstatus", operator: "in", value: [0, 1] }],
     meta: {
-      fields: ["name", "customer_name", "custom_venue", "grand_total"],
+      fields: ["name", "customer_name", "custom_venue", "grand_total", "total_taxes_and_charges", "custom_commission_base"],
     },
   });
 
@@ -154,6 +154,8 @@ export default function ProjectKanbanPage() {
         per_billed: linkedSO?.grand_total > 0
           ? Math.round((paidByProject.get(p.name) ?? 0) / linkedSO.grand_total * 100)
           : undefined,
+        tax_type: linkedSO ? (linkedSO.total_taxes_and_charges > 0 ? "vat_included" : "tax_free") : undefined,
+        commission_base: linkedSO?.custom_commission_base || linkedSO?.grand_total,
       };
     });
   }, [projectsResult, salesOrdersResult, customersResult, employeesResult, suppliersResult, invoicesResult]);
@@ -227,6 +229,28 @@ export default function ProjectKanbanPage() {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Package" />,
           cell: ({ row }) => {
             const amount = row.getValue("package_amount") as number | undefined;
+            return amount
+              ? <span>{amount.toLocaleString("vi-VN")} ₫</span>
+              : <span className="text-muted-foreground">—</span>;
+          },
+        },
+        {
+          accessorKey: "tax_type",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Tax" />,
+          cell: ({ row }) => {
+            const type = row.getValue("tax_type") as string | undefined;
+            if (!type) return <span className="text-muted-foreground">—</span>;
+            return type === "vat_included"
+              ? <Badge variant="outline" className="text-amber-600 border-amber-200">VAT</Badge>
+              : <Badge variant="outline" className="text-green-600 border-green-200">Tax Free</Badge>;
+          },
+          filterFn: "arrIncludesSome",
+        },
+        {
+          accessorKey: "commission_base",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Commission Base" />,
+          cell: ({ row }) => {
+            const amount = row.getValue("commission_base") as number | undefined;
             return amount
               ? <span>{amount.toLocaleString("vi-VN")} ₫</span>
               : <span className="text-muted-foreground">—</span>;

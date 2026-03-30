@@ -15,6 +15,8 @@ export interface ProjectKanbanItem {
   support_planner_name?: string;
   package_amount?: number;      // from Sales Order grand_total
   per_billed?: number;          // from Sales Order per_billed (0-100)
+  tax_type?: "tax_free" | "vat_included";
+  commission_base?: number;     // from Sales Order custom_commission_base
 }
 
 export interface ProjectColumnDef {

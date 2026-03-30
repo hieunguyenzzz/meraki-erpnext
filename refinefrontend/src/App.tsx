@@ -10,6 +10,8 @@ import { Layout } from "@/components/Layout";
 import { SelfServiceLayout } from "@/components/SelfServiceLayout";
 import { ThemeProvider } from "@/context/theme-context";
 import { isEmployeeSelfServiceOnly } from "@/lib/roles";
+import { isProfileIncomplete } from "@/lib/profile";
+import { useMyEmployee } from "@/hooks/useMyEmployee";
 
 import LoginPage from "@/pages/LoginPage";
 import UpdatePasswordPage from "@/pages/UpdatePasswordPage";
@@ -46,6 +48,8 @@ import SettingsPage from "@/pages/admin/SettingsPage";
 import VenuesPage from "@/pages/venues/VenuesPage";
 import LeaveReportPage from "@/pages/reports/LeaveReportPage";
 import VenueDetailPage from "@/pages/venues/VenueDetailPage";
+import VendorsPage from "@/pages/vendors/VendorsPage";
+import VendorDetailPage from "@/pages/vendors/VendorDetailPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 
 const queryClient = new QueryClient({
@@ -59,13 +63,18 @@ const queryClient = new QueryClient({
 });
 
 function RoleRedirect() {
-  const { data: roles, isLoading, isError } = usePermissions<string[]>({});
-  if (isLoading) return null;
+  const { data: roles, isLoading: rolesLoading, isError } = usePermissions<string[]>({});
+  const { employee, isLoading: empLoading } = useMyEmployee();
+
+  if (rolesLoading) return null;
   if (isError || !roles || roles.length === 0) {
     return <Navigate to="/login" replace />;
   }
   if (isEmployeeSelfServiceOnly(roles)) {
-    return <Navigate to="/my-profile" replace />;
+    if (empLoading) return null;
+    if (!employee || isProfileIncomplete(employee)) {
+      return <Navigate to="/my-profile" replace />;
+    }
   }
   return <DashboardPage />;
 }
@@ -146,6 +155,10 @@ export default function App() {
               {/* Venues */}
               <Route path="/venues" element={<VenuesPage />} />
               <Route path="/venues/:name" element={<VenueDetailPage />} />
+
+              {/* Vendors */}
+              <Route path="/vendors" element={<VendorsPage />} />
+              <Route path="/vendors/:name" element={<VendorDetailPage />} />
 
               {/* HR */}
               <Route path="/hr/staff-overview" element={<StaffOverviewPage />} />

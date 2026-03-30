@@ -9,18 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { REQUIRED_PROFILE_FIELDS } from "@/lib/profile";
 
 const REQUIRED_FIELDS = [
-  "cell_number",
-  "personal_email",
+  ...REQUIRED_PROFILE_FIELDS,
   "addr_street",
   "addr_ward",
   "addr_district",
   "addr_province",
-  "person_to_be_contacted",
-  "emergency_phone_number",
-  "bank_name",
-  "bank_ac_no",
 ] as const;
 
 function parseAddress(raw: string) {
