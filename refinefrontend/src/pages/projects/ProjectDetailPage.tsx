@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { useOne, useList, useUpdate, useInvalidate, useNavigation, usePermissions } from "@refinedev/core";
 import * as Popover from "@radix-ui/react-popover";
@@ -33,6 +33,8 @@ import {
   Pencil,
   ChevronsUpDown,
   X,
+  Camera,
+  Paperclip,
 } from "lucide-react";
 import {
   Popover as ShadcnPopover,
@@ -51,6 +53,7 @@ import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
+import { uploadFile } from "@/lib/fileUpload";
 import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES } from "@/lib/roles";
 interface ExpenseCategory { name: string; account_name: string; }
 import { useMyEmployee } from "@/hooks/useMyEmployee";
@@ -181,6 +184,8 @@ export default function ProjectDetailPage() {
   const [expCatOpen, setExpCatOpen] = useState(false);
   const [expCatSearch, setExpCatSearch] = useState("");
   const [creatingExpCat, setCreatingExpCat] = useState(false);
+  const [expenseFile, setExpenseFile] = useState<File | null>(null);
+  const expenseFileRef = useRef<HTMLInputElement>(null);
 
   const invalidate = useInvalidate();
   const { mutateAsync: updateRecord } = useUpdate();
@@ -537,8 +542,19 @@ export default function ProjectDetailPage() {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.detail || "Failed to create expense");
       }
+      const result = await resp.json();
+      // Upload receipt image if provided
+      if (expenseFile && result.name) {
+        try {
+          await uploadFile(expenseFile, "Purchase Invoice", result.name);
+        } catch (err) {
+          console.error("Receipt upload failed:", err);
+        }
+      }
       setAddingExpense(false);
       setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "" });
+      setExpenseFile(null);
+      if (expenseFileRef.current) expenseFileRef.current.value = "";
       fetchExpenses(name!);
     } catch (error) {
       setExpenseError(error instanceof Error ? error.message : "Failed to create expense");
@@ -1918,7 +1934,14 @@ export default function ProjectDetailPage() {
                                   value={newExpense.amount}
                                   onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} />
                               </td>
-                              <td className="px-3 py-2"></td>
+                              <td className="px-3 py-2">
+                                <input ref={expenseFileRef} type="file" accept="image/*,.pdf" className="hidden"
+                                  onChange={e => setExpenseFile(e.target.files?.[0] ?? null)} />
+                                <Button type="button" variant={expenseFile ? "secondary" : "ghost"} size="icon" className="h-7 w-7"
+                                  onClick={() => expenseFileRef.current?.click()} title={expenseFile ? expenseFile.name : "Attach receipt"}>
+                                  {expenseFile ? <Paperclip className="h-4 w-4" /> : <Camera className="h-4 w-4 text-muted-foreground" />}
+                                </Button>
+                              </td>
                               <td className="px-3 py-2">
                                 <div className="flex gap-1">
                                   <Button variant="ghost" size="icon" className="h-7 w-7"
@@ -1930,6 +1953,8 @@ export default function ProjectDetailPage() {
                                     onClick={() => {
                                       setAddingExpense(false);
                                       setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "" });
+                                      setExpenseFile(null);
+                                      if (expenseFileRef.current) expenseFileRef.current.value = "";
                                       setExpenseError(null);
                                     }}>
                                     <X className="h-4 w-4" />
