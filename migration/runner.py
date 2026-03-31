@@ -17,6 +17,7 @@ ORDERED_PHASES = [
     "v051_wedding_expense_category_flag",
     "v052_sales_commission_fields",
     "v053_fix_server_script_allowlist",
+    "v054_pit_backend_setup",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -57,6 +58,7 @@ def run_pending(client) -> int:
             v051_wedding_expense_category_flag,
             v052_sales_commission_fields,
             v053_fix_server_script_allowlist,
+            v054_pit_backend_setup,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -69,6 +71,7 @@ def run_pending(client) -> int:
             v051_wedding_expense_category_flag,
             v052_sales_commission_fields,
             v053_fix_server_script_allowlist,
+            v054_pit_backend_setup,
         )
 
     phase_fns = {
@@ -85,6 +88,7 @@ def run_pending(client) -> int:
         "v051_wedding_expense_category_flag": v051_wedding_expense_category_flag.run,
         "v052_sales_commission_fields": v052_sales_commission_fields.run,
         "v053_fix_server_script_allowlist": v053_fix_server_script_allowlist.run,
+        "v054_pit_backend_setup": v054_pit_backend_setup.run,
     }
 
     state_file = get_state_file()

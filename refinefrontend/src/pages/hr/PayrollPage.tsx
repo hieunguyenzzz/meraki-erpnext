@@ -192,11 +192,9 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependent
     },
     {
       id: "est_pit",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Est. PIT" className="text-right" />,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Income Tax" className="text-right" />,
       cell: ({ row }) => {
-        const deps = dependentsMap[row.original.employee] ?? 0;
-        const si = getTotalSI(row.original.deductions);
-        const pit = calcEstPIT(row.original.gross_pay, si, deps);
+        const pit = getDeductionAmount(row.original.deductions, "Income Tax");
         return <div className="text-right text-red-600 dark:text-red-400">{pit > 0 ? formatVND(pit) : <span className="text-muted-foreground">-</span>}</div>;
       },
     },

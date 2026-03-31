@@ -25,6 +25,33 @@ COMMISSION_COMPONENTS = [
     "Full Package Commission", "Partial Package Commission",
 ]
 
+# Vietnam PIT 2026 transitional: new deductions, old 7 brackets
+PIT_PERSONAL_DEDUCTION = 15_500_000
+PIT_DEPENDENT_DEDUCTION = 6_200_000
+PIT_BRACKETS = [
+    (5_000_000,  0.05, 0),
+    (10_000_000, 0.10, 250_000),
+    (18_000_000, 0.15, 750_000),
+    (32_000_000, 0.20, 1_650_000),
+    (52_000_000, 0.25, 3_250_000),
+    (80_000_000, 0.30, 5_850_000),
+    (float("inf"), 0.35, 9_850_000),
+]
+PIT_COMPONENT = "Income Tax"
+
+
+def _calc_pit(gross_pay: float, si_deductions: float, dependents: int) -> int:
+    """Calculate monthly PIT using Vietnam progressive brackets."""
+    tax_reduction = PIT_PERSONAL_DEDUCTION + dependents * PIT_DEPENDENT_DEDUCTION
+    taxable = gross_pay - si_deductions - tax_reduction
+    if taxable <= 0:
+        return 0
+    for limit, rate, qd in PIT_BRACKETS:
+        if taxable <= limit:
+            return round(taxable * rate - qd)
+    limit, rate, qd = PIT_BRACKETS[-1]
+    return round(taxable * rate - qd)
+
 
 def _ensure_salary_structure_assignments(client: ERPNextClient):
     """Create SSA for any active employee who doesn't have one yet (base from ctc)."""
@@ -245,6 +272,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
             "custom_allowance_dest_partial",
             "custom_full_package_commission_pct",
             "custom_partial_package_commission_pct",
+            "custom_number_of_dependents",
         ]),
         "limit_page_length": 200,
     }).get("data", [])
@@ -337,6 +365,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
 
     # --- Write earnings to each draft salary slip ---
     STRIP_COMPONENTS = set(COMMISSION_COMPONENTS + ["Wedding Allowance"])
+    STRIP_DEDUCTIONS = {PIT_COMPONENT}
     applied = 0
     employees_with_commission = 0
     employees_with_allowance = 0
@@ -382,9 +411,24 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 new_earnings.append({"salary_component": "Wedding Allowance", "amount": round(allowance_amt)})
                 has_allowance = True
 
+            # Calculate PIT
+            gross = sum(e.get("amount", 0) for e in new_earnings)
+            si = sum(
+                d.get("amount", 0) for d in current_deductions
+                if d.get("salary_component", "").startswith(("BHXH", "BHYT", "BHTN"))
+                and "Employer" not in d.get("salary_component", "")
+            )
+            dependents = int(emp_map.get(emp_id, {}).get("custom_number_of_dependents") or 0)
+            pit = _calc_pit(gross, si, dependents)
+
+            # Strip old PIT, add fresh
+            new_deductions = [d for d in current_deductions if d.get("salary_component") not in STRIP_DEDUCTIONS]
+            if pit > 0:
+                new_deductions.append({"salary_component": PIT_COMPONENT, "amount": pit})
+
             client._put(f"/api/resource/Salary Slip/{slip['name']}", {
                 "earnings": new_earnings,
-                "deductions": current_deductions,
+                "deductions": new_deductions,
             })
             applied += 1
             if has_commission:
