@@ -57,7 +57,7 @@ class WeddingExpenseRequest(BaseModel):
     date: str              # YYYY-MM-DD
     description: str
     amount: float
-    category: str          # e.g. "Taxi", "Flight Ticket", "Hotel"
+    category: str          # expense account name (e.g. "Travel Expenses - MWP") or legacy label
     supplier: str = "Company Expense"
 
 
@@ -311,9 +311,12 @@ def create_wedding_expense(req: WeddingExpenseRequest):
 
     amount = round(req.amount)
 
-    expense_account = CATEGORY_TO_ACCOUNT.get(req.category, DEFAULT_EXPENSE_ACCOUNT)
-    # item_name stores "Category: Description" for display
-    item_name = f"{req.category}: {req.description}" if req.description else req.category
+    # Accept either a full account name ("Travel Expenses - MWP") or a legacy label ("Taxi")
+    if req.category.endswith(" - MWP"):
+        expense_account = req.category
+    else:
+        expense_account = CATEGORY_TO_ACCOUNT.get(req.category, DEFAULT_EXPENSE_ACCOUNT)
+    item_name = req.description or "Expense"
 
     pi_values = {
         "supplier": req.supplier,

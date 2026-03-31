@@ -52,7 +52,7 @@ import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
 import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
-import { WEDDING_EXPENSE_CATEGORIES } from "@/lib/constants";
+interface ExpenseCategory { name: string; account_name: string; }
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
 
@@ -177,6 +177,10 @@ export default function ProjectDetailPage() {
   const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "" });
   const [isSavingExpense, setIsSavingExpense] = useState(false);
   const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
+  const [expCatOpen, setExpCatOpen] = useState(false);
+  const [expCatSearch, setExpCatSearch] = useState("");
+  const [creatingExpCat, setCreatingExpCat] = useState(false);
 
   const invalidate = useInvalidate();
   const { mutateAsync: updateRecord } = useUpdate();
@@ -481,6 +485,35 @@ export default function ProjectDetailPage() {
     () => expenses.filter(e => e.status === "Approved").reduce((sum, e) => sum + (e.amount || 0), 0),
     [expenses]
   );
+
+  // Fetch expense categories
+  useEffect(() => {
+    fetch("/inquiry-api/expense/categories")
+      .then(r => r.json())
+      .then(data => setExpenseCategories(data))
+      .catch(() => {});
+  }, []);
+
+  async function handleCreateExpCat() {
+    if (!expCatSearch.trim()) return;
+    setCreatingExpCat(true);
+    try {
+      const resp = await fetch("/inquiry-api/expense/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: expCatSearch.trim() }),
+      });
+      if (!resp.ok) throw new Error("Failed to create category");
+      const newCat = await resp.json();
+      setExpenseCategories(prev => [...prev, newCat]);
+      setNewExpense(prev => ({ ...prev, category: newCat.name }));
+      setExpCatOpen(false);
+    } catch {
+      setExpenseError("Failed to create category");
+    } finally {
+      setCreatingExpCat(false);
+    }
+  }
 
   async function handleAddExpense() {
     if (!newExpense.description || !newExpense.amount || !newExpense.category) return;
@@ -1830,15 +1863,52 @@ export default function ProjectDetailPage() {
                                   onChange={e => setNewExpense({ ...newExpense, description: e.target.value })} />
                               </td>
                               <td className="px-3 py-2">
-                                <Select value={newExpense.category}
-                                  onValueChange={v => setNewExpense({ ...newExpense, category: v })}>
-                                  <SelectTrigger className="h-8 w-full truncate"><SelectValue placeholder="Category" /></SelectTrigger>
-                                  <SelectContent>
-                                    {WEDDING_EXPENSE_CATEGORIES.map(c => (
-                                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <ShadcnPopover open={expCatOpen} onOpenChange={setExpCatOpen}>
+                                  <ShadcnPopoverTrigger asChild>
+                                    <button type="button" className="h-8 w-full flex items-center justify-between rounded-md border border-input bg-background px-2 text-sm truncate">
+                                      <span className={newExpense.category ? "" : "text-muted-foreground"}>
+                                        {newExpense.category
+                                          ? (expenseCategories.find(c => c.name === newExpense.category)?.account_name ?? newExpense.category)
+                                          : "Category"}
+                                      </span>
+                                      <ChevronsUpDown className="h-3 w-3 opacity-50 shrink-0" />
+                                    </button>
+                                  </ShadcnPopoverTrigger>
+                                  <ShadcnPopoverContent className="w-[200px] p-0" align="start">
+                                    <Command>
+                                      <CommandInput placeholder="Search or create..." value={expCatSearch} onValueChange={setExpCatSearch} />
+                                      <CommandList>
+                                        <CommandEmpty>
+                                          <div className="py-2 text-center">
+                                            <p className="text-xs text-muted-foreground mb-1">No match</p>
+                                            {expCatSearch.trim() && (
+                                              <Button type="button" variant="outline" size="sm" onClick={handleCreateExpCat} disabled={creatingExpCat}>
+                                                <Plus className="h-3 w-3 mr-1" />{creatingExpCat ? "..." : `Create "${expCatSearch.trim()}"`}
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </CommandEmpty>
+                                        <CommandGroup>
+                                          {expenseCategories
+                                            .filter(c => !expCatSearch || c.account_name.toLowerCase().includes(expCatSearch.toLowerCase()))
+                                            .map(c => (
+                                              <CommandItem key={c.name} value={c.account_name} onSelect={() => { setNewExpense({ ...newExpense, category: c.name }); setExpCatOpen(false); }}>
+                                                <Check className={cn("mr-2 h-3 w-3", newExpense.category === c.name ? "opacity-100" : "opacity-0")} />
+                                                {c.account_name}
+                                              </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                        {expCatSearch.trim() && expenseCategories.some(c => c.account_name.toLowerCase().includes(expCatSearch.toLowerCase())) && (
+                                          <CommandGroup heading="Create new">
+                                            <CommandItem value={`__create_${expCatSearch}`} onSelect={handleCreateExpCat}>
+                                              <Plus className="mr-2 h-3 w-3" />Create "{expCatSearch.trim()}"
+                                            </CommandItem>
+                                          </CommandGroup>
+                                        )}
+                                      </CommandList>
+                                    </Command>
+                                  </ShadcnPopoverContent>
+                                </ShadcnPopover>
                               </td>
                               <td className="px-3 py-2">
                                 <Input className="h-8 w-full text-right" type="number" min="1" step="1" placeholder="Amount"
