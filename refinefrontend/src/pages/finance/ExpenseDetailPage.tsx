@@ -18,12 +18,18 @@ export default function ExpenseDetailPage() {
   const { name } = useParams<{ name: string }>();
 
   const { result: expense } = useOne({ resource: "Purchase Invoice", id: name! });
+  const { result: projectDoc } = useOne({
+    resource: "Project",
+    id: expense?.project ?? "",
+    queryOptions: { enabled: !!expense?.project },
+  });
 
   if (!expense) {
     return <DetailSkeleton />;
   }
 
   const items = expense.items ?? [];
+  const weddingLabel = projectDoc?.project_name || expense.project;
 
   return (
     <div className="space-y-6">
@@ -63,7 +69,7 @@ export default function ExpenseDetailPage() {
                   to={`/projects/${expense.project}`}
                   className="text-primary hover:underline"
                 >
-                  {expense.project_name || expense.project}
+                  {weddingLabel}
                 </Link>
               </div>
             )}
