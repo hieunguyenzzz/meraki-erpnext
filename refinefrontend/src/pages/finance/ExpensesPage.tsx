@@ -30,8 +30,8 @@ interface Expense {
   supplier_name: string;
   posting_date: string;
   grand_total: number;
-  outstanding_amount: number;
   status: string;
+  against_expense_account: string;
 }
 
 function statusVariant(status: string) {
@@ -117,9 +117,14 @@ const columns: ColumnDef<Expense, unknown>[] = [
     cell: ({ row }) => <div className="text-right">{formatVND(row.original.grand_total)}</div>,
   },
   {
-    accessorKey: "outstanding_amount",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Outstanding" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(row.original.outstanding_amount)}</div>,
+    accessorKey: "against_expense_account",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />,
+    cell: ({ row }) => {
+      const acc = row.original.against_expense_account;
+      if (!acc) return <span className="text-muted-foreground">—</span>;
+      return acc.replace(/ - MWP$/, "");
+    },
+    filterFn: "arrIncludesSome",
   },
   {
     accessorKey: "status",
@@ -175,7 +180,7 @@ export default function ExpensesPage() {
     meta: {
       fields: [
         "name", "supplier", "supplier_name", "posting_date",
-        "grand_total", "outstanding_amount", "status",
+        "grand_total", "status", "against_expense_account",
       ],
     },
   });
