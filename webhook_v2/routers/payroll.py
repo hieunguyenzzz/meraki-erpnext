@@ -20,7 +20,10 @@ class GeneratePayrollRequest(BaseModel):
     end_date: str    # YYYY-MM-DD
 
 
-COMMISSION_COMPONENTS = ["Lead Planner Commission", "Support Planner Commission", "Assistant Commission"]
+COMMISSION_COMPONENTS = [
+    "Lead Planner Commission", "Support Planner Commission", "Assistant Commission",
+    "Full Package Commission", "Partial Package Commission",
+]
 
 
 def _ensure_salary_structure_assignments(client: ERPNextClient):
@@ -212,6 +215,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 "custom_assistant_1", "custom_assistant_2",
                 "custom_lead_commission_pct", "custom_support_commission_pct",
                 "custom_assistant_commission_pct",
+                "custom_sales_person",
             ]),
             "limit_page_length": 500,
         }).get("data", [])
@@ -239,6 +243,8 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
             "custom_allowance_hcm_partial",
             "custom_allowance_dest_full",
             "custom_allowance_dest_partial",
+            "custom_full_package_commission_pct",
+            "custom_partial_package_commission_pct",
         ]),
         "limit_page_length": 200,
     }).get("data", [])
@@ -277,6 +283,36 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
         add_comm(proj.get("custom_support_planner"), "support", net_total, proj)
         add_comm(proj.get("custom_assistant_1"), "assistant", net_total, proj)
         add_comm(proj.get("custom_assistant_2"), "assistant", net_total, proj)
+
+    # --- Build sales commission totals per employee ---
+    # Sales person gets Full Package or Partial Package commission based on service type
+    for proj in projects:
+        sales_person = proj.get("custom_sales_person")
+        if not sales_person:
+            continue
+        net_total = so_net_map.get(proj["sales_order"], 0)
+        if not net_total:
+            continue
+        # Determine service type from project detail
+        try:
+            proj_detail = _get_project_data(client, proj["name"])
+        except Exception:
+            continue
+        service_type = proj_detail.get("service_type", "")
+        is_full = "full" in (service_type or "").lower()
+
+        emp = emp_map.get(sales_person, {})
+        if is_full:
+            pct = float(emp.get("custom_full_package_commission_pct") or 0)
+            key = "full_package"
+        else:
+            pct = float(emp.get("custom_partial_package_commission_pct") or 0)
+            key = "partial_package"
+
+        if pct > 0:
+            if sales_person not in comm_totals:
+                comm_totals[sales_person] = {"lead": 0.0, "support": 0.0, "assistant": 0.0}
+            comm_totals[sales_person][key] = comm_totals[sales_person].get(key, 0.0) + net_total * pct / 100
 
     # --- Build allowance totals per employee ---
     allowance_totals: dict[str, float] = {}
@@ -331,6 +367,12 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                     has_commission = True
                 if totals["assistant"] > 0:
                     new_earnings.append({"salary_component": "Assistant Commission", "amount": round(totals["assistant"])})
+                    has_commission = True
+                if totals.get("full_package", 0) > 0:
+                    new_earnings.append({"salary_component": "Full Package Commission", "amount": round(totals["full_package"])})
+                    has_commission = True
+                if totals.get("partial_package", 0) > 0:
+                    new_earnings.append({"salary_component": "Partial Package Commission", "amount": round(totals["partial_package"])})
                     has_commission = True
 
             # Add wedding allowance

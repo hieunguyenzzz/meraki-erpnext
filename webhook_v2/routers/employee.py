@@ -59,6 +59,8 @@ ALLOWED_FIELDS = {
     "custom_support_commission_pct",
     "custom_assistant_commission_pct",
     "custom_sales_commission_pct",
+    "custom_full_package_commission_pct",
+    "custom_partial_package_commission_pct",
     "user_id",
     "custom_last_review_date",
     "custom_review_notes",

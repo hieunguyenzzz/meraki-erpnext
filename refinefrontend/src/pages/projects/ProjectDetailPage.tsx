@@ -137,6 +137,8 @@ export default function ProjectDetailPage() {
   // Edit state - per-section sheets
   const [editDetailsOpen, setEditDetailsOpen] = useState(false);
   const [editStaffOpen, setEditStaffOpen] = useState(false);
+  const [editSalesOpen, setEditSalesOpen] = useState(false);
+  const [salesForm, setSalesForm] = useState({ salesPerson: "", bookingDate: "" });
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editVenueOpen, setEditVenueOpen] = useState(false);
@@ -219,6 +221,8 @@ export default function ProjectDetailPage() {
         "custom_lead_commission_pct",
         "custom_support_commission_pct",
         "custom_assistant_commission_pct",
+        "custom_sales_person",
+        "custom_booking_date",
         "custom_wedding_vendors",
         "custom_total_budget",
       ],
@@ -798,6 +802,28 @@ export default function ProjectDetailPage() {
     }
   }
 
+  async function handleSaveSales(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSubmittingEdit(true);
+    setEditError(null);
+    try {
+      await updateRecord({
+        resource: "Project",
+        id: name!,
+        values: {
+          custom_sales_person: salesForm.salesPerson || null,
+          custom_booking_date: salesForm.bookingDate || null,
+        },
+      });
+      invalidate({ resource: "Project", invalidates: ["detail"], id: name! });
+      setEditSalesOpen(false);
+    } catch (err: any) {
+      setEditError(err?.message || "Failed to save changes");
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  }
+
   async function handleDelete() {
     setIsDeleting(true);
     setDeleteError(null);
@@ -1366,6 +1392,29 @@ export default function ProjectDetailPage() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Sales Information */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                  <CardTitle>Sales Information</CardTitle>
+                  {isWeddingManager && (
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setSalesForm({
+                        salesPerson: project.custom_sales_person || "",
+                        bookingDate: project.custom_booking_date || "",
+                      });
+                      setEditError(null);
+                      setEditSalesOpen(true);
+                    }}>
+                      <Pencil className="h-3 w-3 mr-1" /> Edit
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <ReadOnlyField label="Sold by" value={getEmployeeNameById(project.custom_sales_person) || project.custom_sales_person || "—"} />
+                  <ReadOnlyField label="Booking Date" value={project.custom_booking_date ? formatDate(project.custom_booking_date) : "—"} />
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* Vendors Tab */}
@@ -2555,6 +2604,53 @@ export default function ProjectDetailPage() {
             </div>
             <SheetFooter className="px-6 py-4 border-t shrink-0">
               <Button type="button" variant="outline" onClick={() => setEditStaffOpen(false)} disabled={isSubmittingEdit}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmittingEdit}>
+                {isSubmittingEdit ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      {/* Edit Sales Information Sheet */}
+      <Sheet open={editSalesOpen} onOpenChange={(open) => { if (!isSubmittingEdit) { setEditSalesOpen(open); setEditError(null); } }}>
+        <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Edit Sales Information</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleSaveSales} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {editError && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {editError}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Sold by</Label>
+                <Select value={salesForm.salesPerson || "__none__"} onValueChange={(v) => setSalesForm({ ...salesForm, salesPerson: v === "__none__" ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Booking Date</Label>
+                <Input type="date" value={salesForm.bookingDate} onChange={(e) => setSalesForm({ ...salesForm, bookingDate: e.target.value })} />
+              </div>
+            </div>
+            <SheetFooter className="px-6 py-4 border-t shrink-0">
+              <Button type="button" variant="outline" onClick={() => setEditSalesOpen(false)} disabled={isSubmittingEdit}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmittingEdit}>

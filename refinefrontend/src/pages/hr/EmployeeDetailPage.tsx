@@ -214,7 +214,8 @@ export default function EmployeeDetailPage() {
       (employee.custom_lead_commission_pct ?? 0) > 0 ||
       (employee.custom_support_commission_pct ?? 0) > 0 ||
       (employee.custom_assistant_commission_pct ?? 0) > 0 ||
-      (employee.custom_sales_commission_pct ?? 0) > 0
+      (employee.custom_full_package_commission_pct ?? 0) > 0 ||
+      (employee.custom_partial_package_commission_pct ?? 0) > 0
     );
   }, [employee]);
 
@@ -326,7 +327,8 @@ export default function EmployeeDetailPage() {
         custom_lead_commission_pct: employee.custom_lead_commission_pct ?? 0,
         custom_support_commission_pct: employee.custom_support_commission_pct ?? 0,
         custom_assistant_commission_pct: employee.custom_assistant_commission_pct ?? 0,
-        custom_sales_commission_pct: employee.custom_sales_commission_pct ?? 0,
+        custom_full_package_commission_pct: employee.custom_full_package_commission_pct ?? 0,
+        custom_partial_package_commission_pct: employee.custom_partial_package_commission_pct ?? 0,
       });
     } else if (section === "allowance") {
       setEditValues({
@@ -376,7 +378,8 @@ export default function EmployeeDetailPage() {
         "custom_allowance_hcm_full", "custom_allowance_hcm_partial",
         "custom_allowance_dest_full", "custom_allowance_dest_partial",
         "custom_lead_commission_pct", "custom_support_commission_pct",
-        "custom_assistant_commission_pct", "custom_sales_commission_pct",
+        "custom_assistant_commission_pct",
+        "custom_full_package_commission_pct", "custom_partial_package_commission_pct",
       ];
       for (const field of numericFields) {
         if (field in values) {
@@ -823,10 +826,16 @@ export default function EmployeeDetailPage() {
                         <span className="font-medium">{employee.custom_assistant_commission_pct}%</span>
                       </div>
                     )}
-                    {(employee.custom_sales_commission_pct ?? 0) > 0 && (
+                    {(employee.custom_full_package_commission_pct ?? 0) > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Sales Commission</span>
-                        <span className="font-medium">{employee.custom_sales_commission_pct}%</span>
+                        <span className="text-muted-foreground">Full Package Commission</span>
+                        <span className="font-medium">{employee.custom_full_package_commission_pct}%</span>
+                      </div>
+                    )}
+                    {(employee.custom_partial_package_commission_pct ?? 0) > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Partial Package Commission</span>
+                        <span className="font-medium">{employee.custom_partial_package_commission_pct}%</span>
                       </div>
                     )}
                   </>
@@ -1355,8 +1364,12 @@ export default function EmployeeDetailPage() {
                   <Input id="edit-assistant-pct" type="number" min={0} max={100} step={0.1} value={editValues.custom_assistant_commission_pct} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_assistant_commission_pct: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-sales-pct">Sales Commission (%)</Label>
-                  <Input id="edit-sales-pct" type="number" min={0} max={100} step={0.1} value={editValues.custom_sales_commission_pct} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_sales_commission_pct: e.target.value }))} />
+                  <Label htmlFor="edit-full-pkg-pct">Full Package Commission (%)</Label>
+                  <Input id="edit-full-pkg-pct" type="number" min={0} max={100} step={0.1} value={editValues.custom_full_package_commission_pct} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_full_package_commission_pct: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-partial-pkg-pct">Partial Package Commission (%)</Label>
+                  <Input id="edit-partial-pkg-pct" type="number" min={0} max={100} step={0.1} value={editValues.custom_partial_package_commission_pct} onChange={(e) => setEditValues((prev) => ({ ...prev, custom_partial_package_commission_pct: e.target.value }))} />
                 </div>
               </>
             )}
