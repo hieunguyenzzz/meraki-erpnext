@@ -223,6 +223,8 @@ export default function ProjectDetailPage() {
         "custom_assistant_commission_pct",
         "custom_sales_person",
         "custom_booking_date",
+        "custom_service_type",
+        "custom_wedding_type",
         "custom_wedding_vendors",
         "custom_total_budget",
       ],
@@ -1187,6 +1189,24 @@ export default function ProjectDetailPage() {
                         <div>
                           <p className="text-xs text-muted-foreground">Venue</p>
                           <p className="font-medium">{venueName}</p>
+                        </div>
+                      </div>
+                    )}
+                    {(project.custom_service_type || project.custom_wedding_type) && (
+                      <div className="flex items-start gap-3 text-sm">
+                        <Users className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Package</p>
+                          <div className="flex gap-2 mt-0.5">
+                            {project.custom_service_type && (
+                              <Badge variant={project.custom_service_type.toLowerCase().includes("full") ? "default" : "secondary"}>
+                                {project.custom_service_type}
+                              </Badge>
+                            )}
+                            {project.custom_wedding_type && (
+                              <Badge variant="outline">{project.custom_wedding_type}</Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
