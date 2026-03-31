@@ -217,3 +217,96 @@ def delete_sales_invoices(request: DeleteSalesInvoicesRequest):
 
     log.info("sales_invoices_deleted", deleted=len(deleted), failed=len(failed))
     return {"deleted": deleted, "failed": failed}
+
+
+class PurchaseInvoiceNamesRequest(BaseModel):
+    names: List[str]
+
+
+@router.post("/purchase-invoices/delete")
+def delete_purchase_invoices(request: PurchaseInvoiceNamesRequest):
+    """Delete Purchase Invoices. Submitted ones are cancelled first, then GL/ledger cleaned up."""
+    client = ERPNextClient()
+    deleted = []
+    failed = []
+
+    for pi_name in request.names:
+        try:
+            pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+            if not pi:
+                failed.append(f"{pi_name}: not found")
+                continue
+
+            docstatus = pi.get("docstatus", 0)
+            if docstatus == 1:
+                _cancel(client, "Purchase Invoice", pi_name)
+
+            _delete_gl_entries(client, pi_name)
+            _delete_payment_ledger_entries(client, pi_name)
+            client._delete(f"/api/resource/Purchase Invoice/{pi_name}")
+            deleted.append(pi_name)
+        except Exception as e:
+            failed.append(f"{pi_name}: {e}")
+
+    log.info("purchase_invoices_deleted", deleted=len(deleted), failed=len(failed))
+    return {"deleted": deleted, "failed": failed}
+
+
+@router.post("/purchase-invoices/mark-paid")
+def mark_purchase_invoices_paid(request: PurchaseInvoiceNamesRequest):
+    """Mark Purchase Invoices as paid by creating Payment Entries."""
+    client = ERPNextClient()
+    paid = []
+    failed = []
+
+    for pi_name in request.names:
+        try:
+            pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+            if not pi:
+                failed.append(f"{pi_name}: not found")
+                continue
+
+            if pi.get("docstatus") != 1:
+                failed.append(f"{pi_name}: not submitted")
+                continue
+
+            outstanding = pi.get("outstanding_amount", 0)
+            if outstanding <= 0:
+                paid.append(pi_name)  # already paid
+                continue
+
+            # Create + submit Payment Entry
+            pe = client._post("/api/resource/Payment Entry", {
+                "payment_type": "Pay",
+                "party_type": "Supplier",
+                "party": pi["supplier"],
+                "paid_from": "Cash - MWP",
+                "paid_to": "Creditors - MWP",
+                "paid_from_account_currency": "VND",
+                "paid_to_account_currency": "VND",
+                "paid_amount": outstanding,
+                "received_amount": outstanding,
+                "posting_date": pi["posting_date"],
+                "company": "Meraki Wedding Planner",
+                "references": [{
+                    "reference_doctype": "Purchase Invoice",
+                    "reference_name": pi_name,
+                    "allocated_amount": outstanding,
+                    "total_amount": pi.get("grand_total", outstanding),
+                    "outstanding_amount": outstanding,
+                }],
+            }).get("data", {})
+
+            pe_name = pe.get("name")
+            if not pe_name:
+                failed.append(f"{pi_name}: PE creation returned no name")
+                continue
+
+            full_pe = client._get(f"/api/resource/Payment Entry/{pe_name}").get("data", {})
+            client._post("/api/method/frappe.client.submit", {"doc": full_pe})
+            paid.append(pi_name)
+        except Exception as e:
+            failed.append(f"{pi_name}: {e}")
+
+    log.info("purchase_invoices_marked_paid", paid=len(paid), failed=len(failed))
+    return {"paid": paid, "failed": failed}

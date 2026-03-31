@@ -2,11 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X } from "lucide-react";
+import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X, BadgeCheck } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
@@ -69,6 +70,25 @@ const initialInvoiceForm = {
 
 const columns: ColumnDef<Expense, unknown>[] = [
   {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
+  {
     accessorKey: "name",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
     cell: ({ row }) => (
@@ -112,6 +132,11 @@ const columns: ColumnDef<Expense, unknown>[] = [
 
 export default function ExpensesPage() {
   const invalidate = useInvalidate();
+
+  // Row selection state
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
+  const [bulkAction, setBulkAction] = useState<"deleting" | "paying" | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   // Dialog states
   const [quickExpenseOpen, setQuickExpenseOpen] = useState(false);
@@ -330,6 +355,69 @@ export default function ExpensesPage() {
     return sum + amount;
   }, 0);
 
+  const selectedNames = Object.keys(rowSelection).filter((k) => rowSelection[k]);
+  const selectedCount = selectedNames.length;
+
+  async function handleDeleteSelected() {
+    if (selectedCount === 0) return;
+    if (!confirm(`Delete ${selectedCount} expense${selectedCount === 1 ? "" : "s"}? This cannot be undone.`)) return;
+
+    setBulkAction("deleting");
+    setBulkError(null);
+    try {
+      const names = selectedNames.map((idx) => expenses[Number(idx)]?.name).filter(Boolean);
+      const res = await fetch("/inquiry-api/purchase-invoices/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Delete failed: ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.failed?.length) {
+        setBulkError(`Some failed: ${data.failed.join(", ")}`);
+      }
+      setRowSelection({});
+      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
+    } catch (err: any) {
+      setBulkError(err.message || "Failed to delete expenses");
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
+  async function handleMarkPaidSelected() {
+    if (selectedCount === 0) return;
+    if (!confirm(`Mark ${selectedCount} expense${selectedCount === 1 ? "" : "s"} as paid?`)) return;
+
+    setBulkAction("paying");
+    setBulkError(null);
+    try {
+      const names = selectedNames.map((idx) => expenses[Number(idx)]?.name).filter(Boolean);
+      const res = await fetch("/inquiry-api/purchase-invoices/mark-paid", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Mark paid failed: ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.failed?.length) {
+        setBulkError(`Some failed: ${data.failed.join(", ")}`);
+      }
+      setRowSelection({});
+      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
+    } catch (err: any) {
+      setBulkError(err.message || "Failed to mark expenses as paid");
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -337,24 +425,45 @@ export default function ExpensesPage() {
           <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
           <p className="text-muted-foreground">Purchase invoices and supplier billing</p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-1.5" />
-              Add Expense
-              <ChevronDown className="h-4 w-4 ml-1" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setQuickExpenseOpen(true)}>
-              Quick Expense
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setSupplierInvoiceOpen(true)}>
-              Supplier Invoice
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          {selectedCount > 0 && (
+            <>
+              <Button variant="outline" size="sm" onClick={handleMarkPaidSelected} disabled={!!bulkAction}>
+                <BadgeCheck className="mr-1.5 h-4 w-4" />
+                {bulkAction === "paying" ? "Paying..." : `Mark ${selectedCount} paid`}
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={!!bulkAction}>
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                {bulkAction === "deleting" ? "Deleting..." : `Delete ${selectedCount}`}
+              </Button>
+            </>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-1.5" />
+                Add Expense
+                <ChevronDown className="h-4 w-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setQuickExpenseOpen(true)}>
+                Quick Expense
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSupplierInvoiceOpen(true)}>
+                Supplier Invoice
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
+
+      {bulkError && (
+        <div className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+          <span>{bulkError}</span>
+          <button onClick={() => setBulkError(null)} className="ml-4 font-medium hover:text-red-900">&times;</button>
+        </div>
+      )}
 
       {/* Quick Expense Sheet */}
       <Sheet open={quickExpenseOpen} onOpenChange={handleQuickExpenseOpenChange}>
@@ -655,6 +764,9 @@ export default function ExpensesPage() {
         isLoading={isLoading}
         searchKey="supplier_name"
         searchPlaceholder="Search by supplier..."
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
         filterableColumns={[
           {
             id: "status",
