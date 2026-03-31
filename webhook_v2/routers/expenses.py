@@ -142,16 +142,19 @@ class CreateCategoryRequest(BaseModel):
 
 @router.get("/expense/categories")
 def list_expense_categories():
-    """List expense accounts suitable for the category picker."""
+    """List expense accounts tagged as wedding expense categories."""
     client = ERPNextClient()
     accounts = client._get("/api/resource/Account", params={
-        "filters": json.dumps([["root_type", "=", "Expense"], ["is_group", "=", 0]]),
+        "filters": json.dumps([
+            ["root_type", "=", "Expense"],
+            ["is_group", "=", 0],
+            ["is_custom_wedding_expense", "=", 1],
+        ]),
         "fields": json.dumps(["name", "account_name"]),
         "limit_page_length": 0,
     }).get("data", [])
-    # Filter out internal accounts
     return [
-        {"name": a["name"], "account_name": a["account_name"]}
+        {"name": a["name"], "account_name": a["account_name"].replace(" - MWP", "")}
         for a in accounts
         if a["account_name"] not in HIDDEN_EXPENSE_ACCOUNTS
     ]
@@ -175,7 +178,7 @@ def create_expense_category(req: CreateCategoryRequest):
     if existing:
         return {"name": existing[0]["name"], "account_name": existing[0]["account_name"]}
 
-    # Create under Indirect Expenses
+    # Create under Indirect Expenses, tagged as wedding expense
     result = client._post("/api/resource/Account", {
         "account_name": account_name,
         "parent_account": "Indirect Expenses - MWP",
@@ -184,9 +187,11 @@ def create_expense_category(req: CreateCategoryRequest):
         "account_type": "Expense Account",
         "company": COMPANY,
         "is_group": 0,
+        "is_custom_wedding_expense": 1,
     }).get("data", {})
 
-    return {"name": result.get("name"), "account_name": result.get("account_name")}
+    display_name = result.get("account_name", "").replace(" - MWP", "")
+    return {"name": result.get("name"), "account_name": display_name}
 
 
 # ---------------------------------------------------------------------------
