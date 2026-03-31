@@ -47,10 +47,17 @@ def get_financial_overview(year: int = Query(default=None, description="Year (de
         "limit_page_length": 2000,
     }).get("data", [])
 
-    # Fetch submitted Journal Entries
+    # Fetch submitted Journal Entries (salary, insurance, etc.)
     journals = client._get("/api/resource/Journal Entry", params={
         "filters": json.dumps([["docstatus", "=", 1]]),
         "fields": json.dumps(["posting_date", "total_debit"]),
+        "limit_page_length": 2000,
+    }).get("data", [])
+
+    # Fetch submitted Purchase Invoices (operational expenses)
+    purchase_invoices = client._get("/api/resource/Purchase Invoice", params={
+        "filters": json.dumps([["docstatus", "=", 1]]),
+        "fields": json.dumps(["posting_date", "grand_total"]),
         "limit_page_length": 2000,
     }).get("data", [])
 
@@ -87,6 +94,11 @@ def get_financial_overview(year: int = Query(default=None, description="Year (de
         month = (j.get("posting_date") or "")[:7]
         if month in monthly_map:
             monthly_map[month]["expenses"] += j.get("total_debit") or 0
+
+    for pi in purchase_invoices:
+        month = (pi.get("posting_date") or "")[:7]
+        if month in monthly_map:
+            monthly_map[month]["expenses"] += pi.get("grand_total") or 0
 
     for p in payments:
         month = (p.get("posting_date") or "")[:7]
@@ -139,8 +151,12 @@ def get_financial_overview(year: int = Query(default=None, description="Year (de
         y = (j.get("posting_date") or "")[:4]
         if y.isdigit():
             years_set.add(int(y))
+    for pi in purchase_invoices:
+        y = (pi.get("posting_date") or "")[:4]
+        if y.isdigit():
+            years_set.add(int(y))
 
-    log.info("financial_overview_served", year=year, invoices=len(invoices), journals=len(journals))
+    log.info("financial_overview_served", year=year, invoices=len(invoices), journals=len(journals), purchase_invoices=len(purchase_invoices))
 
     return {
         "year": year,
