@@ -17,6 +17,13 @@ export interface ProjectKanbanItem {
   per_billed?: number;          // from Sales Order per_billed (0-100)
   tax_type?: "tax_free" | "vat_included";
   commission_base?: number;     // from Sales Order custom_commission_base
+  custom_lead_planner?: string;
+  custom_support_planner?: string;
+  custom_assistant_1?: string;
+  custom_assistant_2?: string;
+  custom_assistant_3?: string;
+  custom_assistant_4?: string;
+  custom_assistant_5?: string;
 }
 
 export interface ProjectColumnDef {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useList, usePermissions } from "@refinedev/core";
 import { LayoutGrid, LayoutList, Plus } from "lucide-react";
 import { Link } from "react-router";
@@ -19,7 +19,8 @@ import {
 } from "@/lib/projectKanban";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
 import { displayName } from "@/lib/format";
-import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
+import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES } from "@/lib/roles";
+import { useMyEmployee } from "@/hooks/useMyEmployee";
 
 export default function ProjectKanbanPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -29,6 +30,19 @@ export default function ProjectKanbanPage() {
   const [yearFilter, setYearFilter] = useState<string | null>(String(new Date().getFullYear()));
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
+  const { employeeId } = useMyEmployee();
+  const isWeddingManager = hasModuleAccess(roles ?? [], WEDDING_MANAGER_ROLES);
+  const [showMyWeddings, setShowMyWeddings] = useState<boolean>(() => {
+    const stored = localStorage.getItem("wedding-my-filter");
+    if (stored !== null) return stored === "true";
+    return false;
+  });
+
+  useEffect(() => {
+    if (roles && localStorage.getItem("wedding-my-filter") === null) {
+      setShowMyWeddings(!hasModuleAccess(roles, WEDDING_MANAGER_ROLES));
+    }
+  }, [roles]);
 
   const handleViewChange = (mode: "kanban" | "list") => {
     setViewMode(mode);
@@ -53,6 +67,11 @@ export default function ProjectKanbanPage() {
         "sales_order",
         "custom_lead_planner",
         "custom_support_planner",
+        "custom_assistant_1",
+        "custom_assistant_2",
+        "custom_assistant_3",
+        "custom_assistant_4",
+        "custom_assistant_5",
       ],
     },
   });
@@ -156,6 +175,13 @@ export default function ProjectKanbanPage() {
           : undefined,
         tax_type: linkedSO ? (linkedSO.total_taxes_and_charges > 0 ? "vat_included" : "tax_free") : undefined,
         commission_base: linkedSO?.custom_commission_base || linkedSO?.grand_total,
+        custom_lead_planner: p.custom_lead_planner,
+        custom_support_planner: p.custom_support_planner,
+        custom_assistant_1: p.custom_assistant_1,
+        custom_assistant_2: p.custom_assistant_2,
+        custom_assistant_3: p.custom_assistant_3,
+        custom_assistant_4: p.custom_assistant_4,
+        custom_assistant_5: p.custom_assistant_5,
       };
     });
   }, [projectsResult, salesOrdersResult, customersResult, employeesResult, suppliersResult, invoicesResult]);
@@ -172,9 +198,22 @@ export default function ProjectKanbanPage() {
   }, [items]);
 
   const filteredItems = useMemo(() => {
-    if (!yearFilter) return items;
-    return items.filter((p) => p.expected_end_date?.startsWith(yearFilter));
-  }, [items, yearFilter]);
+    let result = items;
+    if (yearFilter) {
+      result = result.filter((p) => p.expected_end_date?.startsWith(yearFilter));
+    }
+    if (showMyWeddings && employeeId) {
+      const FIELDS = [
+        "custom_lead_planner", "custom_support_planner",
+        "custom_assistant_1", "custom_assistant_2", "custom_assistant_3",
+        "custom_assistant_4", "custom_assistant_5",
+      ] as const;
+      result = result.filter((p) =>
+        FIELDS.some((f) => p[f] === employeeId)
+      );
+    }
+    return result;
+  }, [items, yearFilter, showMyWeddings, employeeId]);
 
   const columns = useMemo<ColumnDef<ProjectKanbanItem>[]>(() => {
     const cols: ColumnDef<ProjectKanbanItem>[] = [
@@ -330,25 +369,43 @@ export default function ProjectKanbanPage() {
         onOpenChange={setCreateDialogOpen}
       />
 
-      {availableYears.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Button
-            variant={yearFilter === null ? "default" : "outline"}
-            size="sm"
-            className="h-7 px-3 text-xs"
-            onClick={() => setYearFilter(null)}
-          >All</Button>
-          {availableYears.map((year) => (
+      <div className="flex items-center gap-3 flex-wrap">
+        {employeeId && (
+          <div className="flex items-center gap-1 border rounded-md p-1">
             <Button
-              key={year}
-              variant={yearFilter === year ? "default" : "outline"}
+              variant={showMyWeddings ? "default" : "ghost"}
               size="sm"
               className="h-7 px-3 text-xs"
-              onClick={() => setYearFilter(year === yearFilter ? null : year)}
-            >{year}</Button>
-          ))}
-        </div>
-      )}
+              onClick={() => { setShowMyWeddings(true); localStorage.setItem("wedding-my-filter", "true"); }}
+            >My Weddings</Button>
+            <Button
+              variant={!showMyWeddings ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-3 text-xs"
+              onClick={() => { setShowMyWeddings(false); localStorage.setItem("wedding-my-filter", "false"); }}
+            >All Weddings</Button>
+          </div>
+        )}
+        {availableYears.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button
+              variant={yearFilter === null ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-3 text-xs"
+              onClick={() => setYearFilter(null)}
+            >All</Button>
+            {availableYears.map((year) => (
+              <Button
+                key={year}
+                variant={yearFilter === year ? "default" : "outline"}
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={() => setYearFilter(year === yearFilter ? null : year)}
+              >{year}</Button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {viewMode === "list" ? (
         <DataTable
