@@ -26,6 +26,7 @@ const DOC_ROUTES: Record<string, (name: string) => string> = {
   "Lead": (name) => `/crm/leads/${encodeURIComponent(name)}`,
   "Employee": (name) => `/hr/employees/${encodeURIComponent(name)}`,
   "Project": (name) => `/projects/${encodeURIComponent(name)}`,
+  "Purchase Invoice": (name) => `/finance/expenses/${encodeURIComponent(name)}`,
 };
 
 /**
@@ -235,7 +236,7 @@ export default function NotificationsPage() {
                   const isClickable = !!routeFn;
                   const isProcessing = processingId === notif.name;
 
-                  const isLeave = notif.reference_document_type === "Leave Application";
+                  const isActionable = ["Leave Application", "Purchase Invoice"].includes(notif.reference_document_type);
 
                   return (
                     <div
@@ -271,8 +272,8 @@ export default function NotificationsPage() {
                             {timeAgo(notif.creation)}
                           </span>
                         </div>
-                        {/* Approve / Reject for Leave Applications */}
-                        {isLeave && !notif.read && (
+                        {/* Approve / Reject for actionable notifications */}
+                        {isActionable && !notif.read && (
                           <div className="mt-2 flex gap-1.5">
                             <Button
                               size="sm"

@@ -11,6 +11,8 @@ ORDERED_PHASES = [
     "v045_company_expense_supplier",
     "v046_invoice_category_field",
     "v047_convert_je_expenses_to_pi",
+    "v048_expense_rejected_field",
+    "v049_update_notification_action_script",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -45,12 +47,16 @@ def run_pending(client) -> int:
             v041_wedding_vendors, v042_vendor_budget_fields, v043_vendor_custom_fields,
             v044_update_notification_scripts, v045_company_expense_supplier,
             v046_invoice_category_field, v047_convert_je_expenses_to_pi,
+            v048_expense_rejected_field,
+            v049_update_notification_action_script,
         )
     except ModuleNotFoundError:
         from phases import (
             v041_wedding_vendors, v042_vendor_budget_fields, v043_vendor_custom_fields,
             v044_update_notification_scripts, v045_company_expense_supplier,
             v046_invoice_category_field, v047_convert_je_expenses_to_pi,
+            v048_expense_rejected_field,
+            v049_update_notification_action_script,
         )
 
     phase_fns = {
@@ -61,6 +67,8 @@ def run_pending(client) -> int:
         "v045_company_expense_supplier": v045_company_expense_supplier.run,
         "v046_invoice_category_field": v046_invoice_category_field.run,
         "v047_convert_je_expenses_to_pi": v047_convert_je_expenses_to_pi.run,
+        "v048_expense_rejected_field": v048_expense_rejected_field.run,
+        "v049_update_notification_action_script": v049_update_notification_action_script.run,
     }
 
     state_file = get_state_file()

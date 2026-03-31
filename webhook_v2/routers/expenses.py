@@ -9,7 +9,7 @@ New (wedding expenses with approval):
   GET  /expenses                 — list Purchase Invoices used as expenses
   POST /expense/wedding          — create Draft PI (pending approval)
   POST /expense/{name}/approve   — submit Draft PI (finance approves)
-  POST /expense/{name}/reject    — delete Draft PI (finance rejects)
+  POST /expense/{name}/reject    — mark Draft PI as rejected
   DELETE /expense/{name}         — delete expense (Draft or Submitted)
 """
 
@@ -84,6 +84,55 @@ HIDDEN_EXPENSE_ACCOUNTS = {
     "Impairment", "Round Off", "Salary", "Social Insurance Expense",
     "Stock Adjustment", "Write Off", "Commission on Sales",
 }
+
+
+def _get_finance_managers(client: ERPNextClient) -> list[str]:
+    """Return email addresses of users with Accounts Manager role."""
+    users = client._get("/api/resource/User", params={
+        "filters": json.dumps([["enabled", "=", 1], ["user_type", "=", "System User"]]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 0,
+    }).get("data", [])
+    managers = []
+    for u in users:
+        user_doc = client._get(f"/api/resource/User/{u['name']}").get("data", {})
+        roles = [r.get("role") for r in user_doc.get("roles", [])]
+        if "Accounts Manager" in roles:
+            managers.append(u["name"])
+    return managers
+
+
+def _notify_finance_managers(client: ERPNextClient, pi_name: str, amount: float, project: str, description: str):
+    """Send PWA Notification to all Finance Managers about a new expense."""
+    try:
+        # Get project name for readable message
+        project_name = project
+        if project:
+            proj = client._get(f"/api/resource/Project/{project}", params={
+                "fields": json.dumps(["project_name"]),
+            }).get("data", {})
+            project_name = proj.get("project_name") or project
+
+        managers = _get_finance_managers(client)
+        amount_str = f"{amount:,.0f} ₫"
+        message = f"New expense pending approval: <b>{amount_str}</b> for <b>{project_name}</b> — {description}"
+
+        for email in managers:
+            try:
+                client._post("/api/resource/PWA Notification", {
+                    "to_user": email,
+                    "from_user": "Administrator",
+                    "message": message,
+                    "read": 0,
+                    "reference_document_type": "Purchase Invoice",
+                    "reference_document_name": pi_name,
+                })
+            except Exception as e:
+                log.warning("expense_notification_failed", to_user=email, error=str(e))
+
+        log.info("expense_notifications_sent", pi=pi_name, recipients=len(managers))
+    except Exception as e:
+        log.warning("expense_notification_error", pi=pi_name, error=str(e))
 
 
 class CreateCategoryRequest(BaseModel):
@@ -258,6 +307,7 @@ def list_expenses(project: str | None = None):
         "fields": json.dumps([
             "name", "supplier", "supplier_name", "posting_date",
             "grand_total", "project", "docstatus", "owner",
+            "custom_rejected",
         ]),
         "order_by": "posting_date desc",
         "limit_page_length": 0,
@@ -266,7 +316,15 @@ def list_expenses(project: str | None = None):
     result = []
     for pi in pis:
         docstatus = pi.get("docstatus", 0)
-        status = "Pending" if docstatus == 0 else "Approved" if docstatus == 1 else "Unknown"
+        rejected = pi.get("custom_rejected", 0)
+        if docstatus == 0 and rejected:
+            status = "Rejected"
+        elif docstatus == 0:
+            status = "Pending"
+        elif docstatus == 1:
+            status = "Approved"
+        else:
+            status = "Unknown"
 
         # Fetch first item from parent doc (child table direct access returns 403)
         pi_doc = client._get(f"/api/resource/Purchase Invoice/{pi['name']}").get("data", {})
@@ -347,6 +405,10 @@ def create_wedding_expense(req: WeddingExpenseRequest):
         raise HTTPException(status_code=500, detail="Purchase Invoice created but name not returned")
 
     log.info("wedding_expense_created", pi=pi_name, project=req.project, amount=amount)
+
+    # Notify Finance Managers (fire-and-forget)
+    _notify_finance_managers(client, pi_name, amount, req.project, req.description or req.category)
+
     return {"name": pi_name, "status": "Pending"}
 
 
@@ -372,7 +434,7 @@ def approve_expense(pi_name: str):
 
 @router.post("/expense/{pi_name}/reject")
 def reject_expense(pi_name: str):
-    """Reject (delete) a Draft Purchase Invoice."""
+    """Reject a Draft Purchase Invoice (marks as rejected, keeps visible)."""
     client = ERPNextClient()
 
     pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
@@ -382,7 +444,7 @@ def reject_expense(pi_name: str):
         raise HTTPException(status_code=400, detail="Only Draft expenses can be rejected")
 
     try:
-        client._delete(f"/api/resource/Purchase Invoice/{pi_name}")
+        client._put(f"/api/resource/Purchase Invoice/{pi_name}", {"custom_rejected": 1})
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to reject expense: {e}")
 

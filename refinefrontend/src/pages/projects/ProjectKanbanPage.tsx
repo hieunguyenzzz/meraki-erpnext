@@ -39,8 +39,12 @@ export default function ProjectKanbanPage() {
   });
 
   useEffect(() => {
-    if (roles && localStorage.getItem("wedding-my-filter") === null) {
-      setShowMyWeddings(!hasModuleAccess(roles, WEDDING_MANAGER_ROLES));
+    if (!roles) return;
+    if (!hasModuleAccess(roles, WEDDING_MANAGER_ROLES)) {
+      // Non-managers always see only their own weddings
+      setShowMyWeddings(true);
+    } else if (localStorage.getItem("wedding-my-filter") === null) {
+      setShowMyWeddings(false);
     }
   }, [roles]);
 
@@ -370,7 +374,7 @@ export default function ProjectKanbanPage() {
       />
 
       <div className="flex items-center gap-3 flex-wrap">
-        {employeeId && (
+        {employeeId && isWeddingManager && (
           <div className="flex items-center gap-1 border rounded-md p-1">
             <Button
               variant={showMyWeddings ? "default" : "ghost"}

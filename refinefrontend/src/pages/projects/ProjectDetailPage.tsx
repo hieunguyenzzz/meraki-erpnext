@@ -51,7 +51,7 @@ import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { cn } from "@/lib/utils";
-import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
+import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES } from "@/lib/roles";
 interface ExpenseCategory { name: string; account_name: string; }
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
@@ -187,6 +187,7 @@ export default function ProjectDetailPage() {
   const { list } = useNavigation();
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
+  const isWeddingManager = hasModuleAccess(roles ?? [], WEDDING_MANAGER_ROLES);
   const { employeeId: myEmployeeId } = useMyEmployee();
 
   // Fetch Project
@@ -1099,6 +1100,7 @@ export default function ProjectDetailPage() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <CardTitle>Wedding Details</CardTitle>
+                    {isWeddingManager && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1106,6 +1108,7 @@ export default function ProjectDetailPage() {
                     >
                       <Pencil className="h-3 w-3 mr-1" /> Edit
                     </Button>
+                    )}
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {weddingDate && (
@@ -2158,7 +2161,8 @@ export default function ProjectDetailPage() {
                 </ShadcnPopover>
               </div>
 
-              {/* Package Amount */}
+              {/* Package Amount — finance only */}
+              {isFinance && (
               <div className="space-y-2">
                 <Label htmlFor="edit-package-amount">Package Amount (VND)</Label>
                 <Input
@@ -2171,8 +2175,10 @@ export default function ProjectDetailPage() {
                   onChange={(e) => setEditForm({ ...editForm, packageAmount: e.target.value })}
                 />
               </div>
+              )}
 
-              {/* Total Wedding Budget */}
+              {/* Total Wedding Budget — finance only */}
+              {isFinance && (
               <div className="space-y-2">
                 <Label htmlFor="edit-total-budget">Total Wedding Budget (VND)</Label>
                 <Input
@@ -2185,6 +2191,7 @@ export default function ProjectDetailPage() {
                   onChange={(e) => setEditForm({ ...editForm, totalBudget: e.target.value })}
                 />
               </div>
+              )}
 
               {/* Tax Type */}
               <div className="space-y-2">
