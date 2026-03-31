@@ -218,7 +218,6 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependent
 export default function PayrollPage() {
   const today = now();
   const currentMonthStart = firstOfMonth(today);
-  const currentMonthEnd = endOfMonth(today);
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStart);
   const [isRunning, setIsRunning] = useState(false);
@@ -230,8 +229,6 @@ export default function PayrollPage() {
 
   const apiUrl = useApiUrl();
   const invalidate = useInvalidate();
-
-  const isCurrentMonth = selectedMonth === currentMonthStart;
 
   // Fetch ALL payroll entries (for month selector + finding selected PE)
   const { result: allEntriesResult } = useList({
@@ -400,7 +397,7 @@ export default function PayrollPage() {
       const res = await fetch("/inquiry-api/generate-payroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ start_date: currentMonthStart, end_date: currentMonthEnd }),
+        body: JSON.stringify({ start_date: selectedMonth, end_date: selectedEnd }),
       });
       if (!res.ok) throw new Error(`Payroll generation failed: ${res.status}`);
       invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
@@ -466,17 +463,17 @@ export default function PayrollPage() {
               ))}
             </SelectContent>
           </Select>
-          {isCurrentMonth && !isLoading && !allSlipsSubmitted && (
+          {!isLoading && !allSlipsSubmitted && (
             <Button onClick={handleGenerate} disabled={isRunning || submitting}>
               {isRunning ? "Generating..." : selectedPE ? `Recalculate` : `Generate`}
             </Button>
           )}
-          {isCurrentMonth && selectedPE && hasDraftSlips && (
+          {selectedPE && hasDraftSlips && (
             <Button onClick={handleSubmitAll} disabled={submitting || isRunning}>
               {submitting ? "Submitting..." : "Submit All"}
             </Button>
           )}
-          {isCurrentMonth && allSlipsSubmitted && (
+          {allSlipsSubmitted && (
             <Badge variant="success" className="px-3 py-1.5 text-sm">Payroll Submitted</Badge>
           )}
         </div>
@@ -493,9 +490,7 @@ export default function PayrollPage() {
         <Card>
           <CardContent className="py-8">
             <p className="text-muted-foreground text-center">
-              {isCurrentMonth
-                ? `No payroll entry for ${monthLabel(today)}. Click "Generate" to create one for ${activeCount} active employees.`
-                : `No payroll entry for ${monthOptions.find(o => o.value === selectedMonth)?.label ?? selectedMonth}.`}
+              {`No payroll entry for ${monthOptions.find(o => o.value === selectedMonth)?.label ?? selectedMonth}. Click "Generate" to create one for ${activeCount} active employees.`}
             </p>
           </CardContent>
         </Card>
