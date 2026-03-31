@@ -76,6 +76,68 @@ CATEGORY_TO_ACCOUNT = {
 }
 DEFAULT_EXPENSE_ACCOUNT = "Miscellaneous Expenses - MWP"
 
+# Accounts to hide from the category picker (internal/system accounts)
+HIDDEN_EXPENSE_ACCOUNTS = {
+    "Cost of Goods Sold", "Depreciation", "Exchange Gain/Loss",
+    "Expenses Included In Asset Valuation", "Expenses Included In Valuation",
+    "Freight and Forwarding Charges", "Gain/Loss on Asset Disposal",
+    "Impairment", "Round Off", "Salary", "Social Insurance Expense",
+    "Stock Adjustment", "Write Off", "Commission on Sales",
+}
+
+
+class CreateCategoryRequest(BaseModel):
+    name: str  # e.g. "Office Rent"
+
+
+@router.get("/expense/categories")
+def list_expense_categories():
+    """List expense accounts suitable for the category picker."""
+    client = ERPNextClient()
+    accounts = client._get("/api/resource/Account", params={
+        "filters": json.dumps([["root_type", "=", "Expense"], ["is_group", "=", 0]]),
+        "fields": json.dumps(["name", "account_name"]),
+        "limit_page_length": 0,
+    }).get("data", [])
+    # Filter out internal accounts
+    return [
+        {"name": a["name"], "account_name": a["account_name"]}
+        for a in accounts
+        if a["account_name"] not in HIDDEN_EXPENSE_ACCOUNTS
+    ]
+
+
+@router.post("/expense/categories")
+def create_expense_category(req: CreateCategoryRequest):
+    """Create a new expense account under Indirect Expenses."""
+    client = ERPNextClient()
+    account_name = req.name.strip()
+    if not account_name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    # Check if already exists
+    full_name = f"{account_name} - MWP"
+    existing = client._get("/api/resource/Account", params={
+        "filters": json.dumps([["name", "=", full_name]]),
+        "fields": json.dumps(["name", "account_name"]),
+        "limit_page_length": 1,
+    }).get("data", [])
+    if existing:
+        return {"name": existing[0]["name"], "account_name": existing[0]["account_name"]}
+
+    # Create under Indirect Expenses
+    result = client._post("/api/resource/Account", {
+        "account_name": account_name,
+        "parent_account": "Indirect Expenses - MWP",
+        "root_type": "Expense",
+        "report_type": "Profit and Loss",
+        "account_type": "Expense Account",
+        "company": COMPANY,
+        "is_group": 0,
+    }).get("data", {})
+
+    return {"name": result.get("name"), "account_name": result.get("account_name")}
+
 
 # ---------------------------------------------------------------------------
 # Existing endpoints

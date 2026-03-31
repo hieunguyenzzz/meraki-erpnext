@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -40,7 +40,10 @@ function statusVariant(status: string) {
   return "warning" as const;
 }
 
-import { EXPENSE_ACCOUNTS, type ExpenseAccount } from "@/lib/constants";
+interface ExpenseCategory {
+  name: string;
+  account_name: string;
+}
 
 interface Supplier {
   name: string;
@@ -152,6 +155,12 @@ export default function ExpensesPage() {
   // Quick Expense form state
   const [quickForm, setQuickForm] = useState(initialQuickForm);
 
+  // Category combobox state
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+
   // Wedding combobox state
   const [weddingOpen, setWeddingOpen] = useState(false);
   const [weddingSearch, setWeddingSearch] = useState("");
@@ -186,19 +195,51 @@ export default function ExpensesPage() {
   });
 
   const expenses = (result?.data ?? []) as Expense[];
-  const expenseAccounts = EXPENSE_ACCOUNTS;
   const suppliers = (suppliersResult?.data ?? []) as Supplier[];
   const projects = (projectsResult?.data ?? []) as { name: string; project_name: string; customer: string; expected_end_date: string }[];
   const isLoading = query.isLoading;
+
+  // Fetch expense categories from API
+  useEffect(() => {
+    fetch("/inquiry-api/expense/categories")
+      .then(r => r.json())
+      .then(data => setCategories(data))
+      .catch(() => {});
+  }, []);
 
   const filteredProjects = weddingSearch
     ? projects.filter(p => p.project_name.toLowerCase().includes(weddingSearch.toLowerCase()))
     : projects;
 
   // Reset quick expense form
+  async function handleCreateCategory() {
+    if (!categorySearch.trim()) return;
+    setCreatingCategory(true);
+    try {
+      const resp = await fetch("/inquiry-api/expense/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: categorySearch.trim() }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to create category");
+      }
+      const newCat = await resp.json();
+      setCategories(prev => [...prev, newCat]);
+      setQuickForm({ ...quickForm, category: newCat.name });
+      setCategoryOpen(false);
+    } catch (error) {
+      setQuickError(error instanceof Error ? error.message : "Failed to create category");
+    } finally {
+      setCreatingCategory(false);
+    }
+  }
+
   function resetQuickForm() {
     setQuickForm({ ...initialQuickForm, date: new Date().toISOString().slice(0, 10) });
     setWeddingSearch("");
+    setCategorySearch("");
     setQuickError(null);
     setQuickSuccess(null);
   }
@@ -519,22 +560,78 @@ export default function ExpensesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="quick-category">Category *</Label>
-                <Select
-                  value={quickForm.category}
-                  onValueChange={(value) => setQuickForm({ ...quickForm, category: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {expenseAccounts.map((acc) => (
-                      <SelectItem key={acc.name} value={acc.name}>
-                        {acc.account_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Category *</Label>
+                <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span className={quickForm.category ? "" : "text-muted-foreground"}>
+                        {quickForm.category
+                          ? (categories.find(c => c.name === quickForm.category)?.account_name ?? quickForm.category)
+                          : "Search categories..."}
+                      </span>
+                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search or create..."
+                        value={categorySearch}
+                        onValueChange={setCategorySearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          <div className="py-2 text-center">
+                            <p className="text-sm text-muted-foreground mb-2">No categories found</p>
+                            {categorySearch.trim() && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleCreateCategory}
+                                disabled={creatingCategory}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                {creatingCategory ? "Creating..." : `Create "${categorySearch.trim()}"`}
+                              </Button>
+                            )}
+                          </div>
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {categories
+                            .filter(c => !categorySearch || c.account_name.toLowerCase().includes(categorySearch.toLowerCase()))
+                            .map(c => (
+                              <CommandItem
+                                key={c.name}
+                                value={c.account_name}
+                                onSelect={() => {
+                                  setQuickForm({ ...quickForm, category: c.name });
+                                  setCategoryOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", quickForm.category === c.name ? "opacity-100" : "opacity-0")} />
+                                {c.account_name}
+                              </CommandItem>
+                            ))}
+                        </CommandGroup>
+                        {categorySearch.trim() && categories.some(c => c.account_name.toLowerCase().includes(categorySearch.toLowerCase())) && (
+                          <CommandGroup heading="Create new">
+                            <CommandItem
+                              value={`__create_${categorySearch}`}
+                              onSelect={handleCreateCategory}
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Create "{categorySearch.trim()}"
+                            </CommandItem>
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label>Wedding (optional)</Label>
@@ -695,7 +792,7 @@ export default function ExpensesPage() {
                             <SelectValue placeholder="Category" />
                           </SelectTrigger>
                           <SelectContent>
-                            {expenseAccounts.map((acc) => (
+                            {categories.map((acc) => (
                               <SelectItem key={acc.name} value={acc.name}>
                                 {acc.account_name}
                               </SelectItem>
