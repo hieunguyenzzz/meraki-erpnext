@@ -1,4 +1,4 @@
-import { useParams } from "react-router";
+import { useParams, Link } from "react-router";
 import { useOne } from "@refinedev/core";
 import { formatVND, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +56,17 @@ export default function ExpenseDetailPage() {
               <span className="text-muted-foreground">Outstanding</span>
               <span>{formatVND(expense.outstanding_amount)}</span>
             </div>
+            {expense.project && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Wedding</span>
+                <Link
+                  to={`/projects/${expense.project}`}
+                  className="text-primary hover:underline"
+                >
+                  {expense.project_name || expense.project}
+                </Link>
+              </div>
+            )}
           </CardContent>
         </Card>
 
