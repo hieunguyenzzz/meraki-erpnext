@@ -1936,16 +1936,15 @@ export default function ProjectDetailPage() {
                                   value={newExpense.amount}
                                   onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} />
                               </td>
+                              <td className="px-3 py-2"></td>
                               <td className="px-3 py-2">
                                 <input ref={expenseFileRef} type="file" accept="image/*,.pdf" className="hidden"
                                   onChange={e => setExpenseFile(e.target.files?.[0] ?? null)} />
-                                <Button type="button" variant={expenseFile ? "secondary" : "ghost"} size="icon" className="h-7 w-7"
-                                  onClick={() => expenseFileRef.current?.click()} title={expenseFile ? expenseFile.name : "Attach receipt"}>
-                                  {expenseFile ? <Paperclip className="h-4 w-4" /> : <Camera className="h-4 w-4 text-muted-foreground" />}
-                                </Button>
-                              </td>
-                              <td className="px-3 py-2">
                                 <div className="flex gap-1">
+                                  <Button type="button" variant={expenseFile ? "secondary" : "ghost"} size="icon" className="h-7 w-7"
+                                    onClick={() => expenseFileRef.current?.click()} title={expenseFile ? expenseFile.name : "Attach receipt"}>
+                                    {expenseFile ? <Paperclip className="h-4 w-4" /> : <Camera className="h-4 w-4 text-muted-foreground" />}
+                                  </Button>
                                   <Button variant="ghost" size="icon" className="h-7 w-7"
                                     onClick={handleAddExpense}
                                     disabled={!newExpense.description || !newExpense.amount || !newExpense.category || isSavingExpense}>
