@@ -1013,10 +1013,14 @@ export default function ProjectDetailPage() {
     const ids = [
       project.custom_lead_planner,
       project.custom_support_planner,
-      ...assistants,
+      project.custom_assistant_1,
+      project.custom_assistant_2,
+      project.custom_assistant_3,
+      project.custom_assistant_4,
+      project.custom_assistant_5,
     ].filter(Boolean) as string[];
     return employees.filter(e => ids.includes(e.id));
-  }, [project, assistants, employees]);
+  }, [project, employees]);
 
   return (
     <div className="space-y-4">
