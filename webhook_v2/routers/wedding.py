@@ -156,6 +156,7 @@ def create_milestone(project_name: str, req: MilestoneRequest):
         "currency": "VND",
         "selling_price_list": "Standard Selling VND",
         "project": project_name,
+        "custom_invoice_category": "Wedding Payment",
         "items": [{"item_code": "Wedding Planning Service", "item_name": item_name, "qty": 1, "rate": req.amount}],
     }).get("data", {})
     inv_name = inv["name"]
@@ -234,6 +235,7 @@ def edit_milestone(project_name: str, invoice_name: str, req: MilestoneRequest):
         "currency": "VND",
         "selling_price_list": "Standard Selling VND",
         "project": project_name,
+        "custom_invoice_category": "Wedding Payment",
         "items": [{"item_code": "Wedding Planning Service", "item_name": item_name, "qty": 1, "rate": req.amount}],
     }).get("data", {})
     new_inv_name = new_inv["name"]
@@ -403,6 +405,7 @@ class UpdateWeddingDetailsRequest(BaseModel):
     addons: list[UpdateDetailsAddonItem] = []
     tax_type: str | None = None  # "vat" or "none", None = no change
     package_amount: float | None = None  # Override Wedding Planning Service rate
+    wedding_date: str | None = None  # YYYY-MM-DD format
 
 
 @router.put("/wedding/{project_name}/details")
@@ -439,7 +442,25 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to update venue: {e}")
 
-    # 2. Update tax type via server script
+    # 2. Update wedding date on both Project and Sales Order
+    if req.wedding_date:
+        try:
+            client._post("/api/method/frappe.client.set_value", {
+                "doctype": "Project",
+                "name": project_name,
+                "fieldname": "expected_end_date",
+                "value": req.wedding_date,
+            })
+            client._post("/api/method/frappe.client.set_value", {
+                "doctype": "Sales Order",
+                "name": so_name,
+                "fieldname": "delivery_date",
+                "value": req.wedding_date,
+            })
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to update wedding date: {e}")
+
+    # 3. Update tax type via server script
     if req.tax_type in ("vat", "none"):
         try:
             client._post("/api/method/meraki_update_so_taxes", {

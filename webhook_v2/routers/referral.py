@@ -112,6 +112,7 @@ def record_referral(req: RecordReferralRequest):
         "due_date": req.date,
         "currency": "VND",
         "selling_price_list": "Standard Selling VND",
+        "custom_invoice_category": "Referral Commission",
         "items": [{
             "item_code": "REFERRAL-COMMISSION",
             "item_name": item_name,

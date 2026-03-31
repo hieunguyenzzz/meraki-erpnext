@@ -234,8 +234,8 @@ export default function ExpensesPage() {
       }
 
       const result = await resp.json();
-      setQuickSuccess(`Journal Entry ${result.journal_entry} created successfully`);
-      invalidate({ resource: "Journal Entry", invalidates: ["list"] });
+      setQuickSuccess(`Expense ${result.purchase_invoice} created successfully`);
+      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
 
       setTimeout(() => {
         setQuickExpenseOpen(false);

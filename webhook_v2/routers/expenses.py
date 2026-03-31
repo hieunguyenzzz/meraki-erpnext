@@ -83,7 +83,7 @@ DEFAULT_EXPENSE_ACCOUNT = "Miscellaneous Expenses - MWP"
 
 @router.post("/expense/quick")
 def create_quick_expense(req: QuickExpenseRequest):
-    """Create and submit a Journal Entry for a quick expense (atomic)."""
+    """Create and submit a Purchase Invoice for a quick expense (atomic)."""
     client = ERPNextClient()
 
     if req.amount <= 0:
@@ -91,45 +91,42 @@ def create_quick_expense(req: QuickExpenseRequest):
 
     amount = round(req.amount)
 
-    je_values = {
+    pi_values = {
+        "supplier": "Company Expense",
         "posting_date": req.date,
-        "voucher_type": "Journal Entry",
+        "set_posting_time": 1,
         "company": COMPANY,
-        "user_remark": req.description,
-        "accounts": [
-            {
-                "account": req.account,
-                "debit_in_account_currency": amount,
-                "credit_in_account_currency": 0,
-            },
-            {
-                "account": CASH_ACCOUNT,
-                "debit_in_account_currency": 0,
-                "credit_in_account_currency": amount,
-            },
-        ],
+        "items": [{
+            "item_code": "EXPENSE-ITEM",
+            "item_name": req.description,
+            "description": req.description,
+            "expense_account": req.account,
+            "qty": 1,
+            "rate": amount,
+        }],
     }
     if req.project:
-        je_values["project"] = req.project
+        pi_values["project"] = req.project
+        pi_values["items"][0]["project"] = req.project
 
     try:
-        je_resp = client._post("/api/resource/Journal Entry", je_values)
+        pi_resp = client._post("/api/resource/Purchase Invoice", pi_values)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to create journal entry: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to create expense: {e}")
 
-    je_name = je_resp.get("data", {}).get("name")
-    if not je_name:
-        raise HTTPException(status_code=500, detail="Journal Entry created but name not returned")
+    pi_name = pi_resp.get("data", {}).get("name")
+    if not pi_name:
+        raise HTTPException(status_code=500, detail="Purchase Invoice created but name not returned")
 
     # Submit
     try:
-        full_je = client._get(f"/api/resource/Journal Entry/{je_name}").get("data", {})
-        client._post("/api/method/frappe.client.submit", {"doc": full_je})
+        full_pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+        client._post("/api/method/frappe.client.submit", {"doc": full_pi})
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to submit journal entry: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to submit expense: {e}")
 
-    log.info("quick_expense_created", je=je_name, amount=amount)
-    return {"journal_entry": je_name}
+    log.info("quick_expense_created", pi=pi_name, amount=amount)
+    return {"purchase_invoice": pi_name}
 
 
 @router.post("/expense/supplier-invoice")

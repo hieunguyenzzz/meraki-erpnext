@@ -26,6 +26,7 @@ interface Invoice {
   grand_total: number;
   outstanding_amount: number;
   status: string;
+  custom_invoice_category: string;
 }
 
 interface Partner {
@@ -67,6 +68,20 @@ const columns: ColumnDef<Invoice, unknown>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Customer" />,
     cell: ({ row }) => row.original.customer_name,
     filterFn: "includesString",
+  },
+  {
+    accessorKey: "custom_invoice_category",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
+    cell: ({ row }) => {
+      const cat = row.original.custom_invoice_category;
+      if (!cat) return <span className="text-muted-foreground">—</span>;
+      return (
+        <Badge variant={cat === "Wedding Payment" ? "default" : "outline"}>
+          {cat}
+        </Badge>
+      );
+    },
+    filterFn: "arrIncludesSome",
   },
   {
     accessorKey: "posting_date",
@@ -132,7 +147,7 @@ export default function InvoicesPage() {
     resource: "Sales Invoice",
     pagination: { mode: "off" },
     sorters: [{ field: "posting_date", order: "desc" }],
-    meta: { fields: ["name", "customer", "customer_name", "posting_date", "grand_total", "outstanding_amount", "status"] },
+    meta: { fields: ["name", "customer", "customer_name", "posting_date", "grand_total", "outstanding_amount", "status", "custom_invoice_category"] },
   });
 
   // Fetch projects for wedding dropdown
@@ -542,6 +557,14 @@ export default function InvoicesPage() {
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
         filterableColumns={[
+          {
+            id: "custom_invoice_category",
+            title: "Type",
+            options: [
+              { label: "Wedding Payment", value: "Wedding Payment" },
+              { label: "Referral Commission", value: "Referral Commission" },
+            ],
+          },
           {
             id: "status",
             title: "Status",

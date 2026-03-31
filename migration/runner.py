@@ -9,6 +9,8 @@ ORDERED_PHASES = [
     "v043_vendor_custom_fields",
     "v044_update_notification_scripts",
     "v045_company_expense_supplier",
+    "v046_invoice_category_field",
+    "v047_convert_je_expenses_to_pi",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -42,11 +44,13 @@ def run_pending(client) -> int:
         from migration.phases import (
             v041_wedding_vendors, v042_vendor_budget_fields, v043_vendor_custom_fields,
             v044_update_notification_scripts, v045_company_expense_supplier,
+            v046_invoice_category_field, v047_convert_je_expenses_to_pi,
         )
     except ModuleNotFoundError:
         from phases import (
             v041_wedding_vendors, v042_vendor_budget_fields, v043_vendor_custom_fields,
             v044_update_notification_scripts, v045_company_expense_supplier,
+            v046_invoice_category_field, v047_convert_je_expenses_to_pi,
         )
 
     phase_fns = {
@@ -55,6 +59,8 @@ def run_pending(client) -> int:
         "v043_vendor_custom_fields": v043_vendor_custom_fields.run,
         "v044_update_notification_scripts": v044_update_notification_scripts.run,
         "v045_company_expense_supplier": v045_company_expense_supplier.run,
+        "v046_invoice_category_field": v046_invoice_category_field.run,
+        "v047_convert_je_expenses_to_pi": v047_convert_je_expenses_to_pi.run,
     }
 
     state_file = get_state_file()

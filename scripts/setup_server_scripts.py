@@ -6,6 +6,29 @@ Or via bench: bench execute meraki_manager.setup.setup_server_scripts
 import frappe
 
 
+# Shared snippet: resolve HR-EMP-XXXXX in notification messages to employee names.
+# No imports allowed in Frappe server scripts, so uses plain string ops.
+_RESOLVE_EMP_IDS = (
+    '# Resolve HR-EMP-XXXXX to employee names in messages\n'
+    'emp_cache = {}\n'
+    'for n in notifications:\n'
+    '    msg = n.get("message") or ""\n'
+    '    pos = 0\n'
+    '    while True:\n'
+    '        idx = msg.find("HR-EMP-", pos)\n'
+    '        if idx == -1:\n'
+    '            break\n'
+    '        end = idx + 7\n'
+    '        while end < len(msg) and msg[end].isdigit():\n'
+    '            end += 1\n'
+    '        emp_id = msg[idx:end]\n'
+    '        if emp_id not in emp_cache:\n'
+    '            emp_cache[emp_id] = frappe.db.get_value("Employee", emp_id, "employee_name") or emp_id\n'
+    '        msg = msg[:idx] + emp_cache[emp_id] + msg[end:]\n'
+    '        pos = idx + len(emp_cache[emp_id])\n'
+    '    n["message"] = msg\n'
+)
+
 SERVER_SCRIPTS = [
     {
         "name": "update_leave_status",
@@ -39,6 +62,8 @@ SERVER_SCRIPTS = [
             '    limit=20\n'
             ')\n'
             '\n'
+            + _RESOLVE_EMP_IDS +
+            '\n'
             'total = frappe.db.count("PWA Notification", {"to_user": user, "read": 0})\n'
             '\n'
             'frappe.response["message"] = {"notifications": notifications, "total": total}\n'
@@ -62,6 +87,8 @@ SERVER_SCRIPTS = [
             '    limit_start=offset,\n'
             '    limit_page_length=page_size,\n'
             ')\n'
+            '\n'
+            + _RESOLVE_EMP_IDS +
             '\n'
             'total = frappe.db.count("PWA Notification", {"to_user": frappe.session.user})\n'
             'unread = frappe.db.count("PWA Notification", {"to_user": frappe.session.user, "read": 0})\n'
@@ -117,11 +144,14 @@ def create_server_scripts():
     for spec in SERVER_SCRIPTS:
         name = spec["name"]
         if frappe.db.exists("Server Script", name):
-            print(f"Server Script '{name}' already exists, skipping")
-            continue
-        doc = frappe.get_doc({"doctype": "Server Script", **spec})
-        doc.insert()
-        print(f"Created Server Script: {name}")
+            doc = frappe.get_doc("Server Script", name)
+            doc.script = spec["script"]
+            doc.save()
+            print(f"Updated Server Script: {name}")
+        else:
+            doc = frappe.get_doc({"doctype": "Server Script", **spec})
+            doc.insert()
+            print(f"Created Server Script: {name}")
     frappe.db.commit()
 
 
