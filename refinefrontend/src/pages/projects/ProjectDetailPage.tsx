@@ -1305,6 +1305,7 @@ export default function ProjectDetailPage() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <CardTitle>Team</CardTitle>
+                    {isWeddingManager && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1312,6 +1313,7 @@ export default function ProjectDetailPage() {
                     >
                       <Pencil className="h-3 w-3 mr-1" /> Edit
                     </Button>
+                    )}
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {project.custom_lead_planner && (
@@ -1319,7 +1321,7 @@ export default function ProjectDetailPage() {
                         label="Lead Planner"
                         value={
                           (getEmployeeNameById(project.custom_lead_planner) || project.custom_lead_planner) +
-                          (project.custom_lead_commission_pct ? ` (${project.custom_lead_commission_pct}%)` : "")
+                          (isFinance && project.custom_lead_commission_pct ? ` (${project.custom_lead_commission_pct}%)` : "")
                         }
                       />
                     )}
@@ -1328,7 +1330,7 @@ export default function ProjectDetailPage() {
                         label="Support Planner"
                         value={
                           (getEmployeeNameById(project.custom_support_planner) || project.custom_support_planner) +
-                          (project.custom_support_commission_pct ? ` (${project.custom_support_commission_pct}%)` : "")
+                          (isFinance && project.custom_support_commission_pct ? ` (${project.custom_support_commission_pct}%)` : "")
                         }
                       />
                     )}
@@ -1338,7 +1340,7 @@ export default function ProjectDetailPage() {
                         label={`Assistant ${i + 1}`}
                         value={
                           (getEmployeeNameById(asst) || asst) +
-                          (i === 0 && project.custom_assistant_commission_pct ? ` (${project.custom_assistant_commission_pct}%)` : "")
+                          (isFinance && i === 0 && project.custom_assistant_commission_pct ? ` (${project.custom_assistant_commission_pct}%)` : "")
                         }
                       />
                     ))}
@@ -2339,6 +2341,7 @@ export default function ProjectDetailPage() {
                       }}
                       className="w-28 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                     />
+                    {isFinance && (
                     <label className="flex items-center gap-1.5 py-2 text-sm text-muted-foreground whitespace-nowrap cursor-pointer">
                       <input
                         type="checkbox"
@@ -2353,6 +2356,7 @@ export default function ProjectDetailPage() {
                       />
                       Commission
                     </label>
+                    )}
                     <Button
                       type="button"
                       variant="ghost"
@@ -2428,6 +2432,7 @@ export default function ProjectDetailPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {isFinance && (
                       <div className="w-20 shrink-0">
                         <Input
                           type="number"
@@ -2440,8 +2445,9 @@ export default function ProjectDetailPage() {
                           className="text-right text-sm"
                         />
                       </div>
+                      )}
                     </div>
-                    <p className="text-[10px] text-muted-foreground">Blank = use employee default rate</p>
+                    {isFinance && <p className="text-[10px] text-muted-foreground">Blank = use employee default rate</p>}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Support Planner</Label>
@@ -2455,6 +2461,7 @@ export default function ProjectDetailPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {isFinance && (
                       <div className="w-20 shrink-0">
                         <Input
                           type="number"
@@ -2467,8 +2474,9 @@ export default function ProjectDetailPage() {
                           className="text-right text-sm"
                         />
                       </div>
+                      )}
                     </div>
-                    <p className="text-[10px] text-muted-foreground">Blank = use employee default rate</p>
+                    {isFinance && <p className="text-[10px] text-muted-foreground">Blank = use employee default rate</p>}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Assistants</Label>
@@ -2487,6 +2495,7 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     ))}
+                    {isFinance && (
                     <div className="flex items-center gap-2 pt-1">
                       <span className="text-[10px] text-muted-foreground flex-1">Assistant commission override</span>
                       <div className="w-20 shrink-0">
@@ -2502,7 +2511,8 @@ export default function ProjectDetailPage() {
                         />
                       </div>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">Blank = use employee default rate</p>
+                    )}
+                    {isFinance && <p className="text-[10px] text-muted-foreground">Blank = use employee default rate</p>}
                   </div>
                 </div>
               </div>
