@@ -177,7 +177,7 @@ export default function ProjectDetailPage() {
   // Expense tab state
   const [expenses, setExpenses] = useState<any[]>([]);
   const [addingExpense, setAddingExpense] = useState(false);
-  const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "" });
+  const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "" });
   const [isSavingExpense, setIsSavingExpense] = useState(false);
   const [expenseError, setExpenseError] = useState<string | null>(null);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
@@ -536,6 +536,7 @@ export default function ProjectDetailPage() {
           description: newExpense.description,
           amount: parseFloat(newExpense.amount),
           category: newExpense.category,
+          ...(newExpense.staff ? { staff: newExpense.staff } : {}),
         }),
       });
       if (!resp.ok) {
@@ -552,7 +553,7 @@ export default function ProjectDetailPage() {
         }
       }
       setAddingExpense(false);
-      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "" });
+      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "" });
       setExpenseFile(null);
       if (expenseFileRef.current) expenseFileRef.current.value = "";
       fetchExpenses(name!);
@@ -1006,6 +1007,16 @@ export default function ProjectDetailPage() {
     project.custom_assistant_4,
     project.custom_assistant_5,
   ].filter(Boolean);
+
+  // Team members for expense staff dropdown
+  const weddingTeam = useMemo(() => {
+    const ids = [
+      project.custom_lead_planner,
+      project.custom_support_planner,
+      ...assistants,
+    ].filter(Boolean) as string[];
+    return employees.filter(e => ids.includes(e.id));
+  }, [project, assistants, employees]);
 
   return (
     <div className="space-y-4">
@@ -1818,10 +1829,11 @@ export default function ProjectDetailPage() {
                     <div className="border rounded-md overflow-x-auto">
                       <table className="w-full text-sm table-fixed">
                         <colgroup>
-                          <col className="w-[170px]" />
+                          <col className="w-[130px]" />
                           <col />
-                          <col className="w-[160px]" />
-                          <col className="w-[180px]" />
+                          <col className="w-[120px]" />
+                          <col className="w-[140px]" />
+                          <col className="w-[130px]" />
                           <col className="w-[90px]" />
                           <col className="w-[80px]" />
                         </colgroup>
@@ -1829,6 +1841,7 @@ export default function ProjectDetailPage() {
                           <tr className="border-b bg-muted/50">
                             <th className="px-3 py-2 text-left font-medium">Date</th>
                             <th className="px-3 py-2 text-left font-medium">Description</th>
+                            <th className="px-3 py-2 text-left font-medium">In charge by</th>
                             <th className="px-3 py-2 text-left font-medium">Category</th>
                             <th className="px-3 py-2 text-right font-medium">Amount</th>
                             <th className="px-3 py-2 text-left font-medium">Status</th>
@@ -1840,6 +1853,9 @@ export default function ProjectDetailPage() {
                             <tr key={exp.name} className="border-b last:border-b-0">
                               <td className="px-3 py-2">{formatDate(exp.posting_date)}</td>
                               <td className="px-3 py-2">{exp.description}</td>
+                              <td className="px-3 py-2 text-muted-foreground">
+                                {exp.staff ? (employees.find(e => e.id === exp.staff)?.name ?? exp.staff) : "—"}
+                              </td>
                               <td className="px-3 py-2 text-muted-foreground">
                                 {exp.category || "—"}
                               </td>
@@ -1882,6 +1898,19 @@ export default function ProjectDetailPage() {
                               <td className="px-3 py-2">
                                 <Input className="h-8 w-full" placeholder="Description" value={newExpense.description}
                                   onChange={e => setNewExpense({ ...newExpense, description: e.target.value })} />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Select value={newExpense.staff || "__none__"} onValueChange={v => setNewExpense({ ...newExpense, staff: v === "__none__" ? "" : v })}>
+                                  <SelectTrigger className="h-8 w-full text-sm">
+                                    <SelectValue placeholder="Staff" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">—</SelectItem>
+                                    {weddingTeam.map(m => (
+                                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </td>
                               <td className="px-3 py-2">
                                 <ShadcnPopover open={expCatOpen} onOpenChange={setExpCatOpen}>
@@ -1953,7 +1982,7 @@ export default function ProjectDetailPage() {
                                   <Button variant="ghost" size="icon" className="h-7 w-7"
                                     onClick={() => {
                                       setAddingExpense(false);
-                                      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "" });
+                                      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "" });
                                       setExpenseFile(null);
                                       if (expenseFileRef.current) expenseFileRef.current.value = "";
                                       setExpenseError(null);
@@ -1966,7 +1995,7 @@ export default function ProjectDetailPage() {
                           )}
                           {expenses.length === 0 && !addingExpense && (
                             <tr>
-                              <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                              <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                                 No expenses yet
                               </td>
                             </tr>

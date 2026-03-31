@@ -59,6 +59,7 @@ class WeddingExpenseRequest(BaseModel):
     amount: float
     category: str          # expense account name (e.g. "Travel Expenses - MWP") or legacy label
     supplier: str = "Company Expense"
+    staff: str | None = None  # Employee ID (e.g. "HR-EMP-00001") — who incurred the expense
 
 
 # Map wedding expense categories → GL expense accounts
@@ -307,7 +308,7 @@ def list_expenses(project: str | None = None):
         "fields": json.dumps([
             "name", "supplier", "supplier_name", "posting_date",
             "grand_total", "project", "docstatus", "owner",
-            "custom_rejected",
+            "custom_rejected", "custom_expense_staff",
         ]),
         "order_by": "posting_date desc",
         "limit_page_length": 0,
@@ -354,6 +355,7 @@ def list_expenses(project: str | None = None):
             "status": status,
             "docstatus": docstatus,
             "submitted_by": pi.get("owner", ""),
+            "staff": pi.get("custom_expense_staff", ""),
         })
 
     return result
@@ -394,6 +396,8 @@ def create_wedding_expense(req: WeddingExpenseRequest):
             "project": req.project,
         }],
     }
+    if req.staff:
+        pi_values["custom_expense_staff"] = req.staff
 
     try:
         pi_resp = client._post("/api/resource/Purchase Invoice", pi_values)
