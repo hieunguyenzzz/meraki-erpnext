@@ -390,6 +390,101 @@ def reject_expense(pi_name: str):
     return {"success": True}
 
 
+class EditExpenseRequest(BaseModel):
+    amount: float
+    description: str | None = None
+    date: str | None = None       # YYYY-MM-DD
+    account: str | None = None    # expense account
+
+
+@router.put("/expense/{pi_name}")
+def edit_expense(pi_name: str, req: EditExpenseRequest):
+    """Edit an expense by deleting the old PI and recreating with new values."""
+    client = ERPNextClient()
+
+    if req.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+
+    # Fetch old PI to carry forward unchanged fields
+    pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+    if not pi:
+        raise HTTPException(status_code=404, detail="Purchase Invoice not found")
+
+    old_items = pi.get("items", [])
+    first_item = old_items[0] if old_items else {}
+
+    supplier = pi.get("supplier", "Company Expense")
+    posting_date = req.date or pi.get("posting_date")
+    description = req.description if req.description is not None else (first_item.get("item_name") or "Expense")
+    expense_account = req.account or first_item.get("expense_account", DEFAULT_EXPENSE_ACCOUNT)
+    project = pi.get("project", "")
+    amount = round(req.amount)
+
+    # Delete old PI fully (Payment Entries + GL + PLE + doc)
+    docstatus = pi.get("docstatus", 0)
+    if docstatus == 1:
+        # Delete linked Payment Entries first
+        pe_data = client._get("/api/resource/Payment Entry", params={
+            "filters": json.dumps([["Payment Entry Reference", "reference_name", "=", pi_name]]),
+            "fields": json.dumps(["name", "docstatus"]),
+            "limit_page_length": 100,
+        }).get("data", [])
+        for pe in pe_data:
+            if pe["docstatus"] == 1:
+                _cancel(client, "Payment Entry", pe["name"])
+            _delete_gl_entries(client, pe["name"])
+            _delete_payment_ledger_entries(client, pe["name"])
+            try:
+                client._delete(f"/api/resource/Payment Entry/{pe['name']}")
+            except Exception:
+                pass
+
+        _cancel(client, "Purchase Invoice", pi_name)
+        _delete_gl_entries(client, pi_name)
+        _delete_payment_ledger_entries(client, pi_name)
+    try:
+        client._delete(f"/api/resource/Purchase Invoice/{pi_name}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to delete old expense: {e}")
+
+    # Create new PI
+    pi_values = {
+        "supplier": supplier,
+        "posting_date": posting_date,
+        "set_posting_time": 1,
+        "company": COMPANY,
+        "items": [{
+            "item_code": "EXPENSE-ITEM",
+            "item_name": description,
+            "description": description,
+            "expense_account": expense_account,
+            "qty": 1,
+            "rate": amount,
+        }],
+    }
+    if project:
+        pi_values["project"] = project
+        pi_values["items"][0]["project"] = project
+
+    try:
+        new_pi = client._post("/api/resource/Purchase Invoice", pi_values)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to create expense: {e}")
+
+    new_name = new_pi.get("data", {}).get("name")
+
+    # Submit if old one was submitted
+    if docstatus == 1 and new_name:
+        try:
+            full_pi = client._get(f"/api/resource/Purchase Invoice/{new_name}").get("data", {})
+            client._post("/api/method/frappe.client.submit", {"doc": full_pi})
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to submit expense: {e}")
+
+    log.info("expense_edited", old=pi_name, new=new_name, amount=amount)
+    return {"success": True, "name": new_name}
+
+
 @router.delete("/expense/{pi_name}")
 def delete_expense(pi_name: str):
     """Delete a Purchase Invoice (Draft: just delete; Submitted: cancel first)."""

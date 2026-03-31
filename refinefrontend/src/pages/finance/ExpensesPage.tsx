@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X, BadgeCheck } from "lucide-react";
+import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X, BadgeCheck, Pencil } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -71,66 +71,78 @@ const initialInvoiceForm = {
   items: [{ description: "", category: "", amount: "" }] as InvoiceItem[],
 };
 
-const columns: ColumnDef<Expense, unknown>[] = [
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    accessorKey: "name",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
-    cell: ({ row }) => (
-      <Link to={`/finance/expenses/${row.original.name}`} className="font-medium text-primary hover:underline">
-        {row.original.name}
-      </Link>
-    ),
-  },
-  {
-    accessorKey: "posting_date",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
-    cell: ({ row }) => formatDate(row.original.posting_date),
-  },
-  {
-    accessorKey: "grand_total",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Total" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(row.original.grand_total)}</div>,
-  },
-  {
-    accessorKey: "against_expense_account",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />,
-    cell: ({ row }) => {
-      const acc = row.original.against_expense_account;
-      if (!acc) return <span className="text-muted-foreground">—</span>;
-      return acc.replace(/ - MWP$/, "");
+function getColumns(onEdit: (expense: Expense) => void): ColumnDef<Expense, unknown>[] {
+  return [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
     },
-    filterFn: "arrIncludesSome",
-  },
-  {
-    accessorKey: "status",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-    cell: ({ row }) => (
-      <Badge variant={statusVariant(row.original.status)}>
-        {row.original.status}
-      </Badge>
-    ),
-    filterFn: "arrIncludesSome",
-  },
-];
+    {
+      accessorKey: "name",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+      cell: ({ row }) => (
+        <Link to={`/finance/expenses/${row.original.name}`} className="font-medium text-primary hover:underline">
+          {row.original.name}
+        </Link>
+      ),
+    },
+    {
+      accessorKey: "posting_date",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
+      cell: ({ row }) => formatDate(row.original.posting_date),
+    },
+    {
+      accessorKey: "grand_total",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Total" className="text-right" />,
+      cell: ({ row }) => <div className="text-right">{formatVND(row.original.grand_total)}</div>,
+    },
+    {
+      accessorKey: "against_expense_account",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />,
+      cell: ({ row }) => {
+        const acc = row.original.against_expense_account;
+        if (!acc) return <span className="text-muted-foreground">—</span>;
+        return acc.replace(/ - MWP$/, "");
+      },
+      filterFn: "arrIncludesSome",
+    },
+    {
+      accessorKey: "status",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+      cell: ({ row }) => (
+        <Badge variant={statusVariant(row.original.status)}>
+          {row.original.status}
+        </Badge>
+      ),
+      filterFn: "arrIncludesSome",
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => (
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(row.original)}>
+          <Pencil className="h-4 w-4" />
+        </Button>
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+  ];
+}
 
 export default function ExpensesPage() {
   const invalidate = useInvalidate();
@@ -139,6 +151,15 @@ export default function ExpensesPage() {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [bulkAction, setBulkAction] = useState<"deleting" | "paying" | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
+
+  // Edit expense state
+  const [editExpense, setEditExpense] = useState<Expense | null>(null);
+  const [editForm, setEditForm] = useState({ amount: "", description: "", date: "", account: "" });
+  const [editOpen, setEditOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editCatOpen, setEditCatOpen] = useState(false);
+  const [editCatSearch, setEditCatSearch] = useState("");
 
   // Dialog states
   const [quickExpenseOpen, setQuickExpenseOpen] = useState(false);
@@ -458,6 +479,50 @@ export default function ExpensesPage() {
     }
   }
 
+  function openEditSheet(expense: Expense) {
+    setEditExpense(expense);
+    setEditForm({
+      amount: String(expense.grand_total),
+      description: "",  // will be fetched or left empty to keep existing
+      date: expense.posting_date,
+      account: expense.against_expense_account || "",
+    });
+    setEditError(null);
+    setEditCatSearch("");
+    setEditOpen(true);
+  }
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editExpense || !editForm.amount) return;
+    setIsEditing(true);
+    setEditError(null);
+    try {
+      const resp = await fetch(`/inquiry-api/expense/${editExpense.name}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: parseFloat(editForm.amount),
+          description: editForm.description || null,
+          date: editForm.date || null,
+          account: editForm.account || null,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to update expense");
+      }
+      setEditOpen(false);
+      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "Failed to update expense");
+    } finally {
+      setIsEditing(false);
+    }
+  }
+
+  const columns = getColumns(openEditSheet);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -504,6 +569,79 @@ export default function ExpensesPage() {
           <button onClick={() => setBulkError(null)} className="ml-4 font-medium hover:text-red-900">&times;</button>
         </div>
       )}
+
+      {/* Edit Expense Sheet */}
+      <Sheet open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) setEditExpense(null); }}>
+        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b shrink-0">
+            <SheetTitle>Edit Expense</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleEditSubmit} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {editError && (
+                <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                  <AlertCircle className="h-4 w-4" />
+                  {editError}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="edit-date">Date</Label>
+                <Input id="edit-date" type="date" value={editForm.date}
+                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">Description</Label>
+                <Input id="edit-description" placeholder="Leave empty to keep existing"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-amount">Amount (VND) *</Label>
+                <Input id="edit-amount" type="number" min="1" step="1" required
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Popover open={editCatOpen} onOpenChange={setEditCatOpen}>
+                  <PopoverTrigger asChild>
+                    <button type="button" className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm">
+                      <span className={editForm.account ? "" : "text-muted-foreground"}>
+                        {editForm.account ? editForm.account.replace(/ - MWP$/, "") : "Keep existing"}
+                      </span>
+                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search..." value={editCatSearch} onValueChange={setEditCatSearch} />
+                      <CommandList>
+                        <CommandEmpty><p className="py-2 text-center text-sm text-muted-foreground">No match</p></CommandEmpty>
+                        <CommandGroup>
+                          {categories
+                            .filter(c => !editCatSearch || c.account_name.toLowerCase().includes(editCatSearch.toLowerCase()))
+                            .map(c => (
+                              <CommandItem key={c.name} value={c.account_name} onSelect={() => { setEditForm({ ...editForm, account: c.name }); setEditCatOpen(false); }}>
+                                <Check className={cn("mr-2 h-4 w-4", editForm.account === c.name ? "opacity-100" : "opacity-0")} />
+                                {c.account_name}
+                              </CommandItem>
+                            ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <SheetFooter className="px-6 py-4 border-t shrink-0">
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={isEditing || !editForm.amount}>
+                {isEditing ? "Saving..." : "Save"}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
 
       {/* Quick Expense Sheet */}
       <Sheet open={quickExpenseOpen} onOpenChange={handleQuickExpenseOpenChange}>
