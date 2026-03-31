@@ -72,13 +72,11 @@ const PIT_PERSONAL_DEDUCTION = 15_500_000;
 const PIT_DEPENDENT_DEDUCTION = 6_200_000;
 
 const PIT_BRACKETS: { limit: number; rate: number; qd: number }[] = [
-  { limit: 5_000_000, rate: 0.05, qd: 0 },
-  { limit: 10_000_000, rate: 0.10, qd: 250_000 },
-  { limit: 18_000_000, rate: 0.15, qd: 750_000 },
-  { limit: 32_000_000, rate: 0.20, qd: 1_650_000 },
-  { limit: 52_000_000, rate: 0.25, qd: 3_250_000 },
-  { limit: 80_000_000, rate: 0.30, qd: 5_850_000 },
-  { limit: Infinity, rate: 0.35, qd: 9_850_000 },
+  { limit: 10_000_000, rate: 0.05, qd: 0 },
+  { limit: 30_000_000, rate: 0.10, qd: 500_000 },
+  { limit: 60_000_000, rate: 0.20, qd: 3_500_000 },
+  { limit: 100_000_000, rate: 0.30, qd: 9_500_000 },
+  { limit: Infinity, rate: 0.35, qd: 14_500_000 },
 ];
 
 function calcTaxReduction(dependents: number): number {
