@@ -101,12 +101,6 @@ const columns: ColumnDef<Expense, unknown>[] = [
     ),
   },
   {
-    accessorKey: "supplier_name",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Supplier" />,
-    cell: ({ row }) => row.original.supplier_name || row.original.supplier,
-    filterFn: "includesString",
-  },
-  {
     accessorKey: "posting_date",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
     cell: ({ row }) => formatDate(row.original.posting_date),
