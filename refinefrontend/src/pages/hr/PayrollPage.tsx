@@ -243,10 +243,17 @@ export default function PayrollPage() {
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
 
-    // Always include current month
-    seen.add(currentMonthStart);
-    opts.push({ value: currentMonthStart, label: monthLabel(today) });
+    // Include last 12 months + current month
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const val = firstOfMonth(d);
+      if (!seen.has(val)) {
+        seen.add(val);
+        opts.push({ value: val, label: monthLabel(d) });
+      }
+    }
 
+    // Also include any months from existing entries (in case older than 12 months)
     for (const entry of allEntries) {
       if (!seen.has(entry.start_date)) {
         seen.add(entry.start_date);
