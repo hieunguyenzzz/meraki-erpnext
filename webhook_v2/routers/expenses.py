@@ -148,7 +148,7 @@ def list_expense_categories():
         "filters": json.dumps([
             ["root_type", "=", "Expense"],
             ["is_group", "=", 0],
-            ["is_custom_wedding_expense", "=", 1],
+            ["custom_is_wedding_expense", "=", 1],
         ]),
         "fields": json.dumps(["name", "account_name"]),
         "limit_page_length": 0,
@@ -187,7 +187,7 @@ def create_expense_category(req: CreateCategoryRequest):
         "account_type": "Expense Account",
         "company": COMPANY,
         "is_group": 0,
-        "is_custom_wedding_expense": 1,
+        "custom_is_wedding_expense": 1,
     }).get("data", {})
 
     display_name = result.get("account_name", "").replace(" - MWP", "")
