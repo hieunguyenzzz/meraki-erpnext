@@ -335,11 +335,14 @@ export default function ProjectDetailPage() {
     pagination: { mode: "off" as const },
     meta: { fields: ["name", "employee_name", "first_name", "last_name", "user_id", "status"] },
   });
-  const employees = (employeesResult?.data ?? []).map((e: any) => ({
-    id: e.name,
-    name: displayName(e),
-    userId: e.user_id,
-  }));
+  const employees = useMemo(
+    () => (employeesResult?.data ?? []).map((e: any) => ({
+      id: e.name,
+      name: displayName(e),
+      userId: e.user_id,
+    })),
+    [employeesResult?.data]
+  );
 
   // Fetch Venues (Suppliers in Wedding Venues group)
   const { result: venuesResult } = useList({
@@ -491,6 +494,21 @@ export default function ProjectDetailPage() {
     () => expenses.filter(e => e.status === "Approved").reduce((sum, e) => sum + (e.amount || 0), 0),
     [expenses]
   );
+
+  // Team members for expense staff dropdown (must be before early return to respect Rules of Hooks)
+  const weddingTeam = useMemo(() => {
+    if (!project) return [];
+    const ids = [
+      project.custom_lead_planner,
+      project.custom_support_planner,
+      project.custom_assistant_1,
+      project.custom_assistant_2,
+      project.custom_assistant_3,
+      project.custom_assistant_4,
+      project.custom_assistant_5,
+    ].filter(Boolean) as string[];
+    return employees.filter(e => ids.includes(e.id));
+  }, [project, employees]);
 
   // Fetch expense categories
   useEffect(() => {
@@ -1007,20 +1025,6 @@ export default function ProjectDetailPage() {
     project.custom_assistant_4,
     project.custom_assistant_5,
   ].filter(Boolean);
-
-  // Team members for expense staff dropdown
-  const weddingTeam = useMemo(() => {
-    const ids = [
-      project.custom_lead_planner,
-      project.custom_support_planner,
-      project.custom_assistant_1,
-      project.custom_assistant_2,
-      project.custom_assistant_3,
-      project.custom_assistant_4,
-      project.custom_assistant_5,
-    ].filter(Boolean) as string[];
-    return employees.filter(e => ids.includes(e.id));
-  }, [project, employees]);
 
   return (
     <div className="space-y-4">
