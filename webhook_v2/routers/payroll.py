@@ -411,25 +411,29 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 new_earnings.append({"salary_component": "Wedding Allowance", "amount": round(allowance_amt)})
                 has_allowance = True
 
-            # Calculate PIT
-            gross = sum(e.get("amount", 0) for e in new_earnings)
+            # Pass 1: Write earnings + strip old PIT (let ERPNext recompute gross_pay)
+            new_deductions = [d for d in current_deductions if d.get("salary_component") not in STRIP_DEDUCTIONS]
+            client._put(f"/api/resource/Salary Slip/{slip['name']}", {
+                "earnings": new_earnings,
+                "deductions": new_deductions,
+            })
+
+            # Pass 2: Re-read ERPNext's computed gross_pay, then calculate PIT
+            updated_slip = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
+            gross = updated_slip.get("gross_pay", 0)
             si = sum(
-                d.get("amount", 0) for d in current_deductions
+                d.get("amount", 0) for d in updated_slip.get("deductions", [])
                 if d.get("salary_component", "").startswith(("BHXH", "BHYT", "BHTN"))
                 and "Employer" not in d.get("salary_component", "")
             )
             dependents = int(emp_map.get(emp_id, {}).get("custom_number_of_dependents") or 0)
             pit = _calc_pit(gross, si, dependents)
-
-            # Strip old PIT, add fresh
-            new_deductions = [d for d in current_deductions if d.get("salary_component") not in STRIP_DEDUCTIONS]
             if pit > 0:
-                new_deductions.append({"salary_component": PIT_COMPONENT, "amount": pit})
-
-            client._put(f"/api/resource/Salary Slip/{slip['name']}", {
-                "earnings": new_earnings,
-                "deductions": new_deductions,
-            })
+                final_deductions = [d for d in updated_slip.get("deductions", []) if d.get("salary_component") != PIT_COMPONENT]
+                final_deductions.append({"salary_component": PIT_COMPONENT, "amount": pit})
+                client._put(f"/api/resource/Salary Slip/{slip['name']}", {
+                    "deductions": final_deductions,
+                })
             applied += 1
             if has_commission:
                 employees_with_commission += 1
