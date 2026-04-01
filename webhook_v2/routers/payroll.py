@@ -255,6 +255,20 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
     if not draft_slips:
         return {"applied": 0, "commissions": 0, "allowances": 0}
 
+    # Fetch current SSA base per employee (for syncing Basic Salary)
+    employee_ids_for_ssa = list({s["employee"] for s in draft_slips})
+    ssa_data = client._get("/api/resource/Salary Structure Assignment", params={
+        "filters": json.dumps([["employee", "in", employee_ids_for_ssa], ["docstatus", "=", 1]]),
+        "fields": json.dumps(["employee", "base"]),
+        "order_by": "from_date desc",
+        "limit_page_length": 500,
+    }).get("data", [])
+    # Keep only the latest SSA per employee
+    ssa_base_map: dict[str, float] = {}
+    for ssa in ssa_data:
+        if ssa["employee"] not in ssa_base_map:
+            ssa_base_map[ssa["employee"]] = ssa.get("base") or 0
+
     # Fetch employee data (commission rates + allowance rates)
     employee_ids = [s["employee"] for s in draft_slips]
     emp_data = client._get("/api/resource/Employee", params={
@@ -385,8 +399,16 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 if e.get("salary_component") not in STRIP_COMPONENTS
             ]
 
-            new_earnings = list(base_earnings)
+            # Sync Basic Salary from current SSA base
             emp_id = slip["employee"]
+            if emp_id in ssa_base_map:
+                current_base = ssa_base_map[emp_id]
+                base_earnings = [
+                    {**e, "amount": current_base} if e.get("salary_component") == "Basic Salary" else e
+                    for e in base_earnings
+                ]
+
+            new_earnings = list(base_earnings)
 
             # Add commissions
             has_commission = False
