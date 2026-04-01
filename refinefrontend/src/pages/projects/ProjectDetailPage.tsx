@@ -1931,11 +1931,11 @@ export default function ProjectDetailPage() {
                         <tbody>
                           {expenses.map((exp) => (
                             <tr key={exp.name} className="border-b last:border-b-0">
-                              <td className="px-3 py-2">
+                              <td className="px-3 py-2 whitespace-nowrap">
                                 {exp.status === "Pending" ? (
-                                  <Input
+                                  <input
                                     type="date"
-                                    className="h-7 w-32 text-sm"
+                                    className="h-7 px-2 text-sm border border-transparent rounded hover:border-input focus:border-ring focus:outline-none bg-transparent cursor-pointer"
                                     defaultValue={exp.posting_date}
                                     onBlur={async (e) => {
                                       const newDate = e.target.value;
