@@ -311,13 +311,19 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
         add_comm(proj.get("custom_assistant_2"), "assistant", net_total, proj)
 
     # --- Build sales commission totals per employee ---
-    # Sales person gets Full Package or Partial Package commission based on service type
-    for proj in projects:
+    # Sales commission is based on booking date, not wedding date
+    booking_projects = client._get("/api/resource/Project", params={
+        "filters": json.dumps([
+            ["custom_booking_date", "between", [start_date, end_date]],
+            ["status", "!=", "Cancelled"],
+        ]),
+        "fields": json.dumps(["name", "custom_sales_person"]),
+        "limit_page_length": 500,
+    }).get("data", [])
+
+    for proj in booking_projects:
         sales_person = proj.get("custom_sales_person")
         if not sales_person:
-            continue
-        net_total = so_net_map.get(proj["sales_order"], 0)
-        if not net_total:
             continue
         # Determine service type from project detail
         try:
