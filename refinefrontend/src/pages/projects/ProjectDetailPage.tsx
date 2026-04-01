@@ -189,6 +189,7 @@ export default function ProjectDetailPage() {
   const [expCatSearch, setExpCatSearch] = useState("");
   const [creatingExpCat, setCreatingExpCat] = useState(false);
   const [expenseFile, setExpenseFile] = useState<File | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const expenseFileRef = useRef<HTMLInputElement>(null);
 
   const invalidate = useInvalidate();
@@ -2051,7 +2052,7 @@ export default function ProjectDetailPage() {
                                       <button
                                         type="button"
                                         className="p-1 rounded hover:bg-white/20 transition-colors"
-                                        onClick={() => window.open(exp.receipt_url, "_blank")}
+                                        onClick={() => setPreviewImage(exp.receipt_url)}
                                         title="Preview"
                                       >
                                         <Eye className="h-3.5 w-3.5 text-white" />
@@ -2811,6 +2812,23 @@ export default function ProjectDetailPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+      {/* Receipt image preview lightbox */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 cursor-pointer"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <img src={previewImage} alt="Receipt" className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl object-contain" />
+            <button
+              className="absolute -top-3 -right-3 w-8 h-8 flex items-center justify-center rounded-full bg-white shadow-md hover:bg-gray-100 transition-colors"
+              onClick={() => setPreviewImage(null)}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
