@@ -161,7 +161,7 @@ export default function ProjectDetailPage() {
     assistantCommissionPct: "",
     addOns: [] as { itemCode: string; itemName: string; qty: number; rate: number; includeInCommission: boolean }[],
     taxType: "tax_free" as "tax_free" | "vat_included",
-    serviceType: "Full Package" as string,
+    serviceType: "" as string,
   });
   const [editAddonSearch, setEditAddonSearch] = useState<string[]>([]);
   const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
@@ -657,7 +657,7 @@ export default function ProjectDetailPage() {
       totalBudget: project?.custom_total_budget ? String(project.custom_total_budget) : "",
       addOns: currentAddOns,
       taxType: (salesOrder?.total_taxes_and_charges > 0) ? "vat_included" : "tax_free",
-      serviceType: project?.custom_service_type || "Full Package",
+      serviceType: project?.custom_service_type || "",
     }));
     setEditAddonSearch(currentAddOns.map((a) => a.itemName));
     setEditAddonDropdownOpen(currentAddOns.map(() => false));
@@ -2304,7 +2304,7 @@ export default function ProjectDetailPage() {
                     <button
                       key={opt}
                       type="button"
-                      onClick={() => setEditForm({ ...editForm, serviceType: opt })}
+                      onClick={() => setEditForm({ ...editForm, serviceType: editForm.serviceType === opt ? "" : opt })}
                       className={cn(
                         "flex-1 py-2 px-3 rounded-md border text-sm font-medium transition-all",
                         editForm.serviceType === opt
