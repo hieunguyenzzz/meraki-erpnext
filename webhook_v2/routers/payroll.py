@@ -329,16 +329,16 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
 
         emp = emp_map.get(sales_person, {})
         if is_full:
-            pct = float(emp.get("custom_full_package_commission_pct") or 0)
+            amount = float(emp.get("custom_full_package_commission_pct") or 0)
             key = "full_package"
         else:
-            pct = float(emp.get("custom_partial_package_commission_pct") or 0)
+            amount = float(emp.get("custom_partial_package_commission_pct") or 0)
             key = "partial_package"
 
-        if pct > 0:
+        if amount > 0:
             if sales_person not in comm_totals:
                 comm_totals[sales_person] = {"lead": 0.0, "support": 0.0, "assistant": 0.0}
-            comm_totals[sales_person][key] = comm_totals[sales_person].get(key, 0.0) + net_total * pct / 100
+            comm_totals[sales_person][key] = comm_totals[sales_person].get(key, 0.0) + amount
 
     # --- Build allowance totals per employee ---
     allowance_totals: dict[str, float] = {}
