@@ -23,7 +23,7 @@ def run(client):
             print(f"  Created Custom Field Project.{fieldname}")
 
     # 2. Backfill from linked Sales Orders
-    projects = client.get_list("Project", filters=[["sales_order", "is", "set"]], fields=["name", "sales_order"], limit_page_length=500)
+    projects = client.get_list("Project", filters=[["sales_order", "is", "set"]], fields=["name", "sales_order"], limit=500)
     updated = 0
     for proj in projects:
         so_name = proj.get("sales_order")
