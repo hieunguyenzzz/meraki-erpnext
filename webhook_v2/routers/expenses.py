@@ -315,7 +315,7 @@ def list_expenses(project: str | None = None):
             "grand_total", "project", "docstatus", "owner",
             "custom_rejected", "custom_expense_staff",
         ]),
-        "order_by": "posting_date desc",
+        "order_by": "creation desc",
         "limit_page_length": 0,
     }).get("data", [])
 
