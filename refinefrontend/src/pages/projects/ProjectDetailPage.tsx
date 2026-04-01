@@ -35,6 +35,7 @@ import {
   X,
   Camera,
   Paperclip,
+  Eye,
 } from "lucide-react";
 import {
   Popover as ShadcnPopover,
@@ -1909,7 +1910,7 @@ export default function ProjectDetailPage() {
                     <div className="border rounded-md overflow-x-auto">
                       <table className="w-full text-sm">
                         <colgroup>
-                          <col className="w-10" />
+                          <col className="w-16" />
                           <col className="w-[105px]" />
                           <col />
                           <col className="w-[120px]" />
@@ -2040,31 +2041,40 @@ export default function ProjectDetailPage() {
                             <tr key={exp.name} className="border-b last:border-b-0">
                               <td className="px-2 py-1.5 w-10">
                                 {exp.receipt_url ? (
-                                  <div className="relative group">
+                                  <div className="relative group w-12 h-12">
                                     <img
                                       src={exp.receipt_url}
                                       alt=""
-                                      className="w-8 h-8 rounded object-cover cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all"
-                                      onClick={() => window.open(exp.receipt_url, "_blank")}
+                                      className="w-12 h-12 rounded object-cover"
                                     />
-                                    {exp.status === "Pending" && (
-                                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                                        <Pencil className="h-3 w-3 text-white" />
-                                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (!file) return;
-                                          try {
-                                            const { uploadFile } = await import("@/lib/fileUpload");
-                                            await uploadFile(file, "Purchase Invoice", exp.name);
-                                            fetchExpenses(name!);
-                                          } catch {}
-                                        }} />
-                                      </label>
-                                    )}
+                                    <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        type="button"
+                                        className="p-1 rounded hover:bg-white/20 transition-colors"
+                                        onClick={() => window.open(exp.receipt_url, "_blank")}
+                                        title="Preview"
+                                      >
+                                        <Eye className="h-3.5 w-3.5 text-white" />
+                                      </button>
+                                      {exp.status === "Pending" && (
+                                        <label className="p-1 rounded hover:bg-white/20 transition-colors cursor-pointer" title="Replace">
+                                          <Pencil className="h-3.5 w-3.5 text-white" />
+                                          <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            try {
+                                              const { uploadFile } = await import("@/lib/fileUpload");
+                                              await uploadFile(file, "Purchase Invoice", exp.name);
+                                              fetchExpenses(name!);
+                                            } catch {}
+                                          }} />
+                                        </label>
+                                      )}
+                                    </div>
                                   </div>
                                 ) : exp.status === "Pending" ? (
-                                  <label className="flex items-center justify-center w-8 h-8 rounded bg-muted/50 hover:bg-muted cursor-pointer transition-colors">
-                                    <Plus className="h-3 w-3 text-muted-foreground/50" />
+                                  <label className="flex items-center justify-center w-12 h-12 rounded bg-muted/50 hover:bg-muted cursor-pointer transition-colors">
+                                    <Plus className="h-4 w-4 text-muted-foreground/40" />
                                     <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
