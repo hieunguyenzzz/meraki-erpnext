@@ -1909,13 +1909,14 @@ export default function ProjectDetailPage() {
                     <div className="border rounded-md overflow-x-auto">
                       <table className="w-full text-sm">
                         <colgroup>
-                          <col className="w-[130px]" />
+                          <col className="w-10" />
+                          <col className="w-[105px]" />
                           <col />
                           <col className="w-[120px]" />
-                          <col className="w-[140px]" />
-                          <col className="w-[130px]" />
+                          <col className="w-[110px]" />
                           <col className="w-[90px]" />
-                          <col className="w-[80px]" />
+                          <col className="w-16" />
+                          <col className="w-20" />
                         </colgroup>
                         <thead>
                           <tr className="border-b bg-muted/50">
@@ -1975,7 +1976,7 @@ export default function ProjectDetailPage() {
                                 {exp.status === "Pending" ? (
                                   <input
                                     type="date"
-                                    className="h-7 w-[7.5rem] px-2 text-sm border border-transparent rounded hover:border-input focus:border-ring focus:outline-none bg-transparent cursor-pointer"
+                                    className="h-7 w-full px-1 text-sm border border-transparent rounded hover:border-input focus:border-ring focus:outline-none bg-transparent cursor-pointer"
                                     defaultValue={exp.posting_date}
                                     onBlur={async (e) => {
                                       const newDate = e.target.value;
