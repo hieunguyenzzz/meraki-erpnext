@@ -76,6 +76,7 @@ export default function ProjectKanbanPage() {
         "custom_assistant_3",
         "custom_assistant_4",
         "custom_assistant_5",
+        "custom_service_type",
       ],
     },
   });
@@ -186,6 +187,7 @@ export default function ProjectKanbanPage() {
         custom_assistant_3: p.custom_assistant_3,
         custom_assistant_4: p.custom_assistant_4,
         custom_assistant_5: p.custom_assistant_5,
+        custom_service_type: p.custom_service_type || undefined,
       };
     });
   }, [projectsResult, salesOrdersResult, customersResult, employeesResult, suppliersResult, invoicesResult]);
@@ -268,8 +270,17 @@ export default function ProjectKanbanPage() {
     if (isFinance) {
       cols.push(
         {
-          accessorKey: "package_amount",
+          accessorKey: "custom_service_type",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Package" />,
+          cell: ({ row }) => {
+            const type = row.getValue("custom_service_type") as string | undefined;
+            if (!type) return <span className="text-muted-foreground">—</span>;
+            return <Badge variant={type.toLowerCase().includes("full") ? "default" : "secondary"}>{type}</Badge>;
+          },
+        },
+        {
+          accessorKey: "package_amount",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" />,
           cell: ({ row }) => {
             const amount = row.getValue("package_amount") as number | undefined;
             return amount
