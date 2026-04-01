@@ -49,7 +49,7 @@ function getEarningAmount(earnings: SalarySlipEarning[] | undefined, component: 
 }
 
 function getTotalCommission(earnings: SalarySlipEarning[] | undefined): number {
-  const commissionComponents = ["Assistant Commission", "Support Planner Commission", "Lead Planner Commission"];
+  const commissionComponents = ["Assistant Commission", "Support Planner Commission", "Lead Planner Commission", "Full Package Commission", "Partial Package Commission"];
   return earnings?.filter(e => commissionComponents.includes(e.salary_component))
     .reduce((sum, e) => sum + e.amount, 0) ?? 0;
 }
@@ -515,11 +515,16 @@ export default function PayrollPage() {
             const lead = getEarningAmount(s.earnings, "Lead Planner Commission");
             const support = getEarningAmount(s.earnings, "Support Planner Commission");
             const assistant = getEarningAmount(s.earnings, "Assistant Commission");
-            if (lead + support + assistant === 0) return null;
-            return { name: empNameMap[s.employee] || s.employee_name, lead, support, assistant, total: lead + support + assistant };
+            const fullPkg = getEarningAmount(s.earnings, "Full Package Commission");
+            const partialPkg = getEarningAmount(s.earnings, "Partial Package Commission");
+            const total = lead + support + assistant + fullPkg + partialPkg;
+            if (total === 0) return null;
+            return { name: empNameMap[s.employee] || s.employee_name, lead, support, assistant, fullPkg, partialPkg, total };
           })
-          .filter(Boolean) as { name: string; lead: number; support: number; assistant: number; total: number }[];
+          .filter(Boolean) as { name: string; lead: number; support: number; assistant: number; fullPkg: number; partialPkg: number; total: number }[];
         if (commissionRows.length === 0) return null;
+        const hasFullPkg = commissionRows.some(r => r.fullPkg > 0);
+        const hasPartialPkg = commissionRows.some(r => r.partialPkg > 0);
         return (
           <div className="text-xs text-muted-foreground mt-2">
             <p className="font-medium mb-1">Commission Breakdown</p>
@@ -530,6 +535,8 @@ export default function PayrollPage() {
                   <th className="pr-4 font-normal text-right">Lead</th>
                   <th className="pr-4 font-normal text-right">Support</th>
                   <th className="pr-4 font-normal text-right">Assistant</th>
+                  {hasFullPkg && <th className="pr-4 font-normal text-right">Full Pkg</th>}
+                  {hasPartialPkg && <th className="pr-4 font-normal text-right">Partial Pkg</th>}
                   <th className="font-normal text-right">Total</th>
                 </tr>
               </thead>
@@ -540,6 +547,8 @@ export default function PayrollPage() {
                     <td className="pr-4 text-right">{r.lead > 0 ? formatVND(r.lead) : "-"}</td>
                     <td className="pr-4 text-right">{r.support > 0 ? formatVND(r.support) : "-"}</td>
                     <td className="pr-4 text-right">{r.assistant > 0 ? formatVND(r.assistant) : "-"}</td>
+                    {hasFullPkg && <td className="pr-4 text-right">{r.fullPkg > 0 ? formatVND(r.fullPkg) : "-"}</td>}
+                    {hasPartialPkg && <td className="pr-4 text-right">{r.partialPkg > 0 ? formatVND(r.partialPkg) : "-"}</td>}
                     <td className="text-right">{formatVND(r.total)}</td>
                   </tr>
                 ))}
