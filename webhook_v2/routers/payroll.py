@@ -382,7 +382,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 allowance_totals[emp_id] = allowance_totals.get(emp_id, 0.0) + rate
 
     # --- Write earnings to each draft salary slip ---
-    STRIP_COMPONENTS = set(COMMISSION_COMPONENTS + ["Wedding Allowance"])
+    STRIP_COMPONENTS = set(COMMISSION_COMPONENTS + ["Wedding Allowance", "Company Insurance Contribution"])
     STRIP_DEDUCTIONS = {PIT_COMPONENT}
     applied = 0
     employees_with_commission = 0
@@ -436,6 +436,18 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
             if allowance_amt > 0:
                 new_earnings.append({"salary_component": "Wedding Allowance", "amount": round(allowance_amt)})
                 has_allowance = True
+
+            # If base salary is 0 but employee has insurance deductions,
+            # add an earning to offset (company covers employee portion)
+            if ssa_base_map.get(emp_id, 0) == 0:
+                ins_deductions = sum(
+                    d.get("amount", 0) for d in current_deductions
+                    if d.get("salary_component", "").startswith(("BHXH", "BHYT", "BHTN"))
+                    and "Employer" not in d.get("salary_component", "")
+                    and "Payable" not in d.get("salary_component", "")
+                )
+                if ins_deductions > 0:
+                    new_earnings.append({"salary_component": "Company Insurance Contribution", "amount": round(ins_deductions)})
 
             # Pass 1: Write earnings + strip old PIT (let ERPNext recompute gross_pay)
             new_deductions = [d for d in current_deductions if d.get("salary_component") not in STRIP_DEDUCTIONS]
