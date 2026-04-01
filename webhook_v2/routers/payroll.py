@@ -5,7 +5,7 @@ POST /generate-payroll — orchestrates: Payroll Entry + Salary Slips + Wedding 
 """
 
 import json
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
@@ -559,3 +559,101 @@ async def submit_payroll(request: SubmitPayrollRequest):
         "failed": [],
         "jv_name": jv_name,
     }
+
+
+# Employee SI rate constants (Vietnam)
+_SI_EMPLOYEE_PCT = 10.5  # BHXH 8% + BHYT 1.5% + BHTN 1%
+_SI_EMPLOYER_PCT = 21.5  # BHXH 17.5% + BHYT 3% + BHTN 1%
+
+
+@router.get("/payroll/slips")
+def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name")):
+    """
+    Return enriched salary slips for a Payroll Entry.
+
+    Each slip includes earnings/deductions child tables plus pre-computed fields:
+    - employee_display_name, dependents
+    - employer_bhxh, tax_reduction, taxable_income
+    Eliminates N+1 fetches and frontend business logic.
+    """
+    client = ERPNextClient()
+
+    # 1. Fetch basic slip list
+    slips = client._get("/api/resource/Salary Slip", params={
+        "filters": json.dumps([["payroll_entry", "=", pe_name]]),
+        "fields": json.dumps(["name", "employee"]),
+        "limit_page_length": 200,
+    }).get("data", [])
+
+    if not slips:
+        return {"data": []}
+
+    # 2. Batch-fetch employee data (dependents, names)
+    emp_ids = list({s["employee"] for s in slips})
+    employees = client._get("/api/resource/Employee", params={
+        "filters": json.dumps([["name", "in", emp_ids]]),
+        "fields": json.dumps(["name", "first_name", "last_name", "employee_name", "custom_number_of_dependents"]),
+        "limit_page_length": 200,
+    }).get("data", [])
+
+    emp_info: dict[str, dict] = {}
+    for emp in employees:
+        display = [emp.get("last_name"), emp.get("first_name")]
+        display = " ".join(p for p in display if p)
+        if not display or (emp.get("employee_name") or "").startswith("HR-EMP-"):
+            display = display or emp.get("employee_name") or emp["name"]
+        emp_info[emp["name"]] = {
+            "display_name": display,
+            "dependents": int(emp.get("custom_number_of_dependents") or 0),
+        }
+
+    # 3. Fetch each slip's full doc (earnings + deductions)
+    result = []
+    for slip in slips:
+        full = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
+        emp_id = full.get("employee", "")
+        info = emp_info.get(emp_id, {"display_name": emp_id, "dependents": 0})
+
+        earnings = full.get("earnings", [])
+        deductions = full.get("deductions", [])
+
+        # Compute SI total (employee portion)
+        si_total = sum(
+            d.get("amount", 0) for d in deductions
+            if d.get("salary_component", "").startswith(("BHXH", "BHYT", "BHTN"))
+            and "Employer" not in d.get("salary_component", "")
+        )
+
+        # Employer BHXH = employee SI * (21.5 / 10.5)
+        employer_bhxh = round(si_total / _SI_EMPLOYEE_PCT * _SI_EMPLOYER_PCT) if si_total > 0 else 0
+
+        # Tax computations
+        gross = full.get("gross_pay", 0)
+        dependents = info["dependents"]
+        tax_reduction = PIT_PERSONAL_DEDUCTION + dependents * PIT_DEPENDENT_DEDUCTION
+        taxable_income = gross - si_total - tax_reduction
+
+        result.append({
+            "name": full.get("name"),
+            "employee": emp_id,
+            "employee_name": full.get("employee_name", ""),
+            "employee_display_name": info["display_name"],
+            "dependents": dependents,
+            "gross_pay": gross,
+            "total_deduction": full.get("total_deduction", 0),
+            "net_pay": full.get("net_pay", 0),
+            "posting_date": full.get("posting_date"),
+            "docstatus": full.get("docstatus", 0),
+            "modified": full.get("modified"),
+            "earnings": [{"salary_component": e.get("salary_component"), "amount": e.get("amount", 0)} for e in earnings],
+            "deductions": [{"salary_component": d.get("salary_component"), "amount": d.get("amount", 0)} for d in deductions],
+            # Pre-computed fields
+            "si_employee": si_total,
+            "employer_bhxh": employer_bhxh,
+            "tax_reduction": tax_reduction,
+            "taxable_income": taxable_income,
+        })
+
+    # Sort by display name
+    result.sort(key=lambda s: s["employee_display_name"])
+    return {"data": result}

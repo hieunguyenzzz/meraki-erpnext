@@ -590,13 +590,14 @@ def edit_expense(pi_name: str, req: EditExpenseRequest):
         raise HTTPException(status_code=400, detail=f"Failed to create expense: {e}")
 
     new_name = new_pi.get("data", {}).get("name")
+    if not new_name:
+        raise HTTPException(status_code=500, detail="PI created but name not returned")
 
-    if new_name:
-        try:
-            full_pi = client._get(f"/api/resource/Purchase Invoice/{new_name}").get("data", {})
-            client._post("/api/method/frappe.client.submit", {"doc": full_pi})
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to submit expense: {e}")
+    try:
+        full_pi = client._get(f"/api/resource/Purchase Invoice/{new_name}").get("data", {})
+        client._post("/api/method/frappe.client.submit", {"doc": full_pi})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to submit expense: {e}")
 
     log.info("expense_edited", old=pi_name, new=new_name, amount=amount)
     return {"success": True, "name": new_name}

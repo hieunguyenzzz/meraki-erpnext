@@ -32,6 +32,7 @@ import ApplicantDetailPage from "@/pages/hr/ApplicantDetailPage";
 import ApplicantsListPage from "@/pages/hr/ApplicantsListPage";
 import InterviewSchedulingPage from "@/pages/hr/InterviewSchedulingPage";
 import JobOpeningsPage from "@/pages/hr/JobOpeningsPage";
+import LeavesPage from "@/pages/hr/LeavesPage";
 import JobApplyPage from "@/pages/public/JobApplyPage";
 import InvoicesPage from "@/pages/finance/InvoicesPage";
 import InvoiceDetailPage from "@/pages/finance/InvoiceDetailPage";
@@ -169,6 +170,7 @@ export default function App() {
               <Route path="/hr/recruiting/:name" element={<ApplicantDetailPage />} />
               <Route path="/hr/employees" element={<EmployeesPage />} />
               <Route path="/hr/employees/:name" element={<EmployeeDetailPage />} />
+              <Route path="/hr/leaves" element={<LeavesPage />} />
               <Route path="/hr/payroll" element={<PayrollPage />} />
 
               {/* Reports */}

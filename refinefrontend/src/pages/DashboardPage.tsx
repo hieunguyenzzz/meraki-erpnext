@@ -82,71 +82,22 @@ export default function DashboardPage() {
   const isLoading = leadsQuery?.isLoading || employeesQuery?.isLoading;
 
   // --- Upcoming Interviews for current user ---
-  const todayStr = new Date().toISOString().slice(0, 10);
   const email = identity?.email;
-
-  const { result: interviewsResult, query: interviewsQuery } = useList({
-    resource: "Interview",
-    pagination: { mode: "off" },
-    filters: [
-      { field: "scheduled_on", operator: "gte", value: todayStr },
-      { field: "status", operator: "in", value: ["Pending", "Under Review"] },
-    ],
-    meta: {
-      fields: [
-        "name", "job_applicant", "job_opening", "scheduled_on",
-        "from_time", "to_time", "status",
-      ],
-    },
-  });
-  const allUpcoming = interviewsResult?.data ?? [];
-
-  // Fetch interviewer from child table (not available in list API)
-  const [interviewerMap, setInterviewerMap] = useState<Record<string, string>>({});
+  const [myUpcoming, setMyUpcoming] = useState<any[]>([]);
   const [detailsLoading, setDetailsLoading] = useState(true);
 
   useEffect(() => {
-    if (interviewsQuery?.isLoading) return;
-    if (allUpcoming.length === 0) {
-      setDetailsLoading(false);
-      return;
-    }
+    if (!email) { setDetailsLoading(false); return; }
     let cancelled = false;
-    const fetchDetails = async () => {
-      const map: Record<string, string> = {};
-      await Promise.all(
-        allUpcoming.map(async (iv: any) => {
-          try {
-            const res = await fetch(
-              `/api/resource/Interview/${encodeURIComponent(iv.name)}`,
-              { credentials: "include" },
-            );
-            const data = await res.json();
-            const details = data?.data?.interview_details ?? [];
-            if (details.length > 0) map[iv.name] = details[0].interviewer;
-          } catch { /* skip */ }
-        }),
-      );
-      if (!cancelled) {
-        setInterviewerMap(map);
-        setDetailsLoading(false);
-      }
-    };
-    fetchDetails();
+    fetch(`/inquiry-api/dashboard/my-interviews?email=${encodeURIComponent(email)}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled) setMyUpcoming(json.data ?? []);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setDetailsLoading(false); });
     return () => { cancelled = true; };
-  }, [allUpcoming, interviewsQuery?.isLoading]);
-
-  // Filter to only this user's interviews
-  const myUpcoming = useMemo(() => {
-    if (!email) return [];
-    return allUpcoming
-      .filter((iv: any) => interviewerMap[iv.name] === email)
-      .sort((a: any, b: any) =>
-        a.scheduled_on === b.scheduled_on
-          ? (a.from_time ?? "").localeCompare(b.from_time ?? "")
-          : a.scheduled_on.localeCompare(b.scheduled_on),
-      );
-  }, [allUpcoming, interviewerMap, email]);
+  }, [email]);
 
   // Resolve candidate and position names
   const { result: applicantsResult } = useList({
@@ -165,7 +116,7 @@ export default function DashboardPage() {
   });
   const jobOpenings = jobOpeningsResult?.data ?? [];
 
-  const interviewsLoading = interviewsQuery?.isLoading || detailsLoading;
+  const interviewsLoading = detailsLoading;
   const showInterviewsCard = hasHrAccess && (interviewsLoading || myUpcoming.length > 0);
 
   // --- My Tasks ---

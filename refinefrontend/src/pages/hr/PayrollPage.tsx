@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { useList, useInvalidate, useApiUrl } from "@refinedev/core";
+import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { formatVND, formatDate } from "@/lib/format";
+import { formatVND } from "@/lib/format";
 import { extractErrorMessage } from "@/lib/errors";
 
 function now() { return new Date(); }
@@ -19,7 +19,6 @@ function endOfMonth(d: Date) {
 function docstatusLabel(ds: number) { return ds === 0 ? "Draft" : ds === 1 ? "Submitted" : ds === 2 ? "Cancelled" : "Unknown"; }
 function docstatusBadge(ds: number) { return ds === 1 ? "success" as const : ds === 2 ? "destructive" as const : "secondary" as const; }
 
-/** Parse "YYYY-MM-DD" into a Date (local timezone) */
 function parseDate(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
@@ -35,6 +34,8 @@ interface SalarySlip {
   modified?: string;
   employee: string;
   employee_name: string;
+  employee_display_name?: string;
+  dependents?: number;
   gross_pay: number;
   total_deduction: number;
   net_pay: number;
@@ -42,6 +43,11 @@ interface SalarySlip {
   docstatus: number;
   earnings: SalarySlipEarning[];
   deductions: SalarySlipEarning[];
+  // Pre-computed by backend
+  si_employee?: number;
+  employer_bhxh?: number;
+  tax_reduction?: number;
+  taxable_income?: number;
 }
 
 function getEarningAmount(earnings: SalarySlipEarning[] | undefined, component: string): number {
@@ -58,45 +64,6 @@ function getDeductionAmount(deductions: SalarySlipEarning[] | undefined, compone
   return deductions?.find(e => e.salary_component === component)?.amount ?? 0;
 }
 
-function getEmployerBHXH(deductions: SalarySlipEarning[] | undefined): number {
-  const bhxh = getDeductionAmount(deductions, "BHXH (Employee)");
-  const bhyt = getDeductionAmount(deductions, "BHYT (Employee)");
-  const bhtn = getDeductionAmount(deductions, "BHTN (Employee)");
-  const employeeTotal = bhxh + bhyt + bhtn;
-  // Employee pays 10.5%, employer pays 21.5%
-  return employeeTotal > 0 ? Math.round(employeeTotal / 10.5 * 21.5) : 0;
-}
-
-// Vietnam PIT constants (2026 — new deductions, old 7 brackets until July 2026)
-const PIT_PERSONAL_DEDUCTION = 15_500_000;
-const PIT_DEPENDENT_DEDUCTION = 6_200_000;
-
-const PIT_BRACKETS: { limit: number; rate: number; qd: number }[] = [
-  { limit: 10_000_000, rate: 0.05, qd: 0 },
-  { limit: 30_000_000, rate: 0.10, qd: 500_000 },
-  { limit: 60_000_000, rate: 0.20, qd: 3_500_000 },
-  { limit: 100_000_000, rate: 0.30, qd: 9_500_000 },
-  { limit: Infinity, rate: 0.35, qd: 14_500_000 },
-];
-
-function calcTaxReduction(dependents: number): number {
-  return PIT_PERSONAL_DEDUCTION + dependents * PIT_DEPENDENT_DEDUCTION;
-}
-
-function calcEstPIT(grossPay: number, siDeductions: number, dependents: number): number {
-  const taxReduction = calcTaxReduction(dependents);
-  const taxable = grossPay - siDeductions - taxReduction;
-  if (taxable <= 0) return 0;
-  const bracket = PIT_BRACKETS.find(b => taxable <= b.limit) ?? PIT_BRACKETS[PIT_BRACKETS.length - 1];
-  return Math.round(taxable * bracket.rate - bracket.qd);
-}
-
-function getTotalSI(deductions: SalarySlipEarning[] | undefined): number {
-  return getDeductionAmount(deductions, "BHXH (Employee)")
-    + getDeductionAmount(deductions, "BHYT (Employee)")
-    + getDeductionAmount(deductions, "BHTN (Employee)");
-}
-
 interface PayrollEntry {
   name: string;
   posting_date: string;
@@ -107,12 +74,12 @@ interface PayrollEntry {
   number_of_employees: number;
 }
 
-function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependentsMap: Record<string, number>, empNameMap: Record<string, string>): ColumnDef<SalarySlip, unknown>[] {
+function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDef<SalarySlip, unknown>[] {
   return [
     {
       accessorKey: "employee_name",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
-      cell: ({ row }) => <span className="font-medium">{empNameMap[row.original.employee] || row.original.employee_name}</span>,
+      cell: ({ row }) => <span className="font-medium">{row.original.employee_display_name || row.original.employee_name}</span>,
       filterFn: "includesString",
     },
     {
@@ -146,45 +113,31 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>, dependent
     {
       id: "si_employee",
       header: ({ column }) => <DataTableColumnHeader column={column} title="SI 10.5%" className="text-right" />,
-      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(getTotalSI(row.original.deductions))}</div>,
+      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(row.original.si_employee ?? 0)}</div>,
     },
     {
       id: "employer_bhxh",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Employer BHXH" className="text-right" />,
-      cell: ({ row }) => <div className="text-right text-amber-600 dark:text-amber-400">{formatVND(getEmployerBHXH(row.original.deductions))}</div>,
+      cell: ({ row }) => <div className="text-right text-amber-600 dark:text-amber-400">{formatVND(row.original.employer_bhxh ?? 0)}</div>,
     },
     {
       id: "dependents",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Dependents" className="text-right" />,
       cell: ({ row }) => {
-        const deps = dependentsMap[row.original.employee] ?? 0;
+        const deps = row.original.dependents ?? 0;
         return <div className="text-right">{deps > 0 ? deps : <span className="text-muted-foreground">0</span>}</div>;
-      },
-    },
-    {
-      id: "dep_deduction",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Dep. Deduction" className="text-right" />,
-      cell: ({ row }) => {
-        const deps = dependentsMap[row.original.employee] ?? 0;
-        const amount = deps * PIT_DEPENDENT_DEDUCTION;
-        return <div className="text-right text-muted-foreground">{amount > 0 ? formatVND(amount) : <span>-</span>}</div>;
       },
     },
     {
       id: "tax_reduction",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Tax Reduction" className="text-right" />,
-      cell: ({ row }) => {
-        const deps = dependentsMap[row.original.employee] ?? 0;
-        return <div className="text-right text-muted-foreground">{formatVND(calcTaxReduction(deps))}</div>;
-      },
+      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(row.original.tax_reduction ?? 0)}</div>,
     },
     {
       id: "taxable_income",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Taxable Income" className="text-right" />,
       cell: ({ row }) => {
-        const deps = dependentsMap[row.original.employee] ?? 0;
-        const si = getTotalSI(row.original.deductions);
-        const taxable = row.original.gross_pay - si - calcTaxReduction(deps);
+        const taxable = row.original.taxable_income ?? 0;
         return <div className={`text-right ${taxable < 0 ? "text-muted-foreground" : ""}`}>{formatVND(taxable)}</div>;
       },
     },
@@ -221,11 +174,10 @@ export default function PayrollPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [detailedSlips, setDetailedSlips] = useState<SalarySlip[]>([]);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
+  const [enrichedSlips, setEnrichedSlips] = useState<SalarySlip[]>([]);
+  const [loadingSlips, setLoadingSlips] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const apiUrl = useApiUrl();
   const invalidate = useInvalidate();
 
   // Fetch ALL payroll entries (for month selector + finding selected PE)
@@ -238,12 +190,10 @@ export default function PayrollPage() {
 
   const allEntries = (allEntriesResult?.data ?? []) as PayrollEntry[];
 
-  // Build month options from allEntries, deduplicated by start_date, sorted newest first
   const monthOptions = useMemo(() => {
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
 
-    // Include last 12 months + current month
     for (let i = 0; i < 12; i++) {
       const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
       const val = firstOfMonth(d);
@@ -253,7 +203,6 @@ export default function PayrollPage() {
       }
     }
 
-    // Also include any months from existing entries (in case older than 12 months)
     for (const entry of allEntries) {
       if (!seen.has(entry.start_date)) {
         seen.add(entry.start_date);
@@ -262,79 +211,39 @@ export default function PayrollPage() {
       }
     }
 
-    // Sort newest first
     opts.sort((a, b) => b.value.localeCompare(a.value));
     return opts;
   }, [allEntries, currentMonthStart]);
 
-  // Find the Payroll Entry for the selected month
   const selectedPE = useMemo(() => {
     return allEntries.find(e => e.start_date === selectedMonth) ?? null;
   }, [allEntries, selectedMonth]);
 
-  // Compute end date for the selected month
   const selectedEnd = useMemo(() => {
     if (selectedPE) return selectedPE.end_date;
     const d = parseDate(selectedMonth);
     return endOfMonth(d);
   }, [selectedPE, selectedMonth]);
 
-  // Fetch salary slips for selected Payroll Entry
-  const { result: slipsResult, query: slipsQuery } = useList({
-    resource: "Salary Slip",
-    pagination: { mode: "off" },
-    filters: selectedPE
-      ? [{ field: "payroll_entry", operator: "eq", value: selectedPE.name }]
-      : [{ field: "name", operator: "eq", value: "__never__" }],
-    sorters: [{ field: "employee_name", order: "asc" }],
-    meta: { fields: ["name", "employee", "employee_name", "gross_pay", "total_deduction", "net_pay", "posting_date", "docstatus"] },
-    queryOptions: { enabled: !!selectedPE },
-  });
-
-  const basicSlips = (slipsResult?.data ?? []) as SalarySlip[];
-
-  // Fetch detailed salary slips with earnings/deductions child tables
+  // Fetch enriched salary slips from backend (single call, no N+1)
   useEffect(() => {
-    async function fetchDetails() {
-      if (basicSlips.length === 0) {
-        setDetailedSlips([]);
-        return;
-      }
-
-      setLoadingDetails(true);
-      try {
-        const detailed = await Promise.all(
-          basicSlips.map(async (slip) => {
-            const res = await fetch(`${apiUrl}/resource/Salary Slip/${slip.name}`, {
-              credentials: "include",
-            });
-            const data = await res.json();
-            return {
-              ...slip,
-              docstatus: data.data?.docstatus ?? slip.docstatus,
-              modified: data.data?.modified ?? slip.modified,
-              earnings: data.data?.earnings ?? [],
-              deductions: data.data?.deductions ?? [],
-              total_deduction: data.data?.total_deduction ?? slip.total_deduction ?? 0,
-            };
-          })
-        );
-        setDetailedSlips(detailed);
-      } catch (err) {
-        console.error("Failed to fetch salary slip details:", err);
-        setDetailedSlips(basicSlips);
-      } finally {
-        setLoadingDetails(false);
-      }
+    if (!selectedPE) {
+      setEnrichedSlips([]);
+      return;
     }
+    let cancelled = false;
+    setLoadingSlips(true);
+    fetch(`/inquiry-api/payroll/slips?pe_name=${encodeURIComponent(selectedPE.name)}`)
+      .then(res => res.json())
+      .then(json => { if (!cancelled) setEnrichedSlips(json.data ?? []); })
+      .catch(() => { if (!cancelled) setEnrichedSlips([]); })
+      .finally(() => { if (!cancelled) setLoadingSlips(false); });
+    return () => { cancelled = true; };
+  }, [selectedPE?.name, refreshKey]);
 
-    fetchDetails();
-  }, [basicSlips.map(s => s.name).join(","), apiUrl, detailRefreshKey]);
-
-  const allSlips = detailedSlips.length > 0 ? detailedSlips : basicSlips;
   // Hide draft slips with zero pay (freelancers with no weddings this month)
-  const salarySlips = allSlips.filter((s) => s.docstatus === 1 || s.gross_pay > 0);
-  const hasDraftSlips = allSlips.some((s) => s.docstatus === 0);
+  const salarySlips = enrichedSlips.filter((s) => s.docstatus === 1 || s.gross_pay > 0);
+  const hasDraftSlips = enrichedSlips.some((s) => s.docstatus === 0);
   const allSlipsSubmitted = selectedPE && salarySlips.length > 0 && salarySlips.every((s) => s.docstatus === 1);
 
   const { result: empResult } = useList({
@@ -345,31 +254,6 @@ export default function PayrollPage() {
   });
 
   const activeCount = empResult?.data?.length ?? 0;
-
-  const { result: empDepsResult } = useList({
-    resource: "Employee",
-    pagination: { mode: "off" },
-    filters: [{ field: "status", operator: "eq", value: "Active" }],
-    meta: { fields: ["name", "first_name", "last_name", "employee_name", "custom_number_of_dependents"] },
-  });
-
-  const dependentsMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const emp of (empDepsResult?.data ?? []) as any[]) {
-      map[emp.name] = emp.custom_number_of_dependents ?? 0;
-    }
-    return map;
-  }, [empDepsResult?.data]);
-
-  const empNameMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const emp of (empDepsResult?.data ?? []) as any[]) {
-      const fromParts = [emp.last_name, emp.first_name].filter(Boolean).join(" ");
-      const displayName = emp.employee_name?.startsWith("HR-EMP-") ? "" : emp.employee_name;
-      map[emp.name] = fromParts || displayName || emp.name;
-    }
-    return map;
-  }, [empDepsResult?.data]);
 
   // Fetch Wedding Allowance Additional Salary records for selected period
   const { result: additionalSalariesResult } = useList({
@@ -393,7 +277,7 @@ export default function PayrollPage() {
     return map;
   }, [additionalSalariesResult?.data]);
 
-  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap, dependentsMap, empNameMap), [weddingAllowanceMap, dependentsMap, empNameMap]);
+  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap), [weddingAllowanceMap]);
 
   async function handleGenerate() {
     setIsRunning(true);
@@ -406,9 +290,8 @@ export default function PayrollPage() {
       });
       if (!res.ok) throw new Error(`Payroll generation failed: ${res.status}`);
       invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
-      invalidate({ resource: "Salary Slip", invalidates: ["list"] });
       invalidate({ resource: "Additional Salary", invalidates: ["list"] });
-      setDetailRefreshKey(k => k + 1);
+      setRefreshKey(k => k + 1);
     } catch (err: any) {
       setError(extractErrorMessage(err, "Failed to generate payroll"));
     } finally {
@@ -441,12 +324,11 @@ export default function PayrollPage() {
     } finally {
       setSubmitting(false);
       invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
-      invalidate({ resource: "Salary Slip", invalidates: ["list"] });
-      setDetailRefreshKey(k => k + 1);
+      setRefreshKey(k => k + 1);
     }
   }
 
-  const isLoading = slipsQuery?.isLoading || loadingDetails;
+  const isLoading = loadingSlips;
 
   return (
     <div className="space-y-4">
@@ -519,7 +401,7 @@ export default function PayrollPage() {
             const partialPkg = getEarningAmount(s.earnings, "Partial Package Commission");
             const total = lead + support + assistant + fullPkg + partialPkg;
             if (total === 0) return null;
-            return { name: empNameMap[s.employee] || s.employee_name, lead, support, assistant, fullPkg, partialPkg, total };
+            return { name: s.employee_display_name || s.employee_name, lead, support, assistant, fullPkg, partialPkg, total };
           })
           .filter(Boolean) as { name: string; lead: number; support: number; assistant: number; fullPkg: number; partialPkg: number; total: number }[];
         if (commissionRows.length === 0) return null;

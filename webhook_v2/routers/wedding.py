@@ -444,29 +444,17 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to update venue: {e}")
 
-    # 1b. Update service type on Project
+    # 1b. Update Project fields (service type, wedding type) in a single PUT
+    project_updates: dict = {}
     if req.service_type is not None:
-        try:
-            client._post("/api/method/frappe.client.set_value", {
-                "doctype": "Project",
-                "name": project_name,
-                "fieldname": "custom_service_type",
-                "value": req.service_type,
-            })
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to update service type: {e}")
-
-    # 1c. Update wedding type
+        project_updates["custom_service_type"] = req.service_type
     if req.wedding_type is not None:
+        project_updates["custom_wedding_type"] = req.wedding_type
+    if project_updates:
         try:
-            client._post("/api/method/frappe.client.set_value", {
-                "doctype": "Project",
-                "name": project_name,
-                "fieldname": "custom_wedding_type",
-                "value": req.wedding_type,
-            })
+            client._put(f"/api/resource/Project/{project_name}", project_updates)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to update wedding type: {e}")
+            raise HTTPException(status_code=400, detail=f"Failed to update project fields: {e}")
 
     # 2. Update wedding date on both Project and Sales Order
     if req.wedding_date:

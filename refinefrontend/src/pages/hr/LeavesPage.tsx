@@ -202,8 +202,8 @@ export default function LeavesPage() {
     setProcessingId(appName);
     setError(null);
     try {
-      await customMutation({ url: "/api/method/frappe.client.set_value", method: "post", values: { doctype: "Leave Application", name: appName, fieldname: "status", value: "Approved" } });
-      await customMutation({ url: "/api/method/frappe.client.submit", method: "post", values: { doctype: "Leave Application", name: appName } });
+      const res = await fetch(`/inquiry-api/leave/${encodeURIComponent(appName)}/approve`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
     } catch { setError(`Failed to approve ${appName}. Please try again.`); } finally { setProcessingId(null); }
   }
@@ -212,8 +212,8 @@ export default function LeavesPage() {
     setProcessingId(appName);
     setError(null);
     try {
-      await customMutation({ url: "/api/method/frappe.client.set_value", method: "post", values: { doctype: "Leave Application", name: appName, fieldname: "status", value: "Rejected" } });
-      await customMutation({ url: "/api/method/frappe.client.submit", method: "post", values: { doctype: "Leave Application", name: appName } });
+      const res = await fetch(`/inquiry-api/leave/${encodeURIComponent(appName)}/reject`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
     } catch { setError(`Failed to reject ${appName}. Please try again.`); } finally { setProcessingId(null); }
   }

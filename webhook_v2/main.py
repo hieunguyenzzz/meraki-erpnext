@@ -34,6 +34,7 @@ from webhook_v2.routers.financial import router as financial_router
 from webhook_v2.routers.holidays import router as holidays_router
 from webhook_v2.routers.jobs import router as jobs_router
 from webhook_v2.routers.referral import router as referral_router
+from webhook_v2.routers.dashboard import router as dashboard_router
 
 log = get_logger(__name__)
 
@@ -108,6 +109,7 @@ app.include_router(financial_router)
 app.include_router(holidays_router)
 app.include_router(jobs_router)
 app.include_router(referral_router)
+app.include_router(dashboard_router)
 
 
 # Request/Response Models
