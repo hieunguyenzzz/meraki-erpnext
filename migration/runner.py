@@ -19,6 +19,7 @@ ORDERED_PHASES = [
     "v053_fix_server_script_allowlist",
     "v054_pit_backend_setup",
     "v055_sales_commission_to_fixed",
+    "v056_project_service_wedding_type",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run

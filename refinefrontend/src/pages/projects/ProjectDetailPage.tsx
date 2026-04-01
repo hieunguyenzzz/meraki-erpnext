@@ -161,7 +161,7 @@ export default function ProjectDetailPage() {
     assistantCommissionPct: "",
     addOns: [] as { itemCode: string; itemName: string; qty: number; rate: number; includeInCommission: boolean }[],
     taxType: "tax_free" as "tax_free" | "vat_included",
-    serviceType: "Full Package" as "Full Package" | "Partial Package",
+    serviceType: "Full Package" as string,
   });
   const [editAddonSearch, setEditAddonSearch] = useState<string[]>([]);
   const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
@@ -224,6 +224,8 @@ export default function ProjectDetailPage() {
         "custom_assistant_commission_pct",
         "custom_sales_person",
         "custom_booking_date",
+        "custom_service_type",
+        "custom_wedding_type",
         "custom_wedding_vendors",
         "custom_total_budget",
       ],
@@ -241,8 +243,6 @@ export default function ProjectDetailPage() {
         "grand_total",
         "custom_venue",
         "custom_commission_base",
-        "custom_service_type",
-        "custom_wedding_type",
         "delivery_date",
         "per_billed",
         "per_delivered",
@@ -657,7 +657,7 @@ export default function ProjectDetailPage() {
       totalBudget: project?.custom_total_budget ? String(project.custom_total_budget) : "",
       addOns: currentAddOns,
       taxType: (salesOrder?.total_taxes_and_charges > 0) ? "vat_included" : "tax_free",
-      serviceType: (salesOrder?.custom_service_type || "Full Package") as "Full Package" | "Partial Package",
+      serviceType: project?.custom_service_type || "Full Package",
     }));
     setEditAddonSearch(currentAddOns.map((a) => a.itemName));
     setEditAddonDropdownOpen(currentAddOns.map(() => false));
@@ -1195,17 +1195,19 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
-                    {(salesOrder?.custom_service_type || salesOrder?.custom_wedding_type || salesOrder) && (
+                    {(project.custom_service_type || project.custom_wedding_type) && (
                       <div className="flex items-start gap-3 text-sm">
                         <Users className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                         <div>
                           <p className="text-xs text-muted-foreground">Package</p>
                           <div className="flex gap-2 mt-0.5">
-                            <Badge variant={(salesOrder?.custom_service_type || "Full Package").toLowerCase().includes("full") ? "default" : "secondary"}>
-                              {salesOrder?.custom_service_type || "Full Package"}
-                            </Badge>
-                            {salesOrder?.custom_wedding_type && (
-                              <Badge variant="outline">{salesOrder.custom_wedding_type}</Badge>
+                            {project.custom_service_type && (
+                              <Badge variant={project.custom_service_type.toLowerCase().includes("full") ? "default" : "secondary"}>
+                                {project.custom_service_type}
+                              </Badge>
+                            )}
+                            {project.custom_wedding_type && (
+                              <Badge variant="outline">{project.custom_wedding_type}</Badge>
                             )}
                           </div>
                         </div>
@@ -2298,7 +2300,7 @@ export default function ProjectDetailPage() {
               <div className="space-y-2">
                 <Label>Service Type</Label>
                 <div className="flex gap-3">
-                  {(["Full Package", "Partial Package"] as const).map((opt) => (
+                  {["Full Package", "Partial", "Coordinator"].map((opt) => (
                     <button
                       key={opt}
                       type="button"

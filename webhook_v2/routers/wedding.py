@@ -443,12 +443,12 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to update venue: {e}")
 
-    # 1b. Update service type
+    # 1b. Update service type on Project
     if req.service_type is not None:
         try:
             client._post("/api/method/frappe.client.set_value", {
-                "doctype": "Sales Order",
-                "name": so_name,
+                "doctype": "Project",
+                "name": project_name,
                 "fieldname": "custom_service_type",
                 "value": req.service_type,
             })
