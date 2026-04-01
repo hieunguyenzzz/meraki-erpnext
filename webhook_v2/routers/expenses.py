@@ -493,57 +493,77 @@ class EditExpenseRequest(BaseModel):
 
 @router.put("/expense/{pi_name}")
 def edit_expense(pi_name: str, req: EditExpenseRequest):
-    """Edit an expense by deleting the old PI and recreating with new values."""
+    """Edit an expense. Draft PIs are updated in-place; submitted PIs are deleted and recreated."""
     client = ERPNextClient()
 
     if req.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
-    # Fetch old PI to carry forward unchanged fields
     pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
     if not pi:
         raise HTTPException(status_code=404, detail="Purchase Invoice not found")
 
     old_items = pi.get("items", [])
     first_item = old_items[0] if old_items else {}
+    docstatus = pi.get("docstatus", 0)
 
-    supplier = pi.get("supplier", "Company Expense")
-    original_creation = pi.get("creation")
     posting_date = req.date or pi.get("posting_date")
     description = req.description if req.description is not None else (first_item.get("item_name") or "Expense")
     expense_account = req.account or first_item.get("expense_account", DEFAULT_EXPENSE_ACCOUNT)
-    project = pi.get("project", "")
     amount = round(req.amount)
     staff = req.staff if req.staff is not None else pi.get("custom_expense_staff", "")
 
-    # Delete old PI fully (Payment Entries + GL + PLE + doc)
-    docstatus = pi.get("docstatus", 0)
-    if docstatus == 1:
-        # Delete linked Payment Entries first
-        pe_data = client._get("/api/resource/Payment Entry", params={
-            "filters": json.dumps([["Payment Entry Reference", "reference_name", "=", pi_name]]),
-            "fields": json.dumps(["name", "docstatus"]),
-            "limit_page_length": 100,
-        }).get("data", [])
-        for pe in pe_data:
-            if pe["docstatus"] == 1:
-                _cancel(client, "Payment Entry", pe["name"])
-            _delete_gl_entries(client, pe["name"])
-            _delete_payment_ledger_entries(client, pe["name"])
-            try:
-                client._delete(f"/api/resource/Payment Entry/{pe['name']}")
-            except Exception:
-                pass
+    # Draft: update in-place (preserves creation date and document name)
+    if docstatus == 0:
+        update_values: dict = {
+            "posting_date": posting_date,
+            "set_posting_time": 1,
+            "custom_expense_staff": staff,
+            "items": [{
+                "name": first_item.get("name"),
+                "item_code": "EXPENSE-ITEM",
+                "item_name": description,
+                "description": description,
+                "expense_account": expense_account,
+                "qty": 1,
+                "rate": amount,
+                "project": pi.get("project", ""),
+            }],
+        }
+        try:
+            client._put(f"/api/resource/Purchase Invoice/{pi_name}", update_values)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to update expense: {e}")
+        log.info("expense_edited_inplace", pi=pi_name, amount=amount)
+        return {"success": True, "name": pi_name}
 
-        _cancel(client, "Purchase Invoice", pi_name)
-        _delete_gl_entries(client, pi_name)
-        _delete_payment_ledger_entries(client, pi_name)
+    # Submitted: delete and recreate (existing logic for approved expenses)
+    supplier = pi.get("supplier", "Company Expense")
+    project = pi.get("project", "")
+
+    pe_data = client._get("/api/resource/Payment Entry", params={
+        "filters": json.dumps([["Payment Entry Reference", "reference_name", "=", pi_name]]),
+        "fields": json.dumps(["name", "docstatus"]),
+        "limit_page_length": 100,
+    }).get("data", [])
+    for pe in pe_data:
+        if pe["docstatus"] == 1:
+            _cancel(client, "Payment Entry", pe["name"])
+        _delete_gl_entries(client, pe["name"])
+        _delete_payment_ledger_entries(client, pe["name"])
+        try:
+            client._delete(f"/api/resource/Payment Entry/{pe['name']}")
+        except Exception:
+            pass
+
+    _cancel(client, "Purchase Invoice", pi_name)
+    _delete_gl_entries(client, pi_name)
+    _delete_payment_ledger_entries(client, pi_name)
     try:
         client._delete(f"/api/resource/Purchase Invoice/{pi_name}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to delete old expense: {e}")
 
-    # Create new PI
     pi_values = {
         "supplier": supplier,
         "posting_date": posting_date,
@@ -571,20 +591,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest):
 
     new_name = new_pi.get("data", {}).get("name")
 
-    # Preserve original creation date so sort order doesn't change
-    if new_name and original_creation:
-        try:
-            client._post("/api/method/frappe.client.set_value", {
-                "doctype": "Purchase Invoice",
-                "name": new_name,
-                "fieldname": "creation",
-                "value": original_creation,
-            })
-        except Exception:
-            pass  # non-critical, just affects sort order
-
-    # Submit if old one was submitted
-    if docstatus == 1 and new_name:
+    if new_name:
         try:
             full_pi = client._get(f"/api/resource/Purchase Invoice/{new_name}").get("data", {})
             client._post("/api/method/frappe.client.submit", {"doc": full_pi})
