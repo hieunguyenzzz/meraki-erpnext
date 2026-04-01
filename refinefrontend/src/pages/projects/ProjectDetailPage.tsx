@@ -1935,7 +1935,7 @@ export default function ProjectDetailPage() {
                                 {exp.status === "Pending" ? (
                                   <input
                                     type="date"
-                                    className="h-7 px-2 text-sm border border-transparent rounded hover:border-input focus:border-ring focus:outline-none bg-transparent cursor-pointer"
+                                    className="h-7 w-[7.5rem] px-2 text-sm border border-transparent rounded hover:border-input focus:border-ring focus:outline-none bg-transparent cursor-pointer"
                                     defaultValue={exp.posting_date}
                                     onBlur={async (e) => {
                                       const newDate = e.target.value;
