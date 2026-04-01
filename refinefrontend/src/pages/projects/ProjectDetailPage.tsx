@@ -35,7 +35,6 @@ import {
   X,
   Camera,
   Paperclip,
-  Image as ImageIcon,
 } from "lucide-react";
 import {
   Popover as ShadcnPopover,
@@ -1920,7 +1919,7 @@ export default function ProjectDetailPage() {
                         </colgroup>
                         <thead>
                           <tr className="border-b bg-muted/50">
-                            <th className="px-3 py-2 text-left font-medium w-10">Receipt</th>
+                            <th className="px-2 py-2 w-10"></th>
                             <th className="px-3 py-2 text-left font-medium">Date</th>
                             <th className="px-3 py-2 text-left font-medium">Description</th>
                             <th className="px-3 py-2 text-left font-medium">In charge by</th>
@@ -1933,17 +1932,17 @@ export default function ProjectDetailPage() {
                         <tbody>
                           {expenses.map((exp) => (
                             <tr key={exp.name} className="border-b last:border-b-0">
-                              <td className="px-3 py-2">
+                              <td className="px-2 py-1.5 w-10">
                                 {exp.receipt_url ? (
-                                  <div className="relative group cursor-pointer w-8 h-8">
+                                  <div className="relative group">
                                     <img
                                       src={`/api${exp.receipt_url}`}
-                                      alt="Receipt"
-                                      className="w-8 h-8 rounded object-cover border"
+                                      alt=""
+                                      className="w-8 h-8 rounded object-cover cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all"
                                       onClick={() => window.open(`/api${exp.receipt_url}`, "_blank")}
                                     />
                                     {exp.status === "Pending" && (
-                                      <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                                         <Pencil className="h-3 w-3 text-white" />
                                         <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
                                           const file = e.target.files?.[0];
@@ -1958,8 +1957,8 @@ export default function ProjectDetailPage() {
                                     )}
                                   </div>
                                 ) : exp.status === "Pending" ? (
-                                  <label className="flex items-center justify-center w-8 h-8 rounded border border-dashed border-muted-foreground/30 hover:border-muted-foreground/60 cursor-pointer transition-colors">
-                                    <ImageIcon className="h-3 w-3 text-muted-foreground" />
+                                  <label className="flex items-center justify-center w-8 h-8 rounded bg-muted/50 hover:bg-muted cursor-pointer transition-colors">
+                                    <Plus className="h-3 w-3 text-muted-foreground/50" />
                                     <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
@@ -1970,9 +1969,7 @@ export default function ProjectDetailPage() {
                                       } catch {}
                                     }} />
                                   </label>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
+                                ) : null}
                               </td>
                               <td className="px-3 py-2 whitespace-nowrap">
                                 {exp.status === "Pending" ? (
