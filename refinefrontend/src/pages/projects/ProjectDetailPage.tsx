@@ -1907,7 +1907,7 @@ export default function ProjectDetailPage() {
                       </div>
                     )}
                     <div className="border rounded-md overflow-x-auto">
-                      <table className="w-full text-sm table-fixed">
+                      <table className="w-full text-sm">
                         <colgroup>
                           <col className="w-[130px]" />
                           <col />
@@ -1920,13 +1920,13 @@ export default function ProjectDetailPage() {
                         <thead>
                           <tr className="border-b bg-muted/50">
                             <th className="px-2 py-2 w-10"></th>
-                            <th className="px-3 py-2 text-left font-medium">Date</th>
+                            <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Date</th>
                             <th className="px-3 py-2 text-left font-medium">Description</th>
-                            <th className="px-3 py-2 text-left font-medium">In charge by</th>
-                            <th className="px-3 py-2 text-left font-medium">Category</th>
-                            <th className="px-3 py-2 text-right font-medium">Amount</th>
-                            <th className="px-3 py-2 text-left font-medium">Status</th>
-                            <th className="px-3 py-2"></th>
+                            <th className="px-3 py-2 text-left font-medium whitespace-nowrap">In charge by</th>
+                            <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Category</th>
+                            <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Amount</th>
+                            <th className="px-3 py-2 text-left font-medium whitespace-nowrap w-20">Status</th>
+                            <th className="px-3 py-2 w-20"></th>
                           </tr>
                         </thead>
                         <tbody>
