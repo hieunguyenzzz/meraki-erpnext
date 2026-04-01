@@ -488,6 +488,7 @@ class EditExpenseRequest(BaseModel):
     description: str | None = None
     date: str | None = None       # YYYY-MM-DD
     account: str | None = None    # expense account
+    staff: str | None = None      # Employee ID
 
 
 @router.put("/expense/{pi_name}")
@@ -512,6 +513,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest):
     expense_account = req.account or first_item.get("expense_account", DEFAULT_EXPENSE_ACCOUNT)
     project = pi.get("project", "")
     amount = round(req.amount)
+    staff = req.staff if req.staff is not None else pi.get("custom_expense_staff", "")
 
     # Delete old PI fully (Payment Entries + GL + PLE + doc)
     docstatus = pi.get("docstatus", 0)
@@ -558,6 +560,8 @@ def edit_expense(pi_name: str, req: EditExpenseRequest):
     if project:
         pi_values["project"] = project
         pi_values["items"][0]["project"] = project
+    if staff:
+        pi_values["custom_expense_staff"] = staff
 
     try:
         new_pi = client._post("/api/resource/Purchase Invoice", pi_values)

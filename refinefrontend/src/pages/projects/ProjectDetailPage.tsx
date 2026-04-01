@@ -190,6 +190,9 @@ export default function ProjectDetailPage() {
   const [creatingExpCat, setCreatingExpCat] = useState(false);
   const [expenseFile, setExpenseFile] = useState<File | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [editingExpense, setEditingExpense] = useState<string | null>(null);
+  const [editExpValues, setEditExpValues] = useState({ date: "", description: "", amount: "", category: "", staff: "" });
+  const [editExpCatOpen, setEditExpCatOpen] = useState(false);
   const expenseFileRef = useRef<HTMLInputElement>(null);
 
   const invalidate = useInvalidate();
@@ -627,6 +630,43 @@ export default function ProjectDetailPage() {
       fetchExpenses(name!);
     } catch (error) {
       setExpenseError(error instanceof Error ? error.message : "Failed to delete expense");
+    }
+  }
+
+  function startEditExpense(exp: any) {
+    setEditingExpense(exp.name);
+    setEditExpValues({
+      date: exp.posting_date || "",
+      description: exp.description || "",
+      amount: String(exp.amount || ""),
+      category: exp.account || "",
+      staff: exp.staff || "",
+    });
+  }
+
+  async function handleSaveEditExpense() {
+    if (!editingExpense) return;
+    try {
+      const resp = await fetch(`/inquiry-api/expense/${editingExpense}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          date: editExpValues.date,
+          description: editExpValues.description,
+          amount: parseFloat(editExpValues.amount) || 0,
+          account: editExpValues.category,
+          staff: editExpValues.staff,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to save");
+      }
+      setEditingExpense(null);
+      fetchExpenses(name!);
+    } catch (error) {
+      setExpenseError(error instanceof Error ? error.message : "Failed to save expense");
     }
   }
 
@@ -2088,66 +2128,112 @@ export default function ProjectDetailPage() {
                                   </label>
                                 ) : null}
                               </td>
-                              <td className="px-3 py-2 whitespace-nowrap">
-                                {exp.status === "Pending" ? (
-                                  <input
-                                    type="date"
-                                    className="h-7 w-full px-1 text-sm border border-transparent rounded hover:border-input focus:border-ring focus:outline-none bg-transparent cursor-pointer"
-                                    defaultValue={exp.posting_date}
-                                    onBlur={async (e) => {
-                                      const newDate = e.target.value;
-                                      if (newDate && newDate !== exp.posting_date) {
-                                        try {
-                                          await fetch(`/inquiry-api/expense/${exp.name}`, {
-                                            method: "PUT",
-                                            headers: { "Content-Type": "application/json" },
-                                            credentials: "include",
-                                            body: JSON.stringify({ date: newDate, amount: exp.amount }),
-                                          });
-                                          fetchExpenses(name!);
-                                        } catch {}
-                                      }
-                                    }}
-                                  />
-                                ) : (
-                                  formatDate(exp.posting_date)
-                                )}
-                              </td>
-                              <td className="px-3 py-2">{exp.description}</td>
-                              <td className="px-3 py-2 text-muted-foreground">
-                                {exp.staff ? (employees.find(e => e.id === exp.staff)?.name ?? exp.staff) : "—"}
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground">
-                                {exp.category || "—"}
-                              </td>
-                              <td className="px-3 py-2 text-right">{formatVND(exp.amount)}</td>
-                              <td className="px-3 py-2">
-                                <Badge variant={exp.status === "Approved" ? "success" : "warning"}>
-                                  {exp.status}
-                                </Badge>
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex gap-1">
-                                  {exp.status === "Pending" && isFinance && (
-                                    <>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                        onClick={() => handleApproveExpense(exp.name)} title="Approve">
+                              {editingExpense === exp.name ? (
+                                <>
+                                  <td className="px-3 py-2">
+                                    <input type="date" className="h-8 w-full px-1 text-sm border rounded border-input bg-background"
+                                      value={editExpValues.date} onChange={e => setEditExpValues({ ...editExpValues, date: e.target.value })} />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <Input className="h-8 w-full" value={editExpValues.description}
+                                      onChange={e => setEditExpValues({ ...editExpValues, description: e.target.value })} />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <Select value={editExpValues.staff || "__none__"} onValueChange={v => setEditExpValues({ ...editExpValues, staff: v === "__none__" ? "" : v })}>
+                                      <SelectTrigger className="h-8 w-full text-sm"><SelectValue placeholder="Staff" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__none__">—</SelectItem>
+                                        {weddingTeam.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <ShadcnPopover open={editExpCatOpen} onOpenChange={setEditExpCatOpen}>
+                                      <ShadcnPopoverTrigger asChild>
+                                        <button type="button" className="h-8 w-full flex items-center justify-between rounded-md border border-input bg-background px-2 text-sm truncate">
+                                          <span className={editExpValues.category ? "" : "text-muted-foreground"}>
+                                            {editExpValues.category ? (expenseCategories.find(c => c.name === editExpValues.category)?.account_name ?? editExpValues.category) : "Category"}
+                                          </span>
+                                          <ChevronsUpDown className="h-3 w-3 opacity-50 shrink-0" />
+                                        </button>
+                                      </ShadcnPopoverTrigger>
+                                      <ShadcnPopoverContent className="w-[200px] p-0" align="start">
+                                        <Command>
+                                          <CommandInput placeholder="Search..." />
+                                          <CommandList>
+                                            <CommandEmpty>No match</CommandEmpty>
+                                            <CommandGroup>
+                                              {expenseCategories.map(c => (
+                                                <CommandItem key={c.name} value={c.account_name} onSelect={() => { setEditExpValues({ ...editExpValues, category: c.name }); setEditExpCatOpen(false); }}>
+                                                  <Check className={cn("mr-2 h-3 w-3", editExpValues.category === c.name ? "opacity-100" : "opacity-0")} />
+                                                  {c.account_name}
+                                                </CommandItem>
+                                              ))}
+                                            </CommandGroup>
+                                          </CommandList>
+                                        </Command>
+                                      </ShadcnPopoverContent>
+                                    </ShadcnPopover>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <Input className="h-8 w-full text-right" type="number" min="1" step="1"
+                                      value={editExpValues.amount} onChange={e => setEditExpValues({ ...editExpValues, amount: e.target.value })} />
+                                  </td>
+                                  <td className="px-3 py-2"></td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex gap-1">
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSaveEditExpense}
+                                        disabled={!editExpValues.description || !editExpValues.amount} title="Save">
                                         <Check className="h-4 w-4" />
                                       </Button>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                        onClick={() => handleRejectExpense(exp.name)} title="Reject">
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingExpense(null)} title="Cancel">
                                         <X className="h-4 w-4" />
                                       </Button>
-                                    </>
-                                  )}
-                                  {(exp.status === "Pending" || isFinance) && (
-                                    <Button variant="ghost" size="icon" className="h-7 w-7"
-                                      onClick={() => handleDeleteExpense(exp.name)} title="Delete">
-                                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </td>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="px-3 py-2 whitespace-nowrap">{formatDate(exp.posting_date)}</td>
+                                  <td className="px-3 py-2">{exp.description}</td>
+                                  <td className="px-3 py-2 text-muted-foreground">
+                                    {exp.staff ? (employees.find(e => e.id === exp.staff)?.name ?? exp.staff) : "—"}
+                                  </td>
+                                  <td className="px-3 py-2 text-muted-foreground">{exp.category || "—"}</td>
+                                  <td className="px-3 py-2 text-right">{formatVND(exp.amount)}</td>
+                                  <td className="px-3 py-2">
+                                    <Badge variant={exp.status === "Approved" ? "success" : "warning"}>{exp.status}</Badge>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex gap-1">
+                                      {exp.status === "Pending" && (
+                                        <Button variant="ghost" size="icon" className="h-7 w-7"
+                                          onClick={() => startEditExpense(exp)} title="Edit">
+                                          <Pencil className="h-4 w-4 text-muted-foreground" />
+                                        </Button>
+                                      )}
+                                      {exp.status === "Pending" && isFinance && (
+                                        <>
+                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                            onClick={() => handleApproveExpense(exp.name)} title="Approve">
+                                            <Check className="h-4 w-4" />
+                                          </Button>
+                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                            onClick={() => handleRejectExpense(exp.name)} title="Reject">
+                                            <X className="h-4 w-4" />
+                                          </Button>
+                                        </>
+                                      )}
+                                      {(exp.status === "Pending" || isFinance) && (
+                                        <Button variant="ghost" size="icon" className="h-7 w-7"
+                                          onClick={() => handleDeleteExpense(exp.name)} title="Delete">
+                                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </>
+                              )}
                             </tr>
                           ))}
                           {expenses.length === 0 && !addingExpense && (
