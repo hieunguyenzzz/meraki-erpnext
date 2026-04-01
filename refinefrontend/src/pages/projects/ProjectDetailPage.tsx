@@ -161,6 +161,7 @@ export default function ProjectDetailPage() {
     assistantCommissionPct: "",
     addOns: [] as { itemCode: string; itemName: string; qty: number; rate: number; includeInCommission: boolean }[],
     taxType: "tax_free" as "tax_free" | "vat_included",
+    serviceType: "Full Package" as "Full Package" | "Partial Package",
   });
   const [editAddonSearch, setEditAddonSearch] = useState<string[]>([]);
   const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
@@ -223,8 +224,6 @@ export default function ProjectDetailPage() {
         "custom_assistant_commission_pct",
         "custom_sales_person",
         "custom_booking_date",
-        "custom_service_type",
-        "custom_wedding_type",
         "custom_wedding_vendors",
         "custom_total_budget",
       ],
@@ -242,6 +241,8 @@ export default function ProjectDetailPage() {
         "grand_total",
         "custom_venue",
         "custom_commission_base",
+        "custom_service_type",
+        "custom_wedding_type",
         "delivery_date",
         "per_billed",
         "per_delivered",
@@ -656,6 +657,7 @@ export default function ProjectDetailPage() {
       totalBudget: project?.custom_total_budget ? String(project.custom_total_budget) : "",
       addOns: currentAddOns,
       taxType: (salesOrder?.total_taxes_and_charges > 0) ? "vat_included" : "tax_free",
+      serviceType: (salesOrder?.custom_service_type || "Full Package") as "Full Package" | "Partial Package",
     }));
     setEditAddonSearch(currentAddOns.map((a) => a.itemName));
     setEditAddonDropdownOpen(currentAddOns.map(() => false));
@@ -735,6 +737,7 @@ export default function ProjectDetailPage() {
           wedding_date: editForm.weddingDate || null,
           package_amount: editForm.packageAmount ? parseFloat(editForm.packageAmount) : null,
           tax_type: editForm.taxType === "vat_included" ? "vat" : "none",
+          service_type: editForm.serviceType,
           addons: editForm.addOns.map((a) => ({
             item_code: a.itemCode,
             item_name: a.itemName,
@@ -1192,19 +1195,17 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
-                    {(project.custom_service_type || project.custom_wedding_type) && (
+                    {(salesOrder?.custom_service_type || salesOrder?.custom_wedding_type || salesOrder) && (
                       <div className="flex items-start gap-3 text-sm">
                         <Users className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                         <div>
                           <p className="text-xs text-muted-foreground">Package</p>
                           <div className="flex gap-2 mt-0.5">
-                            {project.custom_service_type && (
-                              <Badge variant={project.custom_service_type.toLowerCase().includes("full") ? "default" : "secondary"}>
-                                {project.custom_service_type}
-                              </Badge>
-                            )}
-                            {project.custom_wedding_type && (
-                              <Badge variant="outline">{project.custom_wedding_type}</Badge>
+                            <Badge variant={(salesOrder?.custom_service_type || "Full Package").toLowerCase().includes("full") ? "default" : "secondary"}>
+                              {salesOrder?.custom_service_type || "Full Package"}
+                            </Badge>
+                            {salesOrder?.custom_wedding_type && (
+                              <Badge variant="outline">{salesOrder.custom_wedding_type}</Badge>
                             )}
                           </div>
                         </div>
@@ -2291,6 +2292,28 @@ export default function ProjectDetailPage() {
                     </Command>
                   </ShadcnPopoverContent>
                 </ShadcnPopover>
+              </div>
+
+              {/* Service Type */}
+              <div className="space-y-2">
+                <Label>Service Type</Label>
+                <div className="flex gap-3">
+                  {(["Full Package", "Partial Package"] as const).map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, serviceType: opt })}
+                      className={cn(
+                        "flex-1 py-2 px-3 rounded-md border text-sm font-medium transition-all",
+                        editForm.serviceType === opt
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      )}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Package Amount — finance only */}
