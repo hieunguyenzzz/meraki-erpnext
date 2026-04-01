@@ -2042,10 +2042,10 @@ export default function ProjectDetailPage() {
                                 {exp.receipt_url ? (
                                   <div className="relative group">
                                     <img
-                                      src={`/api${exp.receipt_url}`}
+                                      src={exp.receipt_url}
                                       alt=""
                                       className="w-8 h-8 rounded object-cover cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all"
-                                      onClick={() => window.open(`/api${exp.receipt_url}`, "_blank")}
+                                      onClick={() => window.open(exp.receipt_url, "_blank")}
                                     />
                                     {exp.status === "Pending" && (
                                       <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
