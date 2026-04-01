@@ -1931,111 +1931,8 @@ export default function ProjectDetailPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {expenses.map((exp) => (
-                            <tr key={exp.name} className="border-b last:border-b-0">
-                              <td className="px-2 py-1.5 w-10">
-                                {exp.receipt_url ? (
-                                  <div className="relative group">
-                                    <img
-                                      src={`/api${exp.receipt_url}`}
-                                      alt=""
-                                      className="w-8 h-8 rounded object-cover cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all"
-                                      onClick={() => window.open(`/api${exp.receipt_url}`, "_blank")}
-                                    />
-                                    {exp.status === "Pending" && (
-                                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                                        <Pencil className="h-3 w-3 text-white" />
-                                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (!file) return;
-                                          try {
-                                            const { uploadFile } = await import("@/lib/fileUpload");
-                                            await uploadFile(file, "Purchase Invoice", exp.name);
-                                            fetchExpenses(name!);
-                                          } catch {}
-                                        }} />
-                                      </label>
-                                    )}
-                                  </div>
-                                ) : exp.status === "Pending" ? (
-                                  <label className="flex items-center justify-center w-8 h-8 rounded bg-muted/50 hover:bg-muted cursor-pointer transition-colors">
-                                    <Plus className="h-3 w-3 text-muted-foreground/50" />
-                                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
-                                      const file = e.target.files?.[0];
-                                      if (!file) return;
-                                      try {
-                                        const { uploadFile } = await import("@/lib/fileUpload");
-                                        await uploadFile(file, "Purchase Invoice", exp.name);
-                                        fetchExpenses(name!);
-                                      } catch {}
-                                    }} />
-                                  </label>
-                                ) : null}
-                              </td>
-                              <td className="px-3 py-2 whitespace-nowrap">
-                                {exp.status === "Pending" ? (
-                                  <input
-                                    type="date"
-                                    className="h-7 w-full px-1 text-sm border border-transparent rounded hover:border-input focus:border-ring focus:outline-none bg-transparent cursor-pointer"
-                                    defaultValue={exp.posting_date}
-                                    onBlur={async (e) => {
-                                      const newDate = e.target.value;
-                                      if (newDate && newDate !== exp.posting_date) {
-                                        try {
-                                          await fetch(`/inquiry-api/expense/${exp.name}`, {
-                                            method: "PUT",
-                                            headers: { "Content-Type": "application/json" },
-                                            credentials: "include",
-                                            body: JSON.stringify({ date: newDate, amount: exp.amount }),
-                                          });
-                                          fetchExpenses(name!);
-                                        } catch {}
-                                      }
-                                    }}
-                                  />
-                                ) : (
-                                  formatDate(exp.posting_date)
-                                )}
-                              </td>
-                              <td className="px-3 py-2">{exp.description}</td>
-                              <td className="px-3 py-2 text-muted-foreground">
-                                {exp.staff ? (employees.find(e => e.id === exp.staff)?.name ?? exp.staff) : "—"}
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground">
-                                {exp.category || "—"}
-                              </td>
-                              <td className="px-3 py-2 text-right">{formatVND(exp.amount)}</td>
-                              <td className="px-3 py-2">
-                                <Badge variant={exp.status === "Approved" ? "success" : "warning"}>
-                                  {exp.status}
-                                </Badge>
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex gap-1">
-                                  {exp.status === "Pending" && isFinance && (
-                                    <>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                        onClick={() => handleApproveExpense(exp.name)} title="Approve">
-                                        <Check className="h-4 w-4" />
-                                      </Button>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                        onClick={() => handleRejectExpense(exp.name)} title="Reject">
-                                        <X className="h-4 w-4" />
-                                      </Button>
-                                    </>
-                                  )}
-                                  {(exp.status === "Pending" || isFinance) && (
-                                    <Button variant="ghost" size="icon" className="h-7 w-7"
-                                      onClick={() => handleDeleteExpense(exp.name)} title="Delete">
-                                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
                           {addingExpense && (
-                            <tr className="border-b last:border-b-0 bg-muted/30">
+                            <tr className="border-b bg-muted/30">
                               <td className="px-3 py-2"></td>
                               <td className="px-3 py-2">
                                 <Input className="h-8 w-full" type="date" value={newExpense.date}
@@ -2139,6 +2036,109 @@ export default function ProjectDetailPage() {
                               </td>
                             </tr>
                           )}
+                          {expenses.map((exp) => (
+                            <tr key={exp.name} className="border-b last:border-b-0">
+                              <td className="px-2 py-1.5 w-10">
+                                {exp.receipt_url ? (
+                                  <div className="relative group">
+                                    <img
+                                      src={`/api${exp.receipt_url}`}
+                                      alt=""
+                                      className="w-8 h-8 rounded object-cover cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all"
+                                      onClick={() => window.open(`/api${exp.receipt_url}`, "_blank")}
+                                    />
+                                    {exp.status === "Pending" && (
+                                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                        <Pencil className="h-3 w-3 text-white" />
+                                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          try {
+                                            const { uploadFile } = await import("@/lib/fileUpload");
+                                            await uploadFile(file, "Purchase Invoice", exp.name);
+                                            fetchExpenses(name!);
+                                          } catch {}
+                                        }} />
+                                      </label>
+                                    )}
+                                  </div>
+                                ) : exp.status === "Pending" ? (
+                                  <label className="flex items-center justify-center w-8 h-8 rounded bg-muted/50 hover:bg-muted cursor-pointer transition-colors">
+                                    <Plus className="h-3 w-3 text-muted-foreground/50" />
+                                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      try {
+                                        const { uploadFile } = await import("@/lib/fileUpload");
+                                        await uploadFile(file, "Purchase Invoice", exp.name);
+                                        fetchExpenses(name!);
+                                      } catch {}
+                                    }} />
+                                  </label>
+                                ) : null}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                {exp.status === "Pending" ? (
+                                  <input
+                                    type="date"
+                                    className="h-7 w-full px-1 text-sm border border-transparent rounded hover:border-input focus:border-ring focus:outline-none bg-transparent cursor-pointer"
+                                    defaultValue={exp.posting_date}
+                                    onBlur={async (e) => {
+                                      const newDate = e.target.value;
+                                      if (newDate && newDate !== exp.posting_date) {
+                                        try {
+                                          await fetch(`/inquiry-api/expense/${exp.name}`, {
+                                            method: "PUT",
+                                            headers: { "Content-Type": "application/json" },
+                                            credentials: "include",
+                                            body: JSON.stringify({ date: newDate, amount: exp.amount }),
+                                          });
+                                          fetchExpenses(name!);
+                                        } catch {}
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  formatDate(exp.posting_date)
+                                )}
+                              </td>
+                              <td className="px-3 py-2">{exp.description}</td>
+                              <td className="px-3 py-2 text-muted-foreground">
+                                {exp.staff ? (employees.find(e => e.id === exp.staff)?.name ?? exp.staff) : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground">
+                                {exp.category || "—"}
+                              </td>
+                              <td className="px-3 py-2 text-right">{formatVND(exp.amount)}</td>
+                              <td className="px-3 py-2">
+                                <Badge variant={exp.status === "Approved" ? "success" : "warning"}>
+                                  {exp.status}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  {exp.status === "Pending" && isFinance && (
+                                    <>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                        onClick={() => handleApproveExpense(exp.name)} title="Approve">
+                                        <Check className="h-4 w-4" />
+                                      </Button>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        onClick={() => handleRejectExpense(exp.name)} title="Reject">
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {(exp.status === "Pending" || isFinance) && (
+                                    <Button variant="ghost" size="icon" className="h-7 w-7"
+                                      onClick={() => handleDeleteExpense(exp.name)} title="Delete">
+                                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
                           {expenses.length === 0 && !addingExpense && (
                             <tr>
                               <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
