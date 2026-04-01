@@ -406,7 +406,8 @@ class UpdateWeddingDetailsRequest(BaseModel):
     tax_type: str | None = None  # "vat" or "none", None = no change
     package_amount: float | None = None  # Override Wedding Planning Service rate
     wedding_date: str | None = None  # YYYY-MM-DD format
-    service_type: str | None = None  # "Full Package" or "Partial Package"
+    service_type: str | None = None  # "Full Package", "Partial", "Coordinator"
+    wedding_type: str | None = None  # "HCM" or "Destination"
 
 
 @router.put("/wedding/{project_name}/details")
@@ -454,6 +455,18 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
             })
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to update service type: {e}")
+
+    # 1c. Update wedding type
+    if req.wedding_type is not None:
+        try:
+            client._post("/api/method/frappe.client.set_value", {
+                "doctype": "Project",
+                "name": project_name,
+                "fieldname": "custom_wedding_type",
+                "value": req.wedding_type,
+            })
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to update wedding type: {e}")
 
     # 2. Update wedding date on both Project and Sales Order
     if req.wedding_date:
