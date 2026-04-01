@@ -1931,7 +1931,31 @@ export default function ProjectDetailPage() {
                         <tbody>
                           {expenses.map((exp) => (
                             <tr key={exp.name} className="border-b last:border-b-0">
-                              <td className="px-3 py-2">{formatDate(exp.posting_date)}</td>
+                              <td className="px-3 py-2">
+                                {exp.status === "Pending" ? (
+                                  <Input
+                                    type="date"
+                                    className="h-7 w-32 text-sm"
+                                    defaultValue={exp.posting_date}
+                                    onBlur={async (e) => {
+                                      const newDate = e.target.value;
+                                      if (newDate && newDate !== exp.posting_date) {
+                                        try {
+                                          await fetch(`/inquiry-api/expense/${exp.name}`, {
+                                            method: "PUT",
+                                            headers: { "Content-Type": "application/json" },
+                                            credentials: "include",
+                                            body: JSON.stringify({ date: newDate, amount: exp.amount }),
+                                          });
+                                          fetchExpenses(name!);
+                                        } catch {}
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  formatDate(exp.posting_date)
+                                )}
+                              </td>
                               <td className="px-3 py-2">{exp.description}</td>
                               <td className="px-3 py-2 text-muted-foreground">
                                 {exp.staff ? (employees.find(e => e.id === exp.staff)?.name ?? exp.staff) : "—"}
