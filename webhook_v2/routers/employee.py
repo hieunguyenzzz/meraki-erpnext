@@ -133,6 +133,39 @@ async def update_employee(employee_id: str, request: EmployeeUpdateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
     updated = result.get("message", {}).get("updated", list(updates.keys()))
+
+    # If salary (ctc) changed, also update active Salary Structure Assignment base
+    if "ctc" in updates:
+        import json as _j
+        new_base = updates["ctc"] or 0
+        try:
+            ssa_list = client._get("/api/resource/Salary Structure Assignment", params={
+                "filters": _j.dumps([["employee", "=", employee_id], ["docstatus", "=", 1]]),
+                "fields": _j.dumps(["name", "base", "salary_structure", "from_date", "company"]),
+                "order_by": "from_date desc",
+                "limit_page_length": 1,
+            }).get("data", [])
+            if ssa_list:
+                old_ssa = ssa_list[0]
+                # Cancel and delete old SSA, create new with updated base
+                client._post("/api/method/frappe.client.cancel", {
+                    "doctype": "Salary Structure Assignment",
+                    "name": old_ssa["name"],
+                })
+                client._delete(f"/api/resource/Salary Structure Assignment/{old_ssa['name']}")
+                new_ssa = client._post("/api/resource/Salary Structure Assignment", {
+                    "employee": employee_id,
+                    "salary_structure": old_ssa["salary_structure"],
+                    "from_date": old_ssa["from_date"],
+                    "company": old_ssa["company"],
+                    "base": new_base,
+                    "docstatus": 1,
+                })
+                log.info("ssa_recreated", employee=employee_id, old=old_ssa["name"],
+                         new=new_ssa.get("data", {}).get("name"), base=new_base)
+        except Exception as e:
+            log.warning("ssa_base_update_failed", employee=employee_id, error=str(e))
+
     log.info("employee_updated", employee=employee_id, fields=updated)
     return {"status": "ok", "updated": updated}
 
