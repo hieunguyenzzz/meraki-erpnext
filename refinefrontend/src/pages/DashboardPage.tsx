@@ -461,12 +461,6 @@ export default function DashboardPage() {
               <CalendarDays className="h-4 w-4" />
               My Upcoming Interviews
             </CardTitle>
-            <Link
-              to="/hr/recruiting/interviews"
-              className="text-xs text-primary hover:underline"
-            >
-              View all
-            </Link>
           </CardHeader>
           <CardContent>
             {interviewsLoading ? (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useList, usePermissions } from "@refinedev/core";
+import { usePermissions } from "@refinedev/core";
 import { LayoutGrid, LayoutList, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { type ColumnDef } from "@tanstack/react-table";
@@ -18,7 +18,6 @@ import {
   type ProjectKanbanItem,
 } from "@/lib/projectKanban";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
-import { displayName } from "@/lib/format";
 import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES } from "@/lib/roles";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
@@ -41,7 +40,6 @@ export default function ProjectKanbanPage() {
   useEffect(() => {
     if (!roles) return;
     if (!hasModuleAccess(roles, WEDDING_MANAGER_ROLES)) {
-      // Non-managers always see only their own weddings
       setShowMyWeddings(true);
     } else if (localStorage.getItem("wedding-my-filter") === null) {
       setShowMyWeddings(false);
@@ -53,146 +51,17 @@ export default function ProjectKanbanPage() {
     localStorage.setItem("wedding-view-mode", mode);
   };
 
-  // Fetch Projects
-  const { result: projectsResult, query: projectsQuery } = useList({
-    resource: "Project",
-    pagination: { mode: "off" },
-    filters: [
-      { field: "status", operator: "in", value: ["Open", "Completed"] },
-    ],
-    meta: {
-      fields: [
-        "name",
-        "project_name",
-        "status",
-        "custom_project_stage",
-        "customer",
-        "expected_end_date",
-        "sales_order",
-        "custom_lead_planner",
-        "custom_support_planner",
-        "custom_assistant_1",
-        "custom_assistant_2",
-        "custom_assistant_3",
-        "custom_assistant_4",
-        "custom_assistant_5",
-        "custom_service_type",
-      ],
-    },
-  });
+  // Fetch all project data from backend (replaces 6 separate useList calls)
+  const [items, setItems] = useState<ProjectKanbanItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch Sales Orders for venue info and package amount
-  const { result: salesOrdersResult } = useList({
-    resource: "Sales Order",
-    pagination: { mode: "off" },
-    filters: [{ field: "docstatus", operator: "in", value: [0, 1] }],
-    meta: {
-      fields: ["name", "customer_name", "custom_venue", "grand_total", "total_taxes_and_charges", "custom_commission_base"],
-    },
-  });
-
-  // Fetch submitted Sales Invoices to calculate % paid per project
-  // (milestone invoices link to project, not SO items, so SO.per_billed stays 0)
-  const { result: invoicesResult } = useList({
-    resource: "Sales Invoice",
-    pagination: { mode: "off" },
-    filters: [{ field: "docstatus", operator: "eq", value: 1 }],
-    meta: {
-      fields: ["name", "project", "grand_total", "outstanding_amount"],
-    },
-  });
-
-  // Fetch Employees for planner names (all statuses, not just Active)
-  const { result: employeesResult } = useList({
-    resource: "Employee",
-    pagination: { mode: "off" },
-    meta: { fields: ["name", "employee_name", "first_name", "last_name"] },
-  });
-
-  // Fetch Suppliers for venue names
-  const { result: suppliersResult } = useList({
-    resource: "Supplier",
-    pagination: { mode: "off" },
-    meta: { fields: ["name", "supplier_name"] },
-  });
-
-  // Fetch Customers for customer names
-  const { result: customersResult } = useList({
-    resource: "Customer",
-    pagination: { mode: "off" },
-    meta: {
-      fields: ["name", "customer_name"],
-    },
-  });
-
-  // Build kanban items
-  const items = useMemo<ProjectKanbanItem[]>(() => {
-    const projects = projectsResult?.data ?? [];
-    const salesOrders = salesOrdersResult?.data ?? [];
-    const customers = customersResult?.data ?? [];
-    const employees = employeesResult?.data ?? [];
-    const suppliers = suppliersResult?.data ?? [];
-    const invoices = invoicesResult?.data ?? [];
-
-    // Build lookup maps
-    const soByName = new Map(
-      salesOrders.map((so: any) => [so.name, so])
-    );
-
-    // Build per-project paid amount map from submitted invoices
-    const paidByProject = new Map<string, number>();
-    for (const inv of invoices as any[]) {
-      if (!inv.project) continue;
-      const paid = (inv.grand_total || 0) - (inv.outstanding_amount || 0);
-      paidByProject.set(inv.project, (paidByProject.get(inv.project) ?? 0) + paid);
-    }
-    const customerByName = new Map(
-      customers.map((c: any) => [c.name, c])
-    );
-    const employeeByName = new Map(
-      employees.map((e: any) => [e.name, displayName(e)])
-    );
-    const supplierByName = new Map(
-      suppliers.map((s: any) => [s.name, s.supplier_name])
-    );
-
-    return projects.map((p: any) => {
-      const linkedSO = p.sales_order ? soByName.get(p.sales_order) : null;
-      const linkedCustomer = p.customer ? customerByName.get(p.customer) : null;
-
-      return {
-        id: p.name,
-        project_name: p.project_name,
-        status: p.status,
-        custom_project_stage: p.custom_project_stage || "Planning",
-        customer: p.customer,
-        customer_name: linkedCustomer?.customer_name || linkedSO?.customer_name || p.project_name,
-        expected_end_date: p.expected_end_date,
-        sales_order: p.sales_order,
-        venue_name: linkedSO?.custom_venue
-          ? (supplierByName.get(linkedSO.custom_venue) ?? linkedSO.custom_venue)
-          : undefined,
-        lead_planner_name: p.custom_lead_planner ? employeeByName.get(p.custom_lead_planner) : undefined,
-        support_planner_name: p.custom_support_planner ? employeeByName.get(p.custom_support_planner) : undefined,
-        package_amount: linkedSO?.grand_total,
-        per_billed: linkedSO?.grand_total > 0
-          ? Math.round((paidByProject.get(p.name) ?? 0) / linkedSO.grand_total * 100)
-          : undefined,
-        tax_type: linkedSO ? (linkedSO.total_taxes_and_charges > 0 ? "vat_included" : "tax_free") : undefined,
-        commission_base: linkedSO?.custom_commission_base || linkedSO?.grand_total,
-        custom_lead_planner: p.custom_lead_planner,
-        custom_support_planner: p.custom_support_planner,
-        custom_assistant_1: p.custom_assistant_1,
-        custom_assistant_2: p.custom_assistant_2,
-        custom_assistant_3: p.custom_assistant_3,
-        custom_assistant_4: p.custom_assistant_4,
-        custom_assistant_5: p.custom_assistant_5,
-        custom_service_type: p.custom_service_type || undefined,
-      };
-    });
-  }, [projectsResult, salesOrdersResult, customersResult, employeesResult, suppliersResult, invoicesResult]);
-
-  const isLoading = projectsQuery?.isLoading;
+  useEffect(() => {
+    fetch("/inquiry-api/projects/kanban", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => setItems(data?.data ?? []))
+      .catch(() => setItems([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const availableYears = useMemo(() => {
     const years = new Set<string>();
@@ -240,7 +109,7 @@ export default function ProjectKanbanPage() {
         header: ({ column }) => <DataTableColumnHeader column={column} title="Wedding Date" />,
         cell: ({ row }) => {
           const date = row.getValue("expected_end_date") as string;
-          if (!date) return <span className="text-muted-foreground">—</span>;
+          if (!date) return <span className="text-muted-foreground">{"\u2014"}</span>;
           const { text, color } = formatDaysUntilWedding(date);
           return (
             <div className="flex items-center gap-2">
@@ -259,12 +128,12 @@ export default function ProjectKanbanPage() {
       {
         accessorKey: "venue_name",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Venue" />,
-        cell: ({ row }) => row.getValue("venue_name") ?? <span className="text-muted-foreground">—</span>,
+        cell: ({ row }) => row.getValue("venue_name") ?? <span className="text-muted-foreground">{"\u2014"}</span>,
       },
       {
         accessorKey: "lead_planner_name",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Lead Planner" />,
-        cell: ({ row }) => row.getValue("lead_planner_name") ?? <span className="text-muted-foreground">—</span>,
+        cell: ({ row }) => row.getValue("lead_planner_name") ?? <span className="text-muted-foreground">{"\u2014"}</span>,
       },
     ];
     if (isFinance) {
@@ -274,7 +143,7 @@ export default function ProjectKanbanPage() {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Package" />,
           cell: ({ row }) => {
             const type = row.getValue("custom_service_type") as string | undefined;
-            if (!type) return <span className="text-muted-foreground">—</span>;
+            if (!type) return <span className="text-muted-foreground">{"\u2014"}</span>;
             return <Badge variant={type.toLowerCase().includes("full") ? "default" : "secondary"}>{type}</Badge>;
           },
         },
@@ -284,8 +153,8 @@ export default function ProjectKanbanPage() {
           cell: ({ row }) => {
             const amount = row.getValue("package_amount") as number | undefined;
             return amount
-              ? <span>{amount.toLocaleString("vi-VN")} ₫</span>
-              : <span className="text-muted-foreground">—</span>;
+              ? <span>{amount.toLocaleString("vi-VN")} \u20AB</span>
+              : <span className="text-muted-foreground">{"\u2014"}</span>;
           },
         },
         {
@@ -293,7 +162,7 @@ export default function ProjectKanbanPage() {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Tax" />,
           cell: ({ row }) => {
             const type = row.getValue("tax_type") as string | undefined;
-            if (!type) return <span className="text-muted-foreground">—</span>;
+            if (!type) return <span className="text-muted-foreground">{"\u2014"}</span>;
             return type === "vat_included"
               ? <Badge variant="outline" className="text-amber-600 border-amber-200">VAT</Badge>
               : <Badge variant="outline" className="text-green-600 border-green-200">Tax Free</Badge>;
@@ -306,8 +175,8 @@ export default function ProjectKanbanPage() {
           cell: ({ row }) => {
             const amount = row.getValue("commission_base") as number | undefined;
             return amount
-              ? <span>{amount.toLocaleString("vi-VN")} ₫</span>
-              : <span className="text-muted-foreground">—</span>;
+              ? <span>{amount.toLocaleString("vi-VN")} \u20AB</span>
+              : <span className="text-muted-foreground">{"\u2014"}</span>;
           },
         },
         {
@@ -315,7 +184,7 @@ export default function ProjectKanbanPage() {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Paid" />,
           cell: ({ row }) => {
             const pct = row.getValue("per_billed") as number | undefined;
-            if (pct == null) return <span className="text-muted-foreground">—</span>;
+            if (pct == null) return <span className="text-muted-foreground">{"\u2014"}</span>;
             const rounded = Math.round(pct);
             const color = rounded >= 100 ? "text-green-600" : rounded >= 50 ? "text-amber-600" : "text-muted-foreground";
             return <span className={`font-medium ${color}`}>{rounded}%</span>;
@@ -327,7 +196,7 @@ export default function ProjectKanbanPage() {
       id: "actions",
       cell: ({ row }) => (
         <Button variant="ghost" size="sm" asChild>
-          <Link to={`/projects/${row.original.id}`}>View →</Link>
+          <Link to={`/projects/${row.original.id}`}>View {"\u2192"}</Link>
         </Button>
       ),
     });
@@ -480,28 +349,28 @@ export default function ProjectKanbanPage() {
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
               <div>
                 <span className="font-medium text-foreground">Onboarding</span>{" "}
-                — Contract signed, initial planning
+                -- Contract signed, initial planning
               </div>
               <div>
-                <span className="font-medium text-foreground">Planning</span> —
+                <span className="font-medium text-foreground">Planning</span> --
                 Vendor selection, timeline
               </div>
               <div>
                 <span className="font-medium text-foreground">
                   Final Details
                 </span>{" "}
-                — Last month preparations
+                -- Last month preparations
               </div>
               <div>
                 <span className="font-medium text-foreground">Wedding Week</span>{" "}
-                — Final rehearsals, confirmations
+                -- Final rehearsals, confirmations
               </div>
               <div>
-                <span className="font-medium text-foreground">Day-of</span> —
+                <span className="font-medium text-foreground">Day-of</span> --
                 Wedding day coordination
               </div>
               <div>
-                <span className="font-medium text-foreground">Completed</span> —
+                <span className="font-medium text-foreground">Completed</span> --
                 Post-wedding wrap up
               </div>
             </div>

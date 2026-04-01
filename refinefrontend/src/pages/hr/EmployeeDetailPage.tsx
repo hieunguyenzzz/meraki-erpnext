@@ -99,32 +99,22 @@ export default function EmployeeDetailPage() {
   });
   const designations = (designationsResult?.data ?? []) as any[];
 
-  // Leave allocations for this employee (submitted)
-  const { result: allocsResult } = useList({
-    resource: "Leave Allocation",
-    pagination: { mode: "off" },
-    filters: [
-      { field: "employee", operator: "eq", value: name },
-      { field: "docstatus", operator: "eq", value: 1 },
-    ],
-    meta: {
-      fields: ["name", "employee", "leave_type", "new_leaves_allocated", "from_date"],
-    },
-    queryOptions: { enabled: !!name },
-  });
+  // Leave balance data from backend (period-grouped, no client-side date logic)
+  const [leaveDetail, setLeaveDetail] = useState<{
+    periods: { label: string; from_date: string; to_date: string; is_current: boolean; allocations: { name: string; leave_type: string; allocated: number; taken: number; balance: number }[] }[];
+    summary: { allocated: number; taken: number; remaining: number };
+  } | null>(null);
+  const [leaveDetailVersion, setLeaveDetailVersion] = useState(0);
 
-  // Approved leave applications for this employee
-  const { result: appsResult } = useList({
-    resource: "Leave Application",
-    pagination: { mode: "off" },
-    filters: [
-      { field: "employee", operator: "eq", value: name },
-      { field: "status", operator: "eq", value: "Approved" },
-      { field: "docstatus", operator: "eq", value: 1 },
-    ],
-    meta: { fields: ["name", "employee", "leave_type", "total_leave_days"] },
-    queryOptions: { enabled: !!name },
-  });
+  const refetchLeaveDetail = () => setLeaveDetailVersion((v) => v + 1);
+
+  useEffect(() => {
+    if (!name) return;
+    fetch(`/inquiry-api/leave/employee-detail?employee=${encodeURIComponent(name)}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => setLeaveDetail(data))
+      .catch(() => setLeaveDetail(null));
+  }, [name, leaveDetailVersion]);
 
   // All leave applications for this employee (for history tab)
   const { result: leaveHistoryResult } = useList({
@@ -172,8 +162,8 @@ export default function EmployeeDetailPage() {
   });
   const allEmployees = (allEmployeesResult?.data ?? []) as any[];
 
-  const allocations = (allocsResult?.data ?? []) as any[];
-  const applications = (appsResult?.data ?? []) as any[];
+  const leaveBalance = leaveDetail?.summary ?? { allocated: 0, taken: 0, remaining: 0 };
+  const leavePeriods = leaveDetail?.periods ?? [];
 
   // Fetch display roles for the employee when user_id becomes available
   useEffect(() => {
@@ -192,21 +182,6 @@ export default function EmployeeDetailPage() {
       .catch(() => setDisplayUserRoles([]));
   }, [employee?.user_id]);
 
-  // Calculate leave balance
-  const leaveBalance = useMemo(() => {
-    let allocated = 0;
-    let taken = 0;
-
-    for (const alloc of allocations) {
-      allocated += alloc.new_leaves_allocated ?? 0;
-    }
-    for (const app of applications) {
-      taken += app.total_leave_days ?? 0;
-    }
-
-    return { allocated, taken, remaining: allocated - taken };
-  }, [allocations, applications]);
-
   // Check if any commission is set
   const hasCommission = useMemo(() => {
     if (!employee) return false;
@@ -219,29 +194,9 @@ export default function EmployeeDetailPage() {
     );
   }, [employee]);
 
-  // Group allocations by period (old = before Aug 1 of current year, new = after)
-  const perPeriodAllocations = useMemo(() => {
-    const cutoff = new Date(new Date().getFullYear(), 7, 1); // Aug 1
-    const old: any[] = [];
-    const newPeriod: any[] = [];
-    for (const alloc of allocations) {
-      const fd = alloc.from_date ? new Date(alloc.from_date + "T00:00:00") : null;
-      if (!fd) continue;
-      if (fd < cutoff) old.push(alloc);
-      else newPeriod.push(alloc);
-    }
-    const year = new Date().getFullYear();
-    const groups = [];
-    if (old.length > 0) groups.push({ label: `${year - 1} carry-over`, allocs: old });
-    if (newPeriod.length > 0) groups.push({ label: `${year} allocation`, allocs: newPeriod });
-    return groups;
-  }, [allocations]);
-
-  function openLeaveDialog(alloc?: any) {
-    const target = alloc ?? (allocations.length > 0 ? allocations[0] : null);
-    if (!target) return;
-    const allocated = target.new_leaves_allocated ?? 0;
-    setLeaveAllocEdit({ name: target.name, allocated, taken: leaveBalance.taken });
+  function openLeaveDialog(alloc?: { name: string; allocated: number; taken: number }) {
+    if (!alloc) return;
+    setLeaveAllocEdit({ name: alloc.name, allocated: alloc.allocated, taken: alloc.taken });
     setLeaveError(null);
     setLeaveDialogOpen(true);
   }
@@ -261,7 +216,7 @@ export default function EmployeeDetailPage() {
           value: leaveAllocEdit.allocated,
         },
       });
-      invalidate({ resource: "Leave Allocation", invalidates: ["list"] });
+      refetchLeaveDetail();
       setLeaveDialogOpen(false);
     } catch (err: any) {
       setLeaveError(err?.message || "Failed to update leave allocation");
@@ -276,6 +231,7 @@ export default function EmployeeDetailPage() {
       const resp = await fetch(`/inquiry-api/leave/${encodeURIComponent(appName)}/approve`, { method: "POST" });
       if (!resp.ok) throw new Error(`Failed to approve ${appName}`);
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
+      refetchLeaveDetail();
     } catch { setRecordsError(`Failed to approve ${appName}`); } finally { setProcessingId(null); }
   }
 
@@ -763,16 +719,18 @@ export default function EmployeeDetailPage() {
                       <span>Used: {leaveBalance.taken} days</span>
                       <span>Remaining: {leaveBalance.remaining} days</span>
                     </div>
-                    {perPeriodAllocations.length > 0 && (
+                    {leavePeriods.length > 0 && (
                       <div className="border-t pt-2 space-y-2">
-                        {perPeriodAllocations.map(({ label, allocs }) => (
-                          <div key={label} className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground">{label}</p>
-                            {allocs.map((alloc: any) => (
+                        {leavePeriods.map((period) => (
+                          <div key={period.label} className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {period.label}{period.is_current ? " (current)" : ""}
+                            </p>
+                            {period.allocations.map((alloc) => (
                               <div key={alloc.name} className="flex justify-between items-center text-sm">
                                 <span className="text-muted-foreground">{alloc.leave_type}</span>
                                 <div className="flex items-center gap-2">
-                                  <span>{alloc.new_leaves_allocated} days</span>
+                                  <span>{alloc.allocated} days</span>
                                   <Button
                                     size="icon"
                                     variant="ghost"

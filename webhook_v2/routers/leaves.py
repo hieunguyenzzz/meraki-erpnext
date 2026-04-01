@@ -548,3 +548,126 @@ def get_leave_balance(employee: str, as_of: date | None = None):
         )
 
     return {"data": list(result.values()), "before_august": today.month < 8}
+
+
+def _format_period_label(from_date: date, to_date: date) -> str:
+    """Human-readable period label from allocation dates, e.g. 'Aug 2025 - Jul 2026'."""
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return f"{months[from_date.month - 1]} {from_date.year} - {months[to_date.month - 1]} {to_date.year}"
+
+
+def _period_key(from_str: str, to_str: str) -> str:
+    """Canonical key for a period: 'YYYY-MM-DD|YYYY-MM-DD'."""
+    return f"{from_str[:10]}|{to_str[:10]}"
+
+
+@router.get("/leave/employee-detail")
+def get_leave_employee_detail(employee: str):
+    """Return period-grouped leave balance for an employee's detail page.
+
+    Groups allocations by their [from_date, to_date] range (no hardcoded dates).
+    The 'current' period is the one containing today; others are 'previous'.
+
+    Returns:
+      - periods: list of {label, from_date, to_date, is_current, allocations: [{name, leave_type, allocated, taken, balance}]}
+      - summary: {allocated, taken, remaining}
+    """
+    client = ERPNextClient()
+    today = date.today()
+
+    # Fetch submitted allocations for this employee
+    allocs = client._get("/api/resource/Leave Allocation", params={
+        "filters": f'[["employee","=","{employee}"],["docstatus","=",1]]',
+        "fields": '["name","leave_type","from_date","to_date","new_leaves_allocated"]',
+        "limit_page_length": 200,
+    }).get("data", [])
+
+    # Fetch approved leave applications (submitted, not cancelled)
+    apps = client._get("/api/resource/Leave Application", params={
+        "filters": f'[["employee","=","{employee}"],["status","=","Approved"],["docstatus","=",1]]',
+        "fields": '["name","leave_type","from_date","to_date","total_leave_days"]',
+        "limit_page_length": 500,
+    }).get("data", [])
+
+    # Group allocations by period (from_date, to_date)
+    # Each unique (from_date, to_date) pair defines a period
+    periods: dict[str, dict] = {}
+    for alloc in allocs:
+        fd_str = (alloc.get("from_date") or "")[:10]
+        td_str = (alloc.get("to_date") or "")[:10]
+        if not fd_str or not td_str:
+            continue
+        key = _period_key(fd_str, td_str)
+        fd = date.fromisoformat(fd_str)
+        td = date.fromisoformat(td_str)
+        if key not in periods:
+            periods[key] = {
+                "from_date": fd_str,
+                "to_date": td_str,
+                "label": _format_period_label(fd, td),
+                "is_current": fd <= today <= td,
+                "allocations": [],
+            }
+        periods[key]["allocations"].append({
+            "name": alloc["name"],
+            "leave_type": alloc.get("leave_type", ""),
+            "allocated": float(alloc.get("new_leaves_allocated", 0)),
+            "taken": 0.0,
+            "balance": 0.0,
+        })
+
+    # For each leave application, find which period it belongs to
+    # by matching the application's from_date against allocation periods
+    for app in apps:
+        app_fd_str = (app.get("from_date") or "")[:10]
+        app_td_str = (app.get("to_date") or "")[:10]
+        if not app_fd_str:
+            continue
+        app_fd = date.fromisoformat(app_fd_str)
+        app_days = float(app.get("total_leave_days", 0))
+        app_lt = app.get("leave_type", "")
+
+        # Find the period whose date range contains this application's from_date
+        matched = False
+        for key, period in periods.items():
+            p_fd = date.fromisoformat(period["from_date"])
+            p_td = date.fromisoformat(period["to_date"])
+            if p_fd <= app_fd <= p_td:
+                # Add taken days to the matching leave_type allocation in this period
+                for alloc_entry in period["allocations"]:
+                    if alloc_entry["leave_type"] == app_lt:
+                        alloc_entry["taken"] += app_days
+                        matched = True
+                        break
+                if matched:
+                    break
+
+    # Compute balance for each allocation and build sorted period list
+    total_allocated = 0.0
+    total_taken = 0.0
+
+    for period in periods.values():
+        for alloc_entry in period["allocations"]:
+            alloc_entry["taken"] = round(alloc_entry["taken"] * 10) / 10
+            alloc_entry["balance"] = round((alloc_entry["allocated"] - alloc_entry["taken"]) * 10) / 10
+            total_allocated += alloc_entry["allocated"]
+            total_taken += alloc_entry["taken"]
+
+    # Sort: current periods first, then older periods in reverse chronological order
+    current = [p for p in periods.values() if p["is_current"]]
+    previous = sorted(
+        [p for p in periods.values() if not p["is_current"]],
+        key=lambda p: p["from_date"],
+        reverse=True,
+    )
+    sorted_periods = current + previous
+
+    return {
+        "periods": sorted_periods,
+        "summary": {
+            "allocated": total_allocated,
+            "taken": round(total_taken * 10) / 10,
+            "remaining": round((total_allocated - total_taken) * 10) / 10,
+        },
+    }

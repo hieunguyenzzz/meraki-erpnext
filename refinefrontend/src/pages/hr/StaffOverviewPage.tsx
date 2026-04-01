@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router";
-import { useList, useInvalidate, usePermissions } from "@refinedev/core";
+import { usePermissions } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,10 +17,7 @@ import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 import { formatDate, displayName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
-  getReviewStatus,
   getReviewBadgeVariant,
-  getReviewStatusText,
-  getLeaveBalanceVariant,
   type ReviewStatus,
 } from "@/lib/review-status";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
@@ -41,11 +38,40 @@ interface StaffRow {
   user_id?: string;
   staff_roles: string[];
   review_status: ReviewStatus;
+  review_status_text: string;
   leave_allocated: number;
   leave_taken: number;
   leave_remaining: number;
 }
 
+interface StaffOverviewData {
+  data: Array<{
+    name: string;
+    employee_name: string;
+    display_name: string;
+    first_name?: string;
+    last_name?: string;
+    designation: string;
+    department: string;
+    date_of_joining: string;
+    custom_last_review_date?: string;
+    custom_review_notes?: string;
+    custom_display_order?: number;
+    user_id?: string;
+    custom_meraki_id?: number;
+    review_status: ReviewStatus;
+    review_status_text: string;
+    leave_allocated: number;
+    leave_taken: number;
+    leave_remaining: number;
+  }>;
+  summary: {
+    total: number;
+    overdue: number;
+    due_soon: number;
+    up_to_date: number;
+  };
+}
 
 type SummaryFilter = "all" | "overdue" | "due-soon" | "up-to-date";
 
@@ -78,8 +104,6 @@ export default function StaffOverviewPage() {
   const { data: userRoles } = usePermissions<string[]>({});
   const canManageRoles = (userRoles ?? []).some(r => r === "System Manager" || r === "Administrator");
 
-  const invalidate = useInvalidate();
-
   // Invite staff dialog state
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteForm, setInviteForm] = useState({
@@ -94,108 +118,54 @@ export default function StaffOverviewPage() {
   const [inviteSuccess, setInviteSuccess] = useState<{ password: string; name: string } | null>(null);
   const [copiedPassword, setCopiedPassword] = useState(false);
 
-  // Fetch employees
-  const { result: employeesResult, query: employeesQuery } = useList({
-    resource: "Employee",
-    pagination: { mode: "off" },
-    filters: [{ field: "status", operator: "eq", value: "Active" }],
-    sorters: [{ field: "employee_name", order: "asc" }],
-    meta: {
-      fields: [
-        "name",
-        "employee_name",
-        "first_name",
-        "last_name",
-        "designation",
-        "department",
-        "date_of_joining",
-        "custom_last_review_date",
-        "custom_review_notes",
-        "custom_display_order",
-        "user_id",
-        "custom_meraki_id",
-      ],
-    },
-  });
+  // Fetch staff overview from backend (replaces 3 separate useList calls)
+  const [overviewData, setOverviewData] = useState<StaffOverviewData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchVersion, setFetchVersion] = useState(0);
 
-  // Fetch leave allocations (submitted)
-  const { result: allocsResult } = useList({
-    resource: "Leave Allocation",
-    pagination: { mode: "off" },
-    filters: [{ field: "docstatus", operator: "eq", value: 1 }],
-    meta: {
-      fields: ["name", "employee", "leave_type", "total_leaves_allocated", "new_leaves_allocated"],
-    },
-  });
+  const refetch = useCallback(() => setFetchVersion((v) => v + 1), []);
 
-  // Fetch approved leave applications
-  const { result: appsResult } = useList({
-    resource: "Leave Application",
-    pagination: { mode: "off" },
-    filters: [
-      { field: "status", operator: "eq", value: "Approved" },
-      { field: "docstatus", operator: "eq", value: 1 },
-    ],
-    meta: { fields: ["name", "employee", "leave_type", "total_leave_days"] },
-  });
-
-  const employees = (employeesResult?.data ?? []) as any[];
-  const allocations = (allocsResult?.data ?? []) as any[];
-  const applications = (appsResult?.data ?? []) as any[];
-
-  // Fetch roles map once employees are loaded
   useEffect(() => {
-    if (employees.length === 0) return;
+    setIsLoading(true);
+    fetch("/inquiry-api/staff/overview", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => setOverviewData(data))
+      .catch(() => setOverviewData(null))
+      .finally(() => setIsLoading(false));
+  }, [fetchVersion]);
+
+  // Fetch roles map once overview loads
+  useEffect(() => {
+    if (!overviewData?.data?.length) return;
     fetch("/inquiry-api/employees/roles-map", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => setRolesMap(data ?? {}))
       .catch(() => setRolesMap({}));
-  }, [employees.length]);
+  }, [overviewData?.data?.length]);
 
-  // Build leave data maps
-  const { allocByEmployee, takenByEmployee } = useMemo(() => {
-    // Sum allocations per employee (across all leave types)
-    const allocMap = new Map<string, number>();
-    for (const alloc of allocations) {
-      const current = allocMap.get(alloc.employee) ?? 0;
-      allocMap.set(alloc.employee, current + (alloc.total_leaves_allocated ?? alloc.new_leaves_allocated ?? 0));
-    }
-
-    // Sum taken leave per employee
-    const takenMap = new Map<string, number>();
-    for (const app of applications) {
-      const current = takenMap.get(app.employee) ?? 0;
-      takenMap.set(app.employee, current + (app.total_leave_days ?? 0));
-    }
-
-    return { allocByEmployee: allocMap, takenByEmployee: takenMap };
-  }, [allocations, applications]);
-
-  // Combine into staff rows
+  // Build staff rows from backend data + roles map
   const staffData: StaffRow[] = useMemo(() => {
-    return employees.map((emp) => {
-      const allocated = allocByEmployee.get(emp.name) ?? 0;
-      const taken = takenByEmployee.get(emp.name) ?? 0;
-      return {
-        name: emp.name,
-        employee_name: emp.employee_name,
-        first_name: emp.first_name,
-        last_name: emp.last_name,
-        designation: emp.designation || "-",
-        department: emp.department || "-",
-        date_of_joining: emp.date_of_joining,
-        custom_last_review_date: emp.custom_last_review_date,
-        custom_review_notes: emp.custom_review_notes,
-        custom_display_order: emp.custom_display_order,
-        user_id: emp.user_id,
-        staff_roles: rolesMap[emp.name] ?? [],
-        review_status: getReviewStatus(emp.custom_last_review_date),
-        leave_allocated: allocated,
-        leave_taken: taken,
-        leave_remaining: allocated - taken,
-      };
-    });
-  }, [employees, allocByEmployee, takenByEmployee, rolesMap]);
+    if (!overviewData?.data) return [];
+    return overviewData.data.map((emp) => ({
+      name: emp.name,
+      employee_name: emp.employee_name,
+      first_name: emp.first_name,
+      last_name: emp.last_name,
+      designation: emp.designation,
+      department: emp.department,
+      date_of_joining: emp.date_of_joining,
+      custom_last_review_date: emp.custom_last_review_date,
+      custom_review_notes: emp.custom_review_notes,
+      custom_display_order: emp.custom_display_order,
+      user_id: emp.user_id,
+      staff_roles: rolesMap[emp.name] ?? [],
+      review_status: emp.review_status as ReviewStatus,
+      review_status_text: emp.review_status_text,
+      leave_allocated: emp.leave_allocated,
+      leave_taken: emp.leave_taken,
+      leave_remaining: emp.leave_remaining,
+    }));
+  }, [overviewData, rolesMap]);
 
   // Initialize orderedIds from custom_display_order when data first loads
   useEffect(() => {
@@ -242,31 +212,10 @@ export default function StaffOverviewPage() {
     });
   }
 
-  // Summary counts
-  const { total, overdue, dueSoon, upToDate } = useMemo(() => {
-    let overdue = 0;
-    let dueSoon = 0;
-    let upToDate = 0;
+  // Summary counts from backend
+  const summary = overviewData?.summary ?? { total: 0, overdue: 0, due_soon: 0, up_to_date: 0 };
 
-    for (const row of staffData) {
-      switch (row.review_status) {
-        case "overdue":
-        case "never-reviewed":
-          overdue++;
-          break;
-        case "due-soon":
-          dueSoon++;
-          break;
-        case "up-to-date":
-          upToDate++;
-          break;
-      }
-    }
-
-    return { total: staffData.length, overdue, dueSoon, upToDate };
-  }, [staffData]);
-
-  // Filter data by summary card selection — based on orderedStaff to preserve custom order
+  // Filter data by summary card selection
   const filteredData = useMemo(() => {
     if (summaryFilter === "all") return orderedStaff;
     return orderedStaff.filter((row) => {
@@ -310,7 +259,7 @@ export default function StaffOverviewPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `API error ${res.status}`);
       }
-      invalidate({ resource: "Employee", invalidates: ["list"] });
+      refetch();
       setReviewDialogOpen(false);
       setSelectedEmployee(null);
     } catch (err: any) {
@@ -360,7 +309,7 @@ export default function StaffOverviewPage() {
       // Update local rolesMap immediately
       setRolesMap((prev) => ({ ...prev, [selectedEmployee.name]: roles }));
 
-      invalidate({ resource: "Employee", invalidates: ["list"] });
+      refetch();
       setRolesDialogOpen(false);
       setSelectedEmployee(null);
     } catch (err: any) {
@@ -414,7 +363,7 @@ export default function StaffOverviewPage() {
       }
 
       const result = await resp.json();
-      invalidate({ resource: "Employee", invalidates: ["list"] });
+      refetch();
       setInviteSuccess({ password: result.password, name: inviteForm.fullName.trim() });
     } catch (err: unknown) {
       setInviteError(extractErrorMessage(err, "Failed to invite staff member"));
@@ -450,7 +399,7 @@ export default function StaffOverviewPage() {
       accessorKey: "user_id",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Email" />,
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">{row.original.user_id || "—"}</span>
+        <span className="text-sm text-muted-foreground">{row.original.user_id || "\u2014"}</span>
       ),
     },
     {
@@ -470,7 +419,7 @@ export default function StaffOverviewPage() {
                 <Badge key={r.role} variant={r.variant as any}>{r.label}</Badge>
               ))
             ) : (
-              <span className="text-muted-foreground text-sm">—</span>
+              <span className="text-muted-foreground text-sm">\u2014</span>
             )}
             {canManageRoles && (
               <Button
@@ -507,14 +456,11 @@ export default function StaffOverviewPage() {
       cell: ({ row }) => {
         const status = row.original.review_status;
         const variant = getReviewBadgeVariant(status);
-        const text = getReviewStatusText(row.original.custom_last_review_date);
-        return <Badge variant={variant}>{text}</Badge>;
+        return <Badge variant={variant}>{row.original.review_status_text}</Badge>;
       },
       filterFn: "arrIncludesSome",
     },
   ];
-
-  const isLoading = employeesQuery.isLoading;
 
   const isReviewDirty = reviewDate !== initialReviewDate || reviewNotes !== initialReviewNotes;
   const isRolesDirty = [...selectedRoles].sort().join(",") !== [...initialRoles].sort().join(",");
@@ -544,7 +490,7 @@ export default function StaffOverviewPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{total}</div>
+            <div className="text-2xl font-bold">{summary.total}</div>
           </CardContent>
         </Card>
 
@@ -557,7 +503,7 @@ export default function StaffOverviewPage() {
             <AlertCircle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{overdue}</div>
+            <div className="text-2xl font-bold text-red-600">{summary.overdue}</div>
           </CardContent>
         </Card>
 
@@ -570,7 +516,7 @@ export default function StaffOverviewPage() {
             <Clock className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{dueSoon}</div>
+            <div className="text-2xl font-bold text-amber-600">{summary.due_soon}</div>
           </CardContent>
         </Card>
 
@@ -583,7 +529,7 @@ export default function StaffOverviewPage() {
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{upToDate}</div>
+            <div className="text-2xl font-bold text-green-600">{summary.up_to_date}</div>
           </CardContent>
         </Card>
       </div>

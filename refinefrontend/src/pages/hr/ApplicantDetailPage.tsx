@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, Download, Star, ArrowLeft, CalendarDays } from "lucide-react";
+import { Trash2, Download, Star, ArrowLeft } from "lucide-react";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import FileAttachments from "@/components/FileAttachments";
@@ -207,13 +207,6 @@ export default function ApplicantDetailPage() {
           <Badge variant={stageBadgeVariant(stage)}>{stage}</Badge>
         </div>
         <div className="flex items-center gap-2">
-          {stage === "Interview" && (
-            <Link to={`/hr/recruiting/interviews?candidate=${name}`}>
-              <Button variant="outline" size="sm">
-                <CalendarDays className="h-4 w-4 mr-1" /> Schedule Interview
-              </Button>
-            </Link>
-          )}
           <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <DialogTrigger asChild>
               <Button variant="destructive" size="sm">

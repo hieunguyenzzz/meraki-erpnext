@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { ArrowRight, CalendarDays, Star, X } from "lucide-react";
+import { ArrowRight, Star, X } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { extractErrorMessage } from "@/lib/errors";
 
@@ -243,12 +243,6 @@ export default function ApplicantsListPage() {
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
             Pipeline <ArrowRight className="h-4 w-4" />
-          </Link>
-          <Link
-            to="/hr/recruiting/interviews"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-          >
-            <CalendarDays className="h-4 w-4" /> Interviews
           </Link>
         </div>
       </div>
