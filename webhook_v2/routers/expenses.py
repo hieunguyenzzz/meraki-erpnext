@@ -508,6 +508,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest):
     first_item = old_items[0] if old_items else {}
 
     supplier = pi.get("supplier", "Company Expense")
+    original_creation = pi.get("creation")
     posting_date = req.date or pi.get("posting_date")
     description = req.description if req.description is not None else (first_item.get("item_name") or "Expense")
     expense_account = req.account or first_item.get("expense_account", DEFAULT_EXPENSE_ACCOUNT)
@@ -569,6 +570,18 @@ def edit_expense(pi_name: str, req: EditExpenseRequest):
         raise HTTPException(status_code=400, detail=f"Failed to create expense: {e}")
 
     new_name = new_pi.get("data", {}).get("name")
+
+    # Preserve original creation date so sort order doesn't change
+    if new_name and original_creation:
+        try:
+            client._post("/api/method/frappe.client.set_value", {
+                "doctype": "Purchase Invoice",
+                "name": new_name,
+                "fieldname": "creation",
+                "value": original_creation,
+            })
+        except Exception:
+            pass  # non-critical, just affects sort order
 
     # Submit if old one was submitted
     if docstatus == 1 and new_name:
