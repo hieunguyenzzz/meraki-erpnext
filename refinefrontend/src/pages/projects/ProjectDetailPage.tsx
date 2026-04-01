@@ -35,6 +35,7 @@ import {
   X,
   Camera,
   Paperclip,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   Popover as ShadcnPopover,
@@ -1919,6 +1920,7 @@ export default function ProjectDetailPage() {
                         </colgroup>
                         <thead>
                           <tr className="border-b bg-muted/50">
+                            <th className="px-3 py-2 text-left font-medium w-10">Receipt</th>
                             <th className="px-3 py-2 text-left font-medium">Date</th>
                             <th className="px-3 py-2 text-left font-medium">Description</th>
                             <th className="px-3 py-2 text-left font-medium">In charge by</th>
@@ -1931,6 +1933,47 @@ export default function ProjectDetailPage() {
                         <tbody>
                           {expenses.map((exp) => (
                             <tr key={exp.name} className="border-b last:border-b-0">
+                              <td className="px-3 py-2">
+                                {exp.receipt_url ? (
+                                  <div className="relative group cursor-pointer w-8 h-8">
+                                    <img
+                                      src={`/api${exp.receipt_url}`}
+                                      alt="Receipt"
+                                      className="w-8 h-8 rounded object-cover border"
+                                      onClick={() => window.open(`/api${exp.receipt_url}`, "_blank")}
+                                    />
+                                    {exp.status === "Pending" && (
+                                      <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                        <Pencil className="h-3 w-3 text-white" />
+                                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          try {
+                                            const { uploadFile } = await import("@/lib/fileUpload");
+                                            await uploadFile(file, "Purchase Invoice", exp.name);
+                                            fetchExpenses(name!);
+                                          } catch {}
+                                        }} />
+                                      </label>
+                                    )}
+                                  </div>
+                                ) : exp.status === "Pending" ? (
+                                  <label className="flex items-center justify-center w-8 h-8 rounded border border-dashed border-muted-foreground/30 hover:border-muted-foreground/60 cursor-pointer transition-colors">
+                                    <ImageIcon className="h-3 w-3 text-muted-foreground" />
+                                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      try {
+                                        const { uploadFile } = await import("@/lib/fileUpload");
+                                        await uploadFile(file, "Purchase Invoice", exp.name);
+                                        fetchExpenses(name!);
+                                      } catch {}
+                                    }} />
+                                  </label>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </td>
                               <td className="px-3 py-2 whitespace-nowrap">
                                 {exp.status === "Pending" ? (
                                   <input
@@ -1995,6 +2038,7 @@ export default function ProjectDetailPage() {
                           ))}
                           {addingExpense && (
                             <tr className="border-b last:border-b-0 bg-muted/30">
+                              <td className="px-3 py-2"></td>
                               <td className="px-3 py-2">
                                 <Input className="h-8 w-full" type="date" value={newExpense.date}
                                   onChange={e => setNewExpense({ ...newExpense, date: e.target.value })} />

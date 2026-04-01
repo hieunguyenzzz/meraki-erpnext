@@ -319,6 +319,27 @@ def list_expenses(project: str | None = None):
         "limit_page_length": 0,
     }).get("data", [])
 
+    # Batch-fetch attached files for all PIs (for receipt thumbnails)
+    pi_names = [pi["name"] for pi in pis]
+    file_map: dict[str, str] = {}  # pi_name -> first image file_url
+    if pi_names:
+        try:
+            files = client._get("/api/resource/File", params={
+                "filters": json.dumps([
+                    ["attached_to_doctype", "=", "Purchase Invoice"],
+                    ["attached_to_name", "in", pi_names],
+                    ["file_url", "is", "set"],
+                ]),
+                "fields": json.dumps(["attached_to_name", "file_url"]),
+                "limit_page_length": 0,
+            }).get("data", [])
+            for f in files:
+                doc_name = f.get("attached_to_name")
+                if doc_name and doc_name not in file_map:
+                    file_map[doc_name] = f["file_url"]
+        except Exception:
+            pass
+
     result = []
     for pi in pis:
         docstatus = pi.get("docstatus", 0)
@@ -361,6 +382,7 @@ def list_expenses(project: str | None = None):
             "docstatus": docstatus,
             "submitted_by": pi.get("owner", ""),
             "staff": pi.get("custom_expense_staff", ""),
+            "receipt_url": file_map.get(pi["name"]),
         })
 
     return result
