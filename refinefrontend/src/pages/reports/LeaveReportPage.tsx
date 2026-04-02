@@ -172,6 +172,12 @@ export default function LeaveReportPage() {
           )}
         </CardContent>
       </Card>
+
+      <p className="text-xs text-muted-foreground">
+        {currentYear - 1} Left over / Taken = leave carried over from the {currentYear - 1} allocation, usable from 1 Jan {currentYear} to 31 Jul {currentYear}.
+        {" "}{currentYear} Allocation / Taken = new annual leave from 1 Aug {currentYear} to 31 Jul {currentYear + 1}.
+        {" "}{currentYear} Usable = accrued so far this year (not the full annual amount).
+      </p>
     </div>
   );
 }
