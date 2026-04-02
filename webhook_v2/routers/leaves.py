@@ -246,8 +246,8 @@ def _create_leave_application(
 
 @router.post("/leave/apply")
 def apply_leave(body: LeaveApplyRequest):
-    """Create leave application(s). For Casual Leave with insufficient balance,
-    automatically splits into Casual Leave + Leave Without Pay."""
+    """Create leave application(s). For Annual Leave with insufficient balance,
+    automatically splits into Annual Leave + Leave Without Pay."""
     client = ERPNextClient()
 
     # Prepend half-day AM/PM to description so it shows in notifications
@@ -263,11 +263,11 @@ def apply_leave(body: LeaveApplyRequest):
         )
         leave_approver = (details.get("message") or {}).get("leave_approver")
 
-        # Auto-split Casual Leave when balance is insufficient
-        if body.leave_type == "Casual Leave":
+        # Auto-split Annual Leave when balance is insufficient
+        if body.leave_type == "Annual Leave":
             balance_resp = get_leave_balance(employee=body.employee, as_of=date.fromisoformat(body.from_date))
             leave_row = next(
-                (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
+                (r for r in balance_resp["data"] if r["leave_type"] == "Annual Leave"), None
             )
             if leave_row:
                 old_avail = max(
@@ -292,7 +292,7 @@ def apply_leave(body: LeaveApplyRequest):
                     leave_approver=leave_approver, half_day=body.half_day)
                 return {"created": [app], "split": True}
 
-            include_holiday = _leave_type_includes_holidays(client, "Casual Leave")
+            include_holiday = _leave_type_includes_holidays(client, "Annual Leave")
             casual_to_date = lwp_from_date = requested = None
 
             if include_holiday:
@@ -318,7 +318,7 @@ def apply_leave(body: LeaveApplyRequest):
                 # would tell ERPNext the entire segment is 0.5 days, which is wrong
                 is_single_day = body.from_date == body.to_date
                 cl_app = _create_leave_application(
-                    client, body.employee, "Casual Leave",
+                    client, body.employee, "Annual Leave",
                     body.from_date, casual_to_date, description,
                     leave_approver=leave_approver,
                     half_day=body.half_day if is_single_day else False)
@@ -368,7 +368,7 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
     """Return split preview without creating any documents."""
     client = ERPNextClient()
 
-    if leave_type != "Casual Leave":
+    if leave_type != "Annual Leave":
         return LeavePreviewResponse(
             requested_days=0, total_weekdays=0, holidays_excluded=[],
             casual_balance=0, needs_split=False, casual_days=0, lwp_days=0,
@@ -383,7 +383,7 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
     # Use accrual-aware balance
     balance_resp = get_leave_balance(employee=employee, as_of=date.fromisoformat(from_date))
     leave_row = next(
-        (r for r in balance_resp["data"] if r["leave_type"] == "Casual Leave"), None
+        (r for r in balance_resp["data"] if r["leave_type"] == "Annual Leave"), None
     )
     if leave_row:
         old_avail = max(
@@ -397,7 +397,7 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
         balance = 0.0
     balance_usable  = math.floor(balance * 2) / 2   # nearest 0.5 for half-day precision
     balance_days    = int(balance_usable)            # whole days available for CL
-    include_holiday = _leave_type_includes_holidays(client, "Casual Leave")
+    include_holiday = _leave_type_includes_holidays(client, "Annual Leave")
 
     if include_holiday:
         # ERPNext counts all calendar days

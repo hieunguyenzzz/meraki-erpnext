@@ -95,10 +95,10 @@ def leave_report():
         "limit_page_length": 500,
     }).get("data", [])
 
-    # Fetch all submitted Casual Leave allocations
+    # Fetch all submitted Annual Leave allocations
     allocations = client._get("/api/resource/Leave Allocation", params={
         "filters": json.dumps([
-            ["leave_type", "=", "Casual Leave"],
+            ["leave_type", "=", "Annual Leave"],
             ["docstatus", "=", 1],
         ]),
         "fields": json.dumps([
@@ -108,10 +108,10 @@ def leave_report():
         "limit_page_length": 1000,
     }).get("data", [])
 
-    # Fetch approved Casual Leave applications in range
+    # Fetch approved Annual Leave applications in range
     applications = client._get("/api/resource/Leave Application", params={
         "filters": json.dumps([
-            ["leave_type", "=", "Casual Leave"],
+            ["leave_type", "=", "Annual Leave"],
             ["status", "=", "Approved"],
             ["from_date", ">=", f"{current_year - 1}-01-01"],
             ["to_date", "<=", f"{current_year + 1}-12-31"],

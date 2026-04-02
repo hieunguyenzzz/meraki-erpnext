@@ -339,7 +339,7 @@ export default function LeavesPage() {
                 options: [
                   { label: "Annual Leave", value: "Annual Leave" },
                   { label: "Sick Leave", value: "Sick Leave" },
-                  { label: "Casual Leave", value: "Casual Leave" },
+                  { label: "Annual Leave", value: "Annual Leave" },
                 ],
               },
             ]}

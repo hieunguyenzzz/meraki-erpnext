@@ -173,7 +173,7 @@ export default function MyLeavesPage() {
     });
   }, [balanceData]);
 
-  // Backend-driven split preview for Casual Leave (holiday-aware)
+  // Backend-driven split preview for Annual Leave (holiday-aware)
   const [splitPreview, setSplitPreview] = useState<{
     requested_days: number;
     total_weekdays: number;
@@ -189,7 +189,7 @@ export default function MyLeavesPage() {
   const [submitStep, setSubmitStep] = useState<string | null>(null);
 
   useEffect(() => {
-    if (form.leave_type !== "Casual Leave" || !form.from_date || !form.to_date || !employeeId) {
+    if (form.leave_type !== "Annual Leave" || !form.from_date || !form.to_date || !employeeId) {
       setSplitPreview(null);
       return;
     }
@@ -347,10 +347,10 @@ export default function MyLeavesPage() {
     try {
       if (splitPreview?.needs_split && splitPreview.casual_to_date && splitPreview.lwp_from_date) {
         // Partial balance: submit CL first, then LWP
-        setSubmitStep("Submitting Casual Leave…");
+        setSubmitStep("Submitting Annual Leave…");
         await fetchLeaveApply({
           ...basePayload,
-          leave_type: "Casual Leave",
+          leave_type: "Annual Leave",
           to_date: splitPreview.casual_to_date,
         });
 
@@ -363,7 +363,7 @@ export default function MyLeavesPage() {
           });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : "Unknown error";
-          setError(`Casual Leave was created, but the Leave Without Pay portion failed: ${message}. Please resubmit the remaining days manually.`);
+          setError(`Annual Leave was created, but the Leave Without Pay portion failed: ${message}. Please resubmit the remaining days manually.`);
           invalidate({ resource: "Leave Application", invalidates: ["list"] });
           return;
         }
@@ -376,7 +376,7 @@ export default function MyLeavesPage() {
           ...basePayload,
           leave_type: "Leave Without Pay",
         });
-        setSuccess("Leave request submitted as Leave Without Pay (no Casual Leave balance remaining).");
+        setSuccess("Leave request submitted as Leave Without Pay (no Annual Leave balance remaining).");
       } else {
         await fetchLeaveApply(basePayload);
         setSuccess("Leave request submitted successfully.");
@@ -644,7 +644,7 @@ export default function MyLeavesPage() {
                 )}
               </div>
 
-              {previewLoading && form.leave_type === "Casual Leave" && form.from_date && form.to_date && (
+              {previewLoading && form.leave_type === "Annual Leave" && form.from_date && form.to_date && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
                   Checking leave balance…
                 </div>
@@ -674,7 +674,7 @@ export default function MyLeavesPage() {
                   {splitPreview.needs_split && splitPreview.casual_to_date && (
                     <div className="space-y-2">
                       <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-4 py-3 text-blue-800 dark:text-blue-300">
-                        <p className="font-semibold text-xs uppercase tracking-wide mb-1">Request 1 — Casual Leave (paid)</p>
+                        <p className="font-semibold text-xs uppercase tracking-wide mb-1">Request 1 — Annual Leave (paid)</p>
                         <p>
                           {formatDate(form.from_date)} → {formatDate(splitPreview.casual_to_date)}
                           {" · "}<strong>{splitPreview.casual_days} day{splitPreview.casual_days !== 1 ? "s" : ""}</strong>
@@ -688,7 +688,7 @@ export default function MyLeavesPage() {
                         </p>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Your Casual Leave balance is {splitPreview.casual_balance} day{splitPreview.casual_balance !== 1 ? "s" : ""}. The remaining {splitPreview.lwp_days} day{splitPreview.lwp_days !== 1 ? "s" : ""} will be unpaid.
+                        Your Annual Leave balance is {splitPreview.casual_balance} day{splitPreview.casual_balance !== 1 ? "s" : ""}. The remaining {splitPreview.lwp_days} day{splitPreview.lwp_days !== 1 ? "s" : ""} will be unpaid.
                       </p>
                     </div>
                   )}
@@ -701,7 +701,7 @@ export default function MyLeavesPage() {
                         {formatDate(form.from_date)} → {formatDate(form.to_date)}
                         {" · "}<strong>{splitPreview.lwp_days} day{splitPreview.lwp_days !== 1 ? "s" : ""}</strong>
                       </p>
-                      <p className="text-xs opacity-80">Your Casual Leave balance is exhausted. This leave will be fully unpaid.</p>
+                      <p className="text-xs opacity-80">Your Annual Leave balance is exhausted. This leave will be fully unpaid.</p>
                     </div>
                   )}
                 </div>
