@@ -78,10 +78,31 @@ export default function LeavesPage() {
     meta: { fields: ["name", "employee", "leave_type", "total_leave_days"] },
   });
 
-  const leaveApps = (appsResult?.data ?? []) as LeaveApp[];
+  const leaveAppsRaw = (appsResult?.data ?? []) as LeaveApp[];
   const leaveAllocs = (allocsResult?.data ?? []) as any[];
   const employees = (employeesResult?.data ?? []) as any[];
   const approvedApps = (approvedAppsResult?.data ?? []) as any[];
+
+  // Build employee name lookup from Employee records (first_name + last_name)
+  const empNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of employees) {
+      const name = [e.first_name, e.last_name].filter(Boolean).join(" ");
+      if (name) m.set(e.name, name);
+    }
+    return m;
+  }, [employees]);
+
+  // Resolve employee_name from Employee records when ERPNext returns HR-EMP-* codes
+  const leaveApps = useMemo(() =>
+    leaveAppsRaw.map((app) => {
+      const resolved = empNameMap.get(app.employee);
+      if (resolved && (!app.employee_name || app.employee_name === app.employee || app.employee_name.startsWith("HR-EMP-"))) {
+        return { ...app, employee_name: resolved };
+      }
+      return app;
+    }),
+  [leaveAppsRaw, empNameMap]);
 
   // Build lookup: employee -> leave_type -> taken days
   const takenMap = useMemo(() => {
