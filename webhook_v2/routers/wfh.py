@@ -21,8 +21,11 @@ router = APIRouter()
 
 
 def _clean_error(msg: str) -> str:
-    """Strip HTML tags and clean up ERPNext error messages."""
-    return re.sub(r"<[^>]+>", "", str(msg)).strip()
+    """Strip HTML and rewrite ERPNext error messages to be user-friendly."""
+    clean = re.sub(r"<[^>]+>", "", str(msg)).strip()
+    if "already has an Attendance Request" in clean and "overlaps" in clean:
+        return "You already have a WFH request that overlaps with this period"
+    return clean
 
 
 def _create_wfh_notification(client: ERPNextClient, to_user: str, message: str, ref_name: str) -> None:
