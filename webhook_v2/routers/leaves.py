@@ -26,6 +26,64 @@ def _compute_accrued(allocation_days: float, period_from: date, today: date) -> 
     return min(allocation_days, math.ceil(allocation_days * elapsed / 12))
 
 
+def _enrich_leave_notification(
+    client: ERPNextClient, leave_app_name: str, message: str
+) -> None:
+    """Update the most recent PWA Notification for a leave application with a richer message."""
+    try:
+        notifs = client._get("/api/resource/PWA Notification", params={
+            "filters": f'[["reference_document_type","=","Leave Application"],["reference_document_name","=","{leave_app_name}"]]',
+            "fields": '["name"]',
+            "order_by": "creation desc",
+            "limit_page_length": 1,
+        }).get("data", [])
+        if notifs:
+            client._post("/api/method/frappe.client.set_value", {
+                "doctype": "PWA Notification",
+                "name": notifs[0]["name"],
+                "fieldname": "message",
+                "value": message,
+            })
+    except Exception as e:
+        log.warning("enrich_notification_failed", leave=leave_app_name, error=str(e))
+
+
+def _fmt_days(d) -> str:
+    """Format days: 2.0 → '2', 1.5 → '1.5'."""
+    return str(int(d)) if float(d) == int(float(d)) else str(d)
+
+
+def _format_date_range(from_str: str, to_str: str) -> str:
+    """Format date range for notification messages, e.g. 'Apr 7 – Apr 11'."""
+    fd = date.fromisoformat(from_str)
+    td = date.fromisoformat(to_str)
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    if fd == td:
+        return f"{months[fd.month - 1]} {fd.day}"
+    return f"{months[fd.month - 1]} {fd.day} – {months[td.month - 1]} {td.day}"
+
+
+def _get_employee_name(client: ERPNextClient, identifier: str) -> str:
+    """Get employee's display name. Accepts Employee ID (HR-EMP-00001) or user email."""
+    try:
+        if identifier.startswith("HR-EMP-"):
+            emp = client._get(f"/api/resource/Employee/{identifier}").get("data", {})
+        else:
+            # Look up by user_id (email)
+            emps = client._get("/api/resource/Employee", params={
+                "filters": f'[["user_id","=","{identifier}"]]',
+                "fields": '["first_name","last_name"]',
+                "limit_page_length": 1,
+            }).get("data", [])
+            emp = emps[0] if emps else {}
+        first = emp.get("first_name", "")
+        last = emp.get("last_name", "")
+        return f"{first} {last}".strip() or identifier
+    except Exception:
+        return identifier
+
+
 def _submit_doc(client: ERPNextClient, doctype: str, name: str) -> None:
     """Fetch full doc and submit."""
     full_doc = client._get(f"/api/resource/{doctype}/{name}").get("data", {})
@@ -47,6 +105,20 @@ def approve_leave(leave_id: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to approve leave: {e}")
 
+    # Enrich PWA notification with leave details
+    try:
+        app = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
+        leave_type = app.get("leave_type", "Leave")
+        from_d = (app.get("from_date") or "")[:10]
+        to_d = (app.get("to_date") or "")[:10]
+        days = app.get("total_leave_days", 0)
+        approver_name = _get_employee_name(client, app.get("leave_approver", ""))
+        date_range = _format_date_range(from_d, to_d) if from_d and to_d else ""
+        msg = f"Your **{leave_type}** ({date_range}, {_fmt_days(days)} days) has been **Approved** by **{approver_name}**"
+        _enrich_leave_notification(client, leave_id, msg)
+    except Exception:
+        pass  # non-critical
+
     log.info("leave_approved", leave=leave_id)
     return {"success": True}
 
@@ -65,6 +137,20 @@ def reject_leave(leave_id: str):
         _submit_doc(client, "Leave Application", leave_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to reject leave: {e}")
+
+    # Enrich PWA notification with leave details
+    try:
+        app = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
+        leave_type = app.get("leave_type", "Leave")
+        from_d = (app.get("from_date") or "")[:10]
+        to_d = (app.get("to_date") or "")[:10]
+        days = app.get("total_leave_days", 0)
+        approver_name = _get_employee_name(client, app.get("leave_approver", ""))
+        date_range = _format_date_range(from_d, to_d) if from_d and to_d else ""
+        msg = f"Your **{leave_type}** ({date_range}, {_fmt_days(days)} days) has been **Rejected** by **{approver_name}**"
+        _enrich_leave_notification(client, leave_id, msg)
+    except Exception:
+        pass  # non-critical
 
     log.info("leave_rejected", leave=leave_id)
     return {"success": True}
@@ -101,6 +187,27 @@ def reject_wfh(req_id: str):
     log.info("wfh_rejected", request=req_id)
     return {"success": True}
 
+
+
+def _enrich_apply_notification(
+    client: ERPNextClient, employee_id: str, leave_app: dict, reason: str
+) -> None:
+    """Enrich the PWA Notification created by HRMS after a leave application is inserted."""
+    try:
+        app_name = leave_app.get("name", "")
+        if not app_name:
+            return
+        emp_name = _get_employee_name(client, employee_id)
+        leave_type = leave_app.get("leave_type", "Leave")
+        from_d = (leave_app.get("from_date") or "")[:10]
+        to_d = (leave_app.get("to_date") or "")[:10]
+        days = leave_app.get("total_leave_days", 0)
+        date_range = _format_date_range(from_d, to_d) if from_d and to_d else ""
+        reason_part = f" — {reason}" if reason else ""
+        msg = f"**{emp_name}** requests **{leave_type}**: {date_range} ({_fmt_days(days)} days){reason_part}"
+        _enrich_leave_notification(client, app_name, msg)
+    except Exception:
+        pass  # non-critical
 
 
 class LeaveApplyRequest(BaseModel):
@@ -290,6 +397,7 @@ def apply_leave(body: LeaveApplyRequest):
                     client, body.employee, "Leave Without Pay",
                     body.from_date, body.to_date, description,
                     leave_approver=leave_approver, half_day=body.half_day)
+                _enrich_apply_notification(client, body.employee, app, description)
                 return {"created": [app], "split": True}
 
             include_holiday = _leave_type_includes_holidays(client, "Annual Leave")
@@ -335,12 +443,15 @@ def apply_leave(body: LeaveApplyRequest):
                     except Exception:
                         pass
                     raise
+                _enrich_apply_notification(client, body.employee, cl_app, description)
+                _enrich_apply_notification(client, body.employee, lwp_app, description)
                 return {"created": [cl_app, lwp_app], "split": True}
 
         app = _create_leave_application(
             client, body.employee, body.leave_type,
             body.from_date, body.to_date, description,
             leave_approver=leave_approver, half_day=body.half_day)
+        _enrich_apply_notification(client, body.employee, app, description)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"created": [app], "split": False}

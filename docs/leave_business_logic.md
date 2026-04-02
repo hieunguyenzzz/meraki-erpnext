@@ -4,9 +4,9 @@ This document describes the leave management rules for Meraki Wedding Planner, i
 
 ---
 
-## Leave Type: Casual Leave (CL)
+## Leave Type: Annual Leave (AL)
 
-The only leave type with balance tracking and auto-split logic. All other leave types (Leave Without Pay, Annual Leave, etc.) are passed through directly to ERPNext without any custom balance calculation.
+The only leave type with balance tracking and auto-split logic. All other leave types (Leave Without Pay, etc.) are passed through directly to ERPNext without any custom balance calculation.
 
 ---
 
@@ -64,7 +64,7 @@ new_available = max(new_accrued - new_taken - new_pending, 0)
 
 **Combined balance for apply/preview:** `old_available + new_available` — both periods contribute. The `new_accrued` is computed as of the leave's `from_date`, not today, so a March preview of a May leave correctly reflects 4 months accrued (not 2).
 
-Since both allocations now cover H1 dates (Old: Jan–Jul; New: Jan–Jul+), ERPNext can accept CL applications up to the full combined balance for any date in the year.
+Since both allocations now cover H1 dates (Old: Jan–Jul; New: Jan–Jul+), ERPNext can accept AL applications up to the full combined balance for any date in the year.
 
 ### Overflow tracking
 
@@ -94,7 +94,7 @@ def _is_working_day(d, holidays, weekly_off):
 - All Saturdays (added as individual entries)
 - Official Vietnamese public holidays (see table below)
 
-The Casual Leave type has `include_holiday = 0` in ERPNext, meaning ERPNext itself also excludes holidays when counting leave days.
+The Annual Leave type has `include_holiday = 0` in ERPNext, meaning ERPNext itself also excludes holidays when counting leave days.
 
 ### 2026 Vietnamese Public Holidays
 
@@ -125,17 +125,17 @@ Returns a breakdown before the employee submits:
 - `total_weekdays`: Mon–Fri count across the requested date range (no holidays excluded)
 - `holidays_excluded`: public holidays that fall on weekdays within the range
 - `requested_days`: actual leave days consumed = `total_weekdays − holidays_excluded`
-- `casual_balance`: available CL balance for the relevant period
-- `needs_split`: whether the request exceeds available balance (triggers CL + LWP split)
+- `casual_balance`: available AL balance for the relevant period
+- `needs_split`: whether the request exceeds available balance (triggers AL + LWP split)
 
 ---
 
-## Auto-Split: Casual Leave + Leave Without Pay
+## Auto-Split: Annual Leave + Leave Without Pay
 
-When an employee's CL balance is insufficient for the full request, the system **automatically splits** into two applications:
+When an employee's AL balance is insufficient for the full request, the system **automatically splits** into two applications:
 
 ```
-[--- CL days ---][--- LWP days ---]
+[--- AL days ---][--- LWP days ---]
      ↑                 ↑
   balance_days     remaining days
 ```
@@ -143,14 +143,14 @@ When an employee's CL balance is insufficient for the full request, the system *
 ### Split rules
 
 1. **Zero balance** (`balance_days == 0`): entire request becomes LWP
-2. **Partial balance** (`0 < balance_days < requested`): first `balance_days` working days → CL, remaining → LWP
-3. **Sufficient balance** (`balance_days >= requested`): single CL application, no split
+2. **Partial balance** (`0 < balance_days < requested`): first `balance_days` working days → AL, remaining → LWP
+3. **Sufficient balance** (`balance_days >= requested`): single AL application, no split
 
 `balance_days = int(math.floor(balance * 2) / 2)` — rounded down to the nearest 0.5 day to support half-day balances without truncating 0.5 to 0.
 
 ### Rollback safety
 
-If the CL application is created successfully but the LWP application fails, the CL application is automatically deleted to avoid a dangling partial application.
+If the AL application is created successfully but the LWP application fails, the AL application is automatically deleted to avoid a dangling partial application.
 
 ### Half-day leaves
 
@@ -186,14 +186,51 @@ Employee submits → Open (draft)
 
 ---
 
+## Notifications
+
+Two notification systems fire when leave applications are created/approved/rejected:
+
+### 1. Email Notifications (ERPNext Notification doctype)
+
+- **"Leave Application Submitted for Approval"** — channel: Email, event: New, sent to leave approver
+- **"Leave Application Rejected"** — channel: Email, event: Submit, sent to employee
+- Both have rich HTML templates with leave type, dates, days, reason
+
+### 2. PWA Notifications (in-app bell icon)
+
+Created by HRMS's `PWANotificationsMixin` in `hrms/mixins/pwa_notifications.py`:
+
+- `notify_approver()` — fires on `after_insert` → creates PWA Notification to `leave_approver`
+- `notify_approval_status()` — fires on `on_submit` → creates PWA Notification to employee
+
+**HRMS default messages are generic** (no leave type, dates, or days), so `webhook_v2/routers/leaves.py` enriches the PWA Notification immediately after creation/approval/rejection:
+
+| Action | Enriched message format |
+|--------|------------------------|
+| Apply | `"{employee_name} requests {leave_type}: {from} – {to} ({days} days) — {reason}"` |
+| Approve | `"Your {leave_type} ({from} – {to}, {days} days) has been Approved by {approver}"` |
+| Reject | `"Your {leave_type} ({from} – {to}, {days} days) has been Rejected by {approver}"` |
+
+The enrichment helper `_enrich_leave_notification()` queries the most recent PWA Notification matching `reference_document_name = {leave_app_name}` and updates its `message` field.
+
+### Notification action handling
+
+The `handle_notification_action` Server Script processes Approve/Reject clicks from the notification panel. For Leave Application: directly updates status via `frappe.db.set_value`.
+
+Employee IDs in messages are resolved to real names by the `get_my_notifications` Server Script at read time.
+
+---
+
 ## Key Implementation Files
 
 | File | Purpose |
 |------|---------|
-| `webhook_v2/routers/leaves.py` | All leave balance, preview, apply, approve/reject logic |
+| `webhook_v2/routers/leaves.py` | All leave balance, preview, apply, approve/reject logic + notification enrichment |
 | `webhook_v2/routers/holidays.py` | Holiday list CRUD endpoints |
 | `refinefrontend/src/pages/self-service/MyLeavesPage.tsx` | Employee self-service leave view and apply form |
+| `refinefrontend/src/components/leave/RequestLeaveSheet.tsx` | Shared leave request form (bottom sheet) |
 | `refinefrontend/src/pages/reports/LeaveReportPage.tsx` | HR leave report (all employees) |
+| `refinefrontend/src/pages/notifications/NotificationsPage.tsx` | In-app notification bell and action handling |
 | `refinefrontend/src/pages/admin/SettingsPage.tsx` | Holiday management tab |
 
 ---
@@ -202,7 +239,7 @@ Employee submits → Open (draft)
 
 | Setting | Value | Where |
 |---------|-------|-------|
-| `include_holiday` | `0` (off) | Leave Type → Casual Leave |
+| `include_holiday` | `0` (off) | Leave Type → Annual Leave |
 | Company default holiday list | `Vietnam {year}` | Company → Meraki Wedding Planner |
 | Holiday list contents | All Saturdays + Sundays + public holidays | HR → Holiday List → Vietnam 2026 |
 
