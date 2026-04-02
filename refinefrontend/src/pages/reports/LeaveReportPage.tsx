@@ -81,25 +81,25 @@ export default function LeaveReportPage() {
                       <TableHead key={m} className="text-center min-w-[50px]">{m}</TableHead>
                     ))}
                     <TableHead className="text-center min-w-[90px] bg-blue-50 dark:bg-blue-950/30">
-                      <div className="text-xs leading-tight">2025<br />Allocation</div>
+                      <div className="text-xs leading-tight">{currentYear - 1}<br />Left over</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-blue-50 dark:bg-blue-950/30">
-                      <div className="text-xs leading-tight">2025<br />Taken</div>
+                      <div className="text-xs leading-tight">{currentYear - 1}<br />Taken</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-blue-50 dark:bg-blue-950/30">
-                      <div className="text-xs leading-tight">2025<br />Balance</div>
+                      <div className="text-xs leading-tight">{currentYear - 1}<br />Balance</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[90px] bg-green-50 dark:bg-green-950/30">
-                      <div className="text-xs leading-tight">2026<br />Allocation</div>
+                      <div className="text-xs leading-tight">{currentYear}<br />Allocation</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
-                      <div className="text-xs leading-tight">2026<br />Taken</div>
+                      <div className="text-xs leading-tight">{currentYear}<br />Taken</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
-                      <div className="text-xs leading-tight">2026<br />Balance</div>
+                      <div className="text-xs leading-tight">{currentYear}<br />Balance</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[90px] bg-orange-50 dark:bg-orange-950/30">
-                      <div className="text-xs leading-tight font-semibold">2026<br />Usable</div>
+                      <div className="text-xs leading-tight font-semibold">{currentYear}<br />Usable</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-purple-50 dark:bg-purple-950/30">
                       <div className="text-xs leading-tight font-semibold">Total<br />Balance</div>
