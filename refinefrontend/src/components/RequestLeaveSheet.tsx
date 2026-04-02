@@ -52,7 +52,9 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
     pagination: { mode: "off" },
     meta: { fields: ["name"] },
   });
-  const leaveTypes = (leaveTypesResult?.data ?? []) as { name: string }[];
+  const leaveTypes = ((leaveTypesResult?.data ?? []) as { name: string }[]).filter(
+    (lt) => lt.name !== "Compensatory Off"
+  );
 
   // Backend-driven split preview for Annual Leave (holiday-aware)
   const [splitPreview, setSplitPreview] = useState<{
