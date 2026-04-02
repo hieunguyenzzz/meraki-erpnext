@@ -114,7 +114,7 @@ def approve_leave(leave_id: str):
         days = app.get("total_leave_days", 0)
         approver_name = _get_employee_name(client, app.get("leave_approver", ""))
         date_range = _format_date_range(from_d, to_d) if from_d and to_d else ""
-        msg = f"Your **{leave_type}** ({date_range}, {_fmt_days(days)} days) has been **Approved** by **{approver_name}**"
+        msg = f"Your {leave_type} ({date_range}, {_fmt_days(days)} days) has been Approved by {approver_name}"
         _enrich_leave_notification(client, leave_id, msg)
     except Exception:
         pass  # non-critical
@@ -147,7 +147,7 @@ def reject_leave(leave_id: str):
         days = app.get("total_leave_days", 0)
         approver_name = _get_employee_name(client, app.get("leave_approver", ""))
         date_range = _format_date_range(from_d, to_d) if from_d and to_d else ""
-        msg = f"Your **{leave_type}** ({date_range}, {_fmt_days(days)} days) has been **Rejected** by **{approver_name}**"
+        msg = f"Your {leave_type} ({date_range}, {_fmt_days(days)} days) has been Rejected by {approver_name}"
         _enrich_leave_notification(client, leave_id, msg)
     except Exception:
         pass  # non-critical
@@ -204,7 +204,7 @@ def _enrich_apply_notification(
         days = leave_app.get("total_leave_days", 0)
         date_range = _format_date_range(from_d, to_d) if from_d and to_d else ""
         reason_part = f" — {reason}" if reason else ""
-        msg = f"**{emp_name}** requests **{leave_type}**: {date_range} ({_fmt_days(days)} days){reason_part}"
+        msg = f"{emp_name} requests {leave_type}: {date_range} ({_fmt_days(days)} days){reason_part}"
         _enrich_leave_notification(client, app_name, msg)
     except Exception:
         pass  # non-critical

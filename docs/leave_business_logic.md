@@ -207,9 +207,9 @@ Created by HRMS's `PWANotificationsMixin` in `hrms/mixins/pwa_notifications.py`:
 
 | Action | Enriched message format |
 |--------|------------------------|
-| Apply | `"{employee_name} requests {leave_type}: {from} – {to} ({days} days) — {reason}"` |
-| Approve | `"Your {leave_type} ({from} – {to}, {days} days) has been Approved by {approver}"` |
-| Reject | `"Your {leave_type} ({from} – {to}, {days} days) has been Rejected by {approver}"` |
+| Apply | `"Thục Anh requests Annual Leave: Apr 7 – Apr 11 (3 days) — Family event"` |
+| Approve | `"Your Annual Leave (Apr 7 – Apr 11, 3 days) has been Approved by Hoàng"` |
+| Reject | `"Your Annual Leave (Apr 7 – Apr 11, 3 days) has been Rejected by Hoàng"` |
 
 The enrichment helper `_enrich_leave_notification()` queries the most recent PWA Notification matching `reference_document_name = {leave_app_name}` and updates its `message` field.
 
