@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { useGetIdentity, useLogout, useList, useCreate, useInvalidate } from "@refinedev/core";
+import { useGetIdentity, useLogout, useCreate, useInvalidate } from "@refinedev/core";
 import { LogOut, User, Calendar, Home, Bell } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,20 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
-const initialLeaveForm = {
-  leave_type: "",
-  from_date: "",
-  to_date: "",
-  description: "",
-};
+import { RequestLeaveSheet } from "@/components/RequestLeaveSheet";
 
 const initialWfhForm = {
   from_date: "",
@@ -55,20 +42,11 @@ export function UserNav() {
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [wfhDialogOpen, setWfhDialogOpen] = useState(false);
 
-  // Form states
-  const [leaveForm, setLeaveForm] = useState(initialLeaveForm);
+  // WFH form states
   const [wfhForm, setWfhForm] = useState(initialWfhForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
-  // Fetch leave types
-  const { result: leaveTypesResult } = useList<{ name: string }>({
-    resource: "Leave Type",
-    pagination: { mode: "off" },
-    meta: { fields: ["name"] },
-  });
-  const leaveTypes = leaveTypesResult?.data ?? [];
 
   const email = identity?.email ?? "";
   const initials = email
@@ -78,71 +56,15 @@ export function UserNav() {
     .slice(0, 2)
     .join("");
 
-  function resetLeaveForm() {
-    setLeaveForm(initialLeaveForm);
-    setError(null);
-    setSuccess(null);
-  }
-
   function resetWfhForm() {
     setWfhForm(initialWfhForm);
     setError(null);
     setSuccess(null);
   }
 
-  function handleLeaveDialogChange(open: boolean) {
-    setLeaveDialogOpen(open);
-    if (!open) resetLeaveForm();
-  }
-
   function handleWfhDialogChange(open: boolean) {
     setWfhDialogOpen(open);
     if (!open) resetWfhForm();
-  }
-
-  async function handleLeaveSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!employeeId || !leaveForm.leave_type || !leaveForm.from_date || !leaveForm.to_date) {
-      setError("Please fill in all required fields");
-      return;
-    }
-
-    if (new Date(leaveForm.from_date) > new Date(leaveForm.to_date)) {
-      setError("From date cannot be after To date");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await createDoc({
-        resource: "Leave Application",
-        values: {
-          employee: employeeId,
-          leave_type: leaveForm.leave_type,
-          from_date: leaveForm.from_date,
-          to_date: leaveForm.to_date,
-          description: leaveForm.description,
-          status: "Open",
-        },
-      });
-
-      setSuccess("Leave request submitted successfully");
-      invalidate({ resource: "Leave Application", invalidates: ["list"] });
-
-      setTimeout(() => {
-        setLeaveDialogOpen(false);
-        resetLeaveForm();
-      }, 1500);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to submit leave request";
-      setError(message);
-    } finally {
-      setIsSubmitting(false);
-    }
   }
 
   async function handleWfhSubmit(e: React.FormEvent) {
@@ -235,101 +157,7 @@ export function UserNav() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Leave Request Sheet */}
-      <Sheet open={leaveDialogOpen} onOpenChange={handleLeaveDialogChange}>
-        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
-          <SheetHeader className="px-6 py-4 border-b shrink-0">
-            <SheetTitle>Request Leave</SheetTitle>
-          </SheetHeader>
-
-          <form onSubmit={handleLeaveSubmit} className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {error && (
-                <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-                  {error}
-                </div>
-              )}
-
-              {success && (
-                <div className="rounded-md border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 text-sm text-green-700 dark:text-green-400">
-                  {success}
-                </div>
-              )}
-
-              <div>
-                <Label htmlFor="leave_type">Leave Type *</Label>
-                <Select
-                  value={leaveForm.leave_type}
-                  onValueChange={(v) => setLeaveForm((prev) => ({ ...prev, leave_type: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select leave type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leaveTypes.map((lt) => (
-                      <SelectItem key={lt.name} value={lt.name}>
-                        {lt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="leave_from_date">From Date *</Label>
-                  <Input
-                    id="leave_from_date"
-                    type="date"
-                    value={leaveForm.from_date}
-                    onChange={(e) =>
-                      setLeaveForm((prev) => ({ ...prev, from_date: e.target.value }))
-                    }
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="leave_to_date">To Date *</Label>
-                  <Input
-                    id="leave_to_date"
-                    type="date"
-                    value={leaveForm.to_date}
-                    onChange={(e) =>
-                      setLeaveForm((prev) => ({ ...prev, to_date: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="leave_description">Reason</Label>
-                <Textarea
-                  id="leave_description"
-                  value={leaveForm.description}
-                  onChange={(e) =>
-                    setLeaveForm((prev) => ({ ...prev, description: e.target.value }))
-                  }
-                  placeholder="Optional: Describe the reason for your leave"
-                  rows={3}
-                />
-              </div>
-            </div>
-
-            <SheetFooter className="px-6 py-4 border-t shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setLeaveDialogOpen(false)}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Submitting..." : "Submit Request"}
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
+      <RequestLeaveSheet open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen} />
 
       {/* WFH Request Sheet */}
       <Sheet open={wfhDialogOpen} onOpenChange={handleWfhDialogChange}>
