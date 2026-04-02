@@ -6,7 +6,7 @@ GET /reports/leave-report  — monthly breakdown, old/new period balances, accru
 
 import json
 import math
-from datetime import date
+from datetime import date, timedelta
 from fastapi import APIRouter
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
@@ -137,24 +137,42 @@ def leave_report():
         emp_allocs = alloc_by_emp.get(emp_id, [])
         emp_apps = apps_by_emp.get(emp_id, [])
 
-        # Old period: starts Jan 1 2026
-        old_alloc = next((a for a in emp_allocs if (a.get("from_date") or "")[:10] == "2026-01-01"), None)
-        old_allocation_days = float(old_alloc["new_leaves_allocated"]) if old_alloc else 0.0
-
-        # New period: starts Aug 1 2026
-        new_alloc = next((a for a in emp_allocs if (a.get("from_date") or "")[:10] == "2026-08-01"), None)
-        new_allocation_days = float(new_alloc["new_leaves_allocated"]) if new_alloc else 0.0
+        # Classify allocations: "old" = same-year (carry-over), "new" = cross-year (annual)
+        old_allocation_days = 0.0
+        new_allocation_days = 0.0
+        new_alloc_from: date | None = None  # earliest from_date of new-period allocation
+        old_alloc_to: date | None = None    # to_date of old-period allocation (= cutoff)
+        for a in emp_allocs:
+            fd_str = (a.get("from_date") or "")[:10]
+            td_str = (a.get("to_date") or "")[:10]
+            if not fd_str or not td_str:
+                continue
+            days = float(a.get("new_leaves_allocated", 0))
+            if _parse_date(fd_str).year == _parse_date(td_str).year:
+                # Old (carry-over): e.g. Jan 1 2026 → Jul 31 2026
+                old_allocation_days += days
+                old_alloc_to = _parse_date(td_str)
+            else:
+                # New (annual): e.g. Aug 1 2026 → Jul 31 2027
+                new_allocation_days += days
+                fd = _parse_date(fd_str)
+                if new_alloc_from is None or fd < new_alloc_from:
+                    new_alloc_from = fd
 
         # Skip employees with no allocations at all
         if old_allocation_days == 0 and new_allocation_days == 0:
             continue
 
-        # Taken for old period (apps with from_date before Aug 1 2026)
-        old_cutoff = date(2026, 8, 1)
+        # Cutoff between old/new: day after old period ends, or new period start
+        old_cutoff = (old_alloc_to + timedelta(days=1)) if old_alloc_to else new_alloc_from
+        if old_cutoff is None:
+            old_cutoff = date(current_year, 8, 1)  # fallback
+
+        # Taken for old period (apps with from_date before cutoff)
         old_apps = [a for a in emp_apps if _parse_date(a["from_date"]) < old_cutoff]
         old_taken_raw = sum(float(a.get("total_leave_days", 0)) for a in old_apps)
 
-        # Taken for new period (apps with from_date >= Aug 1 2026)
+        # Taken for new period (apps with from_date >= cutoff)
         new_apps = [a for a in emp_apps if _parse_date(a["from_date"]) >= old_cutoff]
         new_taken_raw = sum(float(a.get("total_leave_days", 0)) for a in new_apps)
 
@@ -176,8 +194,9 @@ def leave_report():
                 )
             monthly_leave.append(round(total * 10) / 10)
 
-        # Accrual for new period: from Jan 1 of current year
-        accrual_start = date(current_year, 1, 1)
+        # Accrual for new period: from Jan 1 of the year the new allocation starts
+        accrual_year = new_alloc_from.year if new_alloc_from else current_year
+        accrual_start = date(accrual_year, 1, 1)
         new_accrued = _compute_accrued(new_allocation_days, accrual_start, today)
         new_usable = max(0, new_accrued - effective_new_taken)
 
