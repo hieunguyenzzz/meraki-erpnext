@@ -8,6 +8,7 @@ GET  /wfh/list              — list WFH for one employee
 GET  /wfh/list-all          — list all WFH (admin)
 """
 
+import re
 from datetime import date
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -17,6 +18,11 @@ from webhook_v2.routers.helpers import fmt_days, format_date_range, get_employee
 
 log = get_logger(__name__)
 router = APIRouter()
+
+
+def _clean_error(msg: str) -> str:
+    """Strip HTML tags and clean up ERPNext error messages."""
+    return re.sub(r"<[^>]+>", "", str(msg)).strip()
 
 
 def _create_wfh_notification(client: ERPNextClient, to_user: str, message: str, ref_name: str) -> None:
@@ -168,4 +174,4 @@ def apply_wfh_request(body: WfhApplyRequest):
 
         return {"data": ar_data}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_clean_error(e))
