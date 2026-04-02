@@ -3,7 +3,7 @@ import {
   Columns3, MessageSquare,
   Banknote, Users, LayoutDashboard,
   FileText, Receipt, CreditCard, BookOpen,
-  FolderKanban, Settings, MapPin, CalendarDays, Briefcase, Store, ClipboardCheck,
+  FolderKanban, Settings, MapPin, CalendarDays, Briefcase, Store, ClipboardCheck, Home,
 } from "lucide-react";
 
 export interface ModuleChild {
@@ -67,6 +67,7 @@ export const MODULES: ModuleConfig[] = [
       { label: "Recruiting", path: "/hr/recruiting/pipeline", icon: Users },
       { label: "Jobs", path: "/hr/recruiting/jobs", icon: Briefcase },
       { label: "Leaves", path: "/hr/leaves", icon: ClipboardCheck },
+      { label: "WFH", path: "/hr/wfh", icon: Home },
       { label: "Payroll", path: "/hr/payroll", icon: Banknote },
     ],
   },

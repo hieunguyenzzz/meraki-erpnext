@@ -14,6 +14,7 @@ interface PwaNotification {
   reference_document_type: string;
   reference_document_name: string;
   creation: string;
+  is_pending: boolean;
 }
 
 interface GroupedNotifications {
@@ -27,6 +28,7 @@ const DOC_ROUTES: Record<string, (name: string) => string> = {
   "Employee": (name) => `/hr/employees/${encodeURIComponent(name)}`,
   "Project": (name) => `/projects/${encodeURIComponent(name)}`,
   "Purchase Invoice": (name) => `/finance/expenses/${encodeURIComponent(name)}`,
+  "Attendance Request": () => "/hr/wfh",
 };
 
 /**
@@ -236,7 +238,7 @@ export default function NotificationsPage() {
                   const isClickable = !!routeFn;
                   const isProcessing = processingId === notif.name;
 
-                  const isActionable = ["Leave Application", "Purchase Invoice"].includes(notif.reference_document_type);
+                  const isActionable = notif.is_pending;
 
                   return (
                     <div
@@ -273,7 +275,7 @@ export default function NotificationsPage() {
                           </span>
                         </div>
                         {/* Approve / Reject for actionable notifications */}
-                        {isActionable && !notif.read && (
+                        {isActionable && (
                           <div className="mt-2 flex gap-1.5">
                             <Button
                               size="sm"

@@ -28,6 +28,7 @@ from webhook_v2.routers.notification_test import router as notification_test_rou
 from webhook_v2.routers.wedding_ops import router as wedding_ops_router
 from webhook_v2.routers.tasks import router as tasks_router
 from webhook_v2.routers.leaves import router as leaves_router
+from webhook_v2.routers.wfh import router as wfh_router
 from webhook_v2.routers.applicants import router as applicants_router
 from webhook_v2.routers.expenses import router as expenses_router
 from webhook_v2.routers.financial import router as financial_router
@@ -106,6 +107,7 @@ app.include_router(notification_test_router)
 app.include_router(wedding_ops_router)
 app.include_router(tasks_router)
 app.include_router(leaves_router)
+app.include_router(wfh_router)
 app.include_router(applicants_router)
 app.include_router(expenses_router)
 app.include_router(financial_router)

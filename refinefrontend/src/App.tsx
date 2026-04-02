@@ -32,6 +32,7 @@ import ApplicantDetailPage from "@/pages/hr/ApplicantDetailPage";
 import ApplicantsListPage from "@/pages/hr/ApplicantsListPage";
 import JobOpeningsPage from "@/pages/hr/JobOpeningsPage";
 import LeavesPage from "@/pages/hr/LeavesPage";
+import WfhPage from "@/pages/hr/WfhPage";
 import JobApplyPage from "@/pages/public/JobApplyPage";
 import InvoicesPage from "@/pages/finance/InvoicesPage";
 import InvoiceDetailPage from "@/pages/finance/InvoiceDetailPage";
@@ -169,6 +170,7 @@ export default function App() {
               <Route path="/hr/employees" element={<EmployeesPage />} />
               <Route path="/hr/employees/:name" element={<EmployeeDetailPage />} />
               <Route path="/hr/leaves" element={<LeavesPage />} />
+              <Route path="/hr/wfh" element={<WfhPage />} />
               <Route path="/hr/payroll" element={<PayrollPage />} />
 
               {/* Reports */}
