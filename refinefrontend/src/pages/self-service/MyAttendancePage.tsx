@@ -84,7 +84,6 @@ export default function MyAttendancePage() {
           "reason",
           "explanation",
           "docstatus",
-          "workflow_state",
         ],
       },
       queryOptions: { enabled: !!employeeId },
