@@ -65,7 +65,7 @@ export default function LeavesPage() {
     resource: "Employee",
     pagination: { mode: "off" },
     filters: [{ field: "status", operator: "eq", value: "Active" }],
-    meta: { fields: ["name", "employee_name"] },
+    meta: { fields: ["name", "employee_name", "first_name", "last_name"] },
   });
 
   const { result: approvedAppsResult } = useList({
@@ -116,18 +116,20 @@ export default function LeavesPage() {
       toDate: string | null;
     }> = [];
 
+    const getName = (e: any) => [e.first_name, e.last_name].filter(Boolean).join(" ") || e.employee_name || e.name;
     const sortedEmployees = [...employees].sort((a, b) =>
-      (a.employee_name ?? "").localeCompare(b.employee_name ?? "")
+      getName(a).localeCompare(getName(b))
     );
 
     for (const emp of sortedEmployees) {
+      const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(" ") || emp.employee_name || emp.name;
       const allocs = allocsByEmployee.get(emp.name);
       if (allocs && allocs.length > 0) {
         for (const alloc of allocs) {
           const allocated = alloc.total_leaves_allocated ?? alloc.new_leaves_allocated ?? 0;
           const taken = takenMap.get(emp.name)?.get(alloc.leave_type) ?? 0;
           rows.push({
-            employeeId: emp.name, employeeName: emp.employee_name,
+            employeeId: emp.name, employeeName: displayName,
             allocName: alloc.name, leaveType: alloc.leave_type,
             allocated, taken, remaining: allocated - taken,
             fromDate: alloc.from_date ?? null, toDate: alloc.to_date ?? null,
@@ -135,7 +137,7 @@ export default function LeavesPage() {
         }
       } else {
         rows.push({
-          employeeId: emp.name, employeeName: emp.employee_name,
+          employeeId: emp.name, employeeName: displayName,
           allocName: null, leaveType: null, allocated: 0, taken: 0, remaining: 0,
           fromDate: null, toDate: null,
         });
