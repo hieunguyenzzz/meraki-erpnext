@@ -40,11 +40,22 @@ def _compute_accrued(allocation: float, accrual_start: date, today: date) -> flo
     return min(allocation, math.ceil(allocation * elapsed / 12))
 
 
+def _count_working_days(start: date, end: date, holidays: set) -> int:
+    """Count Mon–Fri non-holiday days in [start, end]."""
+    count = 0
+    d = start
+    while d <= end:
+        if d.weekday() < 5 and d.isoformat() not in holidays:
+            count += 1
+        d += timedelta(days=1)
+    return count
+
+
 def _leave_days_in_month(
     app_from: date, app_to: date, total_leave_days: float,
-    year: int, month: int,
+    year: int, month: int, holidays: set,
 ) -> float:
-    """Proportional leave days for a specific month from a leave application."""
+    """Working-day leave count for a specific month from a leave application."""
     import calendar
     month_start = date(year, month, 1)
     month_end = date(year, month, calendar.monthrange(year, month)[1])
@@ -55,12 +66,12 @@ def _leave_days_in_month(
     if overlap_start > overlap_end:
         return 0.0
 
-    app_total_days = (app_to - app_from).days + 1
-    overlap_days = (overlap_end - overlap_start).days + 1
-
-    if app_total_days <= 0:
+    # Count actual working days in the full app range and in this month's overlap
+    app_working = _count_working_days(app_from, app_to, holidays)
+    if app_working <= 0:
         return 0.0
-    return round((overlap_days / app_total_days) * total_leave_days * 10) / 10
+    month_working = _count_working_days(overlap_start, overlap_end, holidays)
+    return round((month_working / app_working) * total_leave_days * 10) / 10
 
 
 def _display_name(emp: dict) -> str:
@@ -121,6 +132,17 @@ def leave_report():
         ]),
         "limit_page_length": 2000,
     }).get("data", [])
+
+    # Fetch holiday list for working-day calculation
+    company = client._get("/api/resource/Company/Meraki Wedding Planner").get("data", {})
+    holiday_list_name = company.get("default_holiday_list", "")
+    holidays: set[str] = set()
+    if holiday_list_name:
+        hl_data = client._get(f"/api/resource/Holiday List/{holiday_list_name}").get("data", {})
+        for h in (hl_data.get("holidays") or []):
+            d = (h.get("holiday_date") or "")[:10]
+            if d:
+                holidays.add(d)
 
     # Index allocations and applications by employee
     alloc_by_emp: dict[str, list] = {}
@@ -190,7 +212,7 @@ def leave_report():
                     _parse_date(app["from_date"]),
                     _parse_date(app["to_date"]),
                     float(app.get("total_leave_days", 0)),
-                    current_year, month_idx + 1,
+                    current_year, month_idx + 1, holidays,
                 )
             monthly_leave.append(round(total * 10) / 10)
 
