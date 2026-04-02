@@ -108,6 +108,33 @@ def reject_wfh(req_id: str):
     return {"success": True}
 
 
+def _resolve_employee_names(client: ERPNextClient, reqs: list) -> list:
+    """Ensure employee_name is the actual name, not the employee ID."""
+    # Collect employee IDs that need resolution
+    ids_to_resolve = set()
+    for r in reqs:
+        emp_id = r.get("employee", "")
+        emp_name = r.get("employee_name", "")
+        if not emp_name or emp_name == emp_id or emp_name.startswith("HR-EMP-"):
+            ids_to_resolve.add(emp_id)
+
+    if not ids_to_resolve:
+        return reqs
+
+    # Batch-fetch employee names
+    name_map = {}
+    for emp_id in ids_to_resolve:
+        name_map[emp_id] = get_employee_name(client, emp_id)
+
+    # Patch records
+    for r in reqs:
+        emp_id = r.get("employee", "")
+        if emp_id in name_map:
+            r["employee_name"] = name_map[emp_id]
+
+    return reqs
+
+
 @router.get("/wfh/list-all")
 def list_all_wfh_requests():
     """Return all WFH (Attendance Request) records for admin management."""
@@ -118,7 +145,7 @@ def list_all_wfh_requests():
         "order_by": "creation desc",
         "limit_page_length": 200,
     }).get("data", [])
-    return {"data": reqs}
+    return {"data": _resolve_employee_names(client, reqs)}
 
 
 @router.get("/wfh/list")
@@ -131,7 +158,7 @@ def list_wfh_requests(employee: str):
         "order_by": "creation desc",
         "limit_page_length": 100,
     }).get("data", [])
-    return {"data": reqs}
+    return {"data": _resolve_employee_names(client, reqs)}
 
 
 class WfhApplyRequest(BaseModel):
