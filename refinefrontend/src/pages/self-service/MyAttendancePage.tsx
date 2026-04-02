@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useList, useCreate, useInvalidate } from "@refinedev/core";
+import { useState, useEffect, useCallback } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, Home } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
@@ -29,17 +28,15 @@ interface AttendanceRequest {
   reason: string;
   explanation: string;
   docstatus: number;
-  workflow_state?: string;
 }
 
-function statusVariant(docstatus: number, workflowState?: string) {
-  if (workflowState === "Approved" || docstatus === 1) return "success" as const;
-  if (workflowState === "Rejected") return "destructive" as const;
+function statusVariant(docstatus: number) {
+  if (docstatus === 1) return "success" as const;
+  if (docstatus === 2) return "destructive" as const;
   return "secondary" as const;
 }
 
-function getStatusLabel(docstatus: number, workflowState?: string) {
-  if (workflowState) return workflowState;
+function getStatusLabel(docstatus: number) {
   if (docstatus === 1) return "Approved";
   if (docstatus === 2) return "Cancelled";
   return "Pending";
@@ -53,8 +50,6 @@ const initialForm = {
 
 export default function MyAttendancePage() {
   const { employee, employeeId, isLoading: employeeLoading } = useMyEmployee();
-  const { mutateAsync: createDoc } = useCreate();
-  const invalidate = useInvalidate();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(initialForm);
@@ -62,33 +57,20 @@ export default function MyAttendancePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Fetch user's attendance requests (WFH only)
-  const { result: requestsResult, query: requestsQuery } =
-    useList<AttendanceRequest>({
-      resource: "Attendance Request",
-      filters: employeeId
-        ? [
-            { field: "employee", operator: "eq", value: employeeId },
-            { field: "reason", operator: "eq", value: "Work From Home" },
-          ]
-        : [],
-      pagination: { mode: "off" },
-      sorters: [{ field: "creation", order: "desc" }],
-      meta: {
-        fields: [
-          "name",
-          "employee",
-          "employee_name",
-          "from_date",
-          "to_date",
-          "reason",
-          "explanation",
-          "docstatus",
-        ],
-      },
-      queryOptions: { enabled: !!employeeId },
-    });
-  const requests = (requestsResult?.data ?? []) as AttendanceRequest[];
+  const [requests, setRequests] = useState<AttendanceRequest[]>([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(true);
+
+  const fetchRequests = useCallback(() => {
+    if (!employeeId) return;
+    setIsLoadingRequests(true);
+    fetch(`/inquiry-api/wfh/list?employee=${employeeId}`)
+      .then(r => r.ok ? r.json() : { data: [] })
+      .then(d => setRequests(d.data ?? []))
+      .catch(() => setRequests([]))
+      .finally(() => setIsLoadingRequests(false));
+  }, [employeeId]);
+
+  useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
   // Table columns
   const columns: ColumnDef<AttendanceRequest, unknown>[] = [
@@ -129,17 +111,9 @@ export default function MyAttendancePage() {
         <DataTableColumnHeader column={column} title="Status" />
       ),
       cell: ({ row }) => {
-        const status = getStatusLabel(
-          row.original.docstatus,
-          row.original.workflow_state
-        );
+        const status = getStatusLabel(row.original.docstatus);
         return (
-          <Badge
-            variant={statusVariant(
-              row.original.docstatus,
-              row.original.workflow_state
-            )}
-          >
+          <Badge variant={statusVariant(row.original.docstatus)}>
             {status}
           </Badge>
         );
@@ -189,19 +163,22 @@ export default function MyAttendancePage() {
     setSuccess(null);
 
     try {
-      await createDoc({
-        resource: "Attendance Request",
-        values: {
+      const res = await fetch("/inquiry-api/wfh/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           employee: employeeId,
           from_date: form.from_date,
           to_date: form.to_date,
-          reason: "Work From Home",
           explanation: form.explanation,
-        },
+        }),
       });
-
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Failed to submit WFH request" }));
+        throw new Error(err.detail || "Failed to submit WFH request");
+      }
       setSuccess("WFH request submitted successfully");
-      invalidate({ resource: "Attendance Request", invalidates: ["list"] });
+      fetchRequests();
 
       setTimeout(() => {
         setDialogOpen(false);
@@ -259,7 +236,7 @@ export default function MyAttendancePage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {requests.length === 0 && !requestsQuery.isLoading ? (
+          {requests.length === 0 && !isLoadingRequests ? (
             <p className="text-muted-foreground text-center py-8">
               No WFH requests yet. Click "Request WFH" to submit a new request.
             </p>
@@ -267,7 +244,7 @@ export default function MyAttendancePage() {
             <DataTable
               columns={columns}
               data={requests}
-              isLoading={requestsQuery.isLoading}
+              isLoading={isLoadingRequests}
             />
           )}
         </CardContent>

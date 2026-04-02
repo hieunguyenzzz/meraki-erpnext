@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { useGetIdentity, useLogout, useCreate, useInvalidate } from "@refinedev/core";
+import { useGetIdentity, useLogout } from "@refinedev/core";
 import { LogOut, User, Calendar, Home, Bell } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -35,9 +35,6 @@ export function UserNav() {
   const { data: identity } = useGetIdentity<{ email: string; name?: string }>();
   const { mutate: logout } = useLogout({});
   const { employeeId } = useMyEmployee();
-  const { mutateAsync: createDoc } = useCreate();
-  const invalidate = useInvalidate();
-
   // Dialog states
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [wfhDialogOpen, setWfhDialogOpen] = useState(false);
@@ -84,19 +81,22 @@ export function UserNav() {
     setSuccess(null);
 
     try {
-      await createDoc({
-        resource: "Attendance Request",
-        values: {
+      const res = await fetch("/inquiry-api/wfh/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           employee: employeeId,
           from_date: wfhForm.from_date,
           to_date: wfhForm.to_date,
-          reason: "Work From Home",
           explanation: wfhForm.explanation,
-        },
+        }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Failed to submit WFH request" }));
+        throw new Error(err.detail || "Failed to submit WFH request");
+      }
 
       setSuccess("WFH request submitted successfully");
-      invalidate({ resource: "Attendance Request", invalidates: ["list"] });
 
       setTimeout(() => {
         setWfhDialogOpen(false);

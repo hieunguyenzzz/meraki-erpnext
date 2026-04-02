@@ -1,5 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
-import { useList } from "@refinedev/core";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, Calendar } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
@@ -38,29 +37,20 @@ export default function MyLeavesPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Fetch user's leave applications
-  const { result: appsResult, query: appsQuery } = useList<LeaveApplication>({
-    resource: "Leave Application",
-    filters: employeeId
-      ? [{ field: "employee", operator: "eq", value: employeeId }]
-      : [],
-    pagination: { mode: "off" },
-    sorters: [{ field: "creation", order: "desc" }],
-    meta: {
-      fields: [
-        "name",
-        "leave_type",
-        "from_date",
-        "to_date",
-        "total_leave_days",
-        "status",
-        "description",
-        "docstatus",
-      ],
-    },
-    queryOptions: { enabled: !!employeeId },
-  });
-  const leaveApps = (appsResult?.data ?? []) as LeaveApplication[];
+  const [leaveApps, setLeaveApps] = useState<LeaveApplication[]>([]);
+  const [isLoadingApps, setIsLoadingApps] = useState(true);
+
+  const fetchApps = useCallback(() => {
+    if (!employeeId) return;
+    setIsLoadingApps(true);
+    fetch(`/inquiry-api/leave/my-applications?employee=${employeeId}`)
+      .then(r => r.ok ? r.json() : { data: [] })
+      .then(d => setLeaveApps(d.data ?? []))
+      .catch(() => setLeaveApps([]))
+      .finally(() => setIsLoadingApps(false));
+  }, [employeeId]);
+
+  useEffect(() => { fetchApps(); }, [fetchApps]);
 
   // Fetch leave balances from backend (computed as admin, avoids field permission issues)
   const [balanceData, setBalanceData] = useState<{ data: any[]; before_august: boolean } | null>(null);
@@ -299,7 +289,7 @@ export default function MyLeavesPage() {
           <DataTable
             columns={columns}
             data={leaveApps}
-            isLoading={appsQuery.isLoading}
+            isLoading={isLoadingApps}
             filterableColumns={[
               {
                 id: "status",
@@ -315,7 +305,7 @@ export default function MyLeavesPage() {
         </CardContent>
       </Card>
 
-      <RequestLeaveSheet open={dialogOpen} onOpenChange={setDialogOpen} />
+      <RequestLeaveSheet open={dialogOpen} onOpenChange={setDialogOpen} onSuccess={fetchApps} />
     </div>
   );
 }

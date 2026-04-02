@@ -24,6 +24,7 @@ import {
 interface RequestLeaveSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 const initialForm = {
@@ -35,7 +36,7 @@ const initialForm = {
   description: "",
 };
 
-export function RequestLeaveSheet({ open, onOpenChange }: RequestLeaveSheetProps) {
+export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeaveSheetProps) {
   const { employeeId } = useMyEmployee();
   const invalidate = useInvalidate();
 
@@ -197,6 +198,7 @@ export function RequestLeaveSheet({ open, onOpenChange }: RequestLeaveSheetProps
       }
 
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
+      onSuccess?.();
       setTimeout(() => {
         onOpenChange(false);
         resetForm();

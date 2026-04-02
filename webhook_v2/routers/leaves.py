@@ -782,3 +782,53 @@ def get_leave_employee_detail(employee: str):
             "remaining": round((total_allocated - total_taken) * 10) / 10,
         },
     }
+
+
+@router.get("/wfh/list")
+def list_wfh_requests(employee: str):
+    """Return WFH (Attendance Request) records for an employee."""
+    client = ERPNextClient()
+    reqs = client._get("/api/resource/Attendance Request", params={
+        "filters": f'[["employee","=","{employee}"],["reason","=","Work From Home"]]',
+        "fields": '["name","employee","employee_name","from_date","to_date","reason","explanation","docstatus"]',
+        "order_by": "creation desc",
+        "limit_page_length": 100,
+    }).get("data", [])
+    return {"data": reqs}
+
+
+class WfhApplyRequest(BaseModel):
+    employee: str
+    from_date: str
+    to_date: str
+    explanation: str = ""
+
+
+@router.post("/wfh/apply")
+def apply_wfh_request(body: WfhApplyRequest):
+    """Create a Work From Home Attendance Request."""
+    client = ERPNextClient()
+    try:
+        result = client._post("/api/resource/Attendance Request", {
+            "employee": body.employee,
+            "from_date": body.from_date,
+            "to_date": body.to_date,
+            "reason": "Work From Home",
+            "explanation": body.explanation,
+        })
+        return {"data": result.get("data", {})}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/leave/my-applications")
+def list_my_leave_applications(employee: str):
+    """Return leave applications for an employee (all statuses except cancelled)."""
+    client = ERPNextClient()
+    apps = client._get("/api/resource/Leave Application", params={
+        "filters": f'[["employee","=","{employee}"],["docstatus","!=",2]]',
+        "fields": '["name","leave_type","from_date","to_date","total_leave_days","status","description","docstatus"]',
+        "order_by": "creation desc",
+        "limit_page_length": 200,
+    }).get("data", [])
+    return {"data": apps}
