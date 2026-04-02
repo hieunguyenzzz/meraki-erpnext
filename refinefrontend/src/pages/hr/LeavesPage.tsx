@@ -112,6 +112,8 @@ export default function LeavesPage() {
       allocated: number;
       taken: number;
       remaining: number;
+      fromDate: string | null;
+      toDate: string | null;
     }> = [];
 
     const sortedEmployees = [...employees].sort((a, b) =>
@@ -128,17 +130,38 @@ export default function LeavesPage() {
             employeeId: emp.name, employeeName: emp.employee_name,
             allocName: alloc.name, leaveType: alloc.leave_type,
             allocated, taken, remaining: allocated - taken,
+            fromDate: alloc.from_date ?? null, toDate: alloc.to_date ?? null,
           });
         }
       } else {
         rows.push({
           employeeId: emp.name, employeeName: emp.employee_name,
           allocName: null, leaveType: null, allocated: 0, taken: 0, remaining: 0,
+          fromDate: null, toDate: null,
         });
       }
     }
     return rows;
   }, [employees, allocsByEmployee, takenMap]);
+
+  // --- Period helpers ---
+  function formatPeriod(fromDate: string | null, toDate: string | null): string {
+    if (!fromDate || !toDate) return "\u2014";
+    const fmt = (d: string) => {
+      const date = new Date(d + "T00:00:00");
+      return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    };
+    return `${fmt(fromDate)} \u2013 ${fmt(toDate)}`;
+  }
+
+  function isCarryOver(fromDate: string | null, toDate: string | null): boolean | null {
+    if (!fromDate || !toDate) return null;
+    const fromYear = new Date(fromDate + "T00:00:00").getFullYear();
+    const toYear = new Date(toDate + "T00:00:00").getFullYear();
+    // If from and to are in the same year, it's likely a carry-over (partial year)
+    // Annual allocations typically span across years (e.g., Aug 2026 - Jul 2027)
+    return fromYear === toYear;
+  }
 
   // --- Edit helpers ---
   function getDisplayValues(row: typeof balanceRows[0]) {
@@ -335,6 +358,7 @@ export default function LeavesPage() {
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>Leave Type</TableHead>
+                      <TableHead>Period</TableHead>
                       <TableHead className="text-right">Allocated</TableHead>
                       <TableHead className="text-right">Taken</TableHead>
                       <TableHead className="text-right">Remaining</TableHead>
@@ -353,6 +377,17 @@ export default function LeavesPage() {
                         <TableRow key={key} className={!hasAlloc ? "text-muted-foreground" : undefined}>
                           <TableCell className="font-medium">{row.employeeName}</TableCell>
                           <TableCell>{row.leaveType ?? "\u2014"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">{formatPeriod(row.fromDate, row.toDate)}</span>
+                              {isCarryOver(row.fromDate, row.toDate) === true && (
+                                <Badge variant="outline" className="text-xs">Carry-over</Badge>
+                              )}
+                              {isCarryOver(row.fromDate, row.toDate) === false && (
+                                <Badge variant="secondary" className="text-xs">Annual</Badge>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
                             {hasAlloc ? (
                               <Input type="number" min={0} step={0.5} className="w-20 text-right ml-auto" value={display.allocated ?? 0} onChange={(e) => handleAllocatedChange(row.allocName!, e.target.value)} disabled={saving} />
