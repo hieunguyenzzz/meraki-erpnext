@@ -89,7 +89,7 @@ export default function LeaveReportPage() {
                     <TableHead className="text-center min-w-[80px] bg-blue-50 dark:bg-blue-950/30">
                       <div className="text-xs leading-tight">{currentYear - 1}<br />Balance</div>
                     </TableHead>
-                    <TableHead className="text-center min-w-[90px] bg-green-50 dark:bg-green-950/30">
+                    <TableHead className="text-center min-w-[90px] bg-teal-50 dark:bg-teal-950/30">
                       <div className="text-xs leading-tight">{currentYear}<br />Allocation</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
@@ -134,7 +134,7 @@ export default function LeaveReportPage() {
                         </Badge>
                       </TableCell>
                       {/* 2026 period */}
-                      <TableCell className="text-center text-sm bg-green-50/50 dark:bg-green-950/20">
+                      <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
                         {row.new_allocation_days}
                       </TableCell>
                       <TableCell className="text-center text-sm bg-green-50/50 dark:bg-green-950/20">
