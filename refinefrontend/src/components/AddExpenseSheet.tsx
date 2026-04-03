@@ -260,14 +260,13 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
               </Select>
             </div>
 
-            {/* Bill Photo */}
+            {/* Bill Photo (optional) */}
             <div>
-              <Label>Bill Photo</Label>
+              <Label>Bill Photo <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 onChange={handlePhotoCapture}
                 className="hidden"
               />
@@ -295,7 +294,7 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <Camera className="mr-2 h-4 w-4" />
-                  Take Photo of Bill
+                  Take or Choose Photo
                 </Button>
               )}
 
