@@ -176,16 +176,6 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
     // Use ref (immune to React state resets) with fallbacks
     const capturedPhoto = photoRef.current ?? photo ?? fileInputRef.current?.files?.[0] ?? null;
 
-    // Debug: log photo state to help diagnose upload issues
-    console.log("[AddExpense] submit debug:", {
-      photoRef: !!photoRef.current,
-      photoState: !!photo,
-      fileInputFiles: fileInputRef.current?.files?.length ?? 0,
-      capturedPhoto: !!capturedPhoto,
-      capturedPhotoName: capturedPhoto?.name,
-      capturedPhotoSize: capturedPhoto?.size,
-    });
-
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -212,21 +202,22 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
       const result = await res.json();
 
       // Attach photo — use the file captured before any async work
-      console.log("[AddExpense] after create:", { piName: result.name, hasPhoto: !!capturedPhoto });
+      let photoStatus = `ref=${!!photoRef.current} state=${!!photo} input=${fileInputRef.current?.files?.length ?? 0}`;
       if (capturedPhoto && result.name) {
         try {
           const attachForm = new FormData();
           attachForm.append("file", capturedPhoto);
-          await fetch(`/inquiry-api/expense/${result.name}/attach`, {
+          const attachRes = await fetch(`/inquiry-api/expense/${result.name}/attach`, {
             method: "POST",
             body: attachForm,
           });
-        } catch {
-          // Non-critical — expense was created, just receipt attachment failed
+          photoStatus = attachRes.ok ? "Photo attached" : `Attach failed: ${attachRes.status}`;
+        } catch (err: unknown) {
+          photoStatus = `Attach error: ${err instanceof Error ? err.message : "unknown"}`;
         }
       }
 
-      setSuccess("Expense submitted for approval");
+      setSuccess(`Expense submitted. [Debug: ${photoStatus}]`);
       invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
 
       setTimeout(() => {
