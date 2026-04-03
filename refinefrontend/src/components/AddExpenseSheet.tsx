@@ -169,6 +169,11 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
       return;
     }
 
+    // Capture the photo file BEFORE any async work. On mobile browsers,
+    // React state or the file input can be cleared if the Sheet fires
+    // onOpenChange or the page is suspended during the await.
+    const capturedPhoto = photo ?? fileInputRef.current?.files?.[0] ?? null;
+
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -194,11 +199,11 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
 
       const result = await res.json();
 
-      // Attach photo as receipt via backend (bypasses ERPNext permissions)
-      if (photo && result.name) {
+      // Attach photo — use the file captured before any async work
+      if (capturedPhoto && result.name) {
         try {
           const attachForm = new FormData();
-          attachForm.append("file", photo);
+          attachForm.append("file", capturedPhoto);
           await fetch(`/inquiry-api/expense/${result.name}/attach`, {
             method: "POST",
             body: attachForm,
