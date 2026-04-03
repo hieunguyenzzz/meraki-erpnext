@@ -176,6 +176,16 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
     // Use ref (immune to React state resets) with fallbacks
     const capturedPhoto = photoRef.current ?? photo ?? fileInputRef.current?.files?.[0] ?? null;
 
+    // Debug: log photo state to help diagnose upload issues
+    console.log("[AddExpense] submit debug:", {
+      photoRef: !!photoRef.current,
+      photoState: !!photo,
+      fileInputFiles: fileInputRef.current?.files?.length ?? 0,
+      capturedPhoto: !!capturedPhoto,
+      capturedPhotoName: capturedPhoto?.name,
+      capturedPhotoSize: capturedPhoto?.size,
+    });
+
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -202,6 +212,7 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
       const result = await res.json();
 
       // Attach photo — use the file captured before any async work
+      console.log("[AddExpense] after create:", { piName: result.name, hasPhoto: !!capturedPhoto });
       if (capturedPhoto && result.name) {
         try {
           const attachForm = new FormData();
