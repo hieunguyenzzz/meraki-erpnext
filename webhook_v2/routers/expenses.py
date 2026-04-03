@@ -405,10 +405,7 @@ def list_expenses(project: str | None = None):
         first_item = items[0] if items else {}
 
         item_name = first_item.get("item_name", "")
-        category = pi_doc.get("remarks", "")
-        # If no remarks, try to extract category from "Category: Description" format
-        if not category and ": " in item_name:
-            category = item_name.split(": ", 1)[0]
+        category = first_item.get("expense_account", "")
         description = item_name
         # Strip category prefix from description for cleaner display
         if category and description.startswith(f"{category}: "):
