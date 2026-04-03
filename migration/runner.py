@@ -24,6 +24,7 @@ ORDERED_PHASES = [
     "v058_rename_casual_leave_to_annual",
     "v059_notification_action_attendance_request",
     "v060_notification_pending_status",
+    "v061_income_tax_account",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -71,6 +72,7 @@ def run_pending(client) -> int:
             v058_rename_casual_leave_to_annual,
             v059_notification_action_attendance_request,
             v060_notification_pending_status,
+            v061_income_tax_account,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -90,6 +92,7 @@ def run_pending(client) -> int:
             v058_rename_casual_leave_to_annual,
             v059_notification_action_attendance_request,
             v060_notification_pending_status,
+            v061_income_tax_account,
         )
 
     phase_fns = {
@@ -113,6 +116,7 @@ def run_pending(client) -> int:
         "v058_rename_casual_leave_to_annual": v058_rename_casual_leave_to_annual.run,
         "v059_notification_action_attendance_request": v059_notification_action_attendance_request.run,
         "v060_notification_pending_status": v060_notification_pending_status.run,
+        "v061_income_tax_account": v061_income_tax_account.run,
     }
 
     state_file = get_state_file()

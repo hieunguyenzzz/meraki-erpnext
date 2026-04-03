@@ -510,11 +510,13 @@ async def submit_payroll(request: SubmitPayrollRequest):
     if not draft_slips:
         return {"submitted": 0, "failed": [], "jv_name": None, "message": "No draft slips to submit"}
 
+    # Reset "Failed" status so ERPNext allows re-running submit_salary_slips
+    pe_doc_pre = client._get(f"/api/resource/Payroll Entry/{pe_name}").get("data", {})
+    if pe_doc_pre.get("salary_slips_submitted") == 0 and pe_doc_pre.get("status") == "Failed":
+        client._put(f"/api/resource/Payroll Entry/{pe_name}", {"status": "Draft", "error_message": ""})
+        log.info("reset_failed_pe", pe=pe_name)
+
     # Use ERPNext's native method: submits slips + creates accrual JV in one call.
-    # This calls submit_salary_slips_for_employees which:
-    #   - Submits each draft slip
-    #   - Calls make_accrual_jv_entry() to create GL entries
-    #   - Sets salary_slips_submitted=1 on the PE
     try:
         resp = client._post("/api/method/run_doc_method", {
             "dt": "Payroll Entry",
@@ -525,6 +527,22 @@ async def submit_payroll(request: SubmitPayrollRequest):
         error_msg = str(e)
         log.error("submit_salary_slips_failed", pe=pe_name, error=error_msg)
         return {"submitted": 0, "failed": [error_msg], "jv_name": None}
+
+    # Check if PE ended up in "Failed" state (e.g. missing salary component account)
+    pe_after = client._get(f"/api/resource/Payroll Entry/{pe_name}").get("data", {})
+    if pe_after.get("status") == "Failed":
+        error_msg = (pe_after.get("error_message") or "")[:500]
+        if not error_msg:
+            # Try Error Log for details
+            errors = client._get("/api/resource/Error Log", params={
+                "filters": json.dumps([["method", "like", f"%{pe_name}%"]]),
+                "fields": json.dumps(["error"]),
+                "order_by": "creation desc",
+                "limit_page_length": 1,
+            }).get("data", [])
+            error_msg = errors[0]["error"][:500] if errors else "Unknown error — check ERPNext Error Log"
+        log.error("pe_failed_after_submit", pe=pe_name, error=error_msg)
+        return {"submitted": 0, "failed": [f"ERPNext submission failed: {error_msg}"], "jv_name": None}
 
     # Count how many were actually submitted
     submitted_slips = client._get("/api/resource/Salary Slip", params={
