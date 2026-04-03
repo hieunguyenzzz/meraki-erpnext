@@ -36,6 +36,7 @@ import {
   Camera,
   Paperclip,
   Eye,
+  CheckCheck,
 } from "lucide-react";
 import {
   Popover as ShadcnPopover,
@@ -605,6 +606,27 @@ export default function ProjectDetailPage() {
       fetchExpenses(name!);
     } catch (error) {
       setExpenseError(error instanceof Error ? error.message : "Failed to approve expense");
+    }
+  }
+
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
+  const pendingExpenses = useMemo(() => expenses.filter(e => e.status === "Pending"), [expenses]);
+
+  async function handleApproveAll() {
+    if (!name || pendingExpenses.length === 0) return;
+    setIsApprovingAll(true);
+    setExpenseError(null);
+    try {
+      const resp = await fetch(`/inquiry-api/expense/approve-all?project=${encodeURIComponent(name)}`, { method: "POST", credentials: "include" });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to approve expenses");
+      }
+      fetchExpenses(name);
+    } catch (error) {
+      setExpenseError(error instanceof Error ? error.message : "Failed to approve all expenses");
+    } finally {
+      setIsApprovingAll(false);
     }
   }
 
@@ -1939,10 +1961,18 @@ export default function ProjectDetailPage() {
                         Total approved: {formatVND(approvedExpensesTotal)}
                       </p>
                     </div>
-                    <Button size="sm" onClick={() => setAddingExpense(true)} disabled={addingExpense}>
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Expense
-                    </Button>
+                    <div className="flex gap-2">
+                      {isFinance && pendingExpenses.length > 0 && (
+                        <Button size="sm" variant="outline" onClick={handleApproveAll} disabled={isApprovingAll}>
+                          <CheckCheck className="h-4 w-4 mr-1" />
+                          {isApprovingAll ? "Approving..." : `Approve All (${pendingExpenses.length})`}
+                        </Button>
+                      )}
+                      <Button size="sm" onClick={() => setAddingExpense(true)} disabled={addingExpense}>
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Expense
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     {expenseError && (

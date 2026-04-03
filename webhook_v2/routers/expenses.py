@@ -547,6 +547,36 @@ def approve_expense(pi_name: str):
     return {"success": True}
 
 
+@router.post("/expense/approve-all")
+def approve_all_expenses(project: str):
+    """Approve all pending (Draft, non-rejected) Purchase Invoices for a project."""
+    client = ERPNextClient()
+
+    pis = client._get("/api/resource/Purchase Invoice", params={
+        "filters": json.dumps([
+            ["docstatus", "=", 0],
+            ["project", "=", project],
+            ["custom_rejected", "=", 0],
+        ]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 0,
+    }).get("data", [])
+
+    approved = []
+    failed = []
+    for pi_ref in pis:
+        pi_name = pi_ref["name"]
+        try:
+            pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+            client._post("/api/method/frappe.client.submit", {"doc": pi})
+            approved.append(pi_name)
+        except Exception as e:
+            failed.append({"name": pi_name, "error": str(e)})
+
+    log.info("expenses_approve_all", project=project, approved=len(approved), failed=len(failed))
+    return {"approved": len(approved), "failed": len(failed), "details": failed}
+
+
 @router.post("/expense/{pi_name}/reject")
 def reject_expense(pi_name: str):
     """Reject a Draft Purchase Invoice (marks as rejected, keeps visible)."""
