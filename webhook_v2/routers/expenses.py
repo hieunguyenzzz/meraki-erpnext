@@ -15,7 +15,7 @@ New (wedding expenses with approval):
 
 import json
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.classifier_client import RemoteClassifierClient
@@ -430,6 +430,47 @@ def list_expenses(project: str | None = None):
             "staff": pi.get("custom_expense_staff", ""),
             "receipt_url": file_map.get(pi["name"]),
         })
+
+    return result
+
+
+@router.post("/expense/wedding-with-receipt")
+async def create_wedding_expense_with_receipt(
+    project: str = Form(...),
+    date: str = Form(...),
+    description: str = Form(...),
+    amount: float = Form(...),
+    category: str = Form(...),
+    supplier: str = Form("Company Expense"),
+    staff: str = Form(""),
+    receipt: UploadFile | None = File(None),
+):
+    """Create a Draft PI and attach receipt in one atomic request."""
+    from fastapi import Form as _  # noqa — already imported above
+
+    req = WeddingExpenseRequest(
+        project=project, date=date, description=description,
+        amount=amount, category=category, supplier=supplier,
+        staff=staff or None,
+    )
+    # Reuse existing logic
+    result = create_wedding_expense(req)
+
+    # Attach receipt if provided
+    if receipt and receipt.size and result.get("name"):
+        try:
+            file_data = await receipt.read()
+            client = ERPNextClient()
+            client.upload_file(
+                file_data=file_data,
+                filename=receipt.filename or "receipt.jpg",
+                doctype="Purchase Invoice",
+                docname=result["name"],
+                is_private=False,
+            )
+            log.info("receipt_attached", pi=result["name"])
+        except Exception as e:
+            log.warning("receipt_attach_failed", pi=result["name"], error=str(e))
 
     return result
 

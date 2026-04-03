@@ -175,25 +175,30 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
       return;
     }
 
-    // Use ref (immune to React state resets) with fallbacks
+    // Capture photo from ref before any state changes
     const capturedPhoto = photoRef.current ?? photo ?? fileInputRef.current?.files?.[0] ?? null;
+
+    // Build a single FormData with all fields + optional receipt
+    // This sends everything in one request so the sheet closing can't interrupt
+    const formData = new FormData();
+    formData.append("project", form.project);
+    formData.append("date", form.date);
+    formData.append("description", form.description);
+    formData.append("amount", String(amount));
+    formData.append("category", form.category);
+    formData.append("staff", employeeId || "");
+    if (capturedPhoto) {
+      formData.append("receipt", capturedPhoto);
+    }
 
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const res = await fetch("/inquiry-api/expense/wedding", {
+      const res = await fetch("/inquiry-api/expense/wedding-with-receipt", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project: form.project,
-          date: form.date,
-          description: form.description,
-          amount,
-          category: form.category,
-          staff: employeeId || undefined,
-        }),
+        body: formData,
       });
 
       if (!res.ok) {
@@ -201,25 +206,7 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
         throw new Error(data.detail ?? "Failed to create expense");
       }
 
-      const result = await res.json();
-
-      // Attach photo — use the file captured before any async work
-      let photoStatus = `ref=${!!photoRef.current} state=${!!photo} input=${fileInputRef.current?.files?.length ?? 0}`;
-      if (capturedPhoto && result.name) {
-        try {
-          const attachForm = new FormData();
-          attachForm.append("file", capturedPhoto);
-          const attachRes = await fetch(`/inquiry-api/expense/${result.name}/attach`, {
-            method: "POST",
-            body: attachForm,
-          });
-          photoStatus = attachRes.ok ? "Photo attached" : `Attach failed: ${attachRes.status}`;
-        } catch (err: unknown) {
-          photoStatus = `Attach error: ${err instanceof Error ? err.message : "unknown"}`;
-        }
-      }
-
-      setSuccess(`Expense submitted. [Debug: ${photoStatus}]`);
+      setSuccess("Expense submitted for approval");
       invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
 
       setTimeout(() => {
