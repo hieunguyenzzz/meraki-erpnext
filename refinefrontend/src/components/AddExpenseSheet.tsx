@@ -352,14 +352,35 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
             {/* Amount */}
             <div>
               <Label htmlFor="expense_amount">Amount (VND) *</Label>
-              <Input
-                id="expense_amount"
-                type="number"
-                inputMode="numeric"
-                value={form.amount}
-                onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                placeholder="0"
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="expense_amount"
+                  type="number"
+                  inputMode="numeric"
+                  value={form.amount}
+                  onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+                  placeholder="0"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0 font-mono text-sm px-3"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      amount: (prev.amount || "0") + "000",
+                    }))
+                  }
+                >
+                  000
+                </Button>
+              </div>
+              {form.amount && !isNaN(Number(form.amount)) && Number(form.amount) >= 1000 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {Number(form.amount).toLocaleString("vi-VN")} VND
+                </p>
+              )}
             </div>
 
             {/* Description */}
