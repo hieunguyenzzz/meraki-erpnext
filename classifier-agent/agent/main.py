@@ -23,6 +23,8 @@ from agent.models import (
     ExtractMessageResult,
     ExtractInvoiceRequest,
     ExtractInvoiceResult,
+    ExtractBillImageRequest,
+    ExtractBillImageResult,
     HealthResponse,
 )
 from agent.tools import (
@@ -30,6 +32,7 @@ from agent.tools import (
     classify_expense_email,
     extract_new_message,
     extract_invoice_from_pdf,
+    extract_bill_from_image,
 )
 
 # Configure structured logging
@@ -157,6 +160,21 @@ async def extract_invoice(request: ExtractInvoiceRequest):
         return extract_invoice_from_pdf(request, client)
     except ValueError as e:
         log.error("extract_invoice_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/extract-bill-image", response_model=ExtractBillImageResult)
+async def extract_bill_image(request: ExtractBillImageRequest):
+    """
+    Extract expense data from a bill/receipt photo.
+
+    Expects base64-encoded image (JPEG/PNG from camera).
+    """
+    try:
+        client = get_client()
+        return extract_bill_from_image(request, client)
+    except ValueError as e:
+        log.error("extract_bill_image_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 

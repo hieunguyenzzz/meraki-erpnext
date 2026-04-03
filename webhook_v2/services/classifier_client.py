@@ -233,6 +233,46 @@ class RemoteClassifierClient:
             log.error("extract_invoice_request_error", error=str(e))
             return {}
 
+    def extract_bill_image(self, image_data: bytes, mime_type: str = "image/jpeg") -> dict:
+        """
+        Extract expense data from a bill/receipt photo.
+
+        Args:
+            image_data: Raw image file bytes
+            mime_type: Image MIME type (image/jpeg or image/png)
+
+        Returns:
+            Dict with extracted expense fields (amount, date, description, currency, category)
+        """
+        payload = {
+            "image_base64": base64.b64encode(image_data).decode("utf-8"),
+            "mime_type": mime_type,
+        }
+
+        try:
+            response = self._client.post(
+                f"{self.base_url}/extract-bill-image",
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("error"):
+                log.warning("extract_bill_image_error", error=data["error"])
+                return {}
+
+            return {
+                "amount": data.get("amount"),
+                "date": data.get("date"),
+                "description": data.get("description"),
+                "currency": data.get("currency"),
+                "category": data.get("category"),
+            }
+
+        except Exception as e:
+            log.error("extract_bill_image_request_error", error=str(e))
+            return {}
+
     def health_check(self) -> bool:
         """Check if the classifier service is healthy."""
         try:

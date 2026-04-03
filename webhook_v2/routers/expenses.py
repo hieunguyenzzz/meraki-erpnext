@@ -15,9 +15,10 @@ New (wedding expenses with approval):
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
+from webhook_v2.services.classifier_client import RemoteClassifierClient
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries
 
@@ -138,6 +139,27 @@ def _notify_finance_managers(client: ERPNextClient, pi_name: str, amount: float,
 
 class CreateCategoryRequest(BaseModel):
     name: str  # e.g. "Office Rent"
+
+
+@router.post("/expense/scan-bill")
+async def scan_bill(file: UploadFile = File(...)):
+    """Accept an image upload, send to classifier-agent for OCR, return extracted fields."""
+    image_data = await file.read()
+    if not image_data:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    mime_type = file.content_type or "image/jpeg"
+
+    classifier = RemoteClassifierClient()
+    try:
+        result = classifier.extract_bill_image(image_data, mime_type)
+    finally:
+        classifier.close()
+
+    if not result:
+        raise HTTPException(status_code=422, detail="Could not extract data from image")
+
+    return result
 
 
 @router.get("/expense/categories")

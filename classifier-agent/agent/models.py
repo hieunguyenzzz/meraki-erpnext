@@ -131,6 +131,24 @@ class ExtractInvoiceResult(BaseModel):
     error: str | None = None
 
 
+class ExtractBillImageRequest(BaseModel):
+    """Request to extract expense data from a bill/receipt photo."""
+
+    image_base64: str = Field(..., description="Base64 encoded image (JPEG/PNG)")
+    mime_type: str = "image/jpeg"
+
+
+class ExtractBillImageResult(BaseModel):
+    """Result from bill image extraction."""
+
+    amount: float | None = None
+    date: str | None = None
+    description: str | None = None
+    currency: str | None = None
+    category: str | None = None
+    error: str | None = None
+
+
 class HealthResponse(BaseModel):
     """Health check response."""
 

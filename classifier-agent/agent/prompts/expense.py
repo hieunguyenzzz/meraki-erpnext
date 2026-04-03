@@ -76,3 +76,28 @@ Return ONLY valid JSON (no markdown, no explanation):
 }}
 
 If you cannot extract certain fields, use null. For items, if no line items are visible, create a single item with the description "Invoice" and the total amount."""
+
+
+BILL_IMAGE_PROMPT = """Extract expense details from this bill/receipt photo.
+
+Analyze the image and extract:
+1. Total amount (the final amount paid)
+2. Date (if visible)
+3. Brief description of what was purchased/paid for (1 short sentence)
+4. Currency (VND, USD, etc.)
+
+For expense categorization, use these categories:
+- Travel Expenses - MWP: transportation, accommodation, meals during travel
+- Entertainment Expenses - MWP: client entertainment, meals, drinks
+- Office Expenses - MWP: office supplies, stationery, utilities
+- Equipment Expenses - MWP: equipment rental, purchase
+- Miscellaneous Expenses - MWP: anything that doesn't fit above
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "amount": numeric_amount_or_null,
+  "date": "YYYY-MM-DD" or null,
+  "description": "brief description" or null,
+  "currency": "VND" or "USD" or other,
+  "category": "one of the expense accounts listed above"
+}"""

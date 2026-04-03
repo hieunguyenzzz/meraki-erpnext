@@ -1,42 +1,44 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, Phone, UserPlus, Calendar, MessageCircle } from "lucide-react";
+import { Plus, X, UserPlus, Receipt } from "lucide-react";
 import { useNavigate } from "react-router";
+import { AddExpenseSheet } from "@/components/AddExpenseSheet";
 
-const actions = [
-  {
-    icon: UserPlus,
-    label: "New Lead",
-    color: "#C9A9A6",
-    href: "/crm",
-  },
-  {
-    icon: Phone,
-    label: "Log Call",
-    color: "#A8B5A0",
-    href: "/crm/chats",
-  },
-  {
-    icon: Calendar,
-    label: "Schedule",
-    color: "#C4A962",
-    href: "/projects",
-  },
-  {
-    icon: MessageCircle,
-    label: "Quick Note",
-    color: "#7BA3C9",
-    href: "/crm/chats",
-  },
-];
+interface QuickAction {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  color: string;
+  href?: string;
+  onClick?: () => void;
+}
 
 export function QuickActionFab() {
   const [isOpen, setIsOpen] = useState(false);
+  const [expenseSheetOpen, setExpenseSheetOpen] = useState(false);
   const navigate = useNavigate();
 
-  const handleAction = (href: string) => {
+  const actions: QuickAction[] = [
+    {
+      icon: Receipt,
+      label: "Add Expense",
+      color: "#7C9885",
+      onClick: () => setExpenseSheetOpen(true),
+    },
+    {
+      icon: UserPlus,
+      label: "New Lead",
+      color: "#C9A9A6",
+      href: "/crm",
+    },
+  ];
+
+  const handleAction = (action: QuickAction) => {
     setIsOpen(false);
-    navigate(href);
+    if (action.onClick) {
+      action.onClick();
+    } else if (action.href) {
+      navigate(action.href);
+    }
   };
 
   return (
@@ -66,7 +68,7 @@ export function QuickActionFab() {
               {actions.map((action, index) => (
                 <motion.button
                   key={action.label}
-                  onClick={() => handleAction(action.href)}
+                  onClick={() => handleAction(action)}
                   initial={{ opacity: 0, scale: 0.5, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.5, y: 20 }}
@@ -110,6 +112,8 @@ export function QuickActionFab() {
           )}
         </motion.button>
       </div>
+
+      <AddExpenseSheet open={expenseSheetOpen} onOpenChange={setExpenseSheetOpen} />
     </>
   );
 }
