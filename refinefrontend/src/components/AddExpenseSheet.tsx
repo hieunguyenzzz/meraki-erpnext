@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useList, useInvalidate, usePermissions } from "@refinedev/core";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
@@ -57,21 +57,31 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
   const [success, setSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch open projects
-  const { result: projectsResult } = useList<{
-    name: string;
-    project_name: string;
-    status: string;
-  }>({
+  const ASSIGNMENT_FIELDS = [
+    "custom_lead_planner", "custom_support_planner",
+    "custom_assistant_1", "custom_assistant_2", "custom_assistant_3",
+    "custom_assistant_4", "custom_assistant_5",
+  ] as const;
+
+  // Fetch open projects with assignment fields
+  const { result: projectsResult } = useList<Record<string, string>>({
     resource: "Project",
     filters: [{ field: "status", operator: "eq", value: "Open" }],
     pagination: { mode: "off" },
-    meta: { fields: ["name", "project_name", "status"] },
+    meta: {
+      fields: ["name", "project_name", "status", ...ASSIGNMENT_FIELDS],
+    },
   });
-  const projects = (projectsResult?.data ?? []) as {
-    name: string;
-    project_name: string;
-  }[];
+  const allProjects = (projectsResult?.data ?? []) as Record<string, string>[];
+
+  // Finance sees all projects; staff sees only their assigned weddings
+  const projects = useMemo(() => {
+    if (isFinance) return allProjects;
+    if (!employeeId) return [];
+    return allProjects.filter((p) =>
+      ASSIGNMENT_FIELDS.some((f) => p[f] === employeeId)
+    );
+  }, [allProjects, employeeId, isFinance]);
 
   // Fetch expense categories
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
