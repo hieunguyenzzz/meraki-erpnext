@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useGetIdentity, useLogout } from "@refinedev/core";
 import { LogOut, User, Calendar, Home, Bell, Receipt } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
@@ -24,7 +24,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RequestLeaveSheet } from "@/components/RequestLeaveSheet";
-import { AddExpenseSheet } from "@/components/AddExpenseSheet";
 
 const initialWfhForm = {
   from_date: "",
@@ -36,10 +35,10 @@ export function UserNav() {
   const { data: identity } = useGetIdentity<{ email: string; name?: string }>();
   const { mutate: logout } = useLogout({});
   const { employeeId } = useMyEmployee();
+  const navigate = useNavigate();
   // Dialog states
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [wfhDialogOpen, setWfhDialogOpen] = useState(false);
-  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
 
   // WFH form states
   const [wfhForm, setWfhForm] = useState(initialWfhForm);
@@ -151,7 +150,7 @@ export function UserNav() {
             <Home className="mr-2 h-4 w-4" />
             Request WFH
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setExpenseDialogOpen(true)}>
+          <DropdownMenuItem onClick={() => navigate("/finance/expenses/new")}>
             <Receipt className="mr-2 h-4 w-4" />
             Add Expense
           </DropdownMenuItem>
@@ -164,7 +163,6 @@ export function UserNav() {
       </DropdownMenu>
 
       <RequestLeaveSheet open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen} />
-      <AddExpenseSheet open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen} />
 
       {/* WFH Request Sheet */}
       <Sheet open={wfhDialogOpen} onOpenChange={handleWfhDialogChange}>

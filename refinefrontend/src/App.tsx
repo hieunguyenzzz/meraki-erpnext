@@ -52,6 +52,7 @@ import VenueDetailPage from "@/pages/venues/VenueDetailPage";
 import VendorsPage from "@/pages/vendors/VendorsPage";
 import VendorDetailPage from "@/pages/vendors/VendorDetailPage";
 import NotificationsPage from "@/pages/NotificationsPage";
+import AddExpensePage from "@/pages/finance/AddExpensePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -180,6 +181,7 @@ export default function App() {
               <Route path="/finance/invoices" element={<InvoicesPage />} />
               <Route path="/finance/invoices/:name" element={<InvoiceDetailPage />} />
               <Route path="/finance/expenses" element={<ExpensesPage />} />
+              <Route path="/finance/expenses/new" element={<AddExpensePage />} />
               <Route path="/finance/expenses/:name" element={<ExpenseDetailPage />} />
               <Route path="/finance/payments" element={<PaymentsPage />} />
               <Route path="/finance/payments/:name" element={<PaymentDetailPage />} />
