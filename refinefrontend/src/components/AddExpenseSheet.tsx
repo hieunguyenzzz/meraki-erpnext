@@ -111,9 +111,11 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
   function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setPhoto(file);
-    photoRef.current = file;
-    setPhotoPreview(URL.createObjectURL(file));
+    // Clone the file into a new Blob+name so it survives even if the input is cleared
+    const cloned = new File([file], file.name, { type: file.type, lastModified: file.lastModified });
+    setPhoto(cloned);
+    photoRef.current = cloned;
+    setPhotoPreview(URL.createObjectURL(cloned));
   }
 
   function removePhoto() {
@@ -234,7 +236,12 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
+      <SheetContent
+        side="right"
+        className="sm:max-w-md flex flex-col p-0"
+        onInteractOutside={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <SheetHeader className="px-6 py-4 border-b shrink-0">
           <SheetTitle>Add Expense</SheetTitle>
         </SheetHeader>
