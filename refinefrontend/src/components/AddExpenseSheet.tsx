@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useList, useInvalidate, usePermissions } from "@refinedev/core";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
-import { uploadFile } from "@/lib/fileUpload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -195,10 +194,15 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
 
       const result = await res.json();
 
-      // Attach photo as receipt if available
+      // Attach photo as receipt via backend (bypasses ERPNext permissions)
       if (photo && result.name) {
         try {
-          await uploadFile(photo, "Purchase Invoice", result.name, false);
+          const attachForm = new FormData();
+          attachForm.append("file", photo);
+          await fetch(`/inquiry-api/expense/${result.name}/attach`, {
+            method: "POST",
+            body: attachForm,
+          });
         } catch {
           // Non-critical — expense was created, just receipt attachment failed
         }

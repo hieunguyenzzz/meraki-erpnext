@@ -162,6 +162,30 @@ async def scan_bill(file: UploadFile = File(...)):
     return result
 
 
+@router.post("/expense/{pi_name}/attach")
+async def attach_receipt(pi_name: str, file: UploadFile = File(...)):
+    """Attach a receipt image to a Purchase Invoice (uses admin API keys)."""
+    file_data = await file.read()
+    if not file_data:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    client = ERPNextClient()
+    try:
+        result = client.upload_file(
+            file_data=file_data,
+            filename=file.filename or "receipt.jpg",
+            doctype="Purchase Invoice",
+            docname=pi_name,
+            is_private=False,
+        )
+        file_url = result.get("message", {}).get("file_url")
+        log.info("receipt_attached", pi=pi_name, file_url=file_url)
+        return {"file_url": file_url}
+    except Exception as e:
+        log.error("receipt_attach_failed", pi=pi_name, error=str(e))
+        raise HTTPException(status_code=400, detail=f"Failed to attach receipt: {e}")
+
+
 @router.get("/expense/categories")
 def list_expense_categories():
     """List expense accounts tagged as wedding expense categories."""

@@ -198,6 +198,29 @@ class ERPNextClient:
         response.raise_for_status()
         return response.json()
 
+    def upload_file(self, file_data: bytes, filename: str, doctype: str, docname: str, is_private: bool = False) -> dict[str, Any]:
+        """Upload a file and attach it to a document."""
+        site_name = self._site_name
+        headers = {
+            "Authorization": f"token {self.api_key}:{self.api_secret}",
+            "X-Frappe-Site-Name": site_name,
+        }
+        response = requests.post(
+            f"{self.url}/api/method/upload_file",
+            headers=headers,
+            files={"file": (filename, file_data)},
+            data={
+                "doctype": doctype,
+                "docname": docname,
+                "is_private": "1" if is_private else "0",
+            },
+            timeout=60,
+        )
+        if not response.ok:
+            log.error("upload_file_error", status=response.status_code, body=response.text[:500])
+        response.raise_for_status()
+        return response.json()
+
     # Lead Operations
 
     def get_lead(self, lead_name: str) -> dict | None:
