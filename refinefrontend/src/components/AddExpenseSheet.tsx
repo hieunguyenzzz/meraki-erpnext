@@ -55,6 +55,7 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<File | null>(null);
 
   const ASSIGNMENT_FIELDS = [
     "custom_lead_planner", "custom_support_planner",
@@ -95,6 +96,7 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
   function resetForm() {
     setForm({ ...initialForm, date: today() });
     setPhoto(null);
+    photoRef.current = null;
     setPhotoPreview(null);
     setError(null);
     setSuccess(null);
@@ -110,11 +112,13 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
     const file = e.target.files?.[0];
     if (!file) return;
     setPhoto(file);
+    photoRef.current = file;
     setPhotoPreview(URL.createObjectURL(file));
   }
 
   function removePhoto() {
     setPhoto(null);
+    photoRef.current = null;
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -169,10 +173,8 @@ export function AddExpenseSheet({ open, onOpenChange }: AddExpenseSheetProps) {
       return;
     }
 
-    // Capture the photo file BEFORE any async work. On mobile browsers,
-    // React state or the file input can be cleared if the Sheet fires
-    // onOpenChange or the page is suspended during the await.
-    const capturedPhoto = photo ?? fileInputRef.current?.files?.[0] ?? null;
+    // Use ref (immune to React state resets) with fallbacks
+    const capturedPhoto = photoRef.current ?? photo ?? fileInputRef.current?.files?.[0] ?? null;
 
     setIsSubmitting(true);
     setError(null);
