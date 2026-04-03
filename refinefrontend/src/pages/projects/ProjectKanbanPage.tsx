@@ -153,7 +153,7 @@ export default function ProjectKanbanPage() {
           cell: ({ row }) => {
             const amount = row.getValue("package_amount") as number | undefined;
             return amount
-              ? <span>{amount.toLocaleString("vi-VN")} \u20AB</span>
+              ? <span>{amount.toLocaleString("vi-VN")} {"\u20AB"}</span>
               : <span className="text-muted-foreground">{"\u2014"}</span>;
           },
         },
@@ -175,7 +175,7 @@ export default function ProjectKanbanPage() {
           cell: ({ row }) => {
             const amount = row.getValue("commission_base") as number | undefined;
             return amount
-              ? <span>{amount.toLocaleString("vi-VN")} \u20AB</span>
+              ? <span>{amount.toLocaleString("vi-VN")} {"\u20AB"}</span>
               : <span className="text-muted-foreground">{"\u2014"}</span>;
           },
         },

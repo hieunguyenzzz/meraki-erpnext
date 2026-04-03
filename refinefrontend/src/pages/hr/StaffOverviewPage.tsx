@@ -419,7 +419,7 @@ export default function StaffOverviewPage() {
                 <Badge key={r.role} variant={r.variant as any}>{r.label}</Badge>
               ))
             ) : (
-              <span className="text-muted-foreground text-sm">\u2014</span>
+              <span className="text-muted-foreground text-sm">{"\u2014"}</span>
             )}
             {canManageRoles && (
               <Button
