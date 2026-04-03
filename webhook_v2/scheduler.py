@@ -81,6 +81,41 @@ def mark_stale_leads_job():
         log.error("scheduled_job_error", job="mark_stale_leads", error=str(e))
 
 
+def update_project_stages_job():
+    """Auto-update project stages based on wedding date."""
+    import json
+    from datetime import date
+
+    from webhook_v2.services.erpnext import ERPNextClient
+
+    log.info("scheduled_job_starting", job="update_project_stages")
+    try:
+        client = ERPNextClient()
+        today_str = date.today().isoformat()
+
+        projects = client._get("/api/resource/Project", params={
+            "filters": json.dumps([
+                ["status", "=", "Open"],
+                ["expected_end_date", "<", today_str],
+                ["expected_end_date", "is", "set"],
+                ["custom_project_stage", "!=", "Completed"],
+            ]),
+            "fields": json.dumps(["name", "project_name", "expected_end_date", "custom_project_stage"]),
+            "limit_page_length": 0,
+        }).get("data", [])
+
+        for p in projects:
+            client._put(f"/api/resource/Project/{p['name']}", {
+                "custom_project_stage": "Completed",
+            })
+            log.info("project_stage_updated", project=p["name"],
+                     old_stage=p["custom_project_stage"], new_stage="Completed")
+
+        log.info("scheduled_job_complete", job="update_project_stages", updated=len(projects))
+    except Exception as e:
+        log.error("scheduled_job_error", job="update_project_stages", error=str(e))
+
+
 def start_fetch_scheduler() -> BackgroundScheduler:
     """
     Start the fetch-only scheduler (IMAP fetch without processing).
@@ -155,6 +190,15 @@ def start_scheduler(interval_minutes: int = 5) -> BackgroundScheduler:
         trigger=IntervalTrigger(hours=6),
         id="mark_stale_leads",
         name="Mark stale leads as lost",
+        replace_existing=True,
+    )
+
+    # Auto-update project stages for past weddings (every 6 hours)
+    _scheduler.add_job(
+        update_project_stages_job,
+        trigger=IntervalTrigger(hours=6),
+        id="update_project_stages",
+        name="Auto-update project stages for past weddings",
         replace_existing=True,
     )
 
