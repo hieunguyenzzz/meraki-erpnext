@@ -28,6 +28,7 @@ interface LeaveApp {
   total_leave_days: number;
   status: string;
   docstatus: number;
+  description: string;
 }
 
 interface AllocEdit {
@@ -49,7 +50,7 @@ export default function LeavesPage() {
     resource: "Leave Application",
     pagination: { mode: "off" },
     sorters: [{ field: "creation", order: "desc" }],
-    meta: { fields: ["name", "employee", "employee_name", "leave_type", "from_date", "to_date", "total_leave_days", "status", "docstatus"] },
+    meta: { fields: ["name", "employee", "employee_name", "leave_type", "from_date", "to_date", "total_leave_days", "status", "docstatus", "description"] },
   });
 
   // --- Balances tab data ---
@@ -291,6 +292,15 @@ export default function LeavesPage() {
       accessorKey: "total_leave_days",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Days" className="text-right" />,
       cell: ({ row }) => <div className="text-right">{row.original.total_leave_days}</div>,
+    },
+    {
+      accessorKey: "description",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Note" />,
+      cell: ({ row }) => (
+        <span className="text-muted-foreground text-sm max-w-[200px] truncate block" title={row.original.description || ""}>
+          {row.original.description || "\u2014"}
+        </span>
+      ),
     },
     {
       accessorKey: "status",
