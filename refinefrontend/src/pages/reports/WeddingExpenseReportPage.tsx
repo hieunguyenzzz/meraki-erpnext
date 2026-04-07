@@ -28,6 +28,7 @@ interface ExpenseRow {
   staff: string;
   staff_name: string;
   supplier_name: string;
+  receipt_url: string | null;
 }
 
 interface ExpenseSummary {
@@ -249,6 +250,7 @@ export default function WeddingExpenseReportPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
+                    <TableHead className="w-[52px]"></TableHead>
                     <TableHead className="min-w-[100px]">Date</TableHead>
                     <TableHead className="min-w-[200px]">Description</TableHead>
                     <TableHead className="min-w-[150px]">Category</TableHead>
@@ -260,7 +262,7 @@ export default function WeddingExpenseReportPage() {
                 <TableBody>
                   {rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                         No expenses found for this wedding
                       </TableCell>
                     </TableRow>
@@ -268,7 +270,7 @@ export default function WeddingExpenseReportPage() {
                     grouped.map((group) => (
                       <>
                         <TableRow key={`header-${group.label}`} className="bg-muted/30">
-                          <TableCell colSpan={4} className="font-semibold text-sm">
+                          <TableCell colSpan={5} className="font-semibold text-sm">
                             {group.label}
                           </TableCell>
                           <TableCell className="text-right font-semibold text-sm">
@@ -286,7 +288,7 @@ export default function WeddingExpenseReportPage() {
                   )}
                   {rows.length > 0 && (
                     <TableRow className="bg-muted font-bold">
-                      <TableCell colSpan={4}>Total</TableCell>
+                      <TableCell colSpan={5}>Total</TableCell>
                       <TableCell className="text-right">{formatVND(summary?.total)}</TableCell>
                       <TableCell />
                     </TableRow>
@@ -310,6 +312,21 @@ export default function WeddingExpenseReportPage() {
 function ExpenseTableRow({ row }: { row: ExpenseRow }) {
   return (
     <TableRow>
+      <TableCell className="w-[52px] p-1">
+        {row.receipt_url ? (
+          <a href={row.receipt_url} target="_blank" rel="noopener noreferrer">
+            <img
+              src={row.receipt_url}
+              alt=""
+              className="w-10 h-10 rounded object-cover hover:opacity-80 transition-opacity"
+            />
+          </a>
+        ) : (
+          <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-muted-foreground text-xs">
+            --
+          </div>
+        )}
+      </TableCell>
       <TableCell className="text-sm">{formatDate(row.posting_date)}</TableCell>
       <TableCell className="text-sm">{row.description}</TableCell>
       <TableCell className="text-sm">{row.category_label}</TableCell>

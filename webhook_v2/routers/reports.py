@@ -288,6 +288,27 @@ def wedding_expense_report(project: str = Query(...)):
         "limit_page_length": 0,
     }).get("data", [])
 
+    # Batch-fetch attached files for receipt thumbnails
+    pi_names = [pi["name"] for pi in pis]
+    file_map: dict[str, str] = {}
+    if pi_names:
+        try:
+            files = client._get("/api/resource/File", params={
+                "filters": json.dumps([
+                    ["attached_to_doctype", "=", "Purchase Invoice"],
+                    ["attached_to_name", "in", pi_names],
+                    ["file_url", "is", "set"],
+                ]),
+                "fields": json.dumps(["attached_to_name", "file_url"]),
+                "limit_page_length": 0,
+            }).get("data", [])
+            for f in files:
+                doc_name = f.get("attached_to_name")
+                if doc_name and doc_name not in file_map:
+                    file_map[doc_name] = f["file_url"]
+        except Exception:
+            pass
+
     # Collect unique staff IDs for batch name lookup
     staff_ids = {pi["custom_expense_staff"] for pi in pis if pi.get("custom_expense_staff")}
     staff_names: dict[str, str] = {}
@@ -340,6 +361,7 @@ def wedding_expense_report(project: str = Query(...)):
             "staff": staff_id,
             "staff_name": staff_names.get(staff_id, ""),
             "supplier_name": pi.get("supplier_name", ""),
+            "receipt_url": file_map.get(pi["name"]),
         })
 
     return {
