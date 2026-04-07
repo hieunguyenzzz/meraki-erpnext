@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router";
 import { usePermissions } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Users, AlertCircle, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck } from "lucide-react";
+import { Users, Clock, CheckCircle, Pencil, Check, UserPlus, Copy, CheckCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,6 @@ import { extractErrorMessage } from "@/lib/errors";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 import { formatDate, displayName } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import {
-  getReviewBadgeVariant,
-  type ReviewStatus,
-} from "@/lib/review-status";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { DragEndEvent } from "@dnd-kit/core";
@@ -37,8 +33,7 @@ interface StaffRow {
   custom_display_order?: number;
   user_id?: string;
   staff_roles: string[];
-  review_status: ReviewStatus;
-  review_status_text: string;
+  is_probation: boolean;
   leave_allocated: number;
   leave_taken: number;
   leave_remaining: number;
@@ -59,8 +54,7 @@ interface StaffOverviewData {
     custom_display_order?: number;
     user_id?: string;
     custom_meraki_id?: number;
-    review_status: ReviewStatus;
-    review_status_text: string;
+    is_probation?: boolean;
     leave_allocated: number;
     leave_taken: number;
     leave_remaining: number;
@@ -73,7 +67,7 @@ interface StaffOverviewData {
   };
 }
 
-type SummaryFilter = "all" | "overdue" | "due-soon" | "up-to-date";
+type SummaryFilter = "all" | "probation";
 
 export default function StaffOverviewPage() {
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>("all");
@@ -159,8 +153,7 @@ export default function StaffOverviewPage() {
       custom_display_order: emp.custom_display_order,
       user_id: emp.user_id,
       staff_roles: rolesMap[emp.name] ?? [],
-      review_status: emp.review_status as ReviewStatus,
-      review_status_text: emp.review_status_text,
+      is_probation: !!emp.is_probation,
       leave_allocated: emp.leave_allocated,
       leave_taken: emp.leave_taken,
       leave_remaining: emp.leave_remaining,
@@ -212,24 +205,15 @@ export default function StaffOverviewPage() {
     });
   }
 
-  // Summary counts from backend
-  const summary = overviewData?.summary ?? { total: 0, overdue: 0, due_soon: 0, up_to_date: 0 };
+  // Summary counts
+  const totalStaff = overviewData?.data?.length ?? 0;
+  const probationCount = staffData.filter((r) => r.is_probation).length;
 
   // Filter data by summary card selection
   const filteredData = useMemo(() => {
     if (summaryFilter === "all") return orderedStaff;
-    return orderedStaff.filter((row) => {
-      switch (summaryFilter) {
-        case "overdue":
-          return row.review_status === "overdue" || row.review_status === "never-reviewed";
-        case "due-soon":
-          return row.review_status === "due-soon";
-        case "up-to-date":
-          return row.review_status === "up-to-date";
-        default:
-          return true;
-      }
-    });
+    if (summaryFilter === "probation") return orderedStaff.filter((row) => row.is_probation);
+    return orderedStaff;
   }, [orderedStaff, summaryFilter]);
 
   // Handle adding review
@@ -451,14 +435,15 @@ export default function StaffOverviewPage() {
       cell: ({ row }) => formatDate(row.original.date_of_joining),
     },
     {
-      accessorKey: "review_status",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Review Status" />,
-      cell: ({ row }) => {
-        const status = row.original.review_status;
-        const variant = getReviewBadgeVariant(status);
-        return <Badge variant={variant}>{row.original.review_status_text}</Badge>;
-      },
-      filterFn: "arrIncludesSome",
+      id: "probation",
+      accessorFn: (row) => row.is_probation ? "Yes" : "No",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Probation" />,
+      cell: ({ row }) =>
+        row.original.is_probation ? (
+          <Badge variant="outline" className="border-amber-500 text-amber-600">Probation</Badge>
+        ) : (
+          <span className="text-muted-foreground text-sm">{"\u2014"}</span>
+        ),
     },
   ];
 
@@ -490,46 +475,20 @@ export default function StaffOverviewPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.total}</div>
+            <div className="text-2xl font-bold">{totalStaff}</div>
           </CardContent>
         </Card>
 
         <Card
-          className={`cursor-pointer transition-colors ${summaryFilter === "overdue" ? "ring-2 ring-destructive" : "hover:bg-muted/50"}`}
-          onClick={() => setSummaryFilter("overdue")}
+          className={`cursor-pointer transition-colors ${summaryFilter === "probation" ? "ring-2 ring-amber-500" : "hover:bg-muted/50"}`}
+          onClick={() => setSummaryFilter("probation")}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Review Overdue</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{summary.overdue}</div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={`cursor-pointer transition-colors ${summaryFilter === "due-soon" ? "ring-2 ring-amber-500" : "hover:bg-muted/50"}`}
-          onClick={() => setSummaryFilter("due-soon")}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Due Soon</CardTitle>
+            <CardTitle className="text-sm font-medium">On Probation</CardTitle>
             <Clock className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{summary.due_soon}</div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={`cursor-pointer transition-colors ${summaryFilter === "up-to-date" ? "ring-2 ring-green-500" : "hover:bg-muted/50"}`}
-          onClick={() => setSummaryFilter("up-to-date")}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Up to Date</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{summary.up_to_date}</div>
+            <div className="text-2xl font-bold text-amber-600">{probationCount}</div>
           </CardContent>
         </Card>
       </div>
@@ -558,16 +517,6 @@ export default function StaffOverviewPage() {
               { label: "Operations", value: "Operations" },
               { label: "Management", value: "Management" },
               { label: "Administration", value: "Administration" },
-            ],
-          },
-          {
-            id: "review_status",
-            title: "Review Status",
-            options: [
-              { label: "Overdue", value: "overdue" },
-              { label: "Never Reviewed", value: "never-reviewed" },
-              { label: "Due Soon", value: "due-soon" },
-              { label: "Up to Date", value: "up-to-date" },
             ],
           },
         ]}
