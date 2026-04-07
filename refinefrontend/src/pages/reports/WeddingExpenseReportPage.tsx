@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -47,29 +48,48 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive"> = 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export default function WeddingExpenseReportPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedYear, setSelectedYear] = useState<string>("__none__");
-  const [selectedMonth, setSelectedMonth] = useState<string>("__none__");
-  const [selectedProject, setSelectedProject] = useState("");
   const [rows, setRows] = useState<ExpenseRow[]>([]);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>("all");
+  const initializedRef = useRef(false);
 
-  // Fetch project list on mount
+  // Read filter state from URL
+  const selectedYear = searchParams.get("year") || "__none__";
+  const selectedMonth = searchParams.get("month") || "__none__";
+  const selectedProject = searchParams.get("project") || "";
+
+  // Helper to update URL params (replaces setState calls)
+  const setFilters = (updates: Record<string, string>) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [k, v] of Object.entries(updates)) {
+        if (!v || v === "__none__") next.delete(k);
+        else next.set(k, v);
+      }
+      return next;
+    }, { replace: true });
+  };
+
+  // Fetch project list on mount, default year if no URL params
   useEffect(() => {
     fetch("/inquiry-api/reports/wedding-expenses/projects", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
         const data = d.data ?? [];
         setProjects(data);
-        // Default to current year
-        const currentYear = String(new Date().getFullYear());
-        const years = new Set(data.map((p: Project) => p.expected_end_date?.slice(0, 4)).filter(Boolean));
-        if (years.has(currentYear)) setSelectedYear(currentYear);
+        // Only set default year if no params in URL at all
+        if (!initializedRef.current && !searchParams.has("year") && !searchParams.has("project")) {
+          const currentYear = String(new Date().getFullYear());
+          const hasYear = data.some((p: Project) => p.expected_end_date?.startsWith(currentYear));
+          if (hasYear) setFilters({ year: currentYear });
+        }
+        initializedRef.current = true;
       })
       .catch(() => setProjects([]));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive available years from projects
   const years = useMemo(() => {
@@ -106,10 +126,6 @@ export default function WeddingExpenseReportPage() {
       return true;
     });
   }, [projects, selectedYear, selectedMonth]);
-
-  // Reset downstream selections when filters change
-  useEffect(() => { setSelectedMonth("__none__"); setSelectedProject(""); }, [selectedYear]);
-  useEffect(() => { setSelectedProject(""); }, [selectedMonth]);
 
   // Fetch expenses when project changes
   useEffect(() => {
@@ -157,7 +173,7 @@ export default function WeddingExpenseReportPage() {
           <p className="text-muted-foreground">View detailed expenses per wedding</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Select value={selectedYear} onValueChange={setSelectedYear}>
+          <Select value={selectedYear} onValueChange={(v) => setFilters({ year: v, month: "", project: "" })}>
             <SelectTrigger className="w-[100px]">
               <SelectValue placeholder="Year" />
             </SelectTrigger>
@@ -168,7 +184,7 @@ export default function WeddingExpenseReportPage() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={selectedYear === "__none__"}>
+          <Select value={selectedMonth} onValueChange={(v) => setFilters({ month: v, project: "" })} disabled={selectedYear === "__none__"}>
             <SelectTrigger className="w-[110px]">
               <SelectValue placeholder="Month" />
             </SelectTrigger>
@@ -179,7 +195,7 @@ export default function WeddingExpenseReportPage() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={selectedProject || "__none__"} onValueChange={(v) => setSelectedProject(v === "__none__" ? "" : v)}>
+          <Select value={selectedProject || "__none__"} onValueChange={(v) => setFilters({ project: v === "__none__" ? "" : v })}>
             <SelectTrigger className="w-[260px]">
               <SelectValue placeholder="Select wedding..." />
             </SelectTrigger>
