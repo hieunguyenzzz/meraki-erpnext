@@ -48,6 +48,7 @@ import MyAttendancePage from "@/pages/self-service/MyAttendancePage";
 import SettingsPage from "@/pages/admin/SettingsPage";
 import VenuesPage from "@/pages/venues/VenuesPage";
 import LeaveReportPage from "@/pages/reports/LeaveReportPage";
+import WeddingExpenseReportPage from "@/pages/reports/WeddingExpenseReportPage";
 import VenueDetailPage from "@/pages/venues/VenueDetailPage";
 import VendorsPage from "@/pages/vendors/VendorsPage";
 import VendorDetailPage from "@/pages/vendors/VendorDetailPage";
@@ -176,6 +177,7 @@ export default function App() {
 
               {/* Reports */}
               <Route path="/reports/leaves" element={<LeaveReportPage />} />
+              <Route path="/reports/expenses" element={<WeddingExpenseReportPage />} />
 
               {/* Finance */}
               <Route path="/finance/invoices" element={<InvoicesPage />} />

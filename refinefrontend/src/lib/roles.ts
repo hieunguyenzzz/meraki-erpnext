@@ -88,6 +88,7 @@ export const MODULES: ModuleConfig[] = [
     roles: REPORT_ROLES,
     children: [
       { label: "Leave Report", path: "/reports/leaves", icon: CalendarDays },
+      { label: "Expense Report", path: "/reports/expenses", icon: Receipt },
     ],
   },
   {

@@ -1,13 +1,15 @@
 """
-Leave report endpoint — computes the full leave calendar server-side.
+Report endpoints — server-side computed reports.
 
-GET /reports/leave-report  — monthly breakdown, old/new period balances, accrual
+GET /reports/leave-report                — monthly breakdown, old/new period balances, accrual
+GET /reports/wedding-expenses            — expenses for a specific wedding project
+GET /reports/wedding-expenses/projects   — lightweight project list for dropdown
 """
 
 import json
 import math
 from datetime import date, timedelta
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
 
@@ -247,4 +249,105 @@ def leave_report():
         "current_year": current_year,
         "months": MONTHS,
         "employee_count": len(rows),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Wedding Expense Report
+# ---------------------------------------------------------------------------
+
+@router.get("/reports/wedding-expenses/projects")
+def wedding_expense_projects():
+    """Lightweight project list for the wedding expense report dropdown."""
+    client = ERPNextClient()
+    projects = client._get("/api/resource/Project", params={
+        "filters": json.dumps([["status", "!=", "Cancelled"]]),
+        "fields": json.dumps(["name", "project_name", "expected_end_date"]),
+        "order_by": "expected_end_date desc",
+        "limit_page_length": 0,
+    }).get("data", [])
+    return {"data": projects}
+
+
+@router.get("/reports/wedding-expenses")
+def wedding_expense_report(project: str = Query(...)):
+    """Detailed expense report for a single wedding project."""
+    client = ERPNextClient()
+
+    # Fetch all PIs for this project (Draft + Submitted)
+    pis = client._get("/api/resource/Purchase Invoice", params={
+        "filters": json.dumps([
+            ["project", "=", project],
+            ["docstatus", "in", [0, 1]],
+        ]),
+        "fields": json.dumps([
+            "name", "supplier", "supplier_name", "posting_date",
+            "grand_total", "docstatus", "custom_rejected", "custom_expense_staff",
+        ]),
+        "order_by": "posting_date asc",
+        "limit_page_length": 0,
+    }).get("data", [])
+
+    # Collect unique staff IDs for batch name lookup
+    staff_ids = {pi["custom_expense_staff"] for pi in pis if pi.get("custom_expense_staff")}
+    staff_names: dict[str, str] = {}
+    if staff_ids:
+        emps = client._get("/api/resource/Employee", params={
+            "filters": json.dumps([["name", "in", list(staff_ids)]]),
+            "fields": json.dumps(["name", "employee_name"]),
+            "limit_page_length": 0,
+        }).get("data", [])
+        staff_names = {e["name"]: e["employee_name"] for e in emps}
+
+    # Build result rows — must fetch each PI doc for items (child table 403)
+    rows = []
+    total = 0.0
+    approved_total = 0.0
+    pending_total = 0.0
+    for pi in pis:
+        docstatus = pi.get("docstatus", 0)
+        rejected = pi.get("custom_rejected", 0)
+        if docstatus == 0 and rejected:
+            status = "Rejected"
+        elif docstatus == 0:
+            status = "Pending"
+        else:
+            status = "Approved"
+
+        pi_doc = client._get(f"/api/resource/Purchase Invoice/{pi['name']}").get("data", {})
+        items = pi_doc.get("items", [])
+        first_item = items[0] if items else {}
+
+        amount = float(pi.get("grand_total", 0))
+        category = first_item.get("expense_account", "")
+        description = first_item.get("item_name", "")
+        staff_id = pi.get("custom_expense_staff", "")
+
+        total += amount
+        if status == "Approved":
+            approved_total += amount
+        elif status == "Pending":
+            pending_total += amount
+
+        rows.append({
+            "name": pi["name"],
+            "posting_date": pi["posting_date"],
+            "description": description,
+            "amount": amount,
+            "category": category,
+            "category_label": category.replace(" - MWP", "") if category else "",
+            "status": status,
+            "staff": staff_id,
+            "staff_name": staff_names.get(staff_id, ""),
+            "supplier_name": pi.get("supplier_name", ""),
+        })
+
+    return {
+        "data": rows,
+        "summary": {
+            "total": total,
+            "approved": approved_total,
+            "pending": pending_total,
+            "count": len(rows),
+        },
     }
