@@ -44,8 +44,12 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive"> = 
   Rejected: "destructive",
 };
 
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 export default function WeddingExpenseReportPage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedYear, setSelectedYear] = useState<string>("__none__");
+  const [selectedMonth, setSelectedMonth] = useState<string>("__none__");
   const [selectedProject, setSelectedProject] = useState("");
   const [rows, setRows] = useState<ExpenseRow[]>([]);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
@@ -56,9 +60,56 @@ export default function WeddingExpenseReportPage() {
   useEffect(() => {
     fetch("/inquiry-api/reports/wedding-expenses/projects", { credentials: "include" })
       .then((r) => r.json())
-      .then((d) => setProjects(d.data ?? []))
+      .then((d) => {
+        const data = d.data ?? [];
+        setProjects(data);
+        // Default to current year
+        const currentYear = String(new Date().getFullYear());
+        const years = new Set(data.map((p: Project) => p.expected_end_date?.slice(0, 4)).filter(Boolean));
+        if (years.has(currentYear)) setSelectedYear(currentYear);
+      })
       .catch(() => setProjects([]));
   }, []);
+
+  // Derive available years from projects
+  const years = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of projects) {
+      const y = p.expected_end_date?.slice(0, 4);
+      if (y) s.add(y);
+    }
+    return Array.from(s).sort().reverse();
+  }, [projects]);
+
+  // Derive available months for selected year
+  const months = useMemo(() => {
+    if (selectedYear === "__none__") return [];
+    const s = new Set<number>();
+    for (const p of projects) {
+      if (p.expected_end_date?.startsWith(selectedYear)) {
+        const m = parseInt(p.expected_end_date.slice(5, 7), 10);
+        if (m >= 1 && m <= 12) s.add(m);
+      }
+    }
+    return Array.from(s).sort((a, b) => a - b);
+  }, [projects, selectedYear]);
+
+  // Filter projects by year + month
+  const filteredProjects = useMemo(() => {
+    return projects.filter((p) => {
+      if (!p.expected_end_date) return false;
+      if (selectedYear !== "__none__" && !p.expected_end_date.startsWith(selectedYear)) return false;
+      if (selectedMonth !== "__none__") {
+        const m = String(parseInt(selectedMonth, 10)).padStart(2, "0");
+        if (p.expected_end_date.slice(5, 7) !== m) return false;
+      }
+      return true;
+    });
+  }, [projects, selectedYear, selectedMonth]);
+
+  // Reset downstream selections when filters change
+  useEffect(() => { setSelectedMonth("__none__"); setSelectedProject(""); }, [selectedYear]);
+  useEffect(() => { setSelectedProject(""); }, [selectedMonth]);
 
   // Fetch expenses when project changes
   useEffect(() => {
@@ -100,24 +151,48 @@ export default function WeddingExpenseReportPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Wedding Expense Report</h1>
           <p className="text-muted-foreground">View detailed expenses per wedding</p>
         </div>
-        <Select value={selectedProject || "__none__"} onValueChange={(v) => setSelectedProject(v === "__none__" ? "" : v)}>
-          <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select a wedding..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">Select a wedding...</SelectItem>
-            {projects.map((p) => (
-              <SelectItem key={p.name} value={p.name}>
-                {p.project_name || p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2 flex-wrap">
+          <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="w-[100px]">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">All years</SelectItem>
+              {years.map((y) => (
+                <SelectItem key={y} value={y}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={selectedYear === "__none__"}>
+            <SelectTrigger className="w-[110px]">
+              <SelectValue placeholder="Month" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">All months</SelectItem>
+              {months.map((m) => (
+                <SelectItem key={m} value={String(m)}>{MONTH_LABELS[m - 1]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedProject || "__none__"} onValueChange={(v) => setSelectedProject(v === "__none__" ? "" : v)}>
+            <SelectTrigger className="w-[260px]">
+              <SelectValue placeholder="Select wedding..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Select wedding...</SelectItem>
+              {filteredProjects.map((p) => (
+                <SelectItem key={p.name} value={p.name}>
+                  {p.project_name || p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card>
