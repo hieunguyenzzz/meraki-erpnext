@@ -79,6 +79,7 @@ export default function EmployeeDetailPage() {
   const { mutateAsync: customMutation } = useCustomMutation();
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
+  const canManageRoles = (roles ?? []).some(r => r === "System Manager" || r === "Administrator");
 
   const { result: employee } = useOne<Employee>({ resource: "Employee", id: name! });
 
@@ -352,8 +353,8 @@ export default function EmployeeDetailPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `API error ${res.status}`);
       }
-      // Save ERPNext user roles directly if employment section and user is linked
-      if (editSection === "employment" && employee.user_id) {
+      // Save ERPNext user roles directly if employment section, user is linked, and user has permission
+      if (editSection === "employment" && employee.user_id && canManageRoles) {
         const rolesRes = await fetch(`/inquiry-api/employee/${employee.name}/set-roles`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1254,7 +1255,7 @@ export default function EmployeeDetailPage() {
                   <Label htmlFor="edit-doj">Date of Joining</Label>
                   <Input id="edit-doj" type="date" value={editValues.date_of_joining} onChange={(e) => setEditValues((prev) => ({ ...prev, date_of_joining: e.target.value }))} />
                 </div>
-                <div className="space-y-2">
+                {canManageRoles && <div className="space-y-2">
                   <Label>Roles</Label>
                   {employee.user_id ? (
                     <div className="space-y-1">
@@ -1282,7 +1283,7 @@ export default function EmployeeDetailPage() {
                   ) : (
                     <p className="text-sm text-muted-foreground">Link a user first to manage roles.</p>
                   )}
-                </div>
+                </div>}
                 <div className="space-y-2">
                   <Label htmlFor="edit-ctc">Base Salary (VND)</Label>
                   <Input id="edit-ctc" type="number" value={editValues.ctc} onChange={(e) => setEditValues((prev) => ({ ...prev, ctc: e.target.value }))} />
