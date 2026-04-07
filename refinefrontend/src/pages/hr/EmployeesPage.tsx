@@ -14,6 +14,7 @@ interface Employee {
   department: string;
   status: string;
   custom_last_review_date?: string;
+  custom_is_probation?: number;
 }
 
 function timeSinceReview(d?: string): string {
@@ -30,9 +31,14 @@ const columns: ColumnDef<Employee, unknown>[] = [
     accessorKey: "employee_name",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
     cell: ({ row }) => (
-      <Link to={`/hr/employees/${row.original.name}`} className="font-medium text-primary hover:underline">
-        {displayName(row.original)}
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link to={`/hr/employees/${row.original.name}`} className="font-medium text-primary hover:underline">
+          {displayName(row.original)}
+        </Link>
+        {!!row.original.custom_is_probation && (
+          <Badge variant="outline" className="border-amber-500 text-amber-600 text-xs">Probation</Badge>
+        )}
+      </div>
     ),
     filterFn: "includesString",
   },
@@ -73,7 +79,7 @@ export default function EmployeesPage() {
     resource: "Employee",
     pagination: { mode: "off" },
     sorters: [{ field: "employee_name", order: "asc" }],
-    meta: { fields: ["name", "employee_name", "first_name", "last_name", "designation", "department", "status", "custom_last_review_date"] },
+    meta: { fields: ["name", "employee_name", "first_name", "last_name", "designation", "department", "status", "custom_last_review_date", "custom_is_probation"] },
   });
 
   const employees = (result?.data ?? []) as Employee[];

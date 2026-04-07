@@ -31,6 +31,7 @@ export interface Employee {
   custom_allowance_hcm_partial?: number;
   custom_allowance_dest_full?: number;
   custom_allowance_dest_partial?: number;
+  custom_is_probation?: number;
 }
 
 export interface VenueSupplier {

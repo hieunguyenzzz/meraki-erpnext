@@ -48,6 +48,7 @@ interface SalarySlip {
   employer_bhxh?: number;
   tax_reduction?: number;
   taxable_income?: number;
+  is_probation?: boolean;
 }
 
 function getEarningAmount(earnings: SalarySlipEarning[] | undefined, component: string): number {
@@ -79,7 +80,12 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDe
     {
       accessorKey: "employee_name",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
-      cell: ({ row }) => <span className="font-medium">{row.original.employee_display_name || row.original.employee_name}</span>,
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{row.original.employee_display_name || row.original.employee_name}</span>
+          {row.original.is_probation && <Badge variant="outline" className="border-amber-500 text-amber-600 text-xs">85%</Badge>}
+        </div>
+      ),
       filterFn: "includesString",
     },
     {

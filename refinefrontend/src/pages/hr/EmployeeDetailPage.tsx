@@ -301,6 +301,7 @@ export default function EmployeeDetailPage() {
         custom_insurance_salary: employee.custom_insurance_salary ?? "",
         custom_number_of_dependents: employee.custom_number_of_dependents ?? 0,
         leave_approver: employee.leave_approver || "",
+        custom_is_probation: employee.custom_is_probation ?? 0,
       });
       // Fetch current ERPNext user roles if a user is linked
       setUserRoles([]);
@@ -541,6 +542,9 @@ export default function EmployeeDetailPage() {
           <Badge variant={employee.status === "Active" ? "success" : "secondary"}>
             {employee.status}
           </Badge>
+          {!!employee.custom_is_probation && (
+            <Badge variant="outline" className="border-amber-500 text-amber-600">Probation</Badge>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -1304,6 +1308,15 @@ export default function EmployeeDetailPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div
+                  className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50"
+                  onClick={() => setEditValues((prev) => ({ ...prev, custom_is_probation: prev.custom_is_probation ? 0 : 1 }))}
+                >
+                  <div className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${editValues.custom_is_probation ? "bg-amber-500 border-amber-500 text-white" : "border-muted-foreground/30"}`}>
+                    {!!editValues.custom_is_probation && <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>}
+                  </div>
+                  <Label className="cursor-pointer">Probation (85% base salary)</Label>
                 </div>
               </>
             )}

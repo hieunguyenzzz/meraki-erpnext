@@ -285,6 +285,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
             "custom_full_package_commission_pct",
             "custom_partial_package_commission_pct",
             "custom_number_of_dependents",
+            "custom_is_probation",
         ]),
         "limit_page_length": 200,
     }).get("data", [])
@@ -403,6 +404,10 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
             emp_id = slip["employee"]
             if emp_id in ssa_base_map:
                 current_base = ssa_base_map[emp_id]
+                # Apply probation reduction (85% of base)
+                emp_record = emp_map.get(emp_id, {})
+                if emp_record.get("custom_is_probation"):
+                    current_base = round(current_base * 0.85)
                 base_earnings = [
                     {**e, "amount": current_base} if e.get("salary_component") == "Basic Salary" else e
                     for e in base_earnings
@@ -610,7 +615,7 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
     emp_ids = list({s["employee"] for s in slips})
     employees = client._get("/api/resource/Employee", params={
         "filters": json.dumps([["name", "in", emp_ids]]),
-        "fields": json.dumps(["name", "first_name", "last_name", "employee_name", "custom_number_of_dependents"]),
+        "fields": json.dumps(["name", "first_name", "last_name", "employee_name", "custom_number_of_dependents", "custom_is_probation"]),
         "limit_page_length": 200,
     }).get("data", [])
 
@@ -623,6 +628,7 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
         emp_info[emp["name"]] = {
             "display_name": display,
             "dependents": int(emp.get("custom_number_of_dependents") or 0),
+            "is_probation": bool(emp.get("custom_is_probation")),
         }
 
     # 3. Fetch each slip's full doc (earnings + deductions)
@@ -630,7 +636,7 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
     for slip in slips:
         full = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
         emp_id = full.get("employee", "")
-        info = emp_info.get(emp_id, {"display_name": emp_id, "dependents": 0})
+        info = emp_info.get(emp_id, {"display_name": emp_id, "dependents": 0, "is_probation": False})
 
         earnings = full.get("earnings", [])
         deductions = full.get("deductions", [])
@@ -670,6 +676,7 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
             "employer_bhxh": employer_bhxh,
             "tax_reduction": tax_reduction,
             "taxable_income": taxable_income,
+            "is_probation": info["is_probation"],
         })
 
     # Sort by display name
