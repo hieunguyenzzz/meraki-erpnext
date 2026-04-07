@@ -144,6 +144,15 @@ def start_fetch_scheduler() -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # Auto-update project stages for past weddings (every 6 hours)
+    _scheduler.add_job(
+        update_project_stages_job,
+        trigger=IntervalTrigger(hours=6),
+        id="update_project_stages",
+        name="Auto-update project stages for past weddings",
+        replace_existing=True,
+    )
+
     _scheduler.start()
     log.info(
         "fetch_scheduler_started",
