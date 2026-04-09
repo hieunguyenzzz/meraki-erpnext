@@ -402,22 +402,16 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 if e.get("salary_component") not in STRIP_COMPONENTS
             ]
 
-            # Sync Basic Salary from current SSA base
+            # Note: ERPNext always recalculates Basic Salary from default_amount
+            # (Salary Structure formula) * payment_days / total_working_days.
+            # We cannot override amount or default_amount — ERPNext reverts them on save.
+            # So probation and /26 proration are applied as a combined deduction below.
             emp_id = slip["employee"]
             orig_total_wd = full_slip.get("total_working_days") or 22
             orig_payment_days = full_slip.get("payment_days") or orig_total_wd
             is_partial_month = orig_payment_days < orig_total_wd
-
-            if emp_id in ssa_base_map:
-                current_base = ssa_base_map[emp_id]
-                # Apply probation reduction (85% of base)
-                emp_record = emp_map.get(emp_id, {})
-                if emp_record.get("custom_is_probation"):
-                    current_base = round(current_base * 0.85)
-                base_earnings = [
-                    {**e, "amount": current_base} if e.get("salary_component") == "Basic Salary" else e
-                    for e in base_earnings
-                ]
+            emp_record = emp_map.get(emp_id, {})
+            current_base = ssa_base_map.get(emp_id, 0)
 
             new_earnings = list(base_earnings)
 
@@ -467,17 +461,21 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 "deductions": new_deductions,
             })
 
-            # Pass 2: Apply /26 proration correction for partial-month employees,
-            # then re-read gross and calculate PIT.
-            #
-            # ERPNext prorates Basic Salary as: base * payment_days / total_working_days.
-            # Vietnam standard is /26. For partial months the difference is added as a
-            # deduction so the effective base = base * payment_days / 26.
+            # Pass 2: Combined salary adjustment deduction.
+            # ERPNext sets Basic Salary = ssa_base * payment_days / total_working_days.
+            # We need: correct_base * payment_days / 26 (where correct_base = ssa_base * 0.85 if probation).
+            # The difference is deducted as "Salary Proration Adj".
             PRORATION_COMPONENT = "Salary Proration Adj"
-            if is_partial_month and emp_id in ssa_base_map:
-                erpnext_base = current_base * orig_payment_days / orig_total_wd
-                correct_base = current_base * orig_payment_days / STANDARD_WORKING_DAYS
-                proration_adj = round(erpnext_base - correct_base)
+            is_probation = bool(emp_record.get("custom_is_probation"))
+            correct_base = round(current_base * 0.85) if is_probation else current_base
+
+            if current_base > 0:
+                erpnext_amount = current_base * orig_payment_days / orig_total_wd  # what ERPNext calculated
+                if is_partial_month:
+                    correct_amount = correct_base * orig_payment_days / STANDARD_WORKING_DAYS
+                else:
+                    correct_amount = correct_base  # full month
+                proration_adj = round(erpnext_amount - correct_amount)
             else:
                 proration_adj = 0
 
@@ -489,7 +487,9 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 client._put(f"/api/resource/Salary Slip/{slip['name']}", {"deductions": adj_deductions})
                 updated_slip = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
 
-            gross = updated_slip.get("gross_pay", 0)
+            # Use effective gross (ERPNext gross minus proration/probation adjustment) for PIT
+            erpnext_gross = updated_slip.get("gross_pay", 0)
+            gross = erpnext_gross - proration_adj  # effective gross after corrections
             si = sum(
                 d.get("amount", 0) for d in updated_slip.get("deductions", [])
                 if d.get("salary_component", "").startswith(("BHXH", "BHYT", "BHTN"))
@@ -683,8 +683,14 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
         # Employer BHXH = employee SI * (21.5 / 10.5)
         employer_bhxh = round(si_total / _SI_EMPLOYEE_PCT * _SI_EMPLOYER_PCT) if si_total > 0 else 0
 
-        # Tax computations
-        gross = full.get("gross_pay", 0)
+        # Proration/probation adjustment (deducted from ERPNext gross)
+        proration_adj = sum(
+            d.get("amount", 0) for d in deductions
+            if d.get("salary_component") == "Salary Proration Adj"
+        )
+
+        # Tax computations — use effective gross (after proration/probation correction)
+        gross = full.get("gross_pay", 0) - proration_adj
         dependents = info["dependents"]
         if info["pit_method"] == "Flat 10%":
             tax_reduction = 0
