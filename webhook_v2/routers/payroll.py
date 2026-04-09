@@ -36,6 +36,7 @@ PIT_BRACKETS = [
     (float("inf"), 0.35, 14_500_000),
 ]
 PIT_COMPONENT = "Income Tax"
+STANDARD_WORKING_DAYS = 26  # Vietnam standard: 26 days/month for salary proration
 
 
 def _calc_pit(gross_pay: float, si_deductions: float, dependents: int) -> int:
@@ -385,7 +386,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
 
     # --- Write earnings to each draft salary slip ---
     STRIP_COMPONENTS = set(COMMISSION_COMPONENTS + ["Wedding Allowance", "Company Insurance Contribution"])
-    STRIP_DEDUCTIONS = {PIT_COMPONENT}
+    STRIP_DEDUCTIONS = {PIT_COMPONENT, "Salary Proration Adj"}
     applied = 0
     employees_with_commission = 0
     employees_with_allowance = 0
@@ -403,6 +404,10 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
 
             # Sync Basic Salary from current SSA base
             emp_id = slip["employee"]
+            orig_total_wd = full_slip.get("total_working_days") or 22
+            orig_payment_days = full_slip.get("payment_days") or orig_total_wd
+            is_partial_month = orig_payment_days < orig_total_wd
+
             if emp_id in ssa_base_map:
                 current_base = ssa_base_map[emp_id]
                 # Apply probation reduction (85% of base)
@@ -462,8 +467,28 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 "deductions": new_deductions,
             })
 
-            # Pass 2: Re-read ERPNext's computed gross_pay, then calculate PIT
+            # Pass 2: Apply /26 proration correction for partial-month employees,
+            # then re-read gross and calculate PIT.
+            #
+            # ERPNext prorates Basic Salary as: base * payment_days / total_working_days.
+            # Vietnam standard is /26. For partial months the difference is added as a
+            # deduction so the effective base = base * payment_days / 26.
+            PRORATION_COMPONENT = "Salary Proration Adj"
+            if is_partial_month and emp_id in ssa_base_map:
+                erpnext_base = current_base * orig_payment_days / orig_total_wd
+                correct_base = current_base * orig_payment_days / STANDARD_WORKING_DAYS
+                proration_adj = round(erpnext_base - correct_base)
+            else:
+                proration_adj = 0
+
             updated_slip = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
+
+            if proration_adj > 0:
+                adj_deductions = [d for d in updated_slip.get("deductions", []) if d.get("salary_component") != PRORATION_COMPONENT]
+                adj_deductions.append({"salary_component": PRORATION_COMPONENT, "amount": proration_adj})
+                client._put(f"/api/resource/Salary Slip/{slip['name']}", {"deductions": adj_deductions})
+                updated_slip = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
+
             gross = updated_slip.get("gross_pay", 0)
             si = sum(
                 d.get("amount", 0) for d in updated_slip.get("deductions", [])
@@ -476,12 +501,13 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
             else:
                 dependents = int(emp_map.get(emp_id, {}).get("custom_number_of_dependents") or 0)
                 pit = _calc_pit(gross, si, dependents)
+
+            final_deductions = [d for d in updated_slip.get("deductions", []) if d.get("salary_component") != PIT_COMPONENT]
             if pit > 0:
-                final_deductions = [d for d in updated_slip.get("deductions", []) if d.get("salary_component") != PIT_COMPONENT]
                 final_deductions.append({"salary_component": PIT_COMPONENT, "amount": pit})
-                client._put(f"/api/resource/Salary Slip/{slip['name']}", {
-                    "deductions": final_deductions,
-                })
+            client._put(f"/api/resource/Salary Slip/{slip['name']}", {
+                "deductions": final_deductions,
+            })
             applied += 1
             if has_commission:
                 employees_with_commission += 1

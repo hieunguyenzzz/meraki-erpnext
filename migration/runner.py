@@ -27,6 +27,7 @@ ORDERED_PHASES = [
     "v061_income_tax_account",
     "v062_employee_probation_field",
     "v063_employee_pit_method",
+    "v064_proration_salary_component",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -77,6 +78,7 @@ def run_pending(client) -> int:
             v061_income_tax_account,
             v062_employee_probation_field,
             v063_employee_pit_method,
+            v064_proration_salary_component,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -99,6 +101,7 @@ def run_pending(client) -> int:
             v061_income_tax_account,
             v062_employee_probation_field,
             v063_employee_pit_method,
+            v064_proration_salary_component,
         )
 
     phase_fns = {
@@ -125,6 +128,7 @@ def run_pending(client) -> int:
         "v061_income_tax_account": v061_income_tax_account.run,
         "v062_employee_probation_field": v062_employee_probation_field.run,
         "v063_employee_pit_method": v063_employee_pit_method.run,
+        "v064_proration_salary_component": v064_proration_salary_component.run,
     }
 
     state_file = get_state_file()
