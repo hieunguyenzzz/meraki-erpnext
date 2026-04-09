@@ -286,6 +286,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
             "custom_partial_package_commission_pct",
             "custom_number_of_dependents",
             "custom_is_probation",
+            "custom_pit_method",
         ]),
         "limit_page_length": 200,
     }).get("data", [])
@@ -469,8 +470,12 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 if d.get("salary_component", "").startswith(("BHXH", "BHYT", "BHTN"))
                 and "Employer" not in d.get("salary_component", "")
             )
-            dependents = int(emp_map.get(emp_id, {}).get("custom_number_of_dependents") or 0)
-            pit = _calc_pit(gross, si, dependents)
+            pit_method = emp_map.get(emp_id, {}).get("custom_pit_method") or ""
+            if pit_method == "Flat 10%":
+                pit = round(gross * 0.10) if gross > 0 else 0
+            else:
+                dependents = int(emp_map.get(emp_id, {}).get("custom_number_of_dependents") or 0)
+                pit = _calc_pit(gross, si, dependents)
             if pit > 0:
                 final_deductions = [d for d in updated_slip.get("deductions", []) if d.get("salary_component") != PIT_COMPONENT]
                 final_deductions.append({"salary_component": PIT_COMPONENT, "amount": pit})
@@ -615,7 +620,7 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
     emp_ids = list({s["employee"] for s in slips})
     employees = client._get("/api/resource/Employee", params={
         "filters": json.dumps([["name", "in", emp_ids]]),
-        "fields": json.dumps(["name", "first_name", "last_name", "employee_name", "custom_number_of_dependents", "custom_is_probation"]),
+        "fields": json.dumps(["name", "first_name", "last_name", "employee_name", "custom_number_of_dependents", "custom_is_probation", "custom_pit_method"]),
         "limit_page_length": 200,
     }).get("data", [])
 
@@ -629,6 +634,7 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
             "display_name": display,
             "dependents": int(emp.get("custom_number_of_dependents") or 0),
             "is_probation": bool(emp.get("custom_is_probation")),
+            "pit_method": emp.get("custom_pit_method") or "",
         }
 
     # 3. Fetch each slip's full doc (earnings + deductions)
@@ -654,8 +660,12 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
         # Tax computations
         gross = full.get("gross_pay", 0)
         dependents = info["dependents"]
-        tax_reduction = PIT_PERSONAL_DEDUCTION + dependents * PIT_DEPENDENT_DEDUCTION
-        taxable_income = gross - si_total - tax_reduction
+        if info["pit_method"] == "Flat 10%":
+            tax_reduction = 0
+            taxable_income = gross  # flat 10% on gross, no deductions
+        else:
+            tax_reduction = PIT_PERSONAL_DEDUCTION + dependents * PIT_DEPENDENT_DEDUCTION
+            taxable_income = gross - si_total - tax_reduction
 
         result.append({
             "name": full.get("name"),
@@ -677,6 +687,7 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
             "tax_reduction": tax_reduction,
             "taxable_income": taxable_income,
             "is_probation": info["is_probation"],
+            "pit_method": info["pit_method"],
         })
 
     # Sort by display name

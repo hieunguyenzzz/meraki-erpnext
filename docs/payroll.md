@@ -164,12 +164,15 @@ Freelancers (e.g. an external lead planner for a specific wedding) are treated a
 - **`base = 0`** in Salary Structure Assignment (no fixed salary)
 - **`custom_insurance_salary = 0`** (no BHXH/BHYT/BHTN — formulas produce 0)
 - **Commission rates** set per wedding via Project-level overrides, or per employee as defaults
-- **No PIT** deduction (not implemented in the system)
+- **Flat 10% PIT** on gross income (Vietnam freelancer tax rate — no personal/dependent deductions)
+
+Set the `custom_pit_method` field on the Employee to `"Flat 10%"` to enable the flat rate. When empty (default), the progressive bracket system with deductions is used.
 
 The monthly payroll flow handles them automatically:
 - Salary Slip created with 0 base + 0 deductions
 - Commission recalculation adds wedding commissions
-- Net pay = commission only
+- PIT = 10% of gross (flat, no deductions)
+- Net pay = commission - PIT
 
 Set `employment_type = "Freelance"` on the Employee for labeling.
 

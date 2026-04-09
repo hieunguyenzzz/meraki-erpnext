@@ -70,6 +70,7 @@ ALLOWED_FIELDS = {
     "custom_allowance_dest_partial",
     "custom_display_order",
     "custom_number_of_dependents",
+    "custom_pit_method",
 }
 
 

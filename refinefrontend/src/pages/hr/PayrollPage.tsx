@@ -49,6 +49,7 @@ interface SalarySlip {
   tax_reduction?: number;
   taxable_income?: number;
   is_probation?: boolean;
+  pit_method?: string;
 }
 
 function getEarningAmount(earnings: SalarySlipEarning[] | undefined, component: string): number {
@@ -84,6 +85,7 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDe
         <div className="flex items-center gap-2">
           <span className="font-medium">{row.original.employee_display_name || row.original.employee_name}</span>
           {row.original.is_probation && <Badge variant="outline" className="border-amber-500 text-amber-600 text-xs">85%</Badge>}
+          {row.original.pit_method === "Flat 10%" && <Badge variant="outline" className="border-violet-500 text-violet-600 text-xs">10% PIT</Badge>}
         </div>
       ),
       filterFn: "includesString",
