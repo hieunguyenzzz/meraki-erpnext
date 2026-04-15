@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
+import { HrAddLeaveSheet } from "@/components/HrAddLeaveSheet";
 import { formatDate } from "@/lib/format";
 
 function statusVariant(status: string) {
@@ -42,6 +43,7 @@ export default function LeavesPage() {
   const [error, setError] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, AllocEdit>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [addLeaveOpen, setAddLeaveOpen] = useState(false);
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
 
@@ -115,6 +117,16 @@ export default function LeavesPage() {
     }
     return m;
   }, [approvedApps]);
+
+  // Employee options for the HR "Add Leave" sheet (sorted by display name)
+  const employeeOptions = useMemo(() => {
+    return employees
+      .map((e: any) => ({
+        name: e.name as string,
+        displayName: [e.first_name, e.last_name].filter(Boolean).join(" ") || e.employee_name || e.name,
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [employees]);
 
   const allocsByEmployee = useMemo(() => {
     const m = new Map<string, any[]>();
@@ -379,8 +391,9 @@ export default function LeavesPage() {
 
         <TabsContent value="balances">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle>Leave Balances ({employees.length} employees)</CardTitle>
+              <Button size="sm" onClick={() => setAddLeaveOpen(true)}>+ Add Leave</Button>
             </CardHeader>
             <CardContent>
               {employees.length === 0 ? (
@@ -449,6 +462,12 @@ export default function LeavesPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <HrAddLeaveSheet
+        open={addLeaveOpen}
+        onOpenChange={setAddLeaveOpen}
+        employees={employeeOptions}
+      />
     </div>
   );
 }

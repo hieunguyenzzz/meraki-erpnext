@@ -57,13 +57,7 @@ def approve_leave(leave_id: str):
     """Set Leave Application status to Approved and submit."""
     client = ERPNextClient()
     try:
-        client._post("/api/method/frappe.client.set_value", {
-            "doctype": "Leave Application",
-            "name": leave_id,
-            "fieldname": "status",
-            "value": "Approved",
-        })
-        submit_doc(client, "Leave Application", leave_id)
+        _approve_and_submit(client, leave_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to approve leave: {e}")
 
@@ -147,6 +141,30 @@ class LeaveApplyRequest(BaseModel):
     description: str = ""
     half_day: bool = False
     half_day_period: str = ""  # "AM" or "PM"
+    auto_approve: bool = False  # HR-only: create + approve + submit in one call
+
+
+def _approve_and_submit(client: ERPNextClient, leave_id: str) -> None:
+    """Set Leave Application status to Approved and submit the doc."""
+    client._post("/api/method/frappe.client.set_value", {
+        "doctype": "Leave Application",
+        "name": leave_id,
+        "fieldname": "status",
+        "value": "Approved",
+    })
+    submit_doc(client, "Leave Application", leave_id)
+
+
+def _finalize_apply(
+    client: ERPNextClient, body: LeaveApplyRequest, created: list[dict], split: bool
+) -> dict:
+    """Optionally auto-approve each created Leave Application, then return the payload."""
+    if body.auto_approve:
+        for app in created:
+            name = app.get("name")
+            if name:
+                _approve_and_submit(client, name)
+    return {"created": created, "split": split}
 
 
 def _leave_type_includes_holidays(client: ERPNextClient, leave_type: str) -> bool:
@@ -322,7 +340,7 @@ def apply_leave(body: LeaveApplyRequest):
                     body.from_date, body.to_date, description,
                     leave_approver=leave_approver, half_day=body.half_day)
                 _enrich_apply_notification(client, body.employee, app, description)
-                return {"created": [app], "split": True}
+                return _finalize_apply(client, body, [app], True)
 
             include_holiday = _leave_type_includes_holidays(client, "Annual Leave")
             casual_to_date = lwp_from_date = requested = None
@@ -364,7 +382,7 @@ def apply_leave(body: LeaveApplyRequest):
                     raise
                 _enrich_apply_notification(client, body.employee, cl_app, description)
                 _enrich_apply_notification(client, body.employee, lwp_app, description)
-                return {"created": [cl_app, lwp_app], "split": True}
+                return _finalize_apply(client, body, [cl_app, lwp_app], True)
 
         app = _create_leave_application(
             client, body.employee, body.leave_type,
@@ -373,7 +391,7 @@ def apply_leave(body: LeaveApplyRequest):
         _enrich_apply_notification(client, body.employee, app, description)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"created": [app], "split": False}
+    return _finalize_apply(client, body, [app], False)
 
 
 class HolidayInfo(BaseModel):
