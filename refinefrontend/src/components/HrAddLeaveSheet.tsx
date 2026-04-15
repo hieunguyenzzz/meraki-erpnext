@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useList, useInvalidate } from "@refinedev/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatDate } from "@/lib/format";
 import {
   Sheet,
   SheetContent,
@@ -59,10 +60,73 @@ export function HrAddLeaveSheet({ open, onOpenChange, employees, onSuccess }: Hr
     (lt) => lt.name !== "Compensatory Off"
   );
 
+  // Backend-driven split preview (Annual Leave: holidays, weekday count, balance split)
+  const [splitPreview, setSplitPreview] = useState<{
+    requested_days: number;
+    total_weekdays: number;
+    holidays_excluded: { date: string; description: string }[];
+    casual_balance: number;
+    needs_split: boolean;
+    casual_days: number;
+    lwp_days: number;
+    casual_to_date: string | null;
+    lwp_from_date: string | null;
+  } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (!form.employee || form.leave_type !== "Annual Leave" || !form.from_date || !form.to_date) {
+      setSplitPreview(null);
+      return;
+    }
+    if (new Date(form.from_date) > new Date(form.to_date)) {
+      setSplitPreview(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const params = new URLSearchParams({
+          employee: form.employee,
+          leave_type: form.leave_type,
+          from_date: form.from_date,
+          to_date: form.to_date,
+        });
+        const res = await fetch(`/inquiry-api/leave/preview?${params}`, {
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          setSplitPreview(await res.json());
+        }
+      } catch {
+        // ignore abort
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [form.employee, form.leave_type, form.from_date, form.to_date]);
+
+  // Past-date check (informational — HR often records historical leave)
+  const isPastRange = (() => {
+    if (!form.from_date) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const toCompare = form.to_date || form.from_date;
+    return new Date(toCompare) < today;
+  })();
+
   function resetForm() {
     setForm(initialForm);
     setError(null);
     setSuccess(null);
+    setSplitPreview(null);
   }
 
   function handleOpenChange(next: boolean) {
@@ -246,6 +310,76 @@ export function HrAddLeaveSheet({ open, onOpenChange, employees, onSuccess }: Hr
               )}
             </div>
 
+            {isPastRange && (
+              <div className="rounded-md border border-slate-200 bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 px-4 py-2 text-xs text-slate-600 dark:text-slate-400">
+                Heads up: this range is in the past. That's fine for recording historical leave,
+                but double-check the dates.
+              </div>
+            )}
+
+            {previewLoading && form.leave_type === "Annual Leave" && form.from_date && form.to_date && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+                Checking leave balance…
+              </div>
+            )}
+
+            {!previewLoading && splitPreview && form.leave_type === "Annual Leave" && (
+              <div className="space-y-2 text-sm">
+                <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-amber-800 dark:text-amber-300 space-y-0.5">
+                  <p className="font-medium">Leave breakdown</p>
+                  <p>
+                    {splitPreview.total_weekdays} weekday{splitPreview.total_weekdays !== 1 ? "s" : ""}
+                    {splitPreview.holidays_excluded.length > 0 && (
+                      <> − {splitPreview.holidays_excluded.length} public holiday{splitPreview.holidays_excluded.length !== 1 ? "s" : ""} = <strong>{splitPreview.requested_days} leave day{splitPreview.requested_days !== 1 ? "s" : ""}</strong></>
+                    )}
+                    {splitPreview.holidays_excluded.length === 0 && (
+                      <> = <strong>{splitPreview.requested_days} leave day{splitPreview.requested_days !== 1 ? "s" : ""}</strong></>
+                    )}
+                  </p>
+                  {splitPreview.holidays_excluded.length > 0 && (
+                    <ul className="list-disc list-inside pl-1 text-xs opacity-80">
+                      {splitPreview.holidays_excluded.map((h) => (
+                        <li key={h.date}>{h.description} ({new Date(h.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })})</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {splitPreview.needs_split && splitPreview.casual_to_date && (
+                  <div className="space-y-2">
+                    <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-4 py-3 text-blue-800 dark:text-blue-300">
+                      <p className="font-semibold text-xs uppercase tracking-wide mb-1">Request 1 — Annual Leave (paid)</p>
+                      <p>
+                        {formatDate(form.from_date)} → {formatDate(splitPreview.casual_to_date)}
+                        {" · "}<strong>{splitPreview.casual_days} day{splitPreview.casual_days !== 1 ? "s" : ""}</strong>
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-orange-200 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800 px-4 py-3 text-orange-800 dark:text-orange-300">
+                      <p className="font-semibold text-xs uppercase tracking-wide mb-1">Request 2 — Leave Without Pay (unpaid)</p>
+                      <p>
+                        {splitPreview.lwp_from_date ? formatDate(splitPreview.lwp_from_date) : "—"} → {formatDate(form.to_date)}
+                        {" · "}<strong>{splitPreview.lwp_days} day{splitPreview.lwp_days !== 1 ? "s" : ""}</strong>
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Annual Leave balance is {splitPreview.casual_balance} day{splitPreview.casual_balance !== 1 ? "s" : ""}. The remaining {splitPreview.lwp_days} day{splitPreview.lwp_days !== 1 ? "s" : ""} will be unpaid.
+                    </p>
+                  </div>
+                )}
+
+                {splitPreview.needs_split && !splitPreview.casual_to_date && (
+                  <div className="rounded-md border border-orange-200 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800 px-4 py-3 text-orange-800 dark:text-orange-300 space-y-1">
+                    <p className="font-semibold text-xs uppercase tracking-wide">Leave Without Pay (unpaid)</p>
+                    <p>
+                      {formatDate(form.from_date)} → {formatDate(form.to_date)}
+                      {" · "}<strong>{splitPreview.lwp_days} day{splitPreview.lwp_days !== 1 ? "s" : ""}</strong>
+                    </p>
+                    <p className="text-xs opacity-80">Annual Leave balance is exhausted. This leave will be fully unpaid.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <Label htmlFor="description">Reason</Label>
               <Textarea
@@ -275,7 +409,11 @@ export function HrAddLeaveSheet({ open, onOpenChange, employees, onSuccess }: Hr
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Submitting…" : "Add Leave"}
+              {isSubmitting
+                ? "Submitting…"
+                : splitPreview?.needs_split && splitPreview.casual_to_date
+                  ? "Add Both Leaves"
+                  : "Add Leave"}
             </Button>
           </SheetFooter>
         </form>
