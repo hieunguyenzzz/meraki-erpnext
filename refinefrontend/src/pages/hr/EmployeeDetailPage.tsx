@@ -745,7 +745,7 @@ export default function EmployeeDetailPage() {
                             <p className="text-xs font-medium text-muted-foreground">
                               {period.label}{period.is_current ? " (current)" : ""}
                             </p>
-                            {period.allocations.map((alloc) => (
+                            {period.allocations.map((alloc: any) => (
                               <div key={alloc.name} className="flex justify-between items-center text-sm">
                                 <span className="text-muted-foreground">{alloc.leave_type}</span>
                                 <div className="flex items-center gap-2">
