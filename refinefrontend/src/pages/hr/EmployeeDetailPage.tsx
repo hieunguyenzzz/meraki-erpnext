@@ -170,7 +170,7 @@ export default function EmployeeDetailPage() {
   })).filter((p: any) => p.allocations.length > 0);
   const leaveBalance = leavePeriods.reduce(
     (acc: any, p: any) => {
-      for (const a of p.allocations) {
+      for (const a of p.allocations as any[]) {
         acc.allocated += a.allocated;
         acc.taken += a.taken;
         acc.remaining += a.balance;
