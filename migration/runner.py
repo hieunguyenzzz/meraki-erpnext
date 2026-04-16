@@ -31,6 +31,7 @@ ORDERED_PHASES = [
     "v065_server_script_probation_pit",
     "v066_unlimited_sick_leave",
     "v067_ensure_annual_leave_allocations",
+    "v068_probation_skip_bhxh",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -85,6 +86,7 @@ def run_pending(client) -> int:
             v065_server_script_probation_pit,
             v066_unlimited_sick_leave,
             v067_ensure_annual_leave_allocations,
+            v068_probation_skip_bhxh,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -111,6 +113,7 @@ def run_pending(client) -> int:
             v065_server_script_probation_pit,
             v066_unlimited_sick_leave,
             v067_ensure_annual_leave_allocations,
+            v068_probation_skip_bhxh,
         )
 
     phase_fns = {
@@ -141,6 +144,7 @@ def run_pending(client) -> int:
         "v065_server_script_probation_pit": v065_server_script_probation_pit.run,
         "v066_unlimited_sick_leave": v066_unlimited_sick_leave.run,
         "v067_ensure_annual_leave_allocations": v067_ensure_annual_leave_allocations.run,
+        "v068_probation_skip_bhxh": v068_probation_skip_bhxh.run,
     }
 
     state_file = get_state_file()

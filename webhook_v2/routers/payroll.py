@@ -455,6 +455,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                     new_earnings.append({"salary_component": "Company Insurance Contribution", "amount": round(ins_deductions)})
 
             # Pass 1: Write earnings + strip old PIT (let ERPNext recompute gross_pay)
+            is_probation = bool(emp_record.get("custom_is_probation"))
             new_deductions = [d for d in current_deductions if d.get("salary_component") not in STRIP_DEDUCTIONS]
             client._put(f"/api/resource/Salary Slip/{slip['name']}", {
                 "earnings": new_earnings,
@@ -466,7 +467,6 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
             # We need: correct_base * payment_days / 26 (where correct_base = ssa_base * 0.85 if probation).
             # The difference is deducted as "Salary Proration Adj".
             PRORATION_COMPONENT = "Salary Proration Adj"
-            is_probation = bool(emp_record.get("custom_is_probation"))
             correct_base = round(current_base * 0.85) if is_probation else current_base
 
             if current_base > 0:
