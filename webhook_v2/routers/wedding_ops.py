@@ -138,9 +138,22 @@ def create_wedding(req: CreateWeddingRequest):
 
     log.info("wedding_so_created", so=so_name)
 
-    # 4. Submit Sales Order (fetch full doc first to avoid TimestampMismatchError)
+    # 4. Recalculate commission_base using net_rate when VAT included
     try:
         full_so = client._get(f"/api/resource/Sales Order/{so_name}").get("data", {})
+        if full_so.get("taxes"):
+            items = full_so.get("items", [])
+            pkg_net = next(
+                (i["net_rate"] for i in items if i.get("item_code") == "Wedding Planning Service"),
+                req.package_amount,
+            )
+            addon_net = sum(
+                i["net_rate"] for i in items
+                if i.get("item_code") != "Wedding Planning Service"
+                and any(a.item_code == i.get("item_code") and a.include_in_commission for a in req.addons)
+            )
+            commission_base = pkg_net + addon_net
+            full_so["custom_commission_base"] = commission_base
         client._post("/api/method/frappe.client.submit", {"doc": full_so})
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to submit sales order: {e}")
