@@ -60,7 +60,10 @@ export default function LeavesPage() {
     resource: "Leave Allocation",
     pagination: { mode: "off" },
     sorters: [{ field: "employee_name", order: "asc" }],
-    filters: [{ field: "docstatus", operator: "eq", value: 1 }],
+    filters: [
+      { field: "docstatus", operator: "eq", value: 1 },
+      { field: "leave_type", operator: "ne", value: "Sick Leave" },
+    ],
     meta: { fields: ["name", "employee", "employee_name", "leave_type", "new_leaves_allocated", "total_leaves_allocated", "from_date", "to_date"] },
   });
 
