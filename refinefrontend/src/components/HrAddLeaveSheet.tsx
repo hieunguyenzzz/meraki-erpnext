@@ -136,8 +136,14 @@ export function HrAddLeaveSheet({ open, onOpenChange, employees, onSuccess }: Hr
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.employee || !form.leave_type || !form.from_date || !form.to_date) {
-      setError("Please fill in all required fields");
+    const missing = [
+      !form.employee && "Employee",
+      !form.leave_type && "Leave Type",
+      !form.from_date && "From Date",
+      !form.to_date && "To Date",
+    ].filter(Boolean);
+    if (missing.length) {
+      setError(`Please fill in: ${missing.join(", ")}`);
       return;
     }
     if (new Date(form.from_date) > new Date(form.to_date)) {
