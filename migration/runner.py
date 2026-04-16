@@ -29,6 +29,7 @@ ORDERED_PHASES = [
     "v063_employee_pit_method",
     "v064_proration_salary_component",
     "v065_server_script_probation_pit",
+    "v066_unlimited_sick_leave",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -81,6 +82,7 @@ def run_pending(client) -> int:
             v063_employee_pit_method,
             v064_proration_salary_component,
             v065_server_script_probation_pit,
+            v066_unlimited_sick_leave,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -105,6 +107,7 @@ def run_pending(client) -> int:
             v063_employee_pit_method,
             v064_proration_salary_component,
             v065_server_script_probation_pit,
+            v066_unlimited_sick_leave,
         )
 
     phase_fns = {
@@ -133,6 +136,7 @@ def run_pending(client) -> int:
         "v063_employee_pit_method": v063_employee_pit_method.run,
         "v064_proration_salary_component": v064_proration_salary_component.run,
         "v065_server_script_probation_pit": v065_server_script_probation_pit.run,
+        "v066_unlimited_sick_leave": v066_unlimited_sick_leave.run,
     }
 
     state_file = get_state_file()
