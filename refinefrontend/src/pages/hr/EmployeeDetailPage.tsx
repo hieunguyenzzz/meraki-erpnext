@@ -163,8 +163,22 @@ export default function EmployeeDetailPage() {
   });
   const allEmployees = (allEmployeesResult?.data ?? []) as any[];
 
-  const leaveBalance = leaveDetail?.summary ?? { allocated: 0, taken: 0, remaining: 0 };
-  const leavePeriods = leaveDetail?.periods ?? [];
+  // Filter out Sick Leave (unlimited, not tracked on staff page)
+  const leavePeriods = (leaveDetail?.periods ?? []).map((p: any) => ({
+    ...p,
+    allocations: (p.allocations ?? []).filter((a: any) => a.leave_type !== "Sick Leave"),
+  })).filter((p: any) => p.allocations.length > 0);
+  const leaveBalance = leavePeriods.reduce(
+    (acc: any, p: any) => {
+      for (const a of p.allocations) {
+        acc.allocated += a.allocated;
+        acc.taken += a.taken;
+        acc.remaining += a.balance;
+      }
+      return acc;
+    },
+    { allocated: 0, taken: 0, remaining: 0 },
+  );
 
   // Fetch display roles for the employee when user_id becomes available
   useEffect(() => {
