@@ -443,11 +443,7 @@ export default function LeavesPage() {
                             ) : "\u2014"}
                           </TableCell>
                           <TableCell className="text-right">{hasAlloc ? row.taken : "\u2014"}</TableCell>
-                          <TableCell className="text-right">
-                            {hasAlloc ? (
-                              <Input type="number" min={0} step={0.5} className="w-20 text-right ml-auto" value={display.remaining ?? 0} onChange={(e) => handleRemainingChange(row.allocName!, e.target.value)} disabled={saving} />
-                            ) : "\u2014"}
-                          </TableCell>
+                          <TableCell className="text-right">{hasAlloc ? display.remaining : "\u2014"}</TableCell>
                           <TableCell>
                             {hasAlloc && edited && (
                               <Button size="sm" onClick={() => handleSaveAllocation(row.allocName!, row.taken)} disabled={saving}>
