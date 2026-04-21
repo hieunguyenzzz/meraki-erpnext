@@ -165,6 +165,24 @@ Stories: {form.stories}"""
         result = client._post("/api/resource/Lead", lead_data)
         lead_name = result.get("data", {}).get("name")
         log.info("client_questionnaire_lead_created", lead_name=lead_name, couple=form.couple_names)
+
+        # Create Communication so it shows in Conversation tab
+        try:
+            client._post("/api/resource/Communication", {
+                "doctype": "Communication",
+                "communication_type": "Communication",
+                "communication_medium": "Other",
+                "subject": f"Client Questionnaire from {form.couple_names}",
+                "content": notes_text.replace("\n", "<br>"),
+                "sender": form.email,
+                "reference_doctype": "Lead",
+                "reference_name": lead_name,
+                "sent_or_received": "Received",
+                "status": "Linked",
+            })
+        except Exception as e:
+            log.warning("client_questionnaire_comm_failed", error=str(e), lead=lead_name)
+
         return {"success": True, "lead": lead_name}
     except Exception as e:
         log.error("client_questionnaire_error", error=str(e), couple=form.couple_names)
