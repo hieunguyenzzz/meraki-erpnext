@@ -184,6 +184,22 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Client questionnaire site
+  client-site:
+    build:
+      context: ./client-site
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meraki-client.rule=Host(`client.merakierp.loc`)"
+      - "traefik.http.routers.meraki-client.entrypoints=web"
+      - "traefik.http.services.meraki-client.loadbalancer.server.port=80"
+      - "traefik.docker.network=local-dev"
+    networks:
+      - default
+      - traefik
+
 volumes:
   email-storage-data:
 

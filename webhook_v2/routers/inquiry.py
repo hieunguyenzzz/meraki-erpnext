@@ -108,6 +108,69 @@ Personal story: {form.personal_story}"""
         raise HTTPException(status_code=500, detail="Failed to create inquiry")
 
 
+class ClientQuestionnaireForm(BaseModel):
+    couple_names: str
+    nationalities: str
+    email: str
+    phone: str
+    wedding_date: str
+    location: str
+    guest_count: str = ""
+    events: list[str] = []
+    priorities: str = ""
+    pinterest: str = ""
+    budget: str
+    referral_sources: list[str] = []
+    referral_other: str = ""
+    stories: str = ""
+
+
+@router.post("/client-questionnaire")
+async def create_client_questionnaire(form: ClientQuestionnaireForm):
+    """Create an ERPNext Lead from the client questionnaire form."""
+    events_str = ", ".join(form.events) if form.events else "None selected"
+    referral_str = ", ".join(form.referral_sources)
+    if form.referral_other:
+        referral_str += f" (Other: {form.referral_other})"
+
+    notes_text = f"""Nationalities: {form.nationalities}
+Wedding date: {form.wedding_date}
+Location: {form.location}
+Guest count: {form.guest_count}
+Events: {events_str}
+What matters most: {form.priorities}
+Pinterest: {form.pinterest}
+Budget: {form.budget}
+How they found us: {referral_str}
+Stories: {form.stories}"""
+
+    lead_data: dict = {
+        "doctype": "Lead",
+        "first_name": form.couple_names,
+        "last_name": "",
+        "email_id": form.email,
+        "mobile_no": form.phone,
+        "source": _map_referral(referral_str),
+        "status": "Lead",
+        "notes": [{"note": notes_text}],
+        "custom_couple_name": form.couple_names,
+        "custom_wedding_date_text": form.wedding_date,
+        "custom_budget": form.budget,
+    }
+    if form.guest_count:
+        lead_data["custom_guest_count"] = form.guest_count
+
+    try:
+        client = ERPNextClient()
+        result = client._post("/api/resource/Lead", lead_data)
+        lead_name = result.get("data", {}).get("name")
+        log.info("client_questionnaire_lead_created", lead_name=lead_name, couple=form.couple_names)
+        return {"success": True, "lead": lead_name}
+    except Exception as e:
+        log.error("client_questionnaire_error", error=str(e), couple=form.couple_names)
+        raise HTTPException(status_code=500, detail="Failed to submit questionnaire")
+
+
 def _map_referral(source: str) -> str:
     """Map referral source string to ERPNext Lead Source."""
     mapping = {
@@ -116,4 +179,8 @@ def _map_referral(source: str) -> str:
         "a dear friend": "Referral",
         "website": "Website",
     }
-    return mapping.get(source.lower(), "Other")
+    lower = source.lower()
+    for key, val in mapping.items():
+        if key in lower:
+            return val
+    return "Other"

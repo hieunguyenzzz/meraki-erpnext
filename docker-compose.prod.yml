@@ -319,6 +319,23 @@ services:
       timeout: 5s
       retries: 5
 
+  # Client questionnaire site - public form at client.merakiweddingplanner.com
+  client-site:
+    build:
+      context: ./client-site
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meraki-client.rule=Host(`client.merakiweddingplanner.com`)"
+      - "traefik.http.routers.meraki-client.entrypoints=websecure"
+      - "traefik.http.routers.meraki-client.tls.certresolver=letsencrypt"
+      - "traefik.http.services.meraki-client.loadbalancer.server.port=80"
+      - "traefik.docker.network=dokploy-network"
+    networks:
+      - default
+      - dokploy-network
+
 volumes:
   meraki-db-data:
   meraki-redis-queue-data:
