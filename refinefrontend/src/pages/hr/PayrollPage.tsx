@@ -263,27 +263,18 @@ export default function PayrollPage() {
 
   const activeCount = empResult?.data?.length ?? 0;
 
-  // Fetch Wedding Allowance Additional Salary records for selected period
-  const { result: additionalSalariesResult } = useList({
-    resource: "Additional Salary",
-    pagination: { mode: "off" },
-    filters: [
-      { field: "salary_component", operator: "eq", value: "Wedding Allowance" },
-      { field: "payroll_date", operator: "gte", value: selectedMonth },
-      { field: "payroll_date", operator: "lte", value: selectedEnd },
-      { field: "docstatus", operator: "eq", value: 1 },
-    ],
-    meta: { fields: ["name", "employee", "amount", "custom_wedding_project"] },
-    queryOptions: { enabled: !!selectedMonth && !!selectedEnd },
-  });
-
+  // Build wedding allowance map from salary slip earnings (not Additional Salary records)
   const weddingAllowanceMap = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const rec of (additionalSalariesResult?.data ?? []) as any[]) {
-      map[rec.employee] = (map[rec.employee] ?? 0) + (rec.amount ?? 0);
+    for (const slip of enrichedSlips) {
+      for (const e of slip.earnings) {
+        if (e.salary_component === "Wedding Allowance" && e.amount > 0) {
+          map[slip.employee] = (map[slip.employee] ?? 0) + e.amount;
+        }
+      }
     }
     return map;
-  }, [additionalSalariesResult?.data]);
+  }, [enrichedSlips]);
 
   const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap), [weddingAllowanceMap]);
 
