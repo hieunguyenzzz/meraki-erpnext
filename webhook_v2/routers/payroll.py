@@ -642,11 +642,37 @@ async def submit_payroll(request: SubmitPayrollRequest):
         if jvs:
             jv_name = jvs[0]["name"]
 
-    log.info("payroll_submitted", pe=pe_name, submitted=len(submitted_slips), jv=jv_name)
+    # Step 2: Create and submit Bank Entry (marks salaries as paid)
+    # Accrual JV: Dr Salary Expense → Cr Payroll Payable
+    # Bank Entry: Dr Payroll Payable → Cr Cash/Bank
+    bank_entry_name = None
+    if submitted_slips:
+        try:
+            bank_resp = client._post("/api/method/run_doc_method", {
+                "dt": "Payroll Entry",
+                "dn": pe_name,
+                "method": "make_bank_entry",
+            })
+            # make_bank_entry returns a draft JV — extract its name
+            bank_jv = bank_resp.get("message")
+            if isinstance(bank_jv, dict):
+                bank_entry_name = bank_jv.get("name")
+            if bank_entry_name:
+                # Fetch fresh doc then submit to avoid timestamp mismatch
+                fresh_jv = client._get(f"/api/resource/Journal Entry/{bank_entry_name}").get("data", {})
+                client._post("/api/method/frappe.client.submit", {
+                    "doc": json.dumps(fresh_jv),
+                })
+                log.info("bank_entry_submitted", pe=pe_name, jv=bank_entry_name)
+        except Exception as e:
+            log.warning("bank_entry_failed", pe=pe_name, error=str(e))
+
+    log.info("payroll_submitted", pe=pe_name, submitted=len(submitted_slips), jv=jv_name, bank_entry=bank_entry_name)
     return {
         "submitted": len(submitted_slips),
         "failed": [],
         "jv_name": jv_name,
+        "bank_entry": bank_entry_name,
     }
 
 
