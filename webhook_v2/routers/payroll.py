@@ -92,6 +92,36 @@ def _ensure_salary_structure_assignments(client: ERPNextClient):
         log.info("ssa_auto_created_total", count=created)
 
 
+def _cancel_additional_salary_allowances(client: ERPNextClient, start_date: str, end_date: str):
+    """Cancel submitted Additional Salary 'Wedding Allowance' records in the period.
+
+    The old /generate-allowances endpoint created these, but the payroll flow now
+    computes allowances directly. Submitted Additional Salary records cause ERPNext
+    to auto-inject duplicate rows during create_salary_slips.
+    """
+    ads_records = client._get("/api/resource/Additional Salary", params={
+        "filters": json.dumps([
+            ["salary_component", "=", "Wedding Allowance"],
+            ["docstatus", "=", 1],
+            ["payroll_date", "between", [start_date, end_date]],
+        ]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 500,
+    }).get("data", [])
+
+    for ads in ads_records:
+        try:
+            client._post("/api/method/frappe.client.cancel", {
+                "doctype": "Additional Salary", "name": ads["name"],
+            })
+            log.info("additional_salary_cancelled", name=ads["name"])
+        except Exception as e:
+            log.warning("additional_salary_cancel_failed", name=ads["name"], error=str(e))
+
+    if ads_records:
+        log.info("additional_salary_cleanup", count=len(ads_records), period=f"{start_date}..{end_date}")
+
+
 @router.post("/generate-payroll")
 async def generate_payroll(request: GeneratePayrollRequest):
     """
@@ -137,6 +167,11 @@ async def generate_payroll(request: GeneratePayrollRequest):
 
     # Step 1b: Auto-create Salary Structure Assignments for employees missing one
     _ensure_salary_structure_assignments(client)
+
+    # Step 1c: Cancel submitted Additional Salary "Wedding Allowance" records in this period.
+    # These were created by the old /generate-allowances endpoint and cause ERPNext to
+    # auto-inject duplicate Wedding Allowance rows during create_salary_slips.
+    _cancel_additional_salary_allowances(client, start_date, end_date)
 
     # Step 2: Fill employees + create salary slips
     if is_new:
