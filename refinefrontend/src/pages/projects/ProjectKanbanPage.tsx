@@ -131,6 +131,18 @@ export default function ProjectKanbanPage() {
         cell: ({ row }) => row.getValue("venue_name") ?? <span className="text-muted-foreground">{"\u2014"}</span>,
       },
       {
+        accessorKey: "custom_wedding_type",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
+        cell: ({ row }) => {
+          const type = row.getValue("custom_wedding_type") as string | undefined;
+          if (!type) return <span className="text-muted-foreground">{"\u2014"}</span>;
+          return type === "HCM"
+            ? <Badge variant="outline" className="text-blue-600 border-blue-200">HCM</Badge>
+            : <Badge variant="outline" className="text-amber-600 border-amber-200">Destination</Badge>;
+        },
+        filterFn: "arrIncludesSome",
+      },
+      {
         accessorKey: "lead_planner_name",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Lead Planner" />,
         cell: ({ row }) => row.getValue("lead_planner_name") ?? <span className="text-muted-foreground">{"\u2014"}</span>,
@@ -208,6 +220,14 @@ export default function ProjectKanbanPage() {
       id: "custom_project_stage",
       title: "Stage",
       options: PROJECT_COLUMNS.map(col => ({ label: col.label, value: col.stages[0] })),
+    },
+    {
+      id: "custom_wedding_type",
+      title: "Type",
+      options: [
+        { label: "HCM", value: "HCM" },
+        { label: "Destination", value: "Destination" },
+      ],
     },
   ], []);
 

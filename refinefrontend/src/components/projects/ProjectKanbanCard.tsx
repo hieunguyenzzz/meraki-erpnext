@@ -93,10 +93,18 @@ export function ProjectKanbanCard({ item }: ProjectKanbanCardProps) {
             <span>{weddingDateFormatted}</span>
           </div>
         )}
-        {item.venue_name && (
+        {(item.venue_name || item.custom_wedding_type) && (
           <div className="flex items-center gap-1.5">
             <MapPin className="h-3 w-3 shrink-0" />
-            <span className="truncate">{item.venue_name}</span>
+            {item.venue_name && <span className="truncate">{item.venue_name}</span>}
+            {item.custom_wedding_type && (
+              <Badge variant="outline" className={cn(
+                "text-[10px] px-1 py-0 shrink-0",
+                item.custom_wedding_type === "HCM" ? "text-blue-600 border-blue-200" : "text-amber-600 border-amber-200"
+              )}>
+                {item.custom_wedding_type}
+              </Badge>
+            )}
           </div>
         )}
       </div>

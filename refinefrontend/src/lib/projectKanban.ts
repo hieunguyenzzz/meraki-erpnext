@@ -14,6 +14,7 @@ export interface ProjectKanbanItem {
   lead_planner_name?: string;
   support_planner_name?: string;
   custom_service_type?: string;  // Full Package, Partial, Coordinator
+  custom_wedding_type?: string;  // HCM or Destination
   package_amount?: number;      // from Sales Order grand_total
   per_billed?: number;          // from Sales Order per_billed (0-100)
   tax_type?: "tax_free" | "vat_included";

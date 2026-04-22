@@ -45,10 +45,11 @@ def projects_kanban():
         "custom_assistant_1", "custom_assistant_2",
         "custom_assistant_3", "custom_assistant_4", "custom_assistant_5",
     ]
+    _optional_fields = ["custom_service_type", "custom_wedding_type"]
     try:
         projects = client._get("/api/resource/Project", params={
             "filters": json.dumps([["status", "in", ["Open", "Completed"]]]),
-            "fields": json.dumps(_project_fields + ["custom_service_type"]),
+            "fields": json.dumps(_project_fields + _optional_fields),
             "limit_page_length": 1000,
         }).get("data", [])
     except Exception:
@@ -64,6 +65,7 @@ def projects_kanban():
         "fields": json.dumps([
             "name", "customer_name", "custom_venue", "grand_total",
             "total_taxes_and_charges", "custom_commission_base",
+            "custom_wedding_type",
         ]),
         "limit_page_length": 1000,
     }).get("data", [])
@@ -162,6 +164,7 @@ def projects_kanban():
             "custom_assistant_4": p.get("custom_assistant_4"),
             "custom_assistant_5": p.get("custom_assistant_5"),
             "custom_service_type": p.get("custom_service_type") or None,
+            "custom_wedding_type": p.get("custom_wedding_type") or (linked_so or {}).get("custom_wedding_type") or None,
         })
 
     return {"data": items}
