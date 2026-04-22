@@ -658,6 +658,14 @@ async def submit_payroll(request: SubmitPayrollRequest):
             if isinstance(bank_jv, dict):
                 bank_entry_name = bank_jv.get("name")
             if bank_entry_name:
+                # Set required reference fields for Bank Entry, then submit
+                pe_doc_final = client._get(f"/api/resource/Payroll Entry/{pe_name}").get("data", {})
+                ref_date = pe_doc_final.get("end_date") or end_date
+                ref_month = ref_date[:7].replace("-", "")  # e.g. "202603"
+                client._put(f"/api/resource/Journal Entry/{bank_entry_name}", {
+                    "cheque_no": f"SAL-{ref_month}",
+                    "cheque_date": ref_date,
+                })
                 # Fetch fresh doc then submit to avoid timestamp mismatch
                 fresh_jv = client._get(f"/api/resource/Journal Entry/{bank_entry_name}").get("data", {})
                 client._post("/api/method/frappe.client.submit", {
