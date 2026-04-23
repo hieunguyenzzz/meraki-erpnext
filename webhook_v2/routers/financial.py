@@ -47,11 +47,32 @@ def get_financial_overview(year: int = Query(default=None, description="Year (de
         "limit_page_length": 2000,
     }).get("data", [])
 
-    # Fetch submitted Journal Entries (salary, insurance, etc.)
-    journals = client._get("/api/resource/Journal Entry", params={
-        "filters": json.dumps([["docstatus", "=", 1]]),
-        "fields": json.dumps(["posting_date", "total_debit"]),
-        "limit_page_length": 2000,
+    # Fetch expense accounts to filter JV GL entries (only count real expense debits)
+    expense_accounts = {
+        a["name"]
+        for a in client._get("/api/resource/Account", params={
+            "filters": json.dumps([
+                ["root_type", "=", "Expense"],
+                ["company", "=", "Meraki Wedding Planner"],
+            ]),
+            "fields": json.dumps(["name"]),
+            "limit_page_length": 500,
+        }).get("data", [])
+    }
+
+    # Fetch JV GL entries for the year — debit side only, expense accounts only.
+    # Using GL Entry (not Journal Entry total_debit) because total_debit includes
+    # liability-clearing debits (e.g. Payroll Payable → Cash bank entries).
+    jv_gl_entries = client._get("/api/resource/GL Entry", params={
+        "filters": json.dumps([
+            ["voucher_type", "=", "Journal Entry"],
+            ["debit", "!=", 0],
+            ["posting_date", ">=", f"{year_str}-01-01"],
+            ["posting_date", "<=", f"{year_str}-12-31"],
+            ["is_cancelled", "=", 0],
+        ]),
+        "fields": json.dumps(["posting_date", "account", "debit"]),
+        "limit_page_length": 5000,
     }).get("data", [])
 
     # Fetch submitted Purchase Invoices (operational expenses)
@@ -90,10 +111,12 @@ def get_financial_overview(year: int = Query(default=None, description="Year (de
         if month in monthly_map:
             monthly_map[month]["revenue"] += inv.get("grand_total") or 0
 
-    for j in journals:
-        month = (j.get("posting_date") or "")[:7]
+    for gl in jv_gl_entries:
+        if gl.get("account") not in expense_accounts:
+            continue
+        month = (gl.get("posting_date") or "")[:7]
         if month in monthly_map:
-            monthly_map[month]["expenses"] += j.get("total_debit") or 0
+            monthly_map[month]["expenses"] += gl.get("debit") or 0
 
     for pi in purchase_invoices:
         month = (pi.get("posting_date") or "")[:7]
@@ -147,16 +170,12 @@ def get_financial_overview(year: int = Query(default=None, description="Year (de
         y = (inv.get("posting_date") or "")[:4]
         if y.isdigit():
             years_set.add(int(y))
-    for j in journals:
-        y = (j.get("posting_date") or "")[:4]
-        if y.isdigit():
-            years_set.add(int(y))
     for pi in purchase_invoices:
         y = (pi.get("posting_date") or "")[:4]
         if y.isdigit():
             years_set.add(int(y))
 
-    log.info("financial_overview_served", year=year, invoices=len(invoices), journals=len(journals), purchase_invoices=len(purchase_invoices))
+    log.info("financial_overview_served", year=year, invoices=len(invoices), jv_gl_entries=len(jv_gl_entries), purchase_invoices=len(purchase_invoices))
 
     return {
         "year": year,
