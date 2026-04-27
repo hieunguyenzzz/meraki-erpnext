@@ -19,7 +19,6 @@ log = get_logger(__name__)
 router = APIRouter()
 
 # Item codes that represent the main wedding package (not add-ons)
-_PACKAGE_ITEM_CODES = {"SVC-FULL", "SVC-PARTIAL", "SVC-COORDINATOR", "Wedding Planning Service"}
 
 
 class MilestoneRequest(BaseModel):
@@ -335,7 +334,10 @@ def update_addons(project_name: str, req: AddonsRequest):
     #    so update_child_qty_rate treats them as existing rows, not new ones) + new add-on rows.
     original_items = so.get("items", [])
     default_wh = "Stores - MWP"
-    planning_service_rows = [
+    requested_codes = {a.item_code for a in req.items if a.item_code}
+
+    # Keep all existing SO items that the request doesn't touch (e.g. the main package row)
+    unchanged_rows = [
         {
             "docname": item["name"],
             "item_code": item["item_code"],
@@ -346,21 +348,20 @@ def update_addons(project_name: str, req: AddonsRequest):
             "warehouse": item.get("warehouse") or default_wh,
         }
         for item in original_items
-        if item.get("item_code") in _PACKAGE_ITEM_CODES
+        if item.get("item_code") not in requested_codes
     ]
 
-    # Existing add-on rows keyed by item_code so we can carry their docname
-    existing_addon_by_code = {
+    existing_by_code = {
         item["item_code"]: item
         for item in original_items
-        if item.get("item_code") not in _PACKAGE_ITEM_CODES
+        if item.get("item_code") in requested_codes
     }
 
     addon_rows = []
     for addon in req.items:
         if not addon.item_code:
             continue
-        existing = existing_addon_by_code.get(addon.item_code)
+        existing = existing_by_code.get(addon.item_code)
         row = {
             "item_code": addon.item_code,
             "item_name": addon.item_name,
@@ -369,13 +370,11 @@ def update_addons(project_name: str, req: AddonsRequest):
             "conversion_factor": 1,
             "warehouse": (existing.get("warehouse") if existing else None) or default_wh,
         }
-        # If this item_code already exists on the SO, pass its docname so it's
-        # treated as an update rather than a new insert.
         if existing:
             row["docname"] = existing["name"]
         addon_rows.append(row)
 
-    trans_items = planning_service_rows + addon_rows
+    trans_items = unchanged_rows + addon_rows
 
     # 4. Call ERPNext's standard update_child_qty_rate — accounting-safe, works
     #    even when invoices exist (as long as per_billed < 100% for rate changes;
@@ -492,7 +491,11 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
     # 3. Update add-on items via update_child_qty_rate
     original_items = so.get("items", [])
     default_wh = "Stores - MWP"
-    planning_service_rows = [
+    requested_addon_codes = {a.item_code for a in req.addons if a.item_code}
+
+    # Keep all existing SO items not in the add-on request.
+    # If package_amount is set, apply it to those rows too (they are the main package items).
+    unchanged_rows = [
         {
             "docname": item["name"],
             "item_code": item["item_code"],
@@ -503,13 +506,13 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
             "warehouse": item.get("warehouse") or default_wh,
         }
         for item in original_items
-        if item.get("item_code") in _PACKAGE_ITEM_CODES
+        if item.get("item_code") not in requested_addon_codes
     ]
 
     existing_addon_by_code = {
         item["item_code"]: item
         for item in original_items
-        if item.get("item_code") not in _PACKAGE_ITEM_CODES
+        if item.get("item_code") in requested_addon_codes
     }
 
     addon_rows = []
@@ -529,7 +532,7 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
             row["docname"] = existing["name"]
         addon_rows.append(row)
 
-    trans_items = planning_service_rows + addon_rows
+    trans_items = unchanged_rows + addon_rows
     try:
         client._post(
             "/api/method/erpnext.controllers.accounts_controller.update_child_qty_rate",
@@ -549,14 +552,14 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
     updated_items = so.get("items", [])
     has_tax = bool(so.get("taxes"))
     rate_field = "net_rate" if has_tax else "rate"
+    commission_addon_codes = {a.item_code for a in req.addons if a.include_in_commission}
     package_rate = next(
-        (item[rate_field] for item in updated_items if item.get("item_code") in _PACKAGE_ITEM_CODES),
+        (item[rate_field] for item in updated_items if item.get("item_code") not in requested_addon_codes),
         0,
     )
     addon_commission = sum(
         item[rate_field] for item in updated_items
-        if item.get("item_code") not in _PACKAGE_ITEM_CODES
-        and item.get("item_code") in {a.item_code for a in req.addons if a.include_in_commission}
+        if item.get("item_code") in commission_addon_codes
     )
     commission_base = package_rate + addon_commission
     try:
@@ -571,7 +574,7 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
 
     # 5. Persist include_in_commission flag on each addon Item
     for addon in req.addons:
-        if not addon.item_code or addon.item_code in _PACKAGE_ITEM_CODES:
+        if not addon.item_code or addon.item_code not in requested_addon_codes:
             continue
         try:
             client._post("/api/method/frappe.client.set_value", {
