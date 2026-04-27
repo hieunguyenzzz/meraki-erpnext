@@ -255,6 +255,7 @@ export default function ProjectDetailPage() {
         "per_delivered",
         "status",
         "total_taxes_and_charges",
+        "taxes",
       ],
     },
     queryOptions: { enabled: !!project?.sales_order },
@@ -292,10 +293,6 @@ export default function ProjectDetailPage() {
     if (project?.sales_order) fetchSOItems(project.sales_order);
   }, [project?.sales_order, fetchSOItems]);
 
-  const addOnItems = useMemo(
-    () => soItems.filter((i) => i.item_code !== "Wedding Planning Service"),
-    [soItems]
-  );
 
   // Fetch Sales Invoices linked to this Project via the `project` field
   // (sales_order is not a writable/filterable doc-level field on Sales Invoice)
@@ -390,6 +387,15 @@ export default function ProjectDetailPage() {
     } catch { setAvailableAddOns([]); return []; }
   }, []);
   useEffect(() => { fetchAddonItems(); }, [fetchAddonItems]);
+
+  const addonItemCodes = useMemo(
+    () => new Set(availableAddOns.map((a) => a.name)),
+    [availableAddOns]
+  );
+  const addOnItems = useMemo(
+    () => soItems.filter((i) => addonItemCodes.has(i.item_code)),
+    [soItems, addonItemCodes]
+  );
 
   // Sync vendors from project data
   useEffect(() => {
@@ -703,17 +709,22 @@ export default function ProjectDetailPage() {
   function populateDetailsForm(freshAddOns?: typeof availableAddOns) {
     if (!project) return;
     const addOnsLookup = freshAddOns ?? availableAddOns;
-    const currentAddOns = addOnItems.map((i) => {
-      const itemMeta = addOnsLookup.find((a) => a.name === i.item_code);
-      return {
-        itemCode: i.item_code,
-        itemName: i.item_name,
-        qty: i.qty,
-        rate: i.rate,
-        includeInCommission: !!(itemMeta?.custom_include_in_commission),
-      };
-    });
-    const planningItem = soItems.find((i) => i.item_code === "Wedding Planning Service");
+    const lookupCodes = new Set(addOnsLookup.map((a) => a.name));
+    // Filter SO items using the freshly-fetched add-on catalog, not the (possibly stale) addOnItems memo
+    const currentAddOns = soItems
+      .filter((i) => lookupCodes.has(i.item_code))
+      .map((i) => {
+        const itemMeta = addOnsLookup.find((a) => a.name === i.item_code);
+        return {
+          itemCode: i.item_code,
+          itemName: i.item_name,
+          qty: i.qty,
+          rate: i.rate,
+          includeInCommission: !!(itemMeta?.custom_include_in_commission),
+        };
+      });
+    // Package item = any SO row whose code is NOT in the add-on catalog
+    const planningItem = soItems.find((i) => !lookupCodes.has(i.item_code));
     setEditForm((prev) => ({
       ...prev,
       weddingDate: project?.expected_end_date || "",
@@ -721,7 +732,7 @@ export default function ProjectDetailPage() {
       packageAmount: planningItem ? String(planningItem.rate) : "",
       totalBudget: project?.custom_total_budget ? String(project.custom_total_budget) : "",
       addOns: currentAddOns,
-      taxType: (salesOrder?.total_taxes_and_charges > 0) ? "vat_included" : "tax_free",
+      taxType: ((salesOrder as any)?.taxes?.length > 0) ? "vat_included" : "tax_free",
       serviceType: project?.custom_service_type || "",
       weddingType: project?.custom_wedding_type || "",
     }));
@@ -752,10 +763,12 @@ export default function ProjectDetailPage() {
       const item = await resp.json();
       const itemCode = item.name ?? addonName;
       const itemName = item.item_name ?? addonName;
-      const updated = editForm.addOns.map((a, i) =>
-        i === rowIndex ? { ...a, itemCode, itemName, includeInCommission } : a
-      );
-      setEditForm({ ...editForm, addOns: updated });
+      setEditForm((prev) => ({
+        ...prev,
+        addOns: prev.addOns.map((a, i) =>
+          i === rowIndex ? { ...a, itemCode, itemName, includeInCommission } : a
+        ),
+      }));
       const newSearch = [...editAddonSearch];
       newSearch[rowIndex] = itemName;
       setEditAddonSearch(newSearch);
@@ -803,8 +816,8 @@ export default function ProjectDetailPage() {
           wedding_date: editForm.weddingDate || null,
           package_amount: editForm.packageAmount ? parseFloat(editForm.packageAmount) : null,
           tax_type: editForm.taxType === "vat_included" ? "vat" : "none",
-          service_type: editForm.serviceType,
-          wedding_type: editForm.weddingType,
+          service_type: editForm.serviceType || null,
+          wedding_type: editForm.weddingType || null,
           addons: editForm.addOns.map((a) => ({
             item_code: a.itemCode,
             item_name: a.itemName,
@@ -1237,7 +1250,7 @@ export default function ProjectDetailPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={async () => { const fresh = await fetchAddonItems(); populateDetailsForm(fresh); setEditDetailsOpen(true); }}
+                      onClick={async () => { setEditError(null); const fresh = await fetchAddonItems(); populateDetailsForm(fresh); setEditDetailsOpen(true); }}
                     >
                       <Pencil className="h-3 w-3 mr-1" /> Edit
                     </Button>

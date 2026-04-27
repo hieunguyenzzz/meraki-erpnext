@@ -198,8 +198,8 @@ def create_milestone(project_name: str, req: MilestoneRequest):
         _delete_payment_ledger_entries(client, inv_name)
         try:
             client._delete(f"/api/resource/Sales Invoice/{inv_name}")
-        except Exception:
-            pass
+        except Exception as _del_e:
+            log.warning("invoice_cleanup_failed", invoice=inv_name, error=str(_del_e))
         raise HTTPException(status_code=400, detail=f"Payment Entry creation failed: {str(e)}")
     pe_name = pe["name"]
     full_pe = client._get(f"/api/resource/Payment Entry/{pe_name}").get("data", {})
@@ -274,8 +274,8 @@ def edit_milestone(project_name: str, invoice_name: str, req: MilestoneRequest):
         _delete_payment_ledger_entries(client, new_inv_name)
         try:
             client._delete(f"/api/resource/Sales Invoice/{new_inv_name}")
-        except Exception:
-            pass
+        except Exception as _del_e:
+            log.warning("invoice_cleanup_failed", invoice=new_inv_name, error=str(_del_e))
         raise HTTPException(status_code=400, detail=f"Payment Entry creation failed: {str(e)}")
     pe_name = pe["name"]
     full_pe = client._get(f"/api/resource/Payment Entry/{pe_name}").get("data", {})
@@ -306,92 +306,6 @@ class AddonItem(BaseModel):
     qty: float = 1
     rate: float
 
-
-class AddonsRequest(BaseModel):
-    items: list[AddonItem]
-
-
-@router.put("/wedding/{project_name}/addons")
-def update_addons(project_name: str, req: AddonsRequest):
-    """Update add-on items on a wedding's Sales Order using ERPNext's update_child_qty_rate API."""
-    client = ERPNextClient()
-
-    # 1. Get project → sales_order name
-    project = client._get(f"/api/resource/Project/{project_name}").get("data", {})
-    so_name = project.get("sales_order")
-    if not so_name:
-        raise HTTPException(status_code=404, detail="No Sales Order linked to this project")
-
-    # 2. Get current SO and its items
-    so = client._get(f"/api/resource/Sales Order/{so_name}").get("data", {})
-    if so.get("docstatus") == 2:
-        raise HTTPException(status_code=400, detail="Sales Order is already cancelled")
-
-    if so.get("docstatus") == 0:
-        raise HTTPException(status_code=400, detail="Sales Order is not submitted yet")
-
-    # 3. Build trans_items: keep all package service rows (SVC-FULL/PARTIAL/COORDINATOR, with their name/docname
-    #    so update_child_qty_rate treats them as existing rows, not new ones) + new add-on rows.
-    original_items = so.get("items", [])
-    default_wh = "Stores - MWP"
-    requested_codes = {a.item_code for a in req.items if a.item_code}
-
-    # Keep all existing SO items that the request doesn't touch (e.g. the main package row)
-    unchanged_rows = [
-        {
-            "docname": item["name"],
-            "item_code": item["item_code"],
-            "item_name": item["item_name"],
-            "qty": item["qty"],
-            "rate": item["rate"],
-            "conversion_factor": item.get("conversion_factor", 1),
-            "warehouse": item.get("warehouse") or default_wh,
-        }
-        for item in original_items
-        if item.get("item_code") not in requested_codes
-    ]
-
-    existing_by_code = {
-        item["item_code"]: item
-        for item in original_items
-        if item.get("item_code") in requested_codes
-    }
-
-    addon_rows = []
-    for addon in req.items:
-        if not addon.item_code:
-            continue
-        existing = existing_by_code.get(addon.item_code)
-        row = {
-            "item_code": addon.item_code,
-            "item_name": addon.item_name,
-            "qty": addon.qty,
-            "rate": addon.rate,
-            "conversion_factor": 1,
-            "warehouse": (existing.get("warehouse") if existing else None) or default_wh,
-        }
-        if existing:
-            row["docname"] = existing["name"]
-        addon_rows.append(row)
-
-    trans_items = unchanged_rows + addon_rows
-
-    # 4. Call ERPNext's standard update_child_qty_rate — accounting-safe, works
-    #    even when invoices exist (as long as per_billed < 100% for rate changes;
-    #    adding new rows is allowed at any billing percentage).
-    import json as _json
-    client._post(
-        "/api/method/erpnext.controllers.accounts_controller.update_child_qty_rate",
-        {
-            "parent_doctype": "Sales Order",
-            "trans_items": _json.dumps(trans_items),
-            "parent_doctype_name": so_name,
-            "child_docname": "items",
-        },
-    )
-
-    log.info("addons_updated", project=project_name, so=so_name, addon_count=len(addon_rows))
-    return {"success": True, "sales_order": so_name}
 
 
 class UpdateDetailsAddonItem(BaseModel):
@@ -553,12 +467,12 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
     has_tax = bool(so.get("taxes"))
     rate_field = "net_rate" if has_tax else "rate"
     commission_addon_codes = {a.item_code for a in req.addons if a.include_in_commission}
-    package_rate = next(
-        (item[rate_field] for item in updated_items if item.get("item_code") not in requested_addon_codes),
-        0,
+    package_rate = sum(
+        item.get(rate_field, 0) for item in updated_items
+        if item.get("item_code") not in requested_addon_codes
     )
     addon_commission = sum(
-        item[rate_field] for item in updated_items
+        item.get(rate_field, 0) for item in updated_items
         if item.get("item_code") in commission_addon_codes
     )
     commission_base = package_rate + addon_commission
@@ -583,8 +497,8 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
                 "fieldname": "custom_include_in_commission",
                 "value": 1 if addon.include_in_commission else 0,
             })
-        except Exception:
-            pass  # non-critical, best-effort
+        except Exception as e:
+            log.warning("include_in_commission_update_failed", item=addon.item_code, error=str(e))
 
     log.info("wedding_details_updated", project=project_name, so=so_name, commission_base=commission_base)
     return {"success": True, "commission_base": commission_base}
