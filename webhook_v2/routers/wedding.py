@@ -18,6 +18,9 @@ from webhook_v2.core.logging import get_logger
 log = get_logger(__name__)
 router = APIRouter()
 
+# Item codes that represent the main wedding package (not add-ons)
+_PACKAGE_ITEM_CODES = {"SVC-FULL", "SVC-PARTIAL", "SVC-COORDINATOR", "Wedding Planning Service"}
+
 
 class MilestoneRequest(BaseModel):
     amount: float
@@ -328,7 +331,7 @@ def update_addons(project_name: str, req: AddonsRequest):
     if so.get("docstatus") == 0:
         raise HTTPException(status_code=400, detail="Sales Order is not submitted yet")
 
-    # 3. Build trans_items: keep all "Wedding Planning Service" rows (with their name/docname
+    # 3. Build trans_items: keep all package service rows (SVC-FULL/PARTIAL/COORDINATOR, with their name/docname
     #    so update_child_qty_rate treats them as existing rows, not new ones) + new add-on rows.
     original_items = so.get("items", [])
     default_wh = "Stores - MWP"
@@ -343,14 +346,14 @@ def update_addons(project_name: str, req: AddonsRequest):
             "warehouse": item.get("warehouse") or default_wh,
         }
         for item in original_items
-        if item.get("item_code") == "Wedding Planning Service"
+        if item.get("item_code") in _PACKAGE_ITEM_CODES
     ]
 
     # Existing add-on rows keyed by item_code so we can carry their docname
     existing_addon_by_code = {
         item["item_code"]: item
         for item in original_items
-        if item.get("item_code") != "Wedding Planning Service"
+        if item.get("item_code") not in _PACKAGE_ITEM_CODES
     }
 
     addon_rows = []
@@ -500,13 +503,13 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
             "warehouse": item.get("warehouse") or default_wh,
         }
         for item in original_items
-        if item.get("item_code") == "Wedding Planning Service"
+        if item.get("item_code") in _PACKAGE_ITEM_CODES
     ]
 
     existing_addon_by_code = {
         item["item_code"]: item
         for item in original_items
-        if item.get("item_code") != "Wedding Planning Service"
+        if item.get("item_code") not in _PACKAGE_ITEM_CODES
     }
 
     addon_rows = []
@@ -547,12 +550,12 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
     has_tax = bool(so.get("taxes"))
     rate_field = "net_rate" if has_tax else "rate"
     package_rate = next(
-        (item[rate_field] for item in updated_items if item.get("item_code") == "Wedding Planning Service"),
+        (item[rate_field] for item in updated_items if item.get("item_code") in _PACKAGE_ITEM_CODES),
         0,
     )
     addon_commission = sum(
         item[rate_field] for item in updated_items
-        if item.get("item_code") != "Wedding Planning Service"
+        if item.get("item_code") not in _PACKAGE_ITEM_CODES
         and item.get("item_code") in {a.item_code for a in req.addons if a.include_in_commission}
     )
     commission_base = package_rate + addon_commission
@@ -568,7 +571,7 @@ def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
 
     # 5. Persist include_in_commission flag on each addon Item
     for addon in req.addons:
-        if not addon.item_code or addon.item_code == "Wedding Planning Service":
+        if not addon.item_code or addon.item_code in _PACKAGE_ITEM_CODES:
             continue
         try:
             client._post("/api/method/frappe.client.set_value", {
