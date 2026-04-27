@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Plus, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X, Trash2 } from "lucide-react";
+import { Plus, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X, ChevronDown } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Invoice {
   name: string;
@@ -124,6 +131,7 @@ export default function InvoicesPage() {
   // Row selection state
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [deleting, setDeleting] = useState(false);
+  const [assigning, setAssigning] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Referral sheet state
@@ -269,11 +277,10 @@ export default function InvoicesPage() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      const names = selectedNames.map((idx) => invoices[Number(idx)]?.name).filter(Boolean);
       const res = await fetch("/inquiry-api/sales-invoices/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ names }),
+        body: JSON.stringify({ names: selectedNames }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -292,6 +299,34 @@ export default function InvoicesPage() {
     }
   }
 
+  async function handleAssignCategory(category: "Wedding Payment" | "Referral Commission") {
+    if (selectedCount === 0) return;
+
+    setAssigning(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/inquiry-api/sales-invoices/assign-category", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names: selectedNames, category }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Assign failed: ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.failed?.length) {
+        setDeleteError(`Some invoices failed: ${data.failed.join(", ")}`);
+      }
+      setRowSelection({});
+      invalidate({ resource: "Sales Invoice", invalidates: ["list"] });
+    } catch (err: any) {
+      setDeleteError(err.message || "Failed to assign category");
+    } finally {
+      setAssigning(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -301,10 +336,29 @@ export default function InvoicesPage() {
         </div>
         <div className="flex items-center gap-2">
           {selectedCount > 0 && (
-            <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={deleting}>
-              <Trash2 className="mr-1.5 h-4 w-4" />
-              {deleting ? "Deleting..." : `Delete ${selectedCount} selected`}
-            </Button>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">{selectedCount} selected</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={assigning || deleting}>
+                    {assigning ? "Assigning..." : deleting ? "Deleting..." : "Actions"}
+                    <ChevronDown className="ml-1.5 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => handleAssignCategory("Wedding Payment")}>
+                    Assign as Wedding Payment
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => handleAssignCategory("Referral Commission")}>
+                    Assign as Commission
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={handleDeleteSelected} className="text-destructive">
+                    Delete selected
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
           <Button onClick={() => setReferralOpen(true)}>
             <Plus className="h-4 w-4 mr-1.5" />
@@ -556,6 +610,7 @@ export default function InvoicesPage() {
         enableRowSelection
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
+        getRowId={(row) => row.name}
         filterableColumns={[
           {
             id: "custom_invoice_category",

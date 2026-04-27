@@ -254,6 +254,38 @@ def delete_sales_invoices(request: DeleteSalesInvoicesRequest):
     return {"deleted": deleted, "failed": failed}
 
 
+class AssignSalesInvoiceCategoryRequest(BaseModel):
+    names: List[str]
+    category: str
+
+
+@router.post("/sales-invoices/assign-category")
+def assign_sales_invoice_category(request: AssignSalesInvoiceCategoryRequest):
+    """Set custom_invoice_category on the given sales invoices."""
+    allowed = {"Wedding Payment", "Referral Commission"}
+    if request.category not in allowed:
+        raise HTTPException(status_code=400, detail=f"category must be one of {sorted(allowed)}")
+
+    client = ERPNextClient()
+    updated = []
+    failed = []
+
+    for si_name in request.names:
+        try:
+            client._post("/api/method/frappe.client.set_value", {
+                "doctype": "Sales Invoice",
+                "name": si_name,
+                "fieldname": "custom_invoice_category",
+                "value": request.category,
+            })
+            updated.append(si_name)
+        except Exception as e:
+            failed.append(f"{si_name}: {e}")
+
+    log.info("sales_invoices_category_updated", category=request.category, updated=len(updated), failed=len(failed))
+    return {"updated": updated, "failed": failed}
+
+
 class PurchaseInvoiceNamesRequest(BaseModel):
     names: List[str]
 
