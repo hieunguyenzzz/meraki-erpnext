@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePermissions } from "@refinedev/core";
 import { LayoutGrid, LayoutList, Plus } from "lucide-react";
-import { Link } from "react-router";
-import { type ColumnDef } from "@tanstack/react-table";
+import { Link, useSearchParams } from "react-router";
+import { type ColumnDef, type ColumnFiltersState } from "@tanstack/react-table";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { ProjectKanbanCard } from "@/components/projects/ProjectKanbanCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,25 +26,63 @@ export default function ProjectKanbanPage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">(() =>
     (localStorage.getItem("wedding-view-mode") as "kanban" | "list") || "list"
   );
-  const [yearFilter, setYearFilter] = useState<string | null>(String(new Date().getFullYear()));
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
   const { employeeId } = useMyEmployee();
   const isWeddingManager = hasModuleAccess(roles ?? [], WEDDING_MANAGER_ROLES);
-  const [showMyWeddings, setShowMyWeddings] = useState<boolean>(() => {
-    const stored = localStorage.getItem("wedding-my-filter");
-    if (stored !== null) return stored === "true";
-    return false;
-  });
 
-  useEffect(() => {
-    if (!roles) return;
-    if (!hasModuleAccess(roles, WEDDING_MANAGER_ROLES)) {
-      setShowMyWeddings(true);
-    } else if (localStorage.getItem("wedding-my-filter") === null) {
-      setShowMyWeddings(false);
-    }
-  }, [roles]);
+  // All filter state derived from URL — no defaults written on mount.
+  const yearFilter = searchParams.get("year"); // null = all years
+  const stageParam = searchParams.get("stage") ?? "";
+  const typeParam = searchParams.get("type") ?? "";
+  const searchValue = searchParams.get("q") ?? "";
+
+  // my filter: URL param > localStorage > role default (non-managers always see their own)
+  const myRaw = searchParams.get("my");
+  const showMyWeddings = myRaw !== null
+    ? myRaw === "1"
+    : roles !== undefined && !isWeddingManager
+      ? true
+      : localStorage.getItem("wedding-my-filter") === "true";
+
+  const columnFilters = useMemo<ColumnFiltersState>(() => {
+    const filters: ColumnFiltersState = [];
+    if (stageParam) filters.push({ id: "custom_project_stage", value: stageParam.split(",") });
+    if (typeParam) filters.push({ id: "custom_wedding_type", value: typeParam.split(",") });
+    return filters;
+  }, [stageParam, typeParam]);
+
+  const setParam = (key: string, value: string | null) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value === null || value === "") next.delete(key);
+      else next.set(key, value);
+      return next;
+    }, { replace: true });
+  };
+
+  const setYearFilter = (year: string | null) => setParam("year", year);
+
+  const setShowMyWeddings = (value: boolean) => {
+    localStorage.setItem("wedding-my-filter", value ? "true" : "false");
+    setParam("my", value ? "1" : null);
+  };
+
+  const handleColumnFiltersChange = (filters: ColumnFiltersState) => {
+    const stage = filters.find((f) => f.id === "custom_project_stage")?.value as string[] | undefined;
+    const type = filters.find((f) => f.id === "custom_wedding_type")?.value as string[] | undefined;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (stage?.length) next.set("stage", stage.join(","));
+      else next.delete("stage");
+      if (type?.length) next.set("type", type.join(","));
+      else next.delete("type");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleSearchChange = (value: string) => setParam("q", value || null);
 
   const handleViewChange = (mode: "kanban" | "list") => {
     setViewMode(mode);
@@ -280,13 +318,13 @@ export default function ProjectKanbanPage() {
               variant={showMyWeddings ? "default" : "ghost"}
               size="sm"
               className="h-7 px-3 text-xs"
-              onClick={() => { setShowMyWeddings(true); localStorage.setItem("wedding-my-filter", "true"); }}
+              onClick={() => setShowMyWeddings(true)}
             >My Weddings</Button>
             <Button
               variant={!showMyWeddings ? "default" : "ghost"}
               size="sm"
               className="h-7 px-3 text-xs"
-              onClick={() => { setShowMyWeddings(false); localStorage.setItem("wedding-my-filter", "false"); }}
+              onClick={() => setShowMyWeddings(false)}
             >All Weddings</Button>
           </div>
         )}
@@ -319,6 +357,10 @@ export default function ProjectKanbanPage() {
           searchKey="customer_name"
           searchPlaceholder="Search couple..."
           filterableColumns={filterableColumns}
+          columnFilters={columnFilters}
+          onColumnFiltersChange={handleColumnFiltersChange}
+          searchValue={searchValue}
+          onSearchChange={handleSearchChange}
         />
       ) : isLoading ? (
         <>
