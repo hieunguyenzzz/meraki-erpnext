@@ -15,8 +15,6 @@ interface DataTableToolbarProps<TData> {
   searchKey?: string;
   searchPlaceholder?: string;
   filterableColumns?: FilterableColumn[];
-  searchValue?: string;
-  onSearchChange?: (value: string) => void;
 }
 
 export function DataTableToolbar<TData>({
@@ -24,15 +22,9 @@ export function DataTableToolbar<TData>({
   searchKey,
   searchPlaceholder,
   filterableColumns = [],
-  searchValue,
-  onSearchChange,
 }: DataTableToolbarProps<TData>) {
   const isFiltered = table.getState().columnFilters.length > 0;
   const searchColumn = searchKey ? table.getColumn(searchKey) : undefined;
-  const isSearchControlled = onSearchChange !== undefined;
-  const currentSearchValue = isSearchControlled
-    ? searchValue ?? ""
-    : ((searchColumn?.getFilterValue() as string) ?? "");
 
   return (
     <div className="flex items-center justify-between">
@@ -40,15 +32,8 @@ export function DataTableToolbar<TData>({
         {searchColumn && (
           <Input
             placeholder={searchPlaceholder ?? `Search...`}
-            value={currentSearchValue}
-            onChange={(event) => {
-              const next = event.target.value;
-              if (isSearchControlled) {
-                onSearchChange(next);
-              } else {
-                searchColumn.setFilterValue(next);
-              }
-            }}
+            value={(searchColumn.getFilterValue() as string) ?? ""}
+            onChange={(event) => searchColumn.setFilterValue(event.target.value)}
             className="h-8 w-[150px] lg:w-[250px]"
           />
         )}

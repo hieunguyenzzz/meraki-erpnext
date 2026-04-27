@@ -83,12 +83,6 @@ interface DataTableProps<TData, TValue> {
   sortable?: boolean;
   sortableItems?: string[];
   onDragEnd?: (event: DragEndEvent) => void;
-  /** Controlled facet filters (excludes the `searchKey` column). */
-  columnFilters?: ColumnFiltersState;
-  onColumnFiltersChange?: (filters: ColumnFiltersState) => void;
-  /** Controlled search text (filters the `searchKey` column). */
-  searchValue?: string;
-  onSearchChange?: (value: string) => void;
 }
 
 export function DataTable<TData, TValue>({
@@ -105,62 +99,10 @@ export function DataTable<TData, TValue>({
   sortable,
   sortableItems,
   onDragEnd,
-  columnFilters: controlledColumnFilters,
-  onColumnFiltersChange,
-  searchValue: controlledSearchValue,
-  onSearchChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [internalColumnFilters, setInternalColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const sensors = useSensors(useSensor(PointerSensor));
-
-  const isFiltersControlled = onColumnFiltersChange !== undefined;
-  const isSearchControlled = onSearchChange !== undefined;
-
-  // Merge facet filters + search filter into a single TanStack columnFilters value.
-  // Controlled-mode callers pass facet filters and search text separately; internally
-  // both must live in the same `columnFilters` array so the table filters both.
-  const facetFilters: ColumnFiltersState = isFiltersControlled
-    ? controlledColumnFilters ?? []
-    : internalColumnFilters.filter((f) => f.id !== searchKey);
-  const searchFilter: ColumnFiltersState = isSearchControlled
-    ? searchKey && controlledSearchValue
-      ? [{ id: searchKey, value: controlledSearchValue }]
-      : []
-    : internalColumnFilters.filter((f) => f.id === searchKey);
-  const columnFilters: ColumnFiltersState =
-    isFiltersControlled || isSearchControlled
-      ? [...facetFilters, ...searchFilter]
-      : internalColumnFilters;
-
-  const handleColumnFiltersChange = (updater: Updater<ColumnFiltersState>) => {
-    const next = typeof updater === "function" ? updater(columnFilters) : updater;
-    if (isFiltersControlled || isSearchControlled) {
-      // Split next into facet filters vs search filter and forward to the right callback.
-      const searchEntry = searchKey ? next.find((f) => f.id === searchKey) : undefined;
-      const facetFilters = searchKey ? next.filter((f) => f.id !== searchKey) : next;
-      if (isFiltersControlled) {
-        onColumnFiltersChange(facetFilters);
-      } else {
-        // Search is controlled but filters aren't: keep facets in internal state.
-        setInternalColumnFilters((prev) => [
-          ...facetFilters,
-          ...prev.filter((f) => f.id === searchKey),
-        ]);
-      }
-      if (isSearchControlled) {
-        onSearchChange((searchEntry?.value as string) ?? "");
-      } else if (searchKey) {
-        // Filters are controlled but search isn't: keep search in internal state.
-        setInternalColumnFilters((prev) => [
-          ...prev.filter((f) => f.id !== searchKey),
-          ...(searchEntry ? [searchEntry] : []),
-        ]);
-      }
-    } else {
-      setInternalColumnFilters(next);
-    }
-  };
 
   const handleRowSelectionChange = onRowSelectionChange
     ? (updater: Updater<RowSelectionState>) => {
@@ -176,7 +118,7 @@ export function DataTable<TData, TValue>({
     state: { sorting, columnFilters, ...(rowSelection !== undefined && { rowSelection }) },
     enableRowSelection: enableRowSelection ?? false,
     onSortingChange: setSorting,
-    onColumnFiltersChange: handleColumnFiltersChange,
+    onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: handleRowSelectionChange,
     getRowId: getRowId as ((row: TData, index: number, parent?: any) => string) | undefined,
     getCoreRowModel: getCoreRowModel(),
@@ -220,8 +162,6 @@ export function DataTable<TData, TValue>({
         searchKey={searchKey}
         searchPlaceholder={searchPlaceholder}
         filterableColumns={filterableColumns}
-        searchValue={isSearchControlled ? controlledSearchValue : undefined}
-        onSearchChange={onSearchChange}
       />
       <div className="rounded-md border">
         <Table>

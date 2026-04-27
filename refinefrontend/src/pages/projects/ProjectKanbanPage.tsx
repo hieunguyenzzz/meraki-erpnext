@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePermissions } from "@refinedev/core";
 import { LayoutGrid, LayoutList, Plus } from "lucide-react";
-import { Link, useSearchParams } from "react-router";
-import { type ColumnDef, type ColumnFiltersState } from "@tanstack/react-table";
+import { Link } from "react-router";
+import { type ColumnDef } from "@tanstack/react-table";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { ProjectKanbanCard } from "@/components/projects/ProjectKanbanCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,88 +26,25 @@ export default function ProjectKanbanPage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">(() =>
     (localStorage.getItem("wedding-view-mode") as "kanban" | "list") || "list"
   );
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [yearFilter, setYearFilter] = useState<string | null>(String(new Date().getFullYear()));
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
   const { employeeId } = useMyEmployee();
   const isWeddingManager = hasModuleAccess(roles ?? [], WEDDING_MANAGER_ROLES);
+  const [showMyWeddings, setShowMyWeddings] = useState<boolean>(() => {
+    const stored = localStorage.getItem("wedding-my-filter");
+    if (stored !== null) return stored === "true";
+    return false;
+  });
 
-  // URL-derived filter state (source of truth)
-  const yearFilter = searchParams.get("year");
-  const myParam = searchParams.get("my");
-  const showMyWeddings = myParam === "1";
-  const stageParam = searchParams.get("stage") ?? "";
-  const typeParam = searchParams.get("type") ?? "";
-  const searchValue = searchParams.get("q") ?? "";
-
-  const columnFilters = useMemo<ColumnFiltersState>(() => {
-    const filters: ColumnFiltersState = [];
-    if (stageParam) filters.push({ id: "custom_project_stage", value: stageParam.split(",") });
-    if (typeParam) filters.push({ id: "custom_wedding_type", value: typeParam.split(",") });
-    return filters;
-  }, [stageParam, typeParam]);
-
-  // Helper: update URL params (push by default, replace for high-frequency events).
-  const updateParams = useCallback(
-    (updates: Record<string, string | null>, opts?: { replace?: boolean }) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          for (const [k, v] of Object.entries(updates)) {
-            if (v === null || v === "") next.delete(k);
-            else next.set(k, v);
-          }
-          return next;
-        },
-        { replace: opts?.replace ?? false }
-      );
-    },
-    [setSearchParams]
-  );
-
-  // Seed `year` on mount (synchronous, no role dependency) so the listing isn't
-  // briefly unfiltered while roles load.
-  useEffect(() => {
-    if (!searchParams.has("year")) {
-      updateParams({ year: String(new Date().getFullYear()) }, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Seed `my` once roles load (depends on the "non-manager => forced my=1" rule).
   useEffect(() => {
     if (!roles) return;
-    if (searchParams.has("my")) return;
     if (!hasModuleAccess(roles, WEDDING_MANAGER_ROLES)) {
-      updateParams({ my: "1" }, { replace: true });
-    } else {
-      const stored = localStorage.getItem("wedding-my-filter");
-      if (stored === "true") updateParams({ my: "1" }, { replace: true });
+      setShowMyWeddings(true);
+    } else if (localStorage.getItem("wedding-my-filter") === null) {
+      setShowMyWeddings(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roles]);
-
-  const setYearFilter = (year: string | null) => {
-    updateParams({ year });
-  };
-
-  const setShowMyWeddings = (value: boolean) => {
-    localStorage.setItem("wedding-my-filter", value ? "true" : "false");
-    updateParams({ my: value ? "1" : null });
-  };
-
-  const handleColumnFiltersChange = (filters: ColumnFiltersState) => {
-    const stage = filters.find((f) => f.id === "custom_project_stage")?.value as string[] | undefined;
-    const type = filters.find((f) => f.id === "custom_wedding_type")?.value as string[] | undefined;
-    updateParams({
-      stage: stage && stage.length > 0 ? stage.join(",") : null,
-      type: type && type.length > 0 ? type.join(",") : null,
-    });
-  };
-
-  const handleSearchChange = (value: string) => {
-    updateParams({ q: value || null }, { replace: true });
-  };
 
   const handleViewChange = (mode: "kanban" | "list") => {
     setViewMode(mode);
@@ -343,13 +280,13 @@ export default function ProjectKanbanPage() {
               variant={showMyWeddings ? "default" : "ghost"}
               size="sm"
               className="h-7 px-3 text-xs"
-              onClick={() => setShowMyWeddings(true)}
+              onClick={() => { setShowMyWeddings(true); localStorage.setItem("wedding-my-filter", "true"); }}
             >My Weddings</Button>
             <Button
               variant={!showMyWeddings ? "default" : "ghost"}
               size="sm"
               className="h-7 px-3 text-xs"
-              onClick={() => setShowMyWeddings(false)}
+              onClick={() => { setShowMyWeddings(false); localStorage.setItem("wedding-my-filter", "false"); }}
             >All Weddings</Button>
           </div>
         )}
@@ -382,10 +319,6 @@ export default function ProjectKanbanPage() {
           searchKey="customer_name"
           searchPlaceholder="Search couple..."
           filterableColumns={filterableColumns}
-          columnFilters={columnFilters}
-          onColumnFiltersChange={handleColumnFiltersChange}
-          searchValue={searchValue}
-          onSearchChange={handleSearchChange}
         />
       ) : isLoading ? (
         <>
