@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePermissions } from "@refinedev/core";
 import { LayoutGrid, LayoutList, Plus } from "lucide-react";
-import { Link, useSearchParams } from "react-router";
+import { Link } from "react-router";
 import { type ColumnDef, type ColumnFiltersState } from "@tanstack/react-table";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { ProjectKanbanCard } from "@/components/projects/ProjectKanbanCard";
@@ -26,20 +26,20 @@ export default function ProjectKanbanPage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">(() =>
     (localStorage.getItem("wedding-view-mode") as "kanban" | "list") || "list"
   );
-  const [searchParams, setSearchParams] = useSearchParams();
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
   const { employeeId } = useMyEmployee();
   const isWeddingManager = hasModuleAccess(roles ?? [], WEDDING_MANAGER_ROLES);
 
-  // All filter state derived from URL — no defaults written on mount.
-  const yearFilter = searchParams.get("year"); // null = all years
-  const stageParam = searchParams.get("stage") ?? "";
-  const typeParam = searchParams.get("type") ?? "";
-  const searchValue = searchParams.get("q") ?? "";
+  // Filter state — initialised from URL on mount, kept in React state for reliable renders.
+  // URL is kept in sync via history.pushState (bookmarkable without React Router involvement).
+  const _init = () => new URLSearchParams(window.location.search);
+  const [yearFilter, setYearFilterState] = useState<string | null>(() => _init().get("year"));
+  const [stageParam, setStageParam] = useState(() => _init().get("stage") ?? "");
+  const [typeParam, setTypeParam] = useState(() => _init().get("type") ?? "");
+  const [searchValue, setSearchValue] = useState(() => _init().get("q") ?? "");
+  const [myRaw, setMyRaw] = useState<string | null>(() => _init().get("my"));
 
-  // my filter: URL param > localStorage > role default (non-managers always see their own)
-  const myRaw = searchParams.get("my");
   const showMyWeddings = myRaw !== null
     ? myRaw === "1"
     : roles !== undefined && !isWeddingManager
@@ -53,36 +53,42 @@ export default function ProjectKanbanPage() {
     return filters;
   }, [stageParam, typeParam]);
 
-  const setParam = (key: string, value: string | null) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (value === null || value === "") next.delete(key);
-      else next.set(key, value);
-      return next;
-    }, { replace: true });
+  // Sync all current filter state to the URL (pushState — no React Router navigation).
+  const syncUrl = (overrides: Record<string, string | null>) => {
+    const params = new URLSearchParams(window.location.search);
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v === null || v === "") params.delete(k);
+      else params.set(k, v);
+    }
+    const qs = params.toString();
+    window.history.pushState(null, "", qs ? `?${qs}` : window.location.pathname);
   };
 
-  const setYearFilter = (year: string | null) => setParam("year", year);
+  const setYearFilter = (year: string | null) => {
+    setYearFilterState(year);
+    syncUrl({ year });
+  };
 
   const setShowMyWeddings = (value: boolean) => {
     localStorage.setItem("wedding-my-filter", value ? "true" : "false");
-    setParam("my", value ? "1" : null);
+    setMyRaw(value ? "1" : null);
+    syncUrl({ my: value ? "1" : null });
   };
 
   const handleColumnFiltersChange = (filters: ColumnFiltersState) => {
     const stage = filters.find((f) => f.id === "custom_project_stage")?.value as string[] | undefined;
     const type = filters.find((f) => f.id === "custom_wedding_type")?.value as string[] | undefined;
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (stage?.length) next.set("stage", stage.join(","));
-      else next.delete("stage");
-      if (type?.length) next.set("type", type.join(","));
-      else next.delete("type");
-      return next;
-    }, { replace: true });
+    const stageVal = stage?.length ? stage.join(",") : "";
+    const typeVal = type?.length ? type.join(",") : "";
+    setStageParam(stageVal);
+    setTypeParam(typeVal);
+    syncUrl({ stage: stageVal || null, type: typeVal || null });
   };
 
-  const handleSearchChange = (value: string) => setParam("q", value || null);
+  const handleSearchChange = (value: string) => {
+    setSearchValue(value);
+    syncUrl({ q: value || null });
+  };
 
   const handleViewChange = (mode: "kanban" | "list") => {
     setViewMode(mode);
