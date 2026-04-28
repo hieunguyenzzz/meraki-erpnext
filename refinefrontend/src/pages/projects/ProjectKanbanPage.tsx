@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryState } from "nuqs";
 import { usePermissions } from "@refinedev/core";
 import { LayoutGrid, LayoutList, Plus } from "lucide-react";
 import { Link } from "react-router";
@@ -26,7 +27,10 @@ export default function ProjectKanbanPage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">(() =>
     (localStorage.getItem("wedding-view-mode") as "kanban" | "list") || "list"
   );
-  const [yearFilter, setYearFilter] = useState<string | null>(String(new Date().getFullYear()));
+  const [yearFilter, setYearFilter] = useQueryState("year", {
+    defaultValue: String(new Date().getFullYear()),
+    clearOnDefault: true,
+  });
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
   const { employeeId } = useMyEmployee();

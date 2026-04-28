@@ -1,6 +1,7 @@
 import { Refine, Authenticated, usePermissions } from "@refinedev/core";
 import routerProvider from "@refinedev/react-router";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router";
+import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { dataProvider } from "@/providers/dataProvider";
@@ -97,6 +98,7 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <NuqsAdapter>
       <QueryClientProvider client={queryClient}>
         <Refine
           dataProvider={dataProvider}
@@ -215,6 +217,7 @@ export default function App() {
           </Routes>
         </Refine>
       </QueryClientProvider>
+      </NuqsAdapter>
     </BrowserRouter>
   );
 }
