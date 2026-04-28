@@ -427,21 +427,6 @@ Use **nuqs** (`useQueryState`) for any filter that should be bookmarkable or sha
 
 > **Do NOT use `useSearchParams` from React Router** inside this app. Refine's `Authenticated` wrapper breaks the re-render cycle — URL updates but components don't re-render.
 
-```tsx
-import { useQueryState } from "nuqs";
-
-// Single value (string | null)
-const [yearFilter, setYearFilter] = useQueryState("year", {
-  defaultValue: String(new Date().getFullYear()),
-  clearOnDefault: true,   // removes param from URL when value equals default
-});
-
-// null = "all" (param absent from URL)
-// "2025" = ?year=2025
-setYearFilter("2025");   // sets ?year=2025
-setYearFilter(null);     // clears param
-```
-
 `NuqsAdapter` is already mounted in `App.tsx` (inside `<BrowserRouter>`). No extra setup needed.
 
 For **internal table filters** (stage, type, search) that don't need to be in the URL, use TanStack Table's built-in uncontrolled state — no nuqs needed.
