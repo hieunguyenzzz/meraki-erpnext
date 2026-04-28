@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePermissions } from "@refinedev/core";
 import { LayoutGrid, LayoutList, Plus } from "lucide-react";
 import { Link } from "react-router";
-import { type ColumnDef, type ColumnFiltersState } from "@tanstack/react-table";
+import { type ColumnDef } from "@tanstack/react-table";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { ProjectKanbanCard } from "@/components/projects/ProjectKanbanCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,69 +26,25 @@ export default function ProjectKanbanPage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">(() =>
     (localStorage.getItem("wedding-view-mode") as "kanban" | "list") || "list"
   );
+  const [yearFilter, setYearFilter] = useState<string | null>(String(new Date().getFullYear()));
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
   const { employeeId } = useMyEmployee();
   const isWeddingManager = hasModuleAccess(roles ?? [], WEDDING_MANAGER_ROLES);
+  const [showMyWeddings, setShowMyWeddings] = useState<boolean>(() => {
+    const stored = localStorage.getItem("wedding-my-filter");
+    if (stored !== null) return stored === "true";
+    return false;
+  });
 
-  // Filter state — initialised from URL on mount, kept in React state for reliable renders.
-  // URL is kept in sync via history.pushState (bookmarkable without React Router involvement).
-  const _init = () => new URLSearchParams(window.location.search);
-  const [yearFilter, setYearFilterState] = useState<string | null>(() => _init().get("year"));
-  const [stageParam, setStageParam] = useState(() => _init().get("stage") ?? "");
-  const [typeParam, setTypeParam] = useState(() => _init().get("type") ?? "");
-  const [searchValue, setSearchValue] = useState(() => _init().get("q") ?? "");
-  const [myRaw, setMyRaw] = useState<string | null>(() => _init().get("my"));
-
-  const showMyWeddings = myRaw !== null
-    ? myRaw === "1"
-    : roles !== undefined && !isWeddingManager
-      ? true
-      : localStorage.getItem("wedding-my-filter") === "true";
-
-  const columnFilters = useMemo<ColumnFiltersState>(() => {
-    const filters: ColumnFiltersState = [];
-    if (stageParam) filters.push({ id: "custom_project_stage", value: stageParam.split(",") });
-    if (typeParam) filters.push({ id: "custom_wedding_type", value: typeParam.split(",") });
-    return filters;
-  }, [stageParam, typeParam]);
-
-  // Sync all current filter state to the URL (pushState — no React Router navigation).
-  const syncUrl = (overrides: Record<string, string | null>) => {
-    const params = new URLSearchParams(window.location.search);
-    for (const [k, v] of Object.entries(overrides)) {
-      if (v === null || v === "") params.delete(k);
-      else params.set(k, v);
+  useEffect(() => {
+    if (!roles) return;
+    if (!hasModuleAccess(roles, WEDDING_MANAGER_ROLES)) {
+      setShowMyWeddings(true);
+    } else if (localStorage.getItem("wedding-my-filter") === null) {
+      setShowMyWeddings(false);
     }
-    const qs = params.toString();
-    window.history.pushState(null, "", qs ? `?${qs}` : window.location.pathname);
-  };
-
-  const setYearFilter = (year: string | null) => {
-    setYearFilterState(year);
-    syncUrl({ year });
-  };
-
-  const setShowMyWeddings = (value: boolean) => {
-    localStorage.setItem("wedding-my-filter", value ? "true" : "false");
-    setMyRaw(value ? "1" : null);
-    syncUrl({ my: value ? "1" : null });
-  };
-
-  const handleColumnFiltersChange = (filters: ColumnFiltersState) => {
-    const stage = filters.find((f) => f.id === "custom_project_stage")?.value as string[] | undefined;
-    const type = filters.find((f) => f.id === "custom_wedding_type")?.value as string[] | undefined;
-    const stageVal = stage?.length ? stage.join(",") : "";
-    const typeVal = type?.length ? type.join(",") : "";
-    setStageParam(stageVal);
-    setTypeParam(typeVal);
-    syncUrl({ stage: stageVal || null, type: typeVal || null });
-  };
-
-  const handleSearchChange = (value: string) => {
-    setSearchValue(value);
-    syncUrl({ q: value || null });
-  };
+  }, [roles]);
 
   const handleViewChange = (mode: "kanban" | "list") => {
     setViewMode(mode);
@@ -324,13 +280,13 @@ export default function ProjectKanbanPage() {
               variant={showMyWeddings ? "default" : "ghost"}
               size="sm"
               className="h-7 px-3 text-xs"
-              onClick={() => setShowMyWeddings(true)}
+              onClick={() => { setShowMyWeddings(true); localStorage.setItem("wedding-my-filter", "true"); }}
             >My Weddings</Button>
             <Button
               variant={!showMyWeddings ? "default" : "ghost"}
               size="sm"
               className="h-7 px-3 text-xs"
-              onClick={() => setShowMyWeddings(false)}
+              onClick={() => { setShowMyWeddings(false); localStorage.setItem("wedding-my-filter", "false"); }}
             >All Weddings</Button>
           </div>
         )}
@@ -363,10 +319,6 @@ export default function ProjectKanbanPage() {
           searchKey="customer_name"
           searchPlaceholder="Search couple..."
           filterableColumns={filterableColumns}
-          columnFilters={columnFilters}
-          onColumnFiltersChange={handleColumnFiltersChange}
-          searchValue={searchValue}
-          onSearchChange={handleSearchChange}
         />
       ) : isLoading ? (
         <>
