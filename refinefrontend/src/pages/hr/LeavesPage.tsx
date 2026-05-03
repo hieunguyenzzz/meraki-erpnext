@@ -285,6 +285,16 @@ export default function LeavesPage() {
     } catch { setError(`Failed to reject ${appName}. Please try again.`); } finally { setProcessingId(null); }
   }
 
+  async function handleReApprove(appName: string) {
+    setProcessingId(appName);
+    setError(null);
+    try {
+      const res = await fetch(`/inquiry-api/leave/${encodeURIComponent(appName)}/re-approve`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      invalidate({ resource: "Leave Application", invalidates: ["list"] });
+    } catch { setError(`Failed to re-approve ${appName}. Please try again.`); } finally { setProcessingId(null); }
+  }
+
   const selectedApps = useMemo(() =>
     leaveApps.filter((a) => rowSelection[a.name]),
   [leaveApps, rowSelection]);
@@ -395,6 +405,13 @@ export default function LeavesPage() {
               <Button size="sm" variant="outline" onClick={() => handleApprove(app.name)} disabled={processingId === app.name}>Approve</Button>
               <Button size="sm" variant="destructive" onClick={() => handleReject(app.name)} disabled={processingId === app.name}>Reject</Button>
             </div>
+          );
+        }
+        if (app.status === "Rejected") {
+          return (
+            <Button size="sm" variant="outline" onClick={() => handleReApprove(app.name)} disabled={processingId === app.name}>
+              {processingId === app.name ? "Processing..." : "Approve"}
+            </Button>
           );
         }
         return null;

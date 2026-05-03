@@ -296,6 +296,44 @@ def _create_leave_application(
     return result.get("data", {})
 
 
+@router.post("/leave/{leave_id}/re-approve")
+def re_approve_leave(leave_id: str):
+    """Re-approve a Rejected leave: cancel it, recreate with same data, approve + submit."""
+    client = ERPNextClient()
+    try:
+        app = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
+        if app.get("status") != "Rejected":
+            raise HTTPException(status_code=400, detail="Only Rejected leaves can be re-approved")
+
+        # Cancel the rejected record
+        client._post("/api/method/frappe.client.cancel", {"doc": app})
+
+        # Recreate with same core fields
+        new_app = client._post("/api/resource/Leave Application", {
+            "employee": app["employee"],
+            "leave_type": app["leave_type"],
+            "from_date": app["from_date"],
+            "to_date": app["to_date"],
+            "description": app.get("description", ""),
+            "status": "Open",
+            **({"leave_approver": app["leave_approver"]} if app.get("leave_approver") else {}),
+            **({"half_day": app["half_day"]} if app.get("half_day") else {}),
+        }).get("data", {})
+
+        new_name = new_app.get("name")
+        if not new_name:
+            raise HTTPException(status_code=500, detail="Failed to create replacement leave application")
+
+        _approve_and_submit(client, new_name)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to re-approve leave: {e}")
+
+    log.info("leave_re_approved", original=leave_id, new=new_name)
+    return {"success": True, "new_name": new_name}
+
+
 @router.post("/leave/apply")
 def apply_leave(body: LeaveApplyRequest):
     """Create leave application(s). For Annual Leave with insufficient balance,
