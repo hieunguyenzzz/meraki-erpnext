@@ -56,6 +56,7 @@ export default function LeavesPage() {
   const { result: appsResult, query: appsQuery } = useList({
     resource: "Leave Application",
     pagination: { mode: "off" },
+    filters: [{ field: "docstatus", operator: "ne", value: 2 }],
     sorters: [{ field: "creation", order: "desc" }],
     meta: { fields: ["name", "employee", "employee_name", "leave_type", "from_date", "to_date", "total_leave_days", "status", "docstatus", "description"] },
   });
