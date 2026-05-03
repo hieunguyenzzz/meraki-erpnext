@@ -90,16 +90,6 @@ export default function LeaveReportPage() {
                     <TableHead className="text-center min-w-[80px] bg-blue-50 dark:bg-blue-950/30">
                       <div className="text-xs leading-tight">{currentYear - 1}<br />Balance</div>
                     </TableHead>
-                    <TableHead
-                      className="text-center min-w-[90px] bg-teal-50 dark:bg-teal-950/30 cursor-pointer select-none"
-                      onClick={() => setShowAllocation((v) => !v)}
-                      title={showAllocation ? "Click to hide" : "Click to show"}
-                    >
-                      <div className="text-xs leading-tight">
-                        {currentYear}<br />
-                        {showAllocation ? "Allocation" : <span className="opacity-40">Allocation</span>}
-                      </div>
-                    </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
                       <div className="text-xs leading-tight">{currentYear}<br />Taken</div>
                     </TableHead>
@@ -111,6 +101,16 @@ export default function LeaveReportPage() {
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-purple-50 dark:bg-purple-950/30">
                       <div className="text-xs leading-tight font-semibold">Total<br />Balance</div>
+                    </TableHead>
+                    <TableHead
+                      className="text-center min-w-[90px] bg-teal-50 dark:bg-teal-950/30 cursor-pointer select-none"
+                      onClick={() => setShowAllocation((v) => !v)}
+                      title={showAllocation ? "Click to hide" : "Click to show"}
+                    >
+                      <div className="text-xs leading-tight">
+                        {currentYear}<br />
+                        {showAllocation ? "Allocation" : <span className="opacity-40">Allocation</span>}
+                      </div>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -142,11 +142,6 @@ export default function LeaveReportPage() {
                         </Badge>
                       </TableCell>
                       {/* 2026 period */}
-                      {showAllocation && (
-                        <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
-                          {row.new_allocation_days}
-                        </TableCell>
-                      )}
                       <TableCell className="text-center text-sm bg-green-50/50 dark:bg-green-950/20">
                         {row.new_taken > 0 ? row.new_taken : "-"}
                       </TableCell>
@@ -167,6 +162,12 @@ export default function LeaveReportPage() {
                           {row.total_balance}
                         </Badge>
                       </TableCell>
+                      {/* 2026 Allocation — shown at end when toggled */}
+                      {showAllocation && (
+                        <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
+                          {row.new_allocation_days}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                   {rows.length === 0 && (
