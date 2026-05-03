@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 import { HrAddLeaveSheet } from "@/components/HrAddLeaveSheet";
 import { formatDate } from "@/lib/format";
@@ -44,6 +45,9 @@ export default function LeavesPage() {
   const [edits, setEdits] = useState<Record<string, AllocEdit>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [addLeaveOpen, setAddLeaveOpen] = useState(false);
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
 
@@ -280,6 +284,43 @@ export default function LeavesPage() {
     } catch { setError(`Failed to reject ${appName}. Please try again.`); } finally { setProcessingId(null); }
   }
 
+  const selectedApps = useMemo(() =>
+    leaveApps.filter((a) => rowSelection[a.name]),
+  [leaveApps, rowSelection]);
+
+  const approvedInSelection = selectedApps.filter((a) => a.docstatus === 1);
+
+  async function handleDeleteSelected() {
+    setIsDeleting(true);
+    setError(null);
+    try {
+      for (const app of selectedApps) {
+        if (app.docstatus === 1) {
+          const res = await fetch("/api/method/frappe.client.cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ doc: { doctype: "Leave Application", name: app.name } }),
+          });
+          if (!res.ok) throw new Error(`Failed to cancel ${app.name}`);
+        }
+        const res = await fetch(`/api/resource/Leave%20Application/${encodeURIComponent(app.name)}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(`Failed to delete ${app.name}`);
+      }
+      setRowSelection({});
+      setDeleteDialogOpen(false);
+      invalidate({ resource: "Leave Application", invalidates: ["list"] });
+    } catch (err: any) {
+      setError(err.message ?? "Delete failed. Please try again.");
+      setDeleteDialogOpen(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   // --- DataTable columns for Applications tab ---
   const appColumns: ColumnDef<LeaveApp, unknown>[] = [
     {
@@ -362,7 +403,21 @@ export default function LeavesPage() {
           <TabsTrigger value="balances">Balances</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="applications">
+        <TabsContent value="applications" className="space-y-2">
+          {selectedApps.length > 0 && (
+            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-2">
+              <span className="text-sm text-red-700 dark:text-red-400 flex-1">
+                {selectedApps.length} record{selectedApps.length > 1 ? "s" : ""} selected
+                {approvedInSelection.length > 0 && (
+                  <span className="font-medium"> &middot; {approvedInSelection.length} approved (will reverse leave balance)</span>
+                )}
+              </span>
+              <Button size="sm" variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+                Delete {selectedApps.length} selected
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setRowSelection({})}>Clear</Button>
+            </div>
+          )}
           <DataTable
             columns={appColumns}
             data={leaveApps}
@@ -385,12 +440,37 @@ export default function LeavesPage() {
                 options: [
                   { label: "Annual Leave", value: "Annual Leave" },
                   { label: "Sick Leave", value: "Sick Leave" },
-                  { label: "Annual Leave", value: "Annual Leave" },
                 ],
               },
             ]}
+            enableRowSelection
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            getRowId={(row) => row.name}
           />
         </TabsContent>
+
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete {selectedApps.length} leave record{selectedApps.length > 1 ? "s" : ""}?</DialogTitle>
+              <DialogDescription>
+                This action cannot be undone.
+                {approvedInSelection.length > 0 && (
+                  <span className="block mt-2 text-orange-600 dark:text-orange-400 font-medium">
+                    {approvedInSelection.length} approved leave{approvedInSelection.length > 1 ? "s" : ""} will be cancelled and deleted — the balance will be restored.
+                  </span>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDeleteSelected} disabled={isDeleting}>
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <TabsContent value="balances">
           <Card>
