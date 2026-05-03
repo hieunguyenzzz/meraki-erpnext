@@ -306,7 +306,7 @@ def re_approve_leave(leave_id: str):
             raise HTTPException(status_code=400, detail="Only Rejected leaves can be re-approved")
 
         # Cancel the rejected record
-        client._post("/api/method/frappe.client.cancel", {"doc": app})
+        client._post("/api/method/frappe.client.cancel", {"doctype": "Leave Application", "name": leave_id})
 
         # Recreate with same core fields
         new_app = client._post("/api/resource/Leave Application", {
