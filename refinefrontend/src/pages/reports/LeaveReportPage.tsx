@@ -39,6 +39,7 @@ interface LeaveReportData {
 export default function LeaveReportPage() {
   const [report, setReport] = useState<LeaveReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showAllocation, setShowAllocation] = useState(false);
 
   useEffect(() => {
     fetch("/inquiry-api/reports/leave-report", { credentials: "include" })
@@ -89,8 +90,15 @@ export default function LeaveReportPage() {
                     <TableHead className="text-center min-w-[80px] bg-blue-50 dark:bg-blue-950/30">
                       <div className="text-xs leading-tight">{currentYear - 1}<br />Balance</div>
                     </TableHead>
-                    <TableHead className="text-center min-w-[90px] bg-teal-50 dark:bg-teal-950/30">
-                      <div className="text-xs leading-tight">{currentYear}<br />Allocation</div>
+                    <TableHead
+                      className="text-center min-w-[90px] bg-teal-50 dark:bg-teal-950/30 cursor-pointer select-none"
+                      onClick={() => setShowAllocation((v) => !v)}
+                      title={showAllocation ? "Click to hide" : "Click to show"}
+                    >
+                      <div className="text-xs leading-tight">
+                        {currentYear}<br />
+                        {showAllocation ? "Allocation" : <span className="opacity-40">Allocation</span>}
+                      </div>
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
                       <div className="text-xs leading-tight">{currentYear}<br />Taken</div>
@@ -134,9 +142,11 @@ export default function LeaveReportPage() {
                         </Badge>
                       </TableCell>
                       {/* 2026 period */}
-                      <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
-                        {row.new_allocation_days}
-                      </TableCell>
+                      {showAllocation && (
+                        <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
+                          {row.new_allocation_days}
+                        </TableCell>
+                      )}
                       <TableCell className="text-center text-sm bg-green-50/50 dark:bg-green-950/20">
                         {row.new_taken > 0 ? row.new_taken : "-"}
                       </TableCell>
