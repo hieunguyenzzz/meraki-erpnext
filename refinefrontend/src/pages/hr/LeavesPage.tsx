@@ -307,18 +307,8 @@ export default function LeavesPage() {
     setError(null);
     try {
       for (const app of selectedApps) {
-        if (app.docstatus === 1) {
-          const res = await fetch("/api/method/frappe.client.cancel", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ doc: { doctype: "Leave Application", name: app.name } }),
-          });
-          if (!res.ok) throw new Error(`Failed to cancel ${app.name}`);
-        }
-        const res = await fetch(`/api/resource/Leave%20Application/${encodeURIComponent(app.name)}`, {
+        const res = await fetch(`/inquiry-api/leave/${encodeURIComponent(app.name)}`, {
           method: "DELETE",
-          credentials: "include",
         });
         if (!res.ok) throw new Error(`Failed to delete ${app.name}`);
       }

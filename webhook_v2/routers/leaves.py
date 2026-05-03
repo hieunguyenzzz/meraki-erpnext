@@ -296,6 +296,45 @@ def _create_leave_application(
     return result.get("data", {})
 
 
+@router.delete("/leave/{leave_id}")
+def delete_leave(leave_id: str):
+    """Cancel (if submitted) + delete linked Attendance records + delete the leave application."""
+    client = ERPNextClient()
+    try:
+        app = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
+        if not app:
+            raise HTTPException(status_code=404, detail="Leave application not found")
+
+        # Cancel if submitted
+        if app.get("docstatus") == 1:
+            client._post("/api/method/frappe.client.cancel", {
+                "doctype": "Leave Application", "name": leave_id,
+            })
+
+        # Delete linked Attendance records
+        attendances = client._get("/api/resource/Attendance", params={
+            "filters": f'[["leave_application","=","{leave_id}"]]',
+            "fields": '["name","docstatus"]',
+            "limit_page_length": 100,
+        }).get("data", [])
+        for att in attendances:
+            if att.get("docstatus") == 1:
+                client._post("/api/method/frappe.client.cancel", {
+                    "doctype": "Attendance", "name": att["name"],
+                })
+            client._delete(f"/api/resource/Attendance/{att['name']}")
+
+        # Delete the leave application
+        client._delete(f"/api/resource/Leave Application/{leave_id}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to delete leave: {e}")
+
+    log.info("leave_deleted", leave=leave_id)
+    return {"success": True}
+
+
 @router.post("/leave/{leave_id}/re-approve")
 def re_approve_leave(leave_id: str):
     """Re-approve a Rejected leave: cancel it, recreate with same data, approve + submit."""
