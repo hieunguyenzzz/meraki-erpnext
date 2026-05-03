@@ -162,12 +162,10 @@ export default function LeaveReportPage() {
                           {row.total_balance}
                         </Badge>
                       </TableCell>
-                      {/* 2026 Allocation — shown at end when toggled */}
-                      {showAllocation && (
-                        <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
-                          {row.new_allocation_days}
-                        </TableCell>
-                      )}
+                      {/* 2026 Allocation — always rendered to keep column count stable */}
+                      <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
+                        {showAllocation ? row.new_allocation_days : null}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {rows.length === 0 && (
