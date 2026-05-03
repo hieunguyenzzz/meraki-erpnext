@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { HrAddLeaveSheet } from "@/components/HrAddLeaveSheet";
 import { formatDate } from "@/lib/format";
 
@@ -323,6 +324,25 @@ export default function LeavesPage() {
 
   // --- DataTable columns for Applications tab ---
   const appColumns: ColumnDef<LeaveApp, unknown>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected()}
+          onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(v) => row.toggleSelected(!!v)}
+          aria-label="Select row"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
     {
       accessorKey: "employee_name",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
