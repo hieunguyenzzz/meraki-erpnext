@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Eye, EyeOff } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -62,10 +64,18 @@ export default function LeaveReportPage() {
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">
             {rows.length} Employees
           </CardTitle>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowAllocation((v) => !v)}
+          >
+            {showAllocation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showAllocation ? "Hide" : "Show"} {currentYear} Allocation
+          </Button>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
@@ -102,16 +112,11 @@ export default function LeaveReportPage() {
                     <TableHead className="text-center min-w-[80px] bg-purple-50 dark:bg-purple-950/30">
                       <div className="text-xs leading-tight font-semibold">Total<br />Balance</div>
                     </TableHead>
-                    <TableHead
-                      className="text-center min-w-[90px] bg-teal-50 dark:bg-teal-950/30 cursor-pointer select-none"
-                      onClick={() => setShowAllocation((v) => !v)}
-                      title={showAllocation ? "Click to hide" : "Click to show"}
-                    >
-                      <div className="text-xs leading-tight">
-                        {currentYear}<br />
-                        {showAllocation ? "Allocation" : <span className="opacity-40">Allocation</span>}
-                      </div>
-                    </TableHead>
+                    {showAllocation && (
+                      <TableHead className="text-center min-w-[90px] bg-teal-50 dark:bg-teal-950/30">
+                        <div className="text-xs leading-tight">{currentYear}<br />Allocation</div>
+                      </TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -162,10 +167,11 @@ export default function LeaveReportPage() {
                           {row.total_balance}
                         </Badge>
                       </TableCell>
-                      {/* 2026 Allocation — always rendered to keep column count stable */}
-                      <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
-                        {showAllocation ? row.new_allocation_days : null}
-                      </TableCell>
+                      {showAllocation && (
+                        <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
+                          {row.new_allocation_days}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                   {rows.length === 0 && (
