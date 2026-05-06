@@ -1,14 +1,19 @@
 """
 Performance review endpoints.
 
-POST /review/{employee_name} — Creates a Meraki Review record in ERPNext,
-updates the employee's custom_last_review_date, and creates a Google Calendar
-event for all participants.
+POST /review/{employee_name}     — Schedule a review meeting (Google Calendar integration).
+GET  /reviews/criteria           — List active review criteria.
+POST /reviews                    — Create a review with ratings.
+PATCH /reviews/{name}            — Update a review (replaces ratings child rows).
+DELETE /reviews/{name}           — Delete a review.
+GET  /reviews/employee/{employee}/history — Per-employee review history + sparkline data.
 """
 
 import json
 from datetime import datetime, timedelta
+from statistics import mean
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -26,6 +31,28 @@ class ScheduleReviewRequest(BaseModel):
     review_time: Optional[str] = "09:00"  # HH:MM
     notes: Optional[str] = ""
     participants: list[str] = []  # List of employee IDs
+
+
+class RatingItem(BaseModel):
+    criterion: str
+    score: int
+
+
+class CreateReviewRequest(BaseModel):
+    employee: str
+    review_date: str  # YYYY-MM-DD
+    period: Optional[str] = None
+    notes: Optional[str] = ""
+    overall_score: Optional[float] = None
+    ratings: list[RatingItem] = []
+
+
+class UpdateReviewRequest(BaseModel):
+    review_date: Optional[str] = None
+    period: Optional[str] = None
+    notes: Optional[str] = None
+    overall_score: Optional[float] = None
+    ratings: Optional[list[RatingItem]] = None
 
 
 def _create_calendar_event(
@@ -179,3 +206,217 @@ async def schedule_review(employee_name: str, request: ScheduleReviewRequest):
         "review_name": review_name,
         "google_event_id": google_event_id,
     }
+
+
+# ---------------------------------------------------------------------------
+# Review outcome endpoints (plural /reviews prefix)
+# ---------------------------------------------------------------------------
+
+def _validate_ratings(ratings: list[RatingItem], client: ERPNextClient) -> None:
+    """Validate all rating items. Raises HTTPException on any violation."""
+    if not ratings:
+        return
+
+    # Check scores in range
+    for item in ratings:
+        if not (1 <= item.score <= 10):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Score for criterion '{item.criterion}' must be between 1 and 10, got {item.score}.",
+            )
+
+    # Check no duplicate criteria
+    criteria_names = [item.criterion for item in ratings]
+    if len(criteria_names) != len(set(criteria_names)):
+        raise HTTPException(status_code=400, detail="Duplicate criteria in ratings — each criterion may appear only once.")
+
+    # Check all criteria exist and are active
+    try:
+        active_result = client._get(
+            "/api/resource/Meraki Review Criterion",
+            params={
+                "filters": json.dumps([["active", "=", 1]]),
+                "fields": json.dumps(["name"]),
+                "limit_page_length": 0,
+            },
+        )
+        active_names = {r["name"] for r in active_result.get("data", [])}
+    except Exception as e:
+        log.error("fetch_criteria_error", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Could not fetch criteria list: {e}")
+
+    for item in ratings:
+        if item.criterion not in active_names:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Criterion '{item.criterion}' does not exist or is not active.",
+            )
+
+
+def _compute_average_rating(ratings: list[RatingItem]) -> float:
+    if not ratings:
+        return 0.0
+    return round(mean(item.score for item in ratings), 2)
+
+
+@router.get("/reviews/criteria")
+def get_criteria():
+    """Return all active review criteria sorted by sort_order, then name."""
+    client = ERPNextClient()
+    try:
+        result = client._get(
+            "/api/resource/Meraki Review Criterion",
+            params={
+                "filters": json.dumps([["active", "=", 1]]),
+                "fields": json.dumps(["name", "criterion_name", "sort_order"]),
+                "order_by": "sort_order asc, criterion_name asc",
+                "limit_page_length": 0,
+            },
+        )
+    except Exception as e:
+        log.error("get_criteria_error", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to fetch criteria: {e}")
+
+    return {"criteria": result.get("data", [])}
+
+
+@router.post("/reviews")
+def create_review(request: CreateReviewRequest):
+    """Create a new Meraki Review with optional ratings."""
+    client = ERPNextClient()
+
+    # Validate overall_score
+    if request.overall_score is not None and not (1.0 <= request.overall_score <= 10.0):
+        raise HTTPException(status_code=400, detail="overall_score must be between 1.0 and 10.0.")
+
+    # Validate ratings
+    _validate_ratings(request.ratings, client)
+
+    average_rating = _compute_average_rating(request.ratings)
+
+    payload = {
+        "employee": request.employee,
+        "review_date": request.review_date,
+        "notes": request.notes or "",
+        "average_rating": average_rating,
+        "ratings": [{"criterion": r.criterion, "score": r.score} for r in request.ratings],
+    }
+    if request.period is not None:
+        payload["period"] = request.period
+    if request.overall_score is not None:
+        payload["overall_score"] = request.overall_score
+
+    try:
+        result = client._post("/api/resource/Meraki Review", payload)
+    except Exception as e:
+        log.error("create_review_error", employee=request.employee, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to create review: {e}")
+
+    created = result.get("data", {})
+    review_name = created.get("name", "")
+
+    log.info("review_created", name=review_name, employee=request.employee, average_rating=average_rating)
+
+    # Best-effort: update employee's last review date
+    try:
+        client._post("/api/method/meraki_set_employee_fields", {
+            "employee_name": request.employee,
+            "custom_last_review_date": request.review_date,
+        })
+    except Exception as e:
+        log.warning("review_date_update_failed", employee=request.employee, error=str(e))
+
+    return created
+
+
+@router.patch("/reviews/{name}")
+def update_review(name: str, request: UpdateReviewRequest):
+    """Update an existing Meraki Review. Replaces ratings child rows when provided."""
+    client = ERPNextClient()
+
+    if request.overall_score is not None and not (1.0 <= request.overall_score <= 10.0):
+        raise HTTPException(status_code=400, detail="overall_score must be between 1.0 and 10.0.")
+
+    if request.ratings is not None:
+        _validate_ratings(request.ratings, client)
+
+    # Fetch current doc to merge non-updated fields
+    try:
+        current = client._get(f"/api/resource/Meraki Review/{quote(name)}").get("data", {})
+    except Exception as e:
+        log.error("fetch_review_error", name=name, error=str(e))
+        raise HTTPException(status_code=404, detail=f"Review not found: {name}")
+
+    payload: dict = {}
+    if request.review_date is not None:
+        payload["review_date"] = request.review_date
+    if request.period is not None:
+        payload["period"] = request.period
+    if request.notes is not None:
+        payload["notes"] = request.notes
+    if request.overall_score is not None:
+        payload["overall_score"] = request.overall_score
+
+    if request.ratings is not None:
+        payload["ratings"] = [{"criterion": r.criterion, "score": r.score} for r in request.ratings]
+        payload["average_rating"] = _compute_average_rating(request.ratings)
+
+    try:
+        result = client._put(f"/api/resource/Meraki Review/{quote(name)}", payload)
+    except Exception as e:
+        log.error("update_review_error", name=name, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to update review: {e}")
+
+    updated = result.get("data", {})
+    log.info("review_updated", name=name)
+    return updated
+
+
+@router.delete("/reviews/{name}")
+def delete_review(name: str):
+    """Delete a Meraki Review record."""
+    client = ERPNextClient()
+    try:
+        client._delete(f"/api/resource/Meraki Review/{quote(name)}")
+    except Exception as e:
+        log.error("delete_review_error", name=name, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to delete review: {e}")
+
+    log.info("review_deleted", name=name)
+    return {"status": "ok"}
+
+
+@router.get("/reviews/employee/{employee}/history")
+def get_employee_review_history(employee: str):
+    """Return all reviews for an employee, sorted descending by review_date."""
+    client = ERPNextClient()
+    try:
+        result = client._get(
+            "/api/resource/Meraki Review",
+            params={
+                "filters": json.dumps([["employee", "=", employee]]),
+                "fields": json.dumps([
+                    "name", "review_date", "period", "average_rating",
+                    "overall_score", "reviewer", "notes",
+                ]),
+                "order_by": "review_date desc",
+                "limit_page_length": 0,
+            },
+        )
+    except Exception as e:
+        log.error("get_employee_history_error", employee=employee, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to fetch review history: {e}")
+
+    reviews = result.get("data", [])
+
+    # Build chronological sparkline data (oldest first)
+    average_trend = [
+        {
+            "date": r["review_date"],
+            "score": r.get("overall_score") or r.get("average_rating") or 0,
+        }
+        for r in reversed(reviews)
+    ]
+
+    log.info("employee_history_fetched", employee=employee, count=len(reviews))
+    return {"reviews": reviews, "average_trend": average_trend}

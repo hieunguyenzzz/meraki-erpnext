@@ -34,6 +34,8 @@ import ApplicantsListPage from "@/pages/hr/ApplicantsListPage";
 import JobOpeningsPage from "@/pages/hr/JobOpeningsPage";
 import LeavesPage from "@/pages/hr/LeavesPage";
 import WfhPage from "@/pages/hr/WfhPage";
+import StaffReviewsPage from "@/pages/hr/StaffReviewsPage";
+import StaffReviewDetailPage from "@/pages/hr/StaffReviewDetailPage";
 import JobApplyPage from "@/pages/public/JobApplyPage";
 import InvoicesPage from "@/pages/finance/InvoicesPage";
 import InvoiceDetailPage from "@/pages/finance/InvoiceDetailPage";
@@ -126,6 +128,7 @@ export default function App() {
             { name: "Journal Entry", list: "/finance/journals" },
             { name: "Project", list: "/projects", show: "/projects/:name" },
             { name: "Supplier", list: "/venues", show: "/venues/:name" },
+            { name: "Meraki Review", list: "/hr/staff-reviews", show: "/hr/staff-reviews/:name" },
           ]}
           options={{ syncWithLocation: true, disableTelemetry: true }}
         >
@@ -176,6 +179,8 @@ export default function App() {
               <Route path="/hr/leaves" element={<LeavesPage />} />
               <Route path="/hr/wfh" element={<WfhPage />} />
               <Route path="/hr/payroll" element={<PayrollPage />} />
+              <Route path="/hr/staff-reviews" element={<StaffReviewsPage />} />
+              <Route path="/hr/staff-reviews/:name" element={<StaffReviewDetailPage />} />
 
               {/* Reports */}
               <Route path="/reports/leaves" element={<LeaveReportPage />} />

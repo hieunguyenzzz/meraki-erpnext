@@ -19,6 +19,7 @@ import { getLeaveBalanceVariant } from "@/lib/review-status";
 import { ASSIGNABLE_ROLES, FINANCE_ROLES, hasModuleAccess } from "@/lib/roles";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Employee } from "@/lib/types";
+import { EmployeeReviewsTab } from "@/components/staff-review/EmployeeReviewsTab";
 
 function calculateTenure(dateOfJoining: string): string {
   const joined = new Date(dateOfJoining);
@@ -594,6 +595,7 @@ export default function EmployeeDetailPage() {
             )}
           </TabsTrigger>
           <TabsTrigger value="review">Review</TabsTrigger>
+          <TabsTrigger value="reviews">Reviews</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -998,6 +1000,10 @@ export default function EmployeeDetailPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="reviews" className="space-y-4">
+          <EmployeeReviewsTab employeeName={employee.name} />
         </TabsContent>
       </Tabs>
 

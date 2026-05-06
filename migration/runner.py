@@ -33,6 +33,9 @@ ORDERED_PHASES = [
     "v067_ensure_annual_leave_allocations",
     "v068_probation_skip_bhxh",
     "v069_salary_component_accounts",
+    "v070_meraki_review_outcome_fields",
+    "v071_meraki_review_criterion_doctype",
+    "v072_meraki_review_criterion_seed",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -89,6 +92,9 @@ def run_pending(client) -> int:
             v067_ensure_annual_leave_allocations,
             v068_probation_skip_bhxh,
             v069_salary_component_accounts,
+            v070_meraki_review_outcome_fields,
+            v071_meraki_review_criterion_doctype,
+            v072_meraki_review_criterion_seed,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -117,6 +123,9 @@ def run_pending(client) -> int:
             v067_ensure_annual_leave_allocations,
             v068_probation_skip_bhxh,
             v069_salary_component_accounts,
+            v070_meraki_review_outcome_fields,
+            v071_meraki_review_criterion_doctype,
+            v072_meraki_review_criterion_seed,
         )
 
     phase_fns = {
@@ -149,6 +158,9 @@ def run_pending(client) -> int:
         "v067_ensure_annual_leave_allocations": v067_ensure_annual_leave_allocations.run,
         "v068_probation_skip_bhxh": v068_probation_skip_bhxh.run,
         "v069_salary_component_accounts": v069_salary_component_accounts.run,
+        "v070_meraki_review_outcome_fields": v070_meraki_review_outcome_fields.run,
+        "v071_meraki_review_criterion_doctype": v071_meraki_review_criterion_doctype.run,
+        "v072_meraki_review_criterion_seed": v072_meraki_review_criterion_seed.run,
     }
 
     state_file = get_state_file()
