@@ -457,14 +457,18 @@ def apply_leave(body: LeaveApplyRequest):
             leave_row = next(
                 (r for r in balance_resp["data"] if r["leave_type"] == "Annual Leave"), None
             )
+            # Only the allocation period containing from_date is usable —
+            # ERPNext validates per-allocation, not against a cross-period sum.
+            leave_in_old_period = date.fromisoformat(body.from_date).month < 8
             if leave_row:
-                old_avail = max(
-                    leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"], 0
-                )
-                new_avail = max(
-                    leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
-                )
-                balance = old_avail + new_avail
+                if leave_in_old_period:
+                    balance = max(
+                        leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"], 0
+                    )
+                else:
+                    balance = max(
+                        leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
+                    )
             else:
                 balance = 0.0
             balance_usable = math.floor(balance * 2) / 2
@@ -568,14 +572,18 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
     leave_row = next(
         (r for r in balance_resp["data"] if r["leave_type"] == "Annual Leave"), None
     )
+    # Only the allocation period containing from_date is usable for this leave —
+    # ERPNext validates against the matching Leave Allocation, not a global sum.
+    leave_in_old_period = date.fromisoformat(from_date).month < 8
     if leave_row:
-        old_avail = max(
-            leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"], 0
-        )
-        new_avail = max(
-            leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
-        )
-        balance = old_avail + new_avail
+        if leave_in_old_period:
+            balance = max(
+                leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"], 0
+            )
+        else:
+            balance = max(
+                leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
+            )
     else:
         balance = 0.0
     balance_usable  = math.floor(balance * 2) / 2
