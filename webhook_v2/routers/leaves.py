@@ -373,6 +373,65 @@ def re_approve_leave(leave_id: str):
     return {"success": True, "new_name": new_name}
 
 
+class LeaveAllocationUpdate(BaseModel):
+    new_leaves_allocated: float
+
+
+@router.post("/leave/allocation/{name}")
+def update_leave_allocation(name: str, body: LeaveAllocationUpdate):
+    """Update annual entitlement on a submitted Leave Allocation.
+
+    Bypasses ERPNext's `frappe.client.set_value` because it triggers
+    `doc.save()` → HRMS `before_submit` validation that crashes with
+    `TypeError: int - NoneType` on certain allocations. Uses the
+    `meraki-leave-db-update` allowlisted Server Script which writes via
+    `frappe.db.set_value` (no validation chain).
+    """
+    client = ERPNextClient()
+    try:
+        alloc = client._get(f"/api/resource/Leave Allocation/{name}").get("data") or {}
+        if not alloc:
+            raise HTTPException(status_code=404, detail=f"Leave Allocation {name} not found")
+
+        unused = float(alloc.get("unused_leaves") or 0)
+        new_value = float(body.new_leaves_allocated)
+        new_total = new_value + unused
+
+        for fieldname, value in (
+            ("new_leaves_allocated", new_value),
+            ("total_leaves_allocated", new_total),
+        ):
+            client._post("/api/method/meraki_leave_db_update", {
+                "doctype": "Leave Allocation",
+                "name": name,
+                "fieldname": fieldname,
+                "value": value,
+            })
+
+        # Sync the corresponding Leave Ledger Entry so ERPNext's own balance
+        # calculation (used by Leave Application validation) stays consistent.
+        ledgers = client._get("/api/resource/Leave Ledger Entry", params={
+            "filters": f'[["transaction_type","=","Leave Allocation"],["transaction_name","=","{name}"]]',
+            "fields": '["name"]',
+            "limit_page_length": 5,
+        }).get("data", [])
+        for entry in ledgers:
+            client._post("/api/method/meraki_leave_db_update", {
+                "doctype": "Leave Ledger Entry",
+                "name": entry["name"],
+                "fieldname": "leaves",
+                "value": new_total,
+            })
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error("leave_allocation_update_failed", name=name, error=str(e))
+        raise HTTPException(status_code=400, detail=f"Failed to update allocation: {e}")
+
+    log.info("leave_allocation_updated", name=name, new_leaves_allocated=new_value, total_leaves_allocated=new_total)
+    return {"success": True, "new_leaves_allocated": new_value, "total_leaves_allocated": new_total}
+
+
 @router.post("/leave/apply")
 def apply_leave(body: LeaveApplyRequest):
     """Create leave application(s). For Annual Leave with insufficient balance,

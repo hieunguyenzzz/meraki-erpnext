@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useList, useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -50,7 +50,6 @@ export default function LeavesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const invalidate = useInvalidate();
-  const { mutateAsync: customMutation } = useCustomMutation();
 
   // --- Applications tab data ---
   const { result: appsResult, query: appsQuery } = useList({
@@ -252,11 +251,12 @@ export default function LeavesPage() {
     setSavingId(allocName);
     setError(null);
     try {
-      await customMutation({
-        url: "/api/method/frappe.client.set_value",
-        method: "post",
-        values: { doctype: "Leave Allocation", name: allocName, fieldname: "new_leaves_allocated", value: newAllocated },
+      const res = await fetch(`/inquiry-api/leave/allocation/${encodeURIComponent(allocName)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ new_leaves_allocated: newAllocated }),
       });
+      if (!res.ok) throw new Error(await res.text());
       setEdits((prev) => { const next = { ...prev }; delete next[allocName]; return next; });
       invalidate({ resource: "Leave Allocation", invalidates: ["list"] });
     } catch (err: any) {
