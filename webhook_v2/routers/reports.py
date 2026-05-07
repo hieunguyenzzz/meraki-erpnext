@@ -97,12 +97,15 @@ def leave_report():
     current_year = date.today().year
     today = date.today()
 
-    # Fetch active employees
+    # Fetch active employees with a non-zero CTC (zero-CTC accounts are placeholders / test users)
     employees = client._get("/api/resource/Employee", params={
-        "filters": json.dumps([["status", "=", "Active"]]),
+        "filters": json.dumps([
+            ["status", "=", "Active"],
+            ["ctc", ">", 0],
+        ]),
         "fields": json.dumps([
             "name", "employee_name", "first_name", "last_name",
-            "date_of_joining", "status",
+            "date_of_joining", "status", "ctc",
         ]),
         "order_by": "employee_name asc",
         "limit_page_length": 500,
