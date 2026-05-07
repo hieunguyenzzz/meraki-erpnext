@@ -313,6 +313,7 @@ export default function EmployeeDetailPage() {
       setEditValues({
         designation: employee.designation || "",
         date_of_joining: employee.date_of_joining || "",
+        relieving_date: employee.relieving_date || "",
         ctc: employee.ctc ?? "",
         custom_insurance_salary: employee.custom_insurance_salary ?? "",
         custom_number_of_dependents: employee.custom_number_of_dependents ?? 0,
@@ -1274,6 +1275,11 @@ export default function EmployeeDetailPage() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-doj">Date of Joining</Label>
                   <Input id="edit-doj" type="date" value={editValues.date_of_joining} onChange={(e) => setEditValues((prev) => ({ ...prev, date_of_joining: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-relieving-date">Relieving Date</Label>
+                  <Input id="edit-relieving-date" type="date" value={editValues.relieving_date || ""} onChange={(e) => setEditValues((prev) => ({ ...prev, relieving_date: e.target.value }))} />
+                  <p className="text-xs text-muted-foreground">Last working day. Leave blank if still active.</p>
                 </div>
                 {canManageRoles && <div className="space-y-2">
                   <Label>Roles</Label>
