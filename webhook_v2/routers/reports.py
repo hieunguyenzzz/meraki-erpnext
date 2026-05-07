@@ -232,10 +232,10 @@ def leave_report():
             if doj > accrual_start:
                 accrual_start = doj
         new_accrued = _compute_accrued(new_allocation_days, accrual_start, today)
-        new_usable = max(0, new_accrued - effective_new_taken)
+        new_usable = new_accrued
 
         old_balance = old_allocation_days - capped_old_taken
-        new_balance = new_allocation_days - effective_new_taken
+        new_balance = new_usable - effective_new_taken
 
         rows.append({
             "employee": emp_id,
