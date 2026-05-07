@@ -100,14 +100,14 @@ export default function LeaveReportPage() {
                     <TableHead className="text-center min-w-[80px] bg-blue-50 dark:bg-blue-950/30">
                       <div className="text-xs leading-tight">{currentYear - 1}<br />Balance</div>
                     </TableHead>
+                    <TableHead className="text-center min-w-[90px] bg-orange-50 dark:bg-orange-950/30">
+                      <div className="text-xs leading-tight font-semibold">{currentYear}<br />Usable</div>
+                    </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
                       <div className="text-xs leading-tight">{currentYear}<br />Taken</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
                       <div className="text-xs leading-tight">{currentYear}<br />Balance</div>
-                    </TableHead>
-                    <TableHead className="text-center min-w-[90px] bg-orange-50 dark:bg-orange-950/30">
-                      <div className="text-xs leading-tight font-semibold">{currentYear}<br />Usable</div>
                     </TableHead>
                     <TableHead className="text-center min-w-[80px] bg-purple-50 dark:bg-purple-950/30">
                       <div className="text-xs leading-tight font-semibold">Total<br />Balance</div>
@@ -146,6 +146,12 @@ export default function LeaveReportPage() {
                           {row.old_balance}
                         </Badge>
                       </TableCell>
+                      {/* 2026 Usable */}
+                      <TableCell className="text-center text-sm bg-orange-50/50 dark:bg-orange-950/20">
+                        <Badge variant={row.new_usable > 0 ? "success" : "secondary"} className="text-xs font-semibold">
+                          {row.new_usable}
+                        </Badge>
+                      </TableCell>
                       {/* 2026 period */}
                       <TableCell className="text-center text-sm bg-green-50/50 dark:bg-green-950/20">
                         {row.new_taken > 0 ? row.new_taken : "-"}
@@ -153,12 +159,6 @@ export default function LeaveReportPage() {
                       <TableCell className="text-center text-sm bg-green-50/50 dark:bg-green-950/20">
                         <Badge variant={row.new_balance < 0 ? "destructive" : row.new_balance > 0 ? "success" : "secondary"} className="text-xs">
                           {row.new_balance}
-                        </Badge>
-                      </TableCell>
-                      {/* 2026 Usable */}
-                      <TableCell className="text-center text-sm bg-orange-50/50 dark:bg-orange-950/20">
-                        <Badge variant={row.new_usable > 0 ? "success" : "secondary"} className="text-xs font-semibold">
-                          {row.new_usable}
                         </Badge>
                       </TableCell>
                       {/* Total balance */}
