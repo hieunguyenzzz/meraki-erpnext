@@ -10,6 +10,7 @@ GET  /leave/employee-detail     — period-grouped balance for detail page
 GET  /leave/my-applications     — list leave applications for an employee
 """
 
+import json
 import math
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException
@@ -22,12 +23,111 @@ log = get_logger(__name__)
 router = APIRouter()
 
 
-def _compute_accrued(allocation_days: float, period_from: date, today: date) -> float:
-    """Months fully completed since period start → ceil(allocation × elapsed / 12)."""
-    elapsed = (today.year - period_from.year) * 12 + (today.month - period_from.month)
+def _compute_accrued(
+    allocation_days: float,
+    period_from: date,
+    today: date,
+    relieving_date: date | None = None,
+) -> float:
+    """Months fully completed since period start → ceil(allocation × elapsed / 12).
+
+    If relieving_date is set, accrual stops on that date.
+    """
+    accrual_end = today
+    if relieving_date is not None and relieving_date < accrual_end:
+        accrual_end = relieving_date
+    if accrual_end < period_from:
+        return 0.0
+    elapsed = (accrual_end.year - period_from.year) * 12 + (accrual_end.month - period_from.month)
     if elapsed <= 0:
         return 0.0
     return min(allocation_days, math.ceil(allocation_days * elapsed / 12))
+
+
+def _available_for_leave_date(
+    client: ERPNextClient,
+    employee: str,
+    leave_type: str,
+    leave_from_date: date,
+) -> float:
+    """How many days of `leave_type` are available to consume on `leave_from_date`.
+
+    Sums across all submitted Leave Allocations whose date range covers `leave_from_date`.
+    Long-span allocations (>365 days) are treated as accruing — capped at the accrued
+    portion (with relieving_date as the cap end). Approved + pending Leave Applications
+    are attributed to the overlapping allocation that contains their from_date.
+    """
+    today = date.today()
+    emp = client._get(f"/api/resource/Employee/{employee}").get("data") or {}
+    rel_str = (emp.get("relieving_date") or "")[:10]
+    rel_date = date.fromisoformat(rel_str) if rel_str else None
+    doj_str = (emp.get("date_of_joining") or "")[:10]
+    doj = date.fromisoformat(doj_str) if doj_str else None
+
+    allocs = client._get("/api/resource/Leave Allocation", params={
+        "filters": json.dumps([
+            ["employee", "=", employee],
+            ["leave_type", "=", leave_type],
+            ["docstatus", "=", 1],
+        ]),
+        "fields": '["name","from_date","to_date","new_leaves_allocated","total_leaves_allocated"]',
+        "limit_page_length": 100,
+    }).get("data", [])
+
+    overlapping = []
+    for a in allocs:
+        fd = (a.get("from_date") or "")[:10]
+        td = (a.get("to_date") or "")[:10]
+        if not fd or not td:
+            continue
+        a_from = date.fromisoformat(fd)
+        a_to = date.fromisoformat(td)
+        if a_from <= leave_from_date <= a_to:
+            overlapping.append({**a, "_from": a_from, "_to": a_to})
+
+    if not overlapping:
+        return 0.0
+
+    apps = client._get("/api/resource/Leave Application", params={
+        "filters": json.dumps([
+            ["employee", "=", employee],
+            ["leave_type", "=", leave_type],
+            ["docstatus", "!=", 2],
+            ["status", "!=", "Rejected"],
+        ]),
+        "fields": '["name","from_date","total_leave_days"]',
+        "limit_page_length": 500,
+    }).get("data", [])
+
+    consumed_per_alloc = {a["name"]: 0.0 for a in overlapping}
+    for app in apps:
+        app_fd_str = (app.get("from_date") or "")[:10]
+        if not app_fd_str:
+            continue
+        app_fd = date.fromisoformat(app_fd_str)
+        # When multiple allocations overlap a given date, prefer the shortest-span
+        # one — that's typically the carry-over/short-period allocation, which
+        # should be consumed before a long-running annual allocation.
+        candidates = sorted(
+            [a for a in overlapping if a["_from"] <= app_fd <= a["_to"]],
+            key=lambda a: ((a["_to"] - a["_from"]).days, a["_from"]),
+        )
+        if candidates:
+            consumed_per_alloc[candidates[0]["name"]] += float(app.get("total_leave_days") or 0)
+
+    total = 0.0
+    for a in overlapping:
+        entitled = float(a.get("total_leaves_allocated") or a.get("new_leaves_allocated") or 0)
+        span_days = (a["_to"] - a["_from"]).days
+        if span_days > 365:
+            accrual_start = a["_from"]
+            if doj and doj > accrual_start:
+                accrual_start = doj
+            entitled = _compute_accrued(entitled, accrual_start, today, rel_date)
+        consumed = consumed_per_alloc[a["name"]]
+        total += max(0.0, entitled - consumed)
+
+    return total
 
 
 def _enrich_leave_notification(
@@ -158,11 +258,14 @@ def _approve_and_submit(client: ERPNextClient, leave_id: str) -> None:
 def _finalize_apply(
     client: ERPNextClient, body: LeaveApplyRequest, created: list[dict], split: bool
 ) -> dict:
-    """Optionally auto-approve each created Leave Application, then return the payload."""
+    """Optionally auto-approve each created Leave Application, then return the payload.
+
+    Skip docs already submitted via the Server Script bypass (docstatus=1).
+    """
     if body.auto_approve:
         for app in created:
             name = app.get("name")
-            if name:
+            if name and app.get("docstatus") != 1:
                 _approve_and_submit(client, name)
     return {"created": created, "split": split}
 
@@ -294,6 +397,54 @@ def _create_leave_application(
         payload["half_day"] = 1
     result = client._post("/api/resource/Leave Application", payload)
     return result.get("data", {})
+
+
+def _create_approved_leave_via_script(
+    client: ERPNextClient,
+    employee: str, leave_type: str,
+    from_date: str, to_date: str, description: str,
+    total_leave_days: float,
+    leave_approver: str | None = None,
+    half_day: bool = False,
+    half_day_period: str = "",
+) -> dict:
+    """Create + submit a Leave Application via Server Script, bypassing
+    ERPNext's `validate_leave_balance`. Our own balance check upstream
+    (`_available_for_leave_date`) is the authority.
+    """
+    payload = {
+        "employee": employee,
+        "leave_type": leave_type,
+        "from_date": from_date,
+        "to_date": to_date,
+        "description": description,
+        "status": "Approved",
+        "leave_approver": leave_approver or "",
+        "half_day": 1 if half_day else 0,
+        "half_day_period": half_day_period if half_day else "",
+        "total_leave_days": total_leave_days,
+    }
+    resp = client._post("/api/method/meraki_create_approved_leave", payload)
+    msg = resp.get("message") if isinstance(resp.get("message"), dict) else {}
+    leave_id = msg.get("leave_application") or resp.get("leave_application")
+    if not leave_id:
+        raise Exception(f"meraki_create_approved_leave did not return leave_application: {resp}")
+    doc = client._get(f"/api/resource/Leave Application/{leave_id}").get("data") or {}
+    return doc
+
+
+def _compute_total_leave_days(
+    from_date: str, to_date: str, half_day: bool,
+    include_holiday: bool, holidays: set, weekly_off: int,
+) -> float:
+    """Days that the Leave Application records (matches ERPNext's own counting)."""
+    if half_day:
+        return 0.5
+    if include_holiday:
+        start_d = date.fromisoformat(from_date)
+        end_d = date.fromisoformat(to_date)
+        return float((end_d - start_d).days + 1)
+    return float(_count_leave_days(from_date, to_date, holidays, weekly_off))
 
 
 @router.delete("/leave/{leave_id}")
@@ -444,6 +595,31 @@ def apply_leave(body: LeaveApplyRequest):
         prefix = f"Half Day ({body.half_day_period})"
         description = f"{prefix} — {description}" if description else prefix
 
+    # Holiday context — needed for both balance math and total_leave_days when bypassing.
+    holiday_list = _get_employee_holiday_list(client, body.employee)
+    weekly_off = _get_weekly_off(client, holiday_list) if holiday_list else 6
+    holidays = _get_holidays_in_range(client, holiday_list, body.from_date, body.to_date) if holiday_list else set()
+
+    def _create(leave_type: str, from_d: str, to_d: str, half_day: bool) -> dict:
+        """Create a single Leave Application, using the Server Script bypass when
+        auto_approve is set so we sidestep ERPNext's broken validate_leave_balance."""
+        if body.auto_approve:
+            include_holiday = _leave_type_includes_holidays(client, leave_type)
+            total = _compute_total_leave_days(
+                from_d, to_d, half_day, include_holiday, holidays, weekly_off
+            )
+            return _create_approved_leave_via_script(
+                client, body.employee, leave_type, from_d, to_d, description,
+                total_leave_days=total,
+                leave_approver=leave_approver,
+                half_day=half_day,
+                half_day_period=body.half_day_period,
+            )
+        return _create_leave_application(
+            client, body.employee, leave_type, from_d, to_d, description,
+            leave_approver=leave_approver, half_day=half_day,
+        )
+
     try:
         details = client._get(
             "/api/method/hrms.hr.doctype.leave_application.leave_application.get_leave_details",
@@ -451,34 +627,18 @@ def apply_leave(body: LeaveApplyRequest):
         )
         leave_approver = (details.get("message") or {}).get("leave_approver")
 
-        # Auto-split Annual Leave when balance is insufficient
+        # Auto-split Annual Leave when balance is insufficient. Sum every Leave
+        # Allocation overlapping the leave's from_date (long-span allocations are
+        # treated as accruing and capped at the accrued portion / relieving_date).
         if body.leave_type == "Annual Leave":
-            balance_resp = get_leave_balance(employee=body.employee, as_of=date.fromisoformat(body.from_date))
-            leave_row = next(
-                (r for r in balance_resp["data"] if r["leave_type"] == "Annual Leave"), None
+            balance = _available_for_leave_date(
+                client, body.employee, "Annual Leave", date.fromisoformat(body.from_date)
             )
-            # Only the allocation period containing from_date is usable —
-            # ERPNext validates per-allocation, not against a cross-period sum.
-            leave_in_old_period = date.fromisoformat(body.from_date).month < 8
-            if leave_row:
-                if leave_in_old_period:
-                    balance = max(
-                        leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"], 0
-                    )
-                else:
-                    balance = max(
-                        leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
-                    )
-            else:
-                balance = 0.0
             balance_usable = math.floor(balance * 2) / 2
             balance_days   = int(balance_usable)
 
             if balance_days == 0:
-                app = _create_leave_application(
-                    client, body.employee, "Leave Without Pay",
-                    body.from_date, body.to_date, description,
-                    leave_approver=leave_approver, half_day=body.half_day)
+                app = _create("Leave Without Pay", body.from_date, body.to_date, body.half_day)
                 _enrich_apply_notification(client, body.employee, app, description)
                 return _finalize_apply(client, body, [app], True)
 
@@ -493,9 +653,6 @@ def apply_leave(body: LeaveApplyRequest):
                     casual_to_date = (start_d + timedelta(days=balance_days - 1)).isoformat()
                     lwp_from_date  = (date.fromisoformat(casual_to_date) + timedelta(days=1)).isoformat()
             else:
-                holiday_list = _get_employee_holiday_list(client, body.employee)
-                weekly_off = _get_weekly_off(client, holiday_list) if holiday_list else 6
-                holidays = _get_holidays_in_range(client, holiday_list, body.from_date, body.to_date) if holiday_list else set()
                 requested = _count_leave_days(body.from_date, body.to_date, holidays, weekly_off)
                 if balance_days < requested:
                     casual_to_date = _end_date_for_n_leave_days(body.from_date, balance_days, holidays, weekly_off)
@@ -503,17 +660,15 @@ def apply_leave(body: LeaveApplyRequest):
 
             if balance_days < requested:
                 is_single_day = body.from_date == body.to_date
-                cl_app = _create_leave_application(
-                    client, body.employee, "Annual Leave",
-                    body.from_date, casual_to_date, description,
-                    leave_approver=leave_approver,
-                    half_day=body.half_day if is_single_day else False)
+                cl_app = _create(
+                    "Annual Leave", body.from_date, casual_to_date,
+                    body.half_day if is_single_day else False,
+                )
                 try:
-                    lwp_app = _create_leave_application(
-                        client, body.employee, "Leave Without Pay",
-                        lwp_from_date, body.to_date, description,
-                        leave_approver=leave_approver,
-                        half_day=body.half_day if is_single_day else False)
+                    lwp_app = _create(
+                        "Leave Without Pay", lwp_from_date, body.to_date,
+                        body.half_day if is_single_day else False,
+                    )
                 except Exception:
                     try:
                         client._delete(f"/api/resource/Leave Application/{cl_app.get('name', '')}")
@@ -524,10 +679,7 @@ def apply_leave(body: LeaveApplyRequest):
                 _enrich_apply_notification(client, body.employee, lwp_app, description)
                 return _finalize_apply(client, body, [cl_app, lwp_app], True)
 
-        app = _create_leave_application(
-            client, body.employee, body.leave_type,
-            body.from_date, body.to_date, description,
-            leave_approver=leave_approver, half_day=body.half_day)
+        app = _create(body.leave_type, body.from_date, body.to_date, body.half_day)
         _enrich_apply_notification(client, body.employee, app, description)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -568,24 +720,9 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
     holidays        = _get_holidays_in_range(client, holiday_list, from_date, to_date) if holiday_list else set()
     holiday_details = _get_holiday_details_in_range(client, holiday_list, from_date, to_date) if holiday_list else []
 
-    balance_resp = get_leave_balance(employee=employee, as_of=date.fromisoformat(from_date))
-    leave_row = next(
-        (r for r in balance_resp["data"] if r["leave_type"] == "Annual Leave"), None
+    balance = _available_for_leave_date(
+        client, employee, "Annual Leave", date.fromisoformat(from_date)
     )
-    # Only the allocation period containing from_date is usable for this leave —
-    # ERPNext validates against the matching Leave Allocation, not a global sum.
-    leave_in_old_period = date.fromisoformat(from_date).month < 8
-    if leave_row:
-        if leave_in_old_period:
-            balance = max(
-                leave_row["old_accrued"] - leave_row["old_taken"] - leave_row["old_pending"], 0
-            )
-        else:
-            balance = max(
-                leave_row["new_accrued"] - leave_row["new_taken"] - leave_row["new_pending"], 0
-            )
-    else:
-        balance = 0.0
     balance_usable  = math.floor(balance * 2) / 2
     balance_days    = int(balance_usable)
     include_holiday = _leave_type_includes_holidays(client, "Annual Leave")
@@ -635,6 +772,10 @@ def get_leave_balance(employee: str, as_of: date | None = None):
     """Return leave allocations and taken days for an employee, computed server-side."""
     client = ERPNextClient()
     today = as_of if as_of is not None else date.today()
+
+    emp = client._get(f"/api/resource/Employee/{employee}").get("data") or {}
+    rel_str = (emp.get("relieving_date") or "")[:10]
+    rel_date = date.fromisoformat(rel_str) if rel_str else None
 
     allocs = client._get("/api/resource/Leave Allocation", params={
         "filters": f'[["employee","=","{employee}"],["docstatus","=",1]]',
@@ -718,7 +859,7 @@ def get_leave_balance(employee: str, as_of: date | None = None):
 
         accrual_year = new_alloc_start.year if new_alloc_start else today.year
         data["new_accrued"] = _compute_accrued(
-            data["new_allocation"], date(accrual_year, 1, 1), today
+            data["new_allocation"], date(accrual_year, 1, 1), today, rel_date
         )
 
     return {"data": list(result.values()), "before_august": today.month < 8}

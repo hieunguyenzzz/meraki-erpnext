@@ -38,6 +38,7 @@ ORDERED_PHASES = [
     "v072_meraki_review_criterion_seed",
     "v073_leave_allocation_db_update",
     "v074_relieving_date_allowlist",
+    "v075_create_approved_leave_script",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -99,6 +100,7 @@ def run_pending(client) -> int:
             v072_meraki_review_criterion_seed,
             v073_leave_allocation_db_update,
             v074_relieving_date_allowlist,
+            v075_create_approved_leave_script,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -132,6 +134,7 @@ def run_pending(client) -> int:
             v072_meraki_review_criterion_seed,
             v073_leave_allocation_db_update,
             v074_relieving_date_allowlist,
+            v075_create_approved_leave_script,
         )
 
     phase_fns = {
@@ -169,6 +172,7 @@ def run_pending(client) -> int:
         "v072_meraki_review_criterion_seed": v072_meraki_review_criterion_seed.run,
         "v073_leave_allocation_db_update": v073_leave_allocation_db_update.run,
         "v074_relieving_date_allowlist": v074_relieving_date_allowlist.run,
+        "v075_create_approved_leave_script": v075_create_approved_leave_script.run,
     }
 
     state_file = get_state_file()

@@ -32,11 +32,25 @@ def _seniority_years(date_of_joining: str) -> int:
     return max(0, years)
 
 
-def _compute_accrued(allocation: float, accrual_start: date, today: date) -> float:
-    """Accrued days: ceil(allocation * elapsed_months / 12), capped at allocation."""
+def _compute_accrued(
+    allocation: float,
+    accrual_start: date,
+    today: date,
+    relieving_date: date | None = None,
+) -> float:
+    """Accrued days: ceil(allocation * elapsed_months / 12), capped at allocation.
+
+    If relieving_date is set, accrual stops on that date — leavers don't keep
+    earning leave after their last working day.
+    """
     if allocation <= 0:
         return 0.0
-    elapsed = (today.year - accrual_start.year) * 12 + (today.month - accrual_start.month)
+    accrual_end = today
+    if relieving_date is not None and relieving_date < accrual_end:
+        accrual_end = relieving_date
+    if accrual_end < accrual_start:
+        return 0.0
+    elapsed = (accrual_end.year - accrual_start.year) * 12 + (accrual_end.month - accrual_start.month)
     if elapsed <= 0:
         return 0.0
     return min(allocation, math.ceil(allocation * elapsed / 12))
@@ -105,7 +119,7 @@ def leave_report():
         ]),
         "fields": json.dumps([
             "name", "employee_name", "first_name", "last_name",
-            "date_of_joining", "status", "ctc",
+            "date_of_joining", "relieving_date", "status", "ctc",
         ]),
         "order_by": "employee_name asc",
         "limit_page_length": 500,
@@ -231,7 +245,9 @@ def leave_report():
             doj = _parse_date(doj_str)
             if doj > accrual_start:
                 accrual_start = doj
-        new_accrued = _compute_accrued(new_allocation_days, accrual_start, today)
+        rel_str = (emp.get("relieving_date") or "")[:10]
+        rel_date = _parse_date(rel_str) if rel_str else None
+        new_accrued = _compute_accrued(new_allocation_days, accrual_start, today, rel_date)
         new_usable = new_accrued
 
         old_balance = old_allocation_days - capped_old_taken
