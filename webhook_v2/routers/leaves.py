@@ -116,17 +116,32 @@ def _available_for_leave_date(
             consumed_per_alloc[candidates[0]["name"]] += float(app.get("total_leave_days") or 0)
 
     total = 0.0
+    breakdown = []
     for a in overlapping:
         entitled = float(a.get("total_leaves_allocated") or a.get("new_leaves_allocated") or 0)
         span_days = (a["_to"] - a["_from"]).days
-        if span_days > 365:
+        accruing = span_days > 365
+        if accruing:
             accrual_start = a["_from"]
             if doj and doj > accrual_start:
                 accrual_start = doj
             entitled = _compute_accrued(entitled, accrual_start, today, rel_date)
         consumed = consumed_per_alloc[a["name"]]
-        total += max(0.0, entitled - consumed)
+        contribution = max(0.0, entitled - consumed)
+        total += contribution
+        breakdown.append({
+            "alloc": a["name"], "from": a["_from"].isoformat(), "to": a["_to"].isoformat(),
+            "span_days": span_days, "accruing": accruing,
+            "entitled": entitled, "consumed": consumed, "contribution": contribution,
+        })
 
+    log.info(
+        "_available_for_leave_date",
+        employee=employee, leave_type=leave_type,
+        leave_from_date=leave_from_date.isoformat(),
+        rel_date=rel_date.isoformat() if rel_date else None,
+        breakdown=breakdown, total=total,
+    )
     return total
 
 
