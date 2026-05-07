@@ -218,9 +218,16 @@ def leave_report():
                 )
             monthly_leave.append(round(total * 10) / 10)
 
-        # Accrual for new period: from Jan 1 of the year the new allocation starts
+        # Accrual for new period: from Jan 1 of the year the new allocation starts,
+        # but no earlier than the employee's date of joining (otherwise new hires
+        # get credit for months before they joined).
         accrual_year = new_alloc_from.year if new_alloc_from else current_year
         accrual_start = date(accrual_year, 1, 1)
+        doj_str = (emp.get("date_of_joining") or "")[:10]
+        if doj_str:
+            doj = _parse_date(doj_str)
+            if doj > accrual_start:
+                accrual_start = doj
         new_accrued = _compute_accrued(new_allocation_days, accrual_start, today)
         new_usable = max(0, new_accrued - effective_new_taken)
 
