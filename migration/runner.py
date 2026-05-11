@@ -40,6 +40,7 @@ ORDERED_PHASES = [
     "v074_relieving_date_allowlist",
     "v075_create_approved_leave_script",
     "v076_pay_unpaid_purchase_invoices",
+    "v077_finish_unpaid_pi_backfill",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -103,6 +104,7 @@ def run_pending(client) -> int:
             v074_relieving_date_allowlist,
             v075_create_approved_leave_script,
             v076_pay_unpaid_purchase_invoices,
+            v077_finish_unpaid_pi_backfill,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -138,6 +140,7 @@ def run_pending(client) -> int:
             v074_relieving_date_allowlist,
             v075_create_approved_leave_script,
             v076_pay_unpaid_purchase_invoices,
+            v077_finish_unpaid_pi_backfill,
         )
 
     phase_fns = {
@@ -177,6 +180,7 @@ def run_pending(client) -> int:
         "v074_relieving_date_allowlist": v074_relieving_date_allowlist.run,
         "v075_create_approved_leave_script": v075_create_approved_leave_script.run,
         "v076_pay_unpaid_purchase_invoices": v076_pay_unpaid_purchase_invoices.run,
+        "v077_finish_unpaid_pi_backfill": v077_finish_unpaid_pi_backfill.run,
     }
 
     state_file = get_state_file()
