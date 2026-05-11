@@ -392,6 +392,55 @@ def create_supplier_invoice(req: SupplierInvoiceRequest):
 # New: Wedding expense endpoints (with approval workflow)
 # ---------------------------------------------------------------------------
 
+@router.get("/payments")
+def list_payments():
+    """List Payment Entries with description/category derived from linked Purchase Invoice."""
+    client = ERPNextClient()
+
+    pes = client._get("/api/resource/Payment Entry", params={
+        "filters": json.dumps([["docstatus", "in", [0, 1]]]),
+        "fields": json.dumps([
+            "name", "payment_type", "party", "party_name",
+            "posting_date", "paid_amount", "docstatus",
+        ]),
+        "order_by": "posting_date desc",
+        "limit_page_length": 0,
+    }).get("data", [])
+
+    result = []
+    for pe in pes:
+        description = ""
+        category = ""
+        linked_invoice = ""
+
+        if pe.get("payment_type") == "Pay" and pe.get("party") == "Company Expense":
+            try:
+                pe_doc = client._get(f"/api/resource/Payment Entry/{pe['name']}").get("data", {})
+                pi_name = next(
+                    (ref["reference_name"] for ref in pe_doc.get("references", [])
+                     if ref.get("reference_doctype") == "Purchase Invoice"),
+                    None,
+                )
+                if pi_name:
+                    pi_doc = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+                    first_item = (pi_doc.get("items") or [{}])[0]
+                    description = first_item.get("item_name", "")
+                    raw_account = first_item.get("expense_account", "")
+                    category = raw_account.replace(" - MWP", "")
+                    linked_invoice = pi_name
+            except Exception as e:
+                log.warning("payments_enrich_failed", pe=pe["name"], error=str(e))
+
+        result.append({
+            **pe,
+            "description": description,
+            "category": category,
+            "linked_invoice": linked_invoice,
+        })
+
+    return result
+
+
 @router.get("/expenses")
 def list_expenses(project: str | None = None):
     """List Purchase Invoices used as expenses (Draft=pending + Submitted=approved)."""
