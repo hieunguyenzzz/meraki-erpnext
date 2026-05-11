@@ -1008,7 +1008,6 @@ export default function ExpensesPage() {
             options: [
               { label: "Paid", value: "Paid" },
               { label: "Unpaid", value: "Unpaid" },
-              { label: "Overdue", value: "Overdue" },
               { label: "Cancelled", value: "Cancelled" },
             ],
           },

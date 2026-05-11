@@ -88,6 +88,49 @@ HIDDEN_EXPENSE_ACCOUNTS = {
 }
 
 
+def _mark_pi_paid(client: ERPNextClient, pi_name: str) -> str | None:
+    """Create + submit a Payment Entry that fully pays a submitted Purchase Invoice.
+    Returns the Payment Entry name, or None if already paid."""
+    pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+    outstanding = pi.get("outstanding_amount", 0)
+    if outstanding <= 0:
+        return None
+
+    supplier = pi.get("supplier")
+    posting_date = pi.get("posting_date")
+    currency = pi.get("currency", "VND")
+
+    try:
+        pe = client._post("/api/resource/Payment Entry", {
+            "payment_type": "Pay",
+            "party_type": "Supplier",
+            "party": supplier,
+            "paid_from": "Cash - MWP",
+            "paid_to": "Creditors - MWP",
+            "paid_from_account_currency": currency,
+            "paid_to_account_currency": currency,
+            "paid_amount": outstanding,
+            "received_amount": outstanding,
+            "posting_date": posting_date,
+            "company": COMPANY,
+            "references": [{
+                "reference_doctype": "Purchase Invoice",
+                "reference_name": pi_name,
+                "allocated_amount": outstanding,
+                "total_amount": outstanding,
+                "outstanding_amount": outstanding,
+            }],
+        }).get("data", {})
+        pe_name = pe.get("name")
+        if not pe_name:
+            raise ValueError("Payment Entry created but name not returned")
+        full_pe = client._get(f"/api/resource/Payment Entry/{pe_name}").get("data", {})
+        client._post("/api/method/frappe.client.submit", {"doc": full_pe})
+        return pe_name
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to mark PI {pi_name} as paid: {e}")
+
+
 def _get_finance_managers(client: ERPNextClient) -> list[str]:
     """Return email addresses of users with Accounts Manager role."""
     users = client._get("/api/resource/User", params={
@@ -288,34 +331,7 @@ def create_quick_expense(req: QuickExpenseRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to submit expense: {e}")
 
-    # Create + submit Payment Entry to mark as Paid
-    try:
-        pe = client._post("/api/resource/Payment Entry", {
-            "payment_type": "Pay",
-            "party_type": "Supplier",
-            "party": "Company Expense",
-            "paid_from": "Cash - MWP",
-            "paid_to": "Creditors - MWP",
-            "paid_from_account_currency": "VND",
-            "paid_to_account_currency": "VND",
-            "paid_amount": amount,
-            "received_amount": amount,
-            "posting_date": req.date,
-            "company": COMPANY,
-            "references": [{
-                "reference_doctype": "Purchase Invoice",
-                "reference_name": pi_name,
-                "allocated_amount": amount,
-                "total_amount": amount,
-                "outstanding_amount": amount,
-            }],
-        }).get("data", {})
-        pe_name = pe.get("name")
-        if pe_name:
-            full_pe = client._get(f"/api/resource/Payment Entry/{pe_name}").get("data", {})
-            client._post("/api/method/frappe.client.submit", {"doc": full_pe})
-    except Exception as e:
-        log.warning("quick_expense_payment_failed", pi=pi_name, error=str(e))
+    _mark_pi_paid(client, pi_name)
 
     log.info("quick_expense_created", pi=pi_name, amount=amount)
     return {"purchase_invoice": pi_name}
@@ -365,6 +381,8 @@ def create_supplier_invoice(req: SupplierInvoiceRequest):
         client._post("/api/method/frappe.client.submit", {"doc": full_pi})
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to submit purchase invoice: {e}")
+
+    _mark_pi_paid(client, pi_name)
 
     log.info("supplier_invoice_created", pi=pi_name)
     return {"purchase_invoice": pi_name}
@@ -572,6 +590,8 @@ def approve_expense(pi_name: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to approve expense: {e}")
 
+    _mark_pi_paid(client, pi_name)
+
     log.info("expense_approved", pi=pi_name)
     return {"success": True}
 
@@ -598,6 +618,11 @@ def approve_all_expenses(project: str):
         try:
             pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
             client._post("/api/method/frappe.client.submit", {"doc": pi})
+            try:
+                _mark_pi_paid(client, pi_name)
+            except HTTPException as pay_err:
+                failed.append({"name": pi_name, "error": pay_err.detail})
+                continue
             approved.append(pi_name)
         except Exception as e:
             failed.append({"name": pi_name, "error": str(e)})
