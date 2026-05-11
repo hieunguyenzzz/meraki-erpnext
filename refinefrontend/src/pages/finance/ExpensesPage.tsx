@@ -5,7 +5,6 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X, BadgeCheck, Pencil } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -32,12 +31,6 @@ interface Expense {
   grand_total: number;
   status: string;
   against_expense_account: string;
-}
-
-function statusVariant(status: string) {
-  if (status === "Paid") return "success" as const;
-  if (status === "Overdue" || status === "Cancelled") return "destructive" as const;
-  return "warning" as const;
 }
 
 interface ExpenseCategory {
@@ -119,16 +112,6 @@ function getColumns(onEdit: (expense: Expense) => void): ColumnDef<Expense, unkn
         if (!acc) return <span className="text-muted-foreground">—</span>;
         return acc.replace(/ - MWP$/, "");
       },
-      filterFn: "arrIncludesSome",
-    },
-    {
-      accessorKey: "status",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-      cell: ({ row }) => (
-        <Badge variant={statusVariant(row.original.status)}>
-          {row.original.status}
-        </Badge>
-      ),
       filterFn: "arrIncludesSome",
     },
     {
@@ -1001,17 +984,6 @@ export default function ExpensesPage() {
         enableRowSelection
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
-        filterableColumns={[
-          {
-            id: "status",
-            title: "Status",
-            options: [
-              { label: "Paid", value: "Paid" },
-              { label: "Unpaid", value: "Unpaid" },
-              { label: "Cancelled", value: "Cancelled" },
-            ],
-          },
-        ]}
       />
     </div>
   );
