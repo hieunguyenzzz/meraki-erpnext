@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { SegmentedRating, rampColor } from "@/components/staff-review/SegmentedRating";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2, CheckCircle2 } from "lucide-react";
 import { formatDate } from "@/lib/format";
 
 interface Criterion {
@@ -54,6 +54,7 @@ export default function StaffReviewDetailPage() {
   const [overallScore, setOverallScore] = useState<number | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -96,6 +97,7 @@ export default function StaffReviewDetailPage() {
   async function handleSave() {
     setSaving(true);
     setSaveError("");
+    setSaveSuccess(false);
     try {
       const body = {
         period: period || null,
@@ -115,6 +117,8 @@ export default function StaffReviewDetailPage() {
       }
       query.refetch();
       invalidate({ resource: "Meraki Review", invalidates: ["list"] });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
       setSaveError(err?.message || "Failed to save");
     } finally {
@@ -251,6 +255,12 @@ export default function StaffReviewDetailPage() {
             </div>
 
             {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+            {saveSuccess && (
+              <p className="flex items-center gap-2 text-sm text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Saved successfully
+              </p>
+            )}
           </CardContent>
         </Card>
 
