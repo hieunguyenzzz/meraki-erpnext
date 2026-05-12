@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import { useList, useInvalidate } from "@refinedev/core";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -31,6 +31,7 @@ interface Expense {
   grand_total: number;
   status: string;
   against_expense_account: string;
+  project: string;
 }
 
 interface ExpenseCategory {
@@ -64,7 +65,10 @@ const initialInvoiceForm = {
   items: [{ description: "", category: "", amount: "" }] as InvoiceItem[],
 };
 
-function getColumns(onEdit: (expense: Expense) => void): ColumnDef<Expense, unknown>[] {
+function getColumns(
+  onEdit: (expense: Expense) => void,
+  projectMap: Record<string, string>,
+): ColumnDef<Expense, unknown>[] {
   return [
     {
       id: "select",
@@ -113,6 +117,24 @@ function getColumns(onEdit: (expense: Expense) => void): ColumnDef<Expense, unkn
         return acc.replace(/ - MWP$/, "");
       },
       filterFn: "arrIncludesSome",
+    },
+    {
+      accessorKey: "project",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Wedding" />,
+      cell: ({ row }) => {
+        const project = row.original.project;
+        if (!project) return <span className="text-muted-foreground">—</span>;
+        const label = projectMap[project] || project;
+        return (
+          <Link
+            to={`/projects/${project}`}
+            className="text-primary hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {label}
+          </Link>
+        );
+      },
     },
     {
       id: "actions",
@@ -178,7 +200,7 @@ export default function ExpensesPage() {
     meta: {
       fields: [
         "name", "supplier", "supplier_name", "posting_date",
-        "grand_total", "status", "against_expense_account",
+        "grand_total", "status", "against_expense_account", "project",
       ],
     },
   });
@@ -504,7 +526,13 @@ export default function ExpensesPage() {
     }
   }
 
-  const columns = getColumns(openEditSheet);
+  const projectMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const p of projects) m[p.name] = p.project_name;
+    return m;
+  }, [projects]);
+
+  const columns = getColumns(openEditSheet, projectMap);
 
   return (
     <div className="space-y-4">
