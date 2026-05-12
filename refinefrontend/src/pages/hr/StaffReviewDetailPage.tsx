@@ -66,7 +66,7 @@ export default function StaffReviewDetailPage() {
     const rawNotes = review.notes ?? "";
     const plainNotes = rawNotes.replace(/<[^>]+>/g, "");
     setNotes(plainNotes);
-    setOverallScore(review.overall_score ?? undefined);
+    setOverallScore(review.overall_score && review.overall_score > 0 ? review.overall_score : undefined);
     const ratingMap: Record<string, number> = {};
     for (const r of review.ratings ?? []) {
       ratingMap[r.criterion] = r.score;
@@ -100,7 +100,7 @@ export default function StaffReviewDetailPage() {
       const body = {
         period: period || null,
         notes,
-        overall_score: overallScore ?? null,
+        overall_score: overallScore && overallScore > 0 ? overallScore : null,
         ratings: Object.entries(ratings).map(([criterion, score]) => ({ criterion, score })),
       };
       const res = await fetch(`/inquiry-api/reviews/${encodeURIComponent(name!)}`, {
