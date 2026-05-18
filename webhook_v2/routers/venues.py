@@ -2,13 +2,14 @@
 Venue endpoints — listing, create, update.
 
 The frontend stays dumb: this router fetches Supplier + child wedding-areas
-in two calls (parent list + bulk child query), groups them server-side,
-and returns a single JSON response — avoiding N+1 child-table fetches.
+server-side and returns a single JSON response.
 Create/update orchestrate Supplier + Contact mutations in one call.
 """
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -57,27 +58,19 @@ def list_venues(city: str | None = None, _client: ERPNextClient | None = None) -
         "limit_page_length": 0,
     }).get("data", [])
 
-    venue_names = [v["name"] for v in venues]
+    if not venues:
+        return {"venues": []}
 
-    if venue_names:
-        area_filters = [
-            ["parent", "in", venue_names],
-            ["parenttype", "=", "Supplier"],
-        ]
-        areas = client._get("/api/resource/Venue Wedding Area", params={
-            "filters": json.dumps(area_filters),
-            "fields": json.dumps(_AREA_FIELDS),
-            "order_by": "parent asc, idx asc",
-            "limit_page_length": 0,
-        }).get("data", [])
-        areas_by_parent: dict[str, list[dict]] = {}
-        for a in areas:
-            areas_by_parent.setdefault(a["parent"], []).append(a)
-    else:
-        areas_by_parent = {}
+    def _fetch_areas(venue_name: str) -> list[dict]:
+        encoded = quote(venue_name, safe="")
+        doc = client._get(f"/api/resource/Supplier/{encoded}").get("data", {})
+        return doc.get("custom_venue_wedding_areas") or []
 
-    for v in venues:
-        v["areas"] = areas_by_parent.get(v["name"], [])
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        results = list(pool.map(_fetch_areas, [v["name"] for v in venues]))
+
+    for v, areas in zip(venues, results):
+        v["areas"] = areas
 
     return {"venues": venues}
 

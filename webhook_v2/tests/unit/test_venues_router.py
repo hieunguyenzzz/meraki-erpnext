@@ -6,29 +6,36 @@ from unittest.mock import MagicMock
 
 
 def test_listing_returns_venues_with_areas():
-    """list_venues groups child areas under their parent venue."""
+    """list_venues fetches child areas from the parent doc and attaches them."""
     from webhook_v2.routers.venues import list_venues
 
-    fake_client = MagicMock()
-    fake_client._get.side_effect = [
-        # First call: supplier list
-        {"data": [
-            {
+    venue_doc = {
+        "name": "An Lâm Retreat",
+        "supplier_name": "An Lâm Retreat",
+        "custom_venue_city": "Nha Trang",
+        "custom_venue_type": "Resort/Retreat",
+        "custom_venue_price_range": "MID",
+        "custom_venue_wedding_areas": [
+            {"name": "row1", "area_name": "Lawn",
+             "area_type": "Lawn", "capacity_min": 120, "capacity_max": 160, "idx": 1},
+            {"name": "row2", "area_name": "Beach",
+             "area_type": "Beach", "capacity_min": 80, "capacity_max": 120, "idx": 2},
+        ],
+    }
+
+    def _fake_get(url, params=None):
+        if url == "/api/resource/Supplier":
+            return {"data": [{
                 "name": "An Lâm Retreat",
                 "supplier_name": "An Lâm Retreat",
                 "custom_venue_city": "Nha Trang",
-                "custom_venue_type": "Resort/Retreat",
-                "custom_venue_price_range": "MID",
-            }
-        ]},
-        # Second call: child rows
-        {"data": [
-            {"parent": "An Lâm Retreat", "name": "row1", "area_name": "Lawn",
-             "area_type": "Lawn", "capacity_min": 120, "capacity_max": 160, "idx": 1},
-            {"parent": "An Lâm Retreat", "name": "row2", "area_name": "Beach",
-             "area_type": "Beach", "capacity_min": 80, "capacity_max": 120, "idx": 2},
-        ]},
-    ]
+            }]}
+        elif url.startswith("/api/resource/Supplier/"):
+            return {"data": venue_doc}
+        raise ValueError(f"Unexpected URL: {url}")
+
+    fake_client = MagicMock()
+    fake_client._get.side_effect = _fake_get
 
     result = list_venues(city=None, _client=fake_client)
 
@@ -46,10 +53,8 @@ def test_listing_filters_by_city():
     from webhook_v2.routers.venues import list_venues
 
     fake_client = MagicMock()
-    fake_client._get.side_effect = [
-        {"data": []},  # no venues
-        {"data": []},  # no areas (skipped when venues empty, but side_effect needs it)
-    ]
+    # Empty venue list — no per-venue fetches will happen
+    fake_client._get.return_value = {"data": []}
 
     list_venues(city="HCM", _client=fake_client)
 
@@ -65,7 +70,8 @@ def test_listing_excludes_disabled_and_filters_wedding_venues():
     from webhook_v2.routers.venues import list_venues
 
     fake_client = MagicMock()
-    fake_client._get.side_effect = [{"data": []}, {"data": []}]
+    # Empty venue list — no per-venue fetches will happen
+    fake_client._get.return_value = {"data": []}
 
     list_venues(city=None, _client=fake_client)
 
@@ -80,11 +86,15 @@ def test_listing_returns_empty_areas_when_venue_has_none():
     """A venue with zero child rows still appears in the result with areas=[]."""
     from webhook_v2.routers.venues import list_venues
 
+    def _fake_get(url, params=None):
+        if url == "/api/resource/Supplier":
+            return {"data": [{"name": "Lonely", "supplier_name": "Lonely Venue"}]}
+        elif url.startswith("/api/resource/Supplier/"):
+            return {"data": {"name": "Lonely", "custom_venue_wedding_areas": []}}
+        raise ValueError(f"Unexpected URL: {url}")
+
     fake_client = MagicMock()
-    fake_client._get.side_effect = [
-        {"data": [{"name": "Lonely", "supplier_name": "Lonely Venue"}]},
-        {"data": []},
-    ]
+    fake_client._get.side_effect = _fake_get
 
     result = list_venues(city=None, _client=fake_client)
 
