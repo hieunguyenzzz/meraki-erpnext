@@ -38,6 +38,7 @@ export interface VenueSupplier {
   name: string;
   supplier_name: string;
   supplier_group: string;
+  disabled?: 0 | 1;
   custom_venue_city?: string;
   custom_location?: string;
   custom_capacity_min?: number;
@@ -46,6 +47,37 @@ export interface VenueSupplier {
   custom_features?: string;   // newline-separated
   custom_contact_person?: string;
   custom_notes?: string;
+  custom_venue_external_key?: string;
+  custom_venue_location_subarea?: string;
+  custom_venue_type?: string;
+  custom_venue_price_range?: "" | "LOW" | "MID" | "HIGH" | "LUXURY" | "UNKNOWN";
+  custom_venue_wedding_package_text?: string;
+  custom_venue_wedding_package_url?: string;
+  custom_venue_insights?: string;
+  custom_venue_accommodation?: string;
+  custom_venue_fnb?: string;
+  custom_venue_av_policy?: string;
+  custom_venue_facility?: string;
+  custom_venue_after_party?: string;
+  custom_venue_contact_raw?: string;
+  custom_venue_source?: string;
+  custom_cover_photo?: string;
+  custom_venue_wedding_areas?: VenueWeddingArea[];
+}
+
+export interface VenueWeddingArea {
+  name: string;
+  area_name: string;
+  area_type?: "Ballroom/Indoor" | "Lawn" | "Beach" | "Restaurant/Café/Bar" | "Pool" | "Other";
+  function?: string;
+  capacity_min?: number;
+  capacity_max?: number;
+  capacity_notes?: string;
+  policy_min_spend?: string;
+  setup_notes?: string;
+  meraki_weddings?: string;
+  photos_url?: string;
+  idx?: number;
 }
 
 export interface EmployeeProfile {
