@@ -174,7 +174,53 @@ def test_update_venue_puts_supplier_with_child_rows():
     assert result["name"] == "Test Venue"
     first_put = fake_client._put.call_args_list[0]
     endpoint = first_put.args[0] if first_put.args else first_put.kwargs.get("endpoint")
-    assert endpoint == "/api/resource/Supplier/Test Venue"
+    # Path is URL-encoded so ERPNext receives the correct doc name even with spaces.
+    assert endpoint == "/api/resource/Supplier/Test%20Venue"
+
+
+def test_update_venue_url_encodes_non_ascii_name():
+    """Vietnamese venue names must be URL-encoded in the PUT path."""
+    from webhook_v2.routers.venues import update_venue, VenuePayload, AreaPayload
+
+    payload = VenuePayload(
+        supplier_name="An Lâm Retreat",
+        areas=[AreaPayload(area_name="Hall")],
+    )
+    fake_client = MagicMock()
+    fake_client._put.return_value = {"data": {"name": "An Lâm Retreat"}}
+    fake_client._get.return_value = {"data": []}
+
+    update_venue("An Lâm Retreat", payload, _client=fake_client)
+
+    first_put = fake_client._put.call_args_list[0]
+    endpoint = first_put.args[0]
+    assert endpoint == "/api/resource/Supplier/An%20L%C3%A2m%20Retreat"
+
+
+def test_update_venue_url_encodes_existing_contact_name():
+    """Existing Contact PUT path must also be URL-encoded."""
+    from webhook_v2.routers.venues import update_venue, VenuePayload, AreaPayload, ContactPayload
+
+    payload = VenuePayload(
+        supplier_name="An Lâm Retreat",
+        areas=[AreaPayload(area_name="Hall")],
+        contact=ContactPayload(name="Nguyễn Văn A", email="a@example.com"),
+    )
+    fake_client = MagicMock()
+    fake_client._put.return_value = {"data": {}}
+    fake_client._get.return_value = {"data": [{"name": "Nguyễn Văn A-An Lâm"}]}
+
+    update_venue("An Lâm Retreat", payload, _client=fake_client)
+
+    contact_puts = [
+        c for c in fake_client._put.call_args_list
+        if c.args[0].startswith("/api/resource/Contact/")
+    ]
+    assert len(contact_puts) == 1
+    endpoint = contact_puts[0].args[0]
+    assert "%" in endpoint  # encoded, not raw
+    assert " " not in endpoint
+    assert "ễ" not in endpoint
 
 
 def test_create_venue_with_contact_upserts_contact():

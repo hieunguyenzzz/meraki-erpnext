@@ -204,7 +204,10 @@ def _upsert_contact(
 
     existing_rows = (existing or {}).get("data", [])
     if existing_rows:
-        client._put(f"/api/resource/Contact/{existing_rows[0]['name']}", contact_doc)
+        client._put(
+            f"/api/resource/Contact/{quote(existing_rows[0]['name'], safe='')}",
+            contact_doc,
+        )
     else:
         client._post("/api/resource/Contact", contact_doc)
 
@@ -227,7 +230,7 @@ def update_venue(
         raise HTTPException(status_code=400, detail="Venue requires at least one area.")
     client = _client or ERPNextClient()
     doc = _build_supplier_doc(payload)
-    client._put(f"/api/resource/Supplier/{name}", doc)
+    client._put(f"/api/resource/Supplier/{quote(name, safe='')}", doc)
     _upsert_contact(client, name, payload.contact)
     return {"name": name}
 
