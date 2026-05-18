@@ -491,6 +491,14 @@ export function VenueGalleryTab({
   const { mutate: deleteFile } = useDelete();
   const { mutate: updateSupplier } = useUpdate();
 
+  // Track the latest cover so async callbacks (delete onSuccess) see the
+  // current value even if the prop updated mid-flight from a concurrent
+  // setCover. Closure-captured `currentCoverPhotoName` would be stale.
+  const coverRef = useRef(currentCoverPhotoName);
+  useEffect(() => {
+    coverRef.current = currentCoverPhotoName;
+  }, [currentCoverPhotoName]);
+
   // ── Fetch photos ──────────────────────────────────────────────────────────
   const { result, query } = useList({
     resource: "File",
@@ -543,13 +551,13 @@ export function VenueGalleryTab({
   }, [images, areaFilter, staleTagged]);
 
   // ── Invalidation helper ───────────────────────────────────────────────────
-  function refreshFiles() {
+  const refreshFiles = useCallback(() => {
     invalidate({ resource: "File", invalidates: ["list"] });
-  }
+  }, [invalidate]);
 
-  function refreshSupplier() {
+  const refreshSupplier = useCallback(() => {
     invalidate({ resource: "Supplier", invalidates: ["detail"] });
-  }
+  }, [invalidate]);
 
   // ── Upload handler ────────────────────────────────────────────────────────
   const handleFiles = useCallback(
@@ -594,7 +602,7 @@ export function VenueGalleryTab({
         if (fileInputRef.current) fileInputRef.current.value = "";
       }, 1500);
     },
-    [venueName] // eslint-disable-line react-hooks/exhaustive-deps
+    [venueName, refreshFiles]
   );
 
   // ── Drag-drop ─────────────────────────────────────────────────────────────
@@ -630,7 +638,6 @@ export function VenueGalleryTab({
 
   // ── Delete action ─────────────────────────────────────────────────────────
   function handleDelete(file: FileRecord) {
-    const wasCover = file.name === currentCoverPhotoName;
     deleteFile(
       {
         resource: "File",
@@ -640,7 +647,10 @@ export function VenueGalleryTab({
       },
       {
         onSuccess: () => {
-          if (wasCover) {
+          // Read latest cover at completion time, not at click time —
+          // covers the case where a concurrent setCover updated the prop
+          // between this user clicking delete and the API returning.
+          if (file.name === coverRef.current) {
             updateSupplier({
               resource: "Supplier",
               id: venueName,
