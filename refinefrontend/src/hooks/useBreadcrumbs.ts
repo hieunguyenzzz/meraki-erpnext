@@ -30,7 +30,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
         // (e.g. /crm has a child at /crm which should only exact-match)
         if (child.path !== mod.path && pathname.startsWith(child.path + "/")) {
           crumbs.push({ label: child.label, href: child.path });
-          const rest = pathname.slice(child.path.length + 1);
+          const rest = decodeURIComponent(pathname.slice(child.path.length + 1));
           if (rest) {
             crumbs.push({ label: rest });
           }
