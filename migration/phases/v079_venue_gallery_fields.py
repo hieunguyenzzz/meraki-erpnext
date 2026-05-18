@@ -41,12 +41,7 @@ def run(client):
     ]
 
     for spec in fields:
-        existing = client.get_list(
-            "Custom Field",
-            filters=[["dt", "=", spec["dt"]], ["fieldname", "=", spec["fieldname"]]],
-            fields=["name"],
-            limit=1,
-        )
-        if existing:
+        cf_name = f"{spec['dt']}-{spec['fieldname']}"
+        if client.exists("Custom Field", {"name": cf_name}):
             continue
         client.create("Custom Field", spec)
