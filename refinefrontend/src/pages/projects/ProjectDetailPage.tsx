@@ -359,7 +359,10 @@ export default function ProjectDetailPage() {
   const { result: venuesResult } = useList({
     resource: "Supplier",
     pagination: { mode: "off" as const },
-    filters: [{ field: "supplier_group", operator: "eq", value: "Wedding Venues" }],
+    filters: [
+      { field: "supplier_group", operator: "eq", value: "Wedding Venues" },
+      { field: "disabled", operator: "eq", value: 0 },
+    ],
     meta: { fields: ["name", "supplier_name"] },
   });
   const venues = (venuesResult?.data ?? []) as { name: string; supplier_name: string }[];
