@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ExternalLink } from "lucide-react";
 import type { VenueSupplier, VenueWeddingArea } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -70,23 +71,21 @@ function LongText({ value }: { value?: string | null }) {
 // Price badge
 // ---------------------------------------------------------------------------
 
-const PRICE_BADGE_VARIANTS: Record<string, string> = {
-  LOW: "bg-blue-100 text-blue-700",
-  MID: "bg-emerald-100 text-emerald-700",
-  HIGH: "bg-amber-100 text-amber-700",
-  LUXURY: "bg-purple-100 text-purple-700",
-  UNKNOWN: "bg-gray-100 text-gray-600",
+type BadgeVariant = "info" | "success" | "warning" | "destructive" | "outline";
+
+const PRICE_BADGE_VARIANTS: Record<string, BadgeVariant> = {
+  LOW: "info",
+  MID: "success",
+  HIGH: "warning",
+  LUXURY: "destructive",
+  UNKNOWN: "outline",
 };
 
 function PriceBadge({ value }: { value?: string | null }) {
   if (!value) return <span className="text-muted-foreground">—</span>;
-  const cls =
+  const variant =
     PRICE_BADGE_VARIANTS[value.toUpperCase()] ?? PRICE_BADGE_VARIANTS.UNKNOWN;
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${cls}`}>
-      {value}
-    </span>
-  );
+  return <Badge variant={variant}>{value}</Badge>;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,9 +154,7 @@ function buildColumns(
       width: 140,
       cell: ({ venue }) =>
         venue.custom_venue_type ? (
-          <span className="px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
-            {venue.custom_venue_type}
-          </span>
+          <Badge variant="secondary">{venue.custom_venue_type}</Badge>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
@@ -244,9 +241,7 @@ function buildColumns(
       width: 130,
       cell: ({ area }) =>
         area?.area_type ? (
-          <span className="px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
-            {area.area_type}
-          </span>
+          <Badge variant="secondary">{area.area_type}</Badge>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
@@ -386,6 +381,13 @@ export function VenueListingTable({
   showCityColumn = false,
   onRowClick,
 }: VenueListingTableProps) {
+  const [hoveredVenue, setHoveredVenue] = useState<string | null>(null);
+  const rows = useMemo(() => flatten(venues), [venues]);
+  const columns = useMemo(
+    () => buildColumns(showCityColumn, onRowClick),
+    [showCityColumn, onRowClick]
+  );
+
   if (venues.length === 0) {
     return (
       <div className="text-muted-foreground text-sm py-12 text-center">
@@ -393,9 +395,6 @@ export function VenueListingTable({
       </div>
     );
   }
-
-  const rows = flatten(venues);
-  const columns = buildColumns(showCityColumn, onRowClick);
 
   return (
     <div className="w-full overflow-x-auto border rounded-md">
@@ -432,7 +431,9 @@ export function VenueListingTable({
           {rows.map((row, rowIdx) => (
             <tr
               key={rowIdx}
-              className="hover:bg-muted/30"
+              className={hoveredVenue === row.venue.name ? "bg-muted/30" : ""}
+              onMouseEnter={() => setHoveredVenue(row.venue.name)}
+              onMouseLeave={() => setHoveredVenue(null)}
             >
               {columns.map((col) => {
                 const isVenueScope = col.scope === "venue";
