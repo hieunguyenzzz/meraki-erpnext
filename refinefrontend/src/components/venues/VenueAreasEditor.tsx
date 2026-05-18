@@ -21,6 +21,12 @@ import {
 } from "@/components/ui/dialog";
 import type { VenueWeddingArea } from "@/lib/types";
 
+type EditorArea = VenueWeddingArea & { _clientId?: string };
+
+function generateClientId(): string {
+  return `c_${Math.random().toString(36).slice(2, 11)}`;
+}
+
 const AREA_TYPE_OPTIONS: Array<VenueWeddingArea["area_type"]> = [
   "Ballroom/Indoor",
   "Lawn",
@@ -49,8 +55,8 @@ function capacitySummary(area: VenueWeddingArea): string {
 
 function isValidUrl(value: string): boolean {
   try {
-    new URL(value);
-    return true;
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
@@ -75,14 +81,14 @@ export function VenueAreasEditor({ areas, onChange, errors = {} }: VenueAreasEdi
   }
 
   function addArea() {
-    const newArea: VenueWeddingArea = { name: "", area_name: "" };
+    const newArea: EditorArea = { name: "", area_name: "", _clientId: generateClientId() };
     const newIdx = areas.length;
     onChange([...areas, newArea]);
     setExpandedIndices((prev) => new Set(prev).add(newIdx));
   }
 
   function duplicateArea(idx: number) {
-    const clone: VenueWeddingArea = { ...areas[idx], name: "" };
+    const clone: EditorArea = { ...areas[idx], name: "", _clientId: generateClientId() };
     const newIdx = areas.length;
     onChange([...areas, clone]);
     setExpandedIndices((prev) => new Set(prev).add(newIdx));
@@ -118,16 +124,25 @@ export function VenueAreasEditor({ areas, onChange, errors = {} }: VenueAreasEdi
         const isExpanded = expandedIndices.has(idx);
         const fieldErrors = errors[idx] ?? {};
 
+        const key = area.name || (area as EditorArea)._clientId || `fallback-${idx}`;
+
         return (
           <Card
-            key={idx}
+            key={key}
             className={`border transition-shadow ${isExpanded ? "shadow-md" : "shadow-sm hover:shadow"}`}
           >
             {/* Collapsed / header row */}
             <div
               className="flex items-center justify-between px-4 py-3 cursor-pointer select-none"
               onClick={() => toggleExpanded(idx)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleExpanded(idx);
+                }
+              }}
               role="button"
+              tabIndex={0}
               aria-expanded={isExpanded}
             >
               <div className="flex items-center gap-2 min-w-0">
