@@ -166,7 +166,7 @@ export function VenueForm({
   }
 
   // --- Validation ---
-  function validate(): FormErrors {
+  const validate = useCallback((): FormErrors => {
     const errs: FormErrors = {};
 
     if (!supplierName.trim()) {
@@ -203,11 +203,17 @@ export function VenueForm({
     }
 
     return errs;
-  }
+  }, [supplierName, packageUrl, contactEmail, areas]);
 
   // --- Save ---
   const handleSave = useCallback(async () => {
     setBackendError(null);
+
+    if (mode === "edit" && !initialValue?.name) {
+      setBackendError("Cannot save: venue name is missing.");
+      return;
+    }
+
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
@@ -260,7 +266,7 @@ export function VenueForm({
       const url =
         mode === "create"
           ? "/inquiry-api/venues/"
-          : `/inquiry-api/venues/${encodeURIComponent(initialValue!.name!)}`;
+          : `/inquiry-api/venues/${encodeURIComponent(initialValue?.name ?? "")}`;
       const method = mode === "create" ? "POST" : "PUT";
 
       const res = await fetch(url, {
@@ -282,13 +288,14 @@ export function VenueForm({
     } finally {
       setSaving(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    validate,
     supplierName, city, subarea, venueType, priceRange,
     packageText, packageUrl, insights, accommodation, fnb,
     avPolicy, facility, afterParty, contactRaw,
     contactName, contactTitle, contactEmail, contactPhone, contactAltPhone,
     areas, mode, initialValue,
+    onSaved,
   ]);
 
   const hasErrors = Object.keys(errors).length > 0;
