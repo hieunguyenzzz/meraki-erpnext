@@ -61,6 +61,7 @@ cookies.txt
 webhook/data/
 *.db
 *.sqlite
+migration/scripts/.cache/
 
 # OS
 .DS_Store
