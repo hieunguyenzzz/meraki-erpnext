@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useList, useUpdate, useDelete, useInvalidate } from "@refinedev/core";
-import { ImagePlus, Star, X, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { ImagePlus, Star, X, ChevronLeft, ChevronRight, AlertTriangle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -50,9 +50,11 @@ function CaptionEditor({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(caption ?? "");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const { mutate: updateFile } = useUpdate();
 
   function save() {
+    setSaveError(null);
     updateFile(
       {
         resource: "File",
@@ -61,20 +63,30 @@ function CaptionEditor({
         successNotification: false,
         errorNotification: false,
       },
-      { onSuccess: () => { setEditing(false); onSaved(); } }
+      {
+        onSuccess: () => { setEditing(false); onSaved(); },
+        onError: (err) => { setSaveError(err?.message ?? "Failed to save caption"); },
+      }
     );
   }
 
   if (!editing) {
     return (
-      <p
-        className={`text-xs truncate cursor-pointer hover:text-foreground transition-colors ${
-          caption ? "text-foreground" : "text-muted-foreground italic"
-        }`}
-        onClick={() => { setDraft(caption ?? ""); setEditing(true); }}
-      >
-        {caption || "Add caption…"}
-      </p>
+      <>
+        {saveError && (
+          <p className="text-xs text-destructive truncate" title={saveError}>
+            {saveError}
+          </p>
+        )}
+        <p
+          className={`text-xs truncate cursor-pointer hover:text-foreground transition-colors ${
+            caption ? "text-foreground" : "text-muted-foreground italic"
+          }`}
+          onClick={() => { setDraft(caption ?? ""); setSaveError(null); setEditing(true); }}
+        >
+          {caption || "Add caption…"}
+        </p>
+      </>
     );
   }
 
@@ -100,11 +112,13 @@ function AreaTagPopover({
   currentArea,
   areas,
   onSaved,
+  onError,
 }: {
   fileId: string;
   currentArea?: string;
   areas: VenueWeddingArea[];
   onSaved: () => void;
+  onError?: (msg: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const { mutate: updateFile } = useUpdate();
@@ -118,7 +132,10 @@ function AreaTagPopover({
         successNotification: false,
         errorNotification: false,
       },
-      { onSuccess: () => { setOpen(false); onSaved(); } }
+      {
+        onSuccess: () => { setOpen(false); onSaved(); },
+        onError: (err) => { setOpen(false); onError?.(err?.message ?? "Failed to update area tag"); },
+      }
     );
   }
 
@@ -207,6 +224,7 @@ function PhotoCard({
   onClick: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [cardError, setCardError] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-1">
@@ -249,8 +267,21 @@ function PhotoCard({
           currentArea={file.custom_venue_area}
           areas={areas}
           onSaved={onMetaChange}
+          onError={setCardError}
         />
       </div>
+
+      {/* Card-level error (area tag or cover failures) */}
+      {cardError && (
+        <p
+          className="text-xs text-destructive truncate cursor-pointer"
+          title={cardError}
+          onClick={() => setCardError(null)}
+        >
+          <XCircle className="inline h-3 w-3 mr-0.5" />
+          {cardError}
+        </p>
+      )}
 
       {/* Caption */}
       <CaptionEditor
@@ -448,6 +479,14 @@ export function VenueGalleryTab({
   const [dragOver, setDragOver] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [galleryError, setGalleryError] = useState<string | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showGalleryError(msg: string) {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    setGalleryError(msg);
+    errorTimerRef.current = setTimeout(() => setGalleryError(null), 6000);
+  }
 
   const { mutate: deleteFile } = useDelete();
   const { mutate: updateSupplier } = useUpdate();
@@ -582,7 +621,10 @@ export function VenueGalleryTab({
         successNotification: false,
         errorNotification: false,
       },
-      { onSuccess: refreshSupplier }
+      {
+        onSuccess: refreshSupplier,
+        onError: (err) => showGalleryError(err?.message ?? "Failed to set cover photo"),
+      }
     );
   }
 
@@ -619,6 +661,7 @@ export function VenueGalleryTab({
           }
           refreshFiles();
         },
+        onError: (err) => showGalleryError(err?.message ?? "Failed to delete photo"),
       }
     );
   }
@@ -665,6 +708,20 @@ export function VenueGalleryTab({
           Upload
         </Button>
       </div>
+
+      {/* Gallery-level error banner (delete / cover / area-tag failures) */}
+      {galleryError && (
+        <div
+          className="bg-destructive/10 border border-destructive/30 rounded-md p-3 text-sm flex items-center justify-between gap-3 cursor-pointer"
+          onClick={() => setGalleryError(null)}
+        >
+          <div className="flex items-center gap-2 text-destructive">
+            <XCircle className="h-4 w-4 shrink-0" />
+            <span>{galleryError}</span>
+          </div>
+          <span className="text-xs text-destructive/70 shrink-0">Click to dismiss</span>
+        </div>
+      )}
 
       {/* Stale-tag banner */}
       {staleTagged.length > 0 && (
