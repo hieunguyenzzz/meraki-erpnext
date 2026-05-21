@@ -4,8 +4,8 @@ import { useList, useGetIdentity, usePermissions } from "@refinedev/core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarDays, CheckSquare, Clock, FolderKanban, Heart, Wallet, TreePalm } from "lucide-react";
-import { formatDate, formatVND } from "@/lib/format";
+import { CalendarDays, CheckSquare, Clock, FolderKanban, Heart, TreePalm } from "lucide-react";
+import { formatDate } from "@/lib/format";
 import { formatTimeShort, interviewStatusVariant } from "@/lib/interview-scheduling";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { CRM_ROLES, HR_ROLES, PLANNER_ROLES, hasModuleAccess, getDashboardOptions, type DashboardOption } from "@/lib/roles";
@@ -263,6 +263,7 @@ export default function DashboardPage() {
     if (!leaveBalanceData?.data) return null;
     let total = 0;
     for (const item of leaveBalanceData.data) {
+      if (item.leave_type !== "Annual Leave") continue;
       const oldAllocDays = item.old_allocation ?? 0;
       const rawOldTaken = item.old_taken ?? 0;
       const oldPending = item.old_pending ?? 0;
@@ -282,20 +283,6 @@ export default function DashboardPage() {
     }
     return total;
   }, [leaveBalanceData]);
-
-  // --- Latest Salary Slip (planner dashboard) ---
-  const { result: salarySlipResult, query: salarySlipQuery } = useList({
-    resource: "Salary Slip",
-    pagination: { pageSize: 1 },
-    sorters: [{ field: "posting_date", order: "desc" }],
-    filters: [
-      { field: "employee", operator: "eq", value: employeeId ?? "" },
-      { field: "docstatus", operator: "eq", value: 1 },
-    ],
-    meta: { fields: ["name", "net_pay", "posting_date"] },
-    queryOptions: { enabled: hasPlannerAccess && !!employeeId },
-  });
-  const latestSlip = (salarySlipResult?.data ?? [])[0] as any | undefined;
 
   return (
     <div className="space-y-6">
@@ -410,7 +397,7 @@ export default function DashboardPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <TreePalm className="h-4 w-4" />
-                  Leave Balance
+                  Annual Leave Balance
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -427,29 +414,6 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </Link>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Wallet className="h-4 w-4" />
-                Latest Salary
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {salarySlipQuery?.isLoading ? (
-                <Skeleton className="h-8 w-[120px]" />
-              ) : latestSlip ? (
-                <div>
-                  <div className="text-2xl font-bold">{formatVND(latestSlip.net_pay)}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {new Date(latestSlip.posting_date).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No salary slips</p>
-              )}
-            </CardContent>
-          </Card>
         </div>
       )}
 
