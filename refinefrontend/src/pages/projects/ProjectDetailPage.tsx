@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
@@ -2048,7 +2049,7 @@ export default function ProjectDetailPage() {
                           <col />
                           <col className="w-[120px]" />
                           <col className="w-[110px]" />
-                          <col className="w-[90px]" />
+                          <col className="w-[160px]" />
                           <col className="w-16" />
                           <col className="w-20" />
                         </colgroup>
@@ -2138,9 +2139,9 @@ export default function ProjectDetailPage() {
                                 </ShadcnPopover>
                               </td>
                               <td className="px-3 py-2">
-                                <Input className="h-8 w-full text-right" type="number" min="1" step="1" placeholder="Amount"
+                                <MoneyInput className="h-8 w-full text-right" placeholder="Amount"
                                   value={newExpense.amount}
-                                  onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} />
+                                  onChange={(raw) => setNewExpense({ ...newExpense, amount: raw })} />
                               </td>
                               <td className="px-3 py-2"></td>
                               <td className="px-3 py-2">
@@ -2268,8 +2269,8 @@ export default function ProjectDetailPage() {
                                     </ShadcnPopover>
                                   </td>
                                   <td className="px-3 py-2">
-                                    <Input className="h-8 w-full text-right" type="number" min="1" step="1"
-                                      value={editExpValues.amount} onChange={e => setEditExpValues({ ...editExpValues, amount: e.target.value })} />
+                                    <MoneyInput className="h-8 w-full text-right"
+                                      value={editExpValues.amount} onChange={(raw) => setEditExpValues({ ...editExpValues, amount: raw })} />
                                   </td>
                                   <td className="px-3 py-2"></td>
                                   <td className="px-3 py-2">
