@@ -89,7 +89,7 @@ export const authProvider: AuthProvider = {
   },
 
   onError: async (error) => {
-    if (error?.statusCode === 401 || error?.statusCode === 403) {
+    if (error?.statusCode === 401) {
       return { logout: true, redirectTo: "/login" };
     }
     return { error };
