@@ -66,7 +66,9 @@ export default function MyLeavesPage() {
     if (!balanceData?.data) return [];
     const beforeAugust = balanceData.before_august;
 
-    return balanceData.data.map((item: any) => {
+    return balanceData.data
+      .filter((item: any) => item.leave_type !== "Sick Leave")
+      .map((item: any) => {
       const oldAllocDays = item.old_allocation ?? 0;
       const newAllocDays = item.new_allocation ?? 0;
       const rawOldTaken = item.old_taken ?? 0;
