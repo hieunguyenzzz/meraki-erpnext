@@ -396,6 +396,22 @@ async def set_employee_roles(employee_id: str, request: SetRolesRequest):
     return {"status": "ok", "roles": [r["role"] for r in new_roles]}
 
 
+@router.get("/employees/directory")
+async def get_employees_directory():
+    """
+    Public directory of employees with safe display fields only.
+    Used by the frontend to resolve employee IDs to names without requiring
+    Employee doctype read access on every staff record (which restricted
+    roles like Employee Self Service don't have).
+    """
+    client = ERPNextClient()
+    emps = client._get("/api/resource/Employee", params={
+        "fields": '["name","employee_name","first_name","last_name","user_id","status","designation","department","custom_display_order"]',
+        "limit_page_length": 0,
+    }).get("data", [])
+    return {"data": emps}
+
+
 @router.get("/employees/roles-map")
 async def get_employees_roles_map():
     """

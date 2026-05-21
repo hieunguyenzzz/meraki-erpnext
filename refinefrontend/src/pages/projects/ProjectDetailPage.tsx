@@ -340,19 +340,26 @@ export default function ProjectDetailPage() {
   });
   const tasks = tasksResult?.data ?? [];
 
-  // Fetch Employees for task assignment and team display
-  const { result: employeesResult } = useList({
-    resource: "Employee",
-    pagination: { mode: "off" as const },
-    meta: { fields: ["name", "employee_name", "first_name", "last_name", "user_id", "status"] },
-  });
+  // Fetch Employees for task assignment and team display.
+  // Uses the backend directory endpoint so restricted roles (Employee Self
+  // Service / Projects User) get full name resolution — direct Employee
+  // listing only returns the caller's own record under standard permissions.
+  const [employeeDirectory, setEmployeeDirectory] = useState<any[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/inquiry-api/employees/directory", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((json) => { if (!cancelled) setEmployeeDirectory(json.data ?? []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   const employees = useMemo(
-    () => (employeesResult?.data ?? []).map((e: any) => ({
+    () => employeeDirectory.map((e: any) => ({
       id: e.name,
       name: displayName(e),
       userId: e.user_id,
     })),
-    [employeesResult?.data]
+    [employeeDirectory]
   );
 
   // Fetch Venues (Suppliers in Wedding Venues group)
