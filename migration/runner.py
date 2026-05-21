@@ -43,6 +43,7 @@ ORDERED_PHASES = [
     "v077_finish_unpaid_pi_backfill",
     "v078_venue_extended_model",
     "v079_venue_gallery_fields",
+    "v080_project_planner_auto_share",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -109,6 +110,7 @@ def run_pending(client) -> int:
             v077_finish_unpaid_pi_backfill,
             v078_venue_extended_model,
             v079_venue_gallery_fields,
+            v080_project_planner_auto_share,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -147,6 +149,7 @@ def run_pending(client) -> int:
             v077_finish_unpaid_pi_backfill,
             v078_venue_extended_model,
             v079_venue_gallery_fields,
+            v080_project_planner_auto_share,
         )
 
     phase_fns = {
@@ -189,6 +192,7 @@ def run_pending(client) -> int:
         "v077_finish_unpaid_pi_backfill": v077_finish_unpaid_pi_backfill.run,
         "v078_venue_extended_model": v078_venue_extended_model.run,
         "v079_venue_gallery_fields": v079_venue_gallery_fields.run,
+        "v080_project_planner_auto_share": v080_project_planner_auto_share.run,
     }
 
     state_file = get_state_file()
