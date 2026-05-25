@@ -7,7 +7,6 @@ GET /reports/wedding-expenses/projects   — lightweight project list for dropdo
 """
 
 import json
-import math
 from datetime import date, timedelta
 from fastapi import APIRouter, Query
 from webhook_v2.services.erpnext import ERPNextClient
@@ -53,7 +52,7 @@ def _compute_accrued(
     elapsed = (accrual_end.year - accrual_start.year) * 12 + (accrual_end.month - accrual_start.month)
     if elapsed <= 0:
         return 0.0
-    return min(allocation, math.ceil(allocation * elapsed / 12))
+    return min(allocation, round(allocation * elapsed / 12))
 
 
 def _count_working_days(start: date, end: date, holidays: set) -> int:
