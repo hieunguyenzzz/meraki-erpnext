@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Eye, EyeOff } from "lucide-react";
 import {
   Table,
@@ -42,14 +43,16 @@ export default function LeaveReportPage() {
   const [report, setReport] = useState<LeaveReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAllocation, setShowAllocation] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("Active");
 
   useEffect(() => {
-    fetch("/inquiry-api/reports/leave-report", { credentials: "include" })
+    setIsLoading(true);
+    fetch(`/inquiry-api/reports/leave-report?status=${statusFilter}`, { credentials: "include" })
       .then((r) => r.json())
       .then((data) => setReport(data))
       .catch(() => setReport(null))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [statusFilter]);
 
   const rows = report?.data ?? [];
   const currentYear = report?.current_year ?? new Date().getFullYear();
@@ -68,14 +71,26 @@ export default function LeaveReportPage() {
           <CardTitle className="text-base">
             {rows.length} Employees
           </CardTitle>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowAllocation((v) => !v)}
-          >
-            {showAllocation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            {showAllocation ? "Hide" : "Show"} {currentYear} Allocation
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-8 w-[120px] text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Left">Left</SelectItem>
+                <SelectItem value="All">All</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowAllocation((v) => !v)}
+            >
+              {showAllocation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showAllocation ? "Hide" : "Show"} {currentYear} Allocation
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (

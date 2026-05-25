@@ -96,26 +96,28 @@ def _display_name(emp: dict) -> str:
 
 
 @router.get("/reports/leave-report")
-def leave_report():
+def leave_report(status: str = "Active"):
     """
     Compute the full leave report server-side.
 
-    Returns employee rows with:
-    - Monthly leave breakdown for current year
-    - Old period (2025) allocation/taken/balance
-    - New period (2026) allocation/taken/balance/accrued/usable
-    - Total balance
+    status: "Active" | "Left" | "All"
     """
     client = ERPNextClient()
     current_year = date.today().year
     today = date.today()
 
-    # Fetch active employees with a non-zero CTC (zero-CTC accounts are placeholders / test users)
+    # ctc > 0 guards against placeholder accounts for Active only;
+    # Left employees may have ctc zeroed on exit. Employees with no allocations
+    # are skipped later regardless, so no extra CTC guard is needed for Left/All.
+    if status == "Active":
+        filters = [["ctc", ">", 0], ["status", "=", "Active"]]
+    elif status == "Left":
+        filters = [["status", "=", "Left"]]
+    else:  # All
+        filters = [["status", "in", ["Active", "Left"]]]
+
     employees = client._get("/api/resource/Employee", params={
-        "filters": json.dumps([
-            ["status", "=", "Active"],
-            ["ctc", ">", 0],
-        ]),
+        "filters": json.dumps(filters),
         "fields": json.dumps([
             "name", "employee_name", "first_name", "last_name",
             "date_of_joining", "relieving_date", "status", "ctc",
