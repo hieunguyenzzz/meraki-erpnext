@@ -5,8 +5,10 @@ Sets Employee.status and disables/enables the linked User account.
 
 import re
 from datetime import date
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from requests.exceptions import HTTPError
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
@@ -15,8 +17,12 @@ log = get_logger(__name__)
 router = APIRouter()
 
 
+class DeactivateBody(BaseModel):
+    relieving_date: Optional[str] = None  # ISO date string; defaults to today
+
+
 @router.post("/employee/{employee_name}/deactivate")
-async def deactivate_employee(employee_name: str):
+async def deactivate_employee(employee_name: str, body: DeactivateBody = DeactivateBody()):
     client = ERPNextClient()
 
     try:
@@ -26,6 +32,7 @@ async def deactivate_employee(employee_name: str):
         raise HTTPException(status_code=404, detail=f"Employee not found: {employee_name}")
 
     user_id = emp.get("user_id")
+    relieving = body.relieving_date or str(date.today())
 
     try:
         # Set relieving_date first (required by ERPNext for "Left" status)
@@ -33,7 +40,7 @@ async def deactivate_employee(employee_name: str):
             "doctype": "Employee",
             "name": employee_name,
             "fieldname": "relieving_date",
-            "value": str(date.today()),
+            "value": relieving,
         })
         client._post("/api/method/frappe.client.set_value", {
             "doctype": "Employee",
@@ -58,8 +65,8 @@ async def deactivate_employee(employee_name: str):
         except Exception as e:
             log.warning("user_disable_failed", user=user_id, error=str(e))
 
-    log.info("employee_deactivated", employee=employee_name, user_disabled=user_disabled)
-    return {"status": "ok", "employee": employee_name, "new_status": "Left", "user_disabled": user_disabled}
+    log.info("employee_deactivated", employee=employee_name, relieving_date=relieving, user_disabled=user_disabled)
+    return {"status": "ok", "employee": employee_name, "new_status": "Left", "relieving_date": relieving, "user_disabled": user_disabled}
 
 
 @router.post("/employee/{employee_name}/activate")

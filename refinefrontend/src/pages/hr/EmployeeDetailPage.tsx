@@ -71,6 +71,7 @@ export default function EmployeeDetailPage() {
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [relievingDate, setRelievingDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -504,8 +505,13 @@ export default function EmployeeDetailPage() {
     setStatusLoading(true);
     setStatusError(null);
     const action = employee.status === "Active" ? "deactivate" : "activate";
+    const body = action === "deactivate" ? JSON.stringify({ relieving_date: relievingDate }) : undefined;
     try {
-      const res = await fetch(`/inquiry-api/employee/${employee.name}/${action}`, { method: "POST" });
+      const res = await fetch(`/inquiry-api/employee/${employee.name}/${action}`, {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body,
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `API error ${res.status}`);
@@ -1021,6 +1027,17 @@ export default function EmployeeDetailPage() {
               ? `This will set their status to "Left" and disable their login account${employee.company_email ? ` (${employee.company_email})` : ""}.`
               : "This will set their status to \"Active\" and re-enable their login account."}
           </p>
+          {employee.status === "Active" && (
+            <div className="space-y-1">
+              <Label htmlFor="relieving-date">Last working day</Label>
+              <Input
+                id="relieving-date"
+                type="date"
+                value={relievingDate}
+                onChange={(e) => setRelievingDate(e.target.value)}
+              />
+            </div>
+          )}
           {statusError && <p className="text-sm text-red-600">{statusError}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setStatusDialogOpen(false)} disabled={statusLoading}>
