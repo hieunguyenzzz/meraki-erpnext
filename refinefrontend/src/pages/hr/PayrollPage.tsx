@@ -249,8 +249,8 @@ export default function PayrollPage() {
     return () => { cancelled = true; };
   }, [selectedPE?.name, refreshKey]);
 
-  // Hide draft slips with zero pay (freelancers with no weddings this month)
-  const salarySlips = enrichedSlips.filter((s) => s.docstatus === 1 || s.gross_pay > 0);
+  // Hide slips with zero gross pay (test accounts / placeholder employees)
+  const salarySlips = enrichedSlips.filter((s) => s.gross_pay > 0);
   const hasDraftSlips = enrichedSlips.some((s) => s.docstatus === 0);
   const allSlipsSubmitted = selectedPE && salarySlips.length > 0 && salarySlips.every((s) => s.docstatus === 1);
 
