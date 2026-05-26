@@ -36,7 +36,7 @@ PIT_BRACKETS = [
     (float("inf"), 0.35, 14_500_000),
 ]
 PIT_COMPONENT = "Income Tax"
-STANDARD_WORKING_DAYS = 26  # Vietnam standard: 26 days/month for salary proration
+STANDARD_WORKING_DAYS = 22  # Working days/month for salary proration (Mon–Fri, ~22/month)
 
 
 def _calc_pit(gross_pay: float, si_deductions: float, dependents: int) -> int:
