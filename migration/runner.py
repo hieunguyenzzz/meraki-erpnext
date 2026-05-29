@@ -45,6 +45,7 @@ ORDERED_PHASES = [
     "v079_venue_gallery_fields",
     "v080_project_planner_auto_share",
     "v081_employee_probation_end_date",
+    "v082_probation_end_date_allowlist",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -113,6 +114,7 @@ def run_pending(client) -> int:
             v079_venue_gallery_fields,
             v080_project_planner_auto_share,
             v081_employee_probation_end_date,
+            v082_probation_end_date_allowlist,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -153,6 +155,7 @@ def run_pending(client) -> int:
             v079_venue_gallery_fields,
             v080_project_planner_auto_share,
             v081_employee_probation_end_date,
+            v082_probation_end_date_allowlist,
         )
 
     phase_fns = {
@@ -197,6 +200,7 @@ def run_pending(client) -> int:
         "v079_venue_gallery_fields": v079_venue_gallery_fields.run,
         "v080_project_planner_auto_share": v080_project_planner_auto_share.run,
         "v081_employee_probation_end_date": v081_employee_probation_end_date.run,
+        "v082_probation_end_date_allowlist": v082_probation_end_date_allowlist.run,
     }
 
     state_file = get_state_file()
