@@ -72,6 +72,7 @@ ALLOWED_FIELDS = {
     "custom_number_of_dependents",
     "custom_pit_method",
     "custom_is_probation",
+    "custom_probation_end_date",
     "relieving_date",
 }
 

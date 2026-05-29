@@ -320,6 +320,7 @@ export default function EmployeeDetailPage() {
         custom_number_of_dependents: employee.custom_number_of_dependents ?? 0,
         leave_approver: employee.leave_approver || "",
         custom_is_probation: employee.custom_is_probation ?? 0,
+        custom_probation_end_date: employee.custom_probation_end_date ?? "",
       });
       // Fetch current ERPNext user roles if a user is linked
       setUserRoles([]);
@@ -566,7 +567,9 @@ export default function EmployeeDetailPage() {
             {employee.status}
           </Badge>
           {!!employee.custom_is_probation && (
-            <Badge variant="outline" className="border-amber-500 text-amber-600">Probation</Badge>
+            <Badge variant="outline" className="border-amber-500 text-amber-600">
+              Probation{employee.custom_probation_end_date ? ` · ends ${employee.custom_probation_end_date}` : ""}
+            </Badge>
           )}
           <Button
             size="sm"
@@ -1362,6 +1365,17 @@ export default function EmployeeDetailPage() {
                   </div>
                   <Label className="cursor-pointer">Probation (85% base salary)</Label>
                 </div>
+                {!!editValues.custom_is_probation && (
+                  <div className="space-y-1 pl-2">
+                    <Label htmlFor="edit-probation-end-date">Probation End Date</Label>
+                    <Input
+                      id="edit-probation-end-date"
+                      type="date"
+                      value={editValues.custom_probation_end_date}
+                      onChange={(e) => setEditValues((prev) => ({ ...prev, custom_probation_end_date: e.target.value }))}
+                    />
+                  </div>
+                )}
               </>
             )}
             {editSection === "commission" && (

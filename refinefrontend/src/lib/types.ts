@@ -32,6 +32,7 @@ export interface Employee {
   custom_allowance_dest_full?: number;
   custom_allowance_dest_partial?: number;
   custom_is_probation?: number;
+  custom_probation_end_date?: string;
 }
 
 export interface VenueSupplier {

@@ -5,6 +5,7 @@ POST /generate-payroll — orchestrates: Payroll Entry + Salary Slips + Wedding 
 """
 
 import json
+from datetime import date, timedelta
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
@@ -37,6 +38,16 @@ PIT_BRACKETS = [
 ]
 PIT_COMPONENT = "Income Tax"
 STANDARD_WORKING_DAYS = 22  # Working days/month for salary proration (Mon–Fri, ~22/month)
+
+
+def _working_days_in_range(start: date, end: date) -> int:
+    """Count Mon–Fri days in [start, end] inclusive (no holiday deduction — consistent with STANDARD_WORKING_DAYS)."""
+    count, d = 0, start
+    while d <= end:
+        if d.weekday() < 5:
+            count += 1
+        d += timedelta(days=1)
+    return count
 
 
 def _calc_pit(gross_pay: float, si_deductions: float, dependents: int) -> int:
@@ -322,6 +333,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
             "custom_partial_package_commission_pct",
             "custom_number_of_dependents",
             "custom_is_probation",
+            "custom_probation_end_date",
             "custom_pit_method",
         ]),
         "limit_page_length": 200,
@@ -491,6 +503,7 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
 
             # Pass 1: Write earnings + strip old PIT (let ERPNext recompute gross_pay)
             is_probation = bool(emp_record.get("custom_is_probation"))
+            prob_end_str = (emp_record.get("custom_probation_end_date") or "")[:10]
             new_deductions = [d for d in current_deductions if d.get("salary_component") not in STRIP_DEDUCTIONS]
             client._put(f"/api/resource/Salary Slip/{slip['name']}", {
                 "earnings": new_earnings,
@@ -499,10 +512,27 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
 
             # Pass 2: Combined salary adjustment deduction.
             # ERPNext sets Basic Salary = ssa_base * payment_days / total_working_days.
-            # We need: correct_base * payment_days / 26 (where correct_base = ssa_base * 0.85 if probation).
+            # We need: correct_base * payment_days / 22 (where correct_base depends on probation state).
             # The difference is deducted as "Salary Proration Adj".
             PRORATION_COMPONENT = "Salary Proration Adj"
-            correct_base = round(current_base * 0.85) if is_probation else current_base
+            slip_start = date.fromisoformat(start_date)
+            slip_end = date.fromisoformat(end_date)
+
+            if is_probation and prob_end_str:
+                prob_end = date.fromisoformat(prob_end_str)
+                if prob_end < slip_start:
+                    # Probation already ended before this period
+                    correct_base = current_base
+                elif prob_end >= slip_end:
+                    # Still fully in probation for the entire period
+                    correct_base = round(current_base * 0.85)
+                else:
+                    # Mid-month split: partial probation within this period
+                    prob_wd = _working_days_in_range(slip_start, prob_end)
+                    post_wd = _working_days_in_range(prob_end + timedelta(days=1), slip_end)
+                    correct_base = round(current_base * (0.85 * prob_wd + post_wd) / STANDARD_WORKING_DAYS)
+            else:
+                correct_base = round(current_base * 0.85) if is_probation else current_base
 
             if current_base > 0:
                 erpnext_amount = current_base * orig_payment_days / orig_total_wd  # what ERPNext calculated
