@@ -165,16 +165,32 @@ export default function NotificationsPage() {
     }
   }
 
-  async function handleAction(notifName: string, action: "approve" | "reject") {
-    setProcessingId(notifName);
+  async function handleAction(notif: PwaNotification, action: "approve" | "reject") {
+    setProcessingId(notif.name);
     try {
+      const id = encodeURIComponent(notif.reference_document_name);
+      // Route Leave/WFH through the webhook API (same path as the bell dropdown)
+      // so the doc is properly submitted and the Google Calendar event is added.
+      // Purchase Invoice has no webhook endpoint yet, so it keeps the Server Script.
+      if (notif.reference_document_type === "Leave Application") {
+        await customMutation({ url: `/inquiry-api/leave/${id}/${action}`, method: "post", values: {} });
+      } else if (notif.reference_document_type === "Attendance Request") {
+        await customMutation({ url: `/inquiry-api/wfh/${id}/${action}`, method: "post", values: {} });
+      } else {
+        await customMutation({
+          url: "/api/method/handle_notification_action",
+          method: "post",
+          values: { notif_name: notif.name, action },
+        });
+      }
+      // Mark the PWA notification read (dismiss it)
       await customMutation({
-        url: "/api/method/handle_notification_action",
+        url: `/inquiry-api/notification/${encodeURIComponent(notif.name)}/read`,
         method: "post",
-        values: { notif_name: notifName, action },
+        values: {},
       });
       setAllNotifications((prev) =>
-        prev.map((n) => (n.name === notifName ? { ...n, read: 1 } : n)),
+        prev.map((n) => (n.name === notif.name ? { ...n, read: 1 } : n)),
       );
       query.refetch();
     } catch {
@@ -282,7 +298,7 @@ export default function NotificationsPage() {
                               variant="default"
                               className="h-7 px-2.5 text-xs"
                               disabled={isProcessing}
-                              onClick={(e) => { e.stopPropagation(); handleAction(notif.name, "approve"); }}
+                              onClick={(e) => { e.stopPropagation(); handleAction(notif, "approve"); }}
                             >
                               <Check className="mr-1 h-3 w-3" />
                               {isProcessing ? "..." : "Approve"}
@@ -292,7 +308,7 @@ export default function NotificationsPage() {
                               variant="destructive"
                               className="h-7 px-2.5 text-xs"
                               disabled={isProcessing}
-                              onClick={(e) => { e.stopPropagation(); handleAction(notif.name, "reject"); }}
+                              onClick={(e) => { e.stopPropagation(); handleAction(notif, "reject"); }}
                             >
                               <X className="mr-1 h-3 w-3" />
                               Reject
