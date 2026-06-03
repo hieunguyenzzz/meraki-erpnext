@@ -79,19 +79,13 @@ function NotificationBell() {
             values: {},
           });
         }
-        // Mark notification as read after approval/rejection
-        await customMutation({
-          url: "/api/method/handle_notification_action",
-          method: "post",
-          values: { notif_name: notif.name, action: "read" },
-        });
-      } else {
-        await customMutation({
-          url: "/api/method/handle_notification_action",
-          method: "post",
-          values: { notif_name: notif.name, action },
-        });
       }
+      // Mark notification as read (dismiss from bell)
+      await customMutation({
+        url: `/inquiry-api/notification/${encodeURIComponent(notif.name)}/read`,
+        method: "post",
+        values: {},
+      });
       refetch();
     } catch {
       // user can retry

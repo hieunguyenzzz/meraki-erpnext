@@ -40,6 +40,7 @@ from webhook_v2.routers.reports import router as reports_router
 from webhook_v2.routers.staff_overview import router as staff_overview_router
 from webhook_v2.routers.projects import router as projects_router
 from webhook_v2.routers.venues import router as venues_router
+from webhook_v2.routers.notifications import router as notifications_router
 
 log = get_logger(__name__)
 
@@ -120,6 +121,7 @@ app.include_router(reports_router)
 app.include_router(staff_overview_router)
 app.include_router(projects_router)
 app.include_router(venues_router)
+app.include_router(notifications_router)
 
 
 # Request/Response Models
