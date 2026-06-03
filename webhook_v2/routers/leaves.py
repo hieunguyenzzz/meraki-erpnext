@@ -16,6 +16,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
+from webhook_v2.services.google_calendar import add_ooo_event
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.helpers import fmt_days, format_date_range, get_employee_name, submit_doc
 
@@ -161,7 +162,7 @@ def approve_leave(leave_id: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to approve leave: {e}")
 
-    # Enrich PWA notification with leave details
+    # Enrich PWA notification with leave details + add calendar event
     try:
         app = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
         leave_type = app.get("leave_type", "Leave")
@@ -172,6 +173,11 @@ def approve_leave(leave_id: str):
         date_range = format_date_range(from_d, to_d) if from_d and to_d else ""
         msg = f"Your {leave_type} ({date_range}, {fmt_days(days)} days) has been Approved by {approver_name}"
         _enrich_leave_notification(client, leave_id, msg)
+        # Add OOO event to Google Calendar
+        if from_d and to_d:
+            emp = client._get(f"/api/resource/Employee/{app.get('employee', '')}").get("data", {})
+            first_name = emp.get("first_name") or app.get("employee_name", "")
+            add_ooo_event(first_name, from_d, to_d)
     except Exception:
         pass  # non-critical
 

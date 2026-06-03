@@ -13,6 +13,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
+from webhook_v2.services.google_calendar import add_wfh_event
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.helpers import fmt_days, format_date_range, get_employee_name, submit_doc
 
@@ -74,6 +75,11 @@ def approve_wfh(req_id: str):
         if info["user_id"]:
             msg = f"Your WFH request ({info['date_range']}, {fmt_days(info['days'])} days) has been Approved"
             _create_wfh_notification(client, info["user_id"], msg, req_id)
+        # Add WFH event to Google Calendar
+        if info["from_date"] and info["to_date"]:
+            emp = client._get(f"/api/resource/Employee/{info['employee']}").get("data", {})
+            first_name = emp.get("first_name") or info["employee_name"]
+            add_wfh_event(first_name, info["from_date"], info["to_date"])
     except Exception:
         pass
 
