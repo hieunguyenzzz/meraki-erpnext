@@ -9,14 +9,18 @@ from webhook_v2.core.logging import get_logger
 log = get_logger(__name__)
 
 _CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "")
-_KEY_JSON = os.getenv("GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON", "")
+# Use the domain-wide-delegation service account and impersonate the organiser,
+# matching review.py. The external read-only SA cannot be granted writer access
+# to the Workspace calendar, so direct sharing fails with 403.
+_KEY_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+_ORGANIZER = os.getenv("GOOGLE_ORGANIZER_EMAIL", "")
 
 _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
 def _service():
-    if not _KEY_JSON or not _CALENDAR_ID:
+    if not _KEY_JSON or not _CALENDAR_ID or not _ORGANIZER:
         return None
     try:
         from google.oauth2 import service_account
@@ -24,7 +28,7 @@ def _service():
         creds = service_account.Credentials.from_service_account_info(
             json.loads(_KEY_JSON),
             scopes=["https://www.googleapis.com/auth/calendar"],
-        )
+        ).with_subject(_ORGANIZER)
         return build("calendar", "v3", credentials=creds)
     except Exception as e:
         log.warning("calendar_init_failed", error=str(e))
