@@ -60,16 +60,37 @@ function NotificationBell() {
   const count: number = (notifResult?.data as any)?.message?.total ?? 0;
   const refetch = query.refetch;
 
-  async function handleAction(notifName: string, action: "read" | "approve" | "reject") {
-    setProcessingId(notifName);
+  async function handleAction(notif: PwaNotification, action: "read" | "approve" | "reject") {
+    setProcessingId(notif.name);
     try {
-      await customMutation({
-        url: "/api/method/handle_notification_action",
-        method: "post",
-        values: { notif_name: notifName, action },
-      });
       if (action === "approve" || action === "reject") {
-        invalidate({ resource: "Leave Application", invalidates: ["list"] });
+        const id = encodeURIComponent(notif.reference_document_name);
+        if (notif.reference_document_type === "Leave Application") {
+          await customMutation({
+            url: `/inquiry-api/leave/${id}/${action}`,
+            method: "post",
+            values: {},
+          });
+          invalidate({ resource: "Leave Application", invalidates: ["list"] });
+        } else if (notif.reference_document_type === "Attendance Request") {
+          await customMutation({
+            url: `/inquiry-api/wfh/${id}/${action}`,
+            method: "post",
+            values: {},
+          });
+        }
+        // Mark notification as read after approval/rejection
+        await customMutation({
+          url: "/api/method/handle_notification_action",
+          method: "post",
+          values: { notif_name: notif.name, action: "read" },
+        });
+      } else {
+        await customMutation({
+          url: "/api/method/handle_notification_action",
+          method: "post",
+          values: { notif_name: notif.name, action },
+        });
       }
       refetch();
     } catch {
@@ -109,6 +130,7 @@ function NotificationBell() {
           <div className="max-h-80 overflow-y-auto">
             {notifications.map((notif) => {
               const isLeave = notif.reference_document_type === "Leave Application";
+              const isWfh = notif.reference_document_type === "Attendance Request";
               const isProcessing = processingId === notif.name;
 
               const routeFn = DOC_ROUTES[notif.reference_document_type];
@@ -120,7 +142,7 @@ function NotificationBell() {
                     className={targetUrl ? "cursor-pointer hover:text-primary transition-colors" : ""}
                     onClick={() => {
                       if (!targetUrl) return;
-                      handleAction(notif.name, "read");
+                      handleAction(notif, "read");
                       navigate(targetUrl);
                     }}
                   >
@@ -130,14 +152,14 @@ function NotificationBell() {
                     </p>
                   </div>
                   <div className="mt-2 flex gap-1.5">
-                    {isLeave && (
+                    {(isLeave || isWfh) && (
                       <>
                         <Button
                           size="sm"
                           variant="default"
                           className="h-7 px-2.5 text-xs"
                           disabled={isProcessing}
-                          onClick={() => handleAction(notif.name, "approve")}
+                          onClick={() => handleAction(notif, "approve")}
                         >
                           <Check className="mr-1 h-3 w-3" />
                           {isProcessing ? "..." : "Approve"}
@@ -147,7 +169,7 @@ function NotificationBell() {
                           variant="destructive"
                           className="h-7 px-2.5 text-xs"
                           disabled={isProcessing}
-                          onClick={() => handleAction(notif.name, "reject")}
+                          onClick={() => handleAction(notif, "reject")}
                         >
                           <X className="mr-1 h-3 w-3" />
                           Reject
@@ -159,7 +181,7 @@ function NotificationBell() {
                       variant="ghost"
                       className="h-7 px-2 text-xs ml-auto"
                       disabled={isProcessing}
-                      onClick={() => handleAction(notif.name, "read")}
+                      onClick={() => handleAction(notif, "read")}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
