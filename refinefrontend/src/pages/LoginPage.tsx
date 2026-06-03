@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [resetCooldown, setResetCooldown] = useState(false);
 
   if (isLoading) {
     return (
@@ -76,6 +77,12 @@ export default function LoginPage() {
         setView("forgot-success");
       } else if (res.status === 404) {
         setResetError("No account found with that email address.");
+      } else if (res.status === 429) {
+        setResetError(
+          "Too many reset attempts from your network. Please wait a minute and try again, or contact your administrator."
+        );
+        setResetCooldown(true);
+        setTimeout(() => setResetCooldown(false), 60000);
       } else {
         const data = await res.json().catch(() => null);
         setResetError(
@@ -178,7 +185,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={resetSubmitting}
+                  disabled={resetSubmitting || resetCooldown}
                 >
                   {resetSubmitting ? "Sending..." : "Send Reset Email"}
                 </Button>
