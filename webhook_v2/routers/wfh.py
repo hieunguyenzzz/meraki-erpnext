@@ -2,7 +2,7 @@
 WFH (Attendance Request) endpoints.
 
 POST /wfh/{req_id}/approve  — submit Attendance Request
-POST /wfh/{req_id}/reject   — set workflow_state=Rejected + submit
+POST /wfh/{req_id}/reject   — set custom_status=Rejected + submit
 POST /wfh/apply             — create WFH request + notify approver
 GET  /wfh/list              — list WFH for one employee
 GET  /wfh/list-all          — list all WFH (admin)
@@ -63,9 +63,15 @@ def _get_wfh_details(client: ERPNextClient, req_id: str) -> dict:
 
 @router.post("/wfh/{req_id}/approve")
 def approve_wfh(req_id: str):
-    """Submit Attendance Request (approve WFH)."""
+    """Submit Attendance Request (approve WFH), setting custom_status=Approved first."""
     client = ERPNextClient()
     try:
+        client._post("/api/method/frappe.client.set_value", {
+            "doctype": "Attendance Request",
+            "name": req_id,
+            "fieldname": "custom_status",
+            "value": "Approved",
+        })
         submit_doc(client, "Attendance Request", req_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to approve WFH request: {e}")
@@ -89,13 +95,13 @@ def approve_wfh(req_id: str):
 
 @router.post("/wfh/{req_id}/reject")
 def reject_wfh(req_id: str):
-    """Set Attendance Request workflow_state to Rejected and submit."""
+    """Set custom_status to Rejected on Attendance Request and submit."""
     client = ERPNextClient()
     try:
         client._post("/api/method/frappe.client.set_value", {
             "doctype": "Attendance Request",
             "name": req_id,
-            "fieldname": "workflow_state",
+            "fieldname": "custom_status",
             "value": "Rejected",
         })
         submit_doc(client, "Attendance Request", req_id)

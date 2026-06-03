@@ -46,6 +46,9 @@ ORDERED_PHASES = [
     "v080_project_planner_auto_share",
     "v081_employee_probation_end_date",
     "v082_probation_end_date_allowlist",
+    "v083_attendance_request_status_fields",
+    "v084_wfh_decision_notifications",
+    "v085_notification_action_wfh_status",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -115,6 +118,9 @@ def run_pending(client) -> int:
             v080_project_planner_auto_share,
             v081_employee_probation_end_date,
             v082_probation_end_date_allowlist,
+            v083_attendance_request_status_fields,
+            v084_wfh_decision_notifications,
+            v085_notification_action_wfh_status,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -156,6 +162,9 @@ def run_pending(client) -> int:
             v080_project_planner_auto_share,
             v081_employee_probation_end_date,
             v082_probation_end_date_allowlist,
+            v083_attendance_request_status_fields,
+            v084_wfh_decision_notifications,
+            v085_notification_action_wfh_status,
         )
 
     phase_fns = {
@@ -201,6 +210,9 @@ def run_pending(client) -> int:
         "v080_project_planner_auto_share": v080_project_planner_auto_share.run,
         "v081_employee_probation_end_date": v081_employee_probation_end_date.run,
         "v082_probation_end_date_allowlist": v082_probation_end_date_allowlist.run,
+        "v083_attendance_request_status_fields": v083_attendance_request_status_fields.run,
+        "v084_wfh_decision_notifications": v084_wfh_decision_notifications.run,
+        "v085_notification_action_wfh_status": v085_notification_action_wfh_status.run,
     }
 
     state_file = get_state_file()
