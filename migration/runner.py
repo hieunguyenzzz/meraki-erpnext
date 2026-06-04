@@ -49,6 +49,7 @@ ORDERED_PHASES = [
     "v083_attendance_request_status_fields",
     "v084_wfh_decision_notifications",
     "v085_notification_action_wfh_status",
+    "v086_disable_custom_leave_submit_notification",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -121,6 +122,7 @@ def run_pending(client) -> int:
             v083_attendance_request_status_fields,
             v084_wfh_decision_notifications,
             v085_notification_action_wfh_status,
+            v086_disable_custom_leave_submit_notification,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -165,6 +167,7 @@ def run_pending(client) -> int:
             v083_attendance_request_status_fields,
             v084_wfh_decision_notifications,
             v085_notification_action_wfh_status,
+            v086_disable_custom_leave_submit_notification,
         )
 
     phase_fns = {
@@ -213,6 +216,7 @@ def run_pending(client) -> int:
         "v083_attendance_request_status_fields": v083_attendance_request_status_fields.run,
         "v084_wfh_decision_notifications": v084_wfh_decision_notifications.run,
         "v085_notification_action_wfh_status": v085_notification_action_wfh_status.run,
+        "v086_disable_custom_leave_submit_notification": v086_disable_custom_leave_submit_notification.run,
     }
 
     state_file = get_state_file()
