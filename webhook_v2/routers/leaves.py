@@ -797,6 +797,8 @@ def get_leave_balance(employee: str, as_of: date | None = None):
     emp = client._get(f"/api/resource/Employee/{employee}").get("data") or {}
     rel_str = (emp.get("relieving_date") or "")[:10]
     rel_date = date.fromisoformat(rel_str) if rel_str else None
+    doj_str = (emp.get("date_of_joining") or "")[:10]
+    doj = date.fromisoformat(doj_str) if doj_str else None
 
     allocs = client._get("/api/resource/Leave Allocation", params={
         "filters": f'[["employee","=","{employee}"],["docstatus","=",1]]',
@@ -878,9 +880,15 @@ def get_leave_balance(employee: str, as_of: date | None = None):
         old_expired = today.month >= 8
         data["old_accrued"] = data["old_taken"] if old_expired else data["old_allocation"]
 
+        # Accrual starts Jan 1 of the new period, but no earlier than the
+        # employee's date of joining — otherwise new hires get credit for
+        # months before they joined (matches reports.py / _available_for_leave_date).
         accrual_year = new_alloc_start.year if new_alloc_start else today.year
+        accrual_start = date(accrual_year, 1, 1)
+        if doj and doj > accrual_start:
+            accrual_start = doj
         data["new_accrued"] = _compute_accrued(
-            data["new_allocation"], date(accrual_year, 1, 1), today, rel_date
+            data["new_allocation"], accrual_start, today, rel_date
         )
 
     return {"data": list(result.values()), "before_august": today.month < 8}
