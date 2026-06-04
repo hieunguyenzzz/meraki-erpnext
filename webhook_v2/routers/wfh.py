@@ -10,7 +10,7 @@ GET  /wfh/list-all          — list all WFH (admin)
 
 import re
 from datetime import date
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.google_calendar import add_wfh_event
@@ -62,9 +62,17 @@ def _get_wfh_details(client: ERPNextClient, req_id: str) -> dict:
 
 
 @router.post("/wfh/{req_id}/approve")
-def approve_wfh(req_id: str):
-    """Submit Attendance Request (approve WFH), setting custom_status=Approved first."""
+def approve_wfh(req_id: str, background_tasks: BackgroundTasks):
+    """Submit Attendance Request (approve WFH), setting custom_status=Approved first.
+
+    Idempotent: a re-click on an already-decided request is a no-op, so it can't
+    create duplicate calendar events or notifications.
+    """
     client = ERPNextClient()
+    existing = client._get(f"/api/resource/Attendance Request/{req_id}").get("data", {})
+    if existing.get("docstatus") == 1 or existing.get("custom_status") in ("Approved", "Rejected"):
+        log.info("wfh_approve_noop", request=req_id, custom_status=existing.get("custom_status"))
+        return {"success": True, "already_processed": True}
     try:
         client._post("/api/method/frappe.client.set_value", {
             "doctype": "Attendance Request",
@@ -81,11 +89,13 @@ def approve_wfh(req_id: str):
         if info["user_id"]:
             msg = f"Your WFH request ({info['date_range']}, {fmt_days(info['days'])} days) has been Approved"
             _create_wfh_notification(client, info["user_id"], msg, req_id)
-        # Add WFH event to Google Calendar
+        # Add WFH event to Google Calendar in the background — the synchronous
+        # Google API call previously made this endpoint take ~8s, which looked
+        # "stuck" and prompted double-clicks.
         if info["from_date"] and info["to_date"]:
             emp = client._get(f"/api/resource/Employee/{info['employee']}").get("data", {})
             first_name = emp.get("first_name") or info["employee_name"]
-            add_wfh_event(first_name, info["from_date"], info["to_date"])
+            background_tasks.add_task(add_wfh_event, first_name, info["from_date"], info["to_date"])
     except Exception:
         pass
 
@@ -95,8 +105,15 @@ def approve_wfh(req_id: str):
 
 @router.post("/wfh/{req_id}/reject")
 def reject_wfh(req_id: str):
-    """Set custom_status to Rejected on Attendance Request and submit."""
+    """Set custom_status to Rejected on Attendance Request and submit.
+
+    Idempotent: a re-click on an already-decided request is a no-op.
+    """
     client = ERPNextClient()
+    existing = client._get(f"/api/resource/Attendance Request/{req_id}").get("data", {})
+    if existing.get("docstatus") == 1 or existing.get("custom_status") in ("Approved", "Rejected"):
+        log.info("wfh_reject_noop", request=req_id, custom_status=existing.get("custom_status"))
+        return {"success": True, "already_processed": True}
     try:
         client._post("/api/method/frappe.client.set_value", {
             "doctype": "Attendance Request",
