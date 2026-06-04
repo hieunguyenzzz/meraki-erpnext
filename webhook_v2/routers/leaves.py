@@ -13,7 +13,7 @@ GET  /leave/my-applications     — list leave applications for an employee
 import json
 import math
 from datetime import date, timedelta
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.google_calendar import add_ooo_event
@@ -154,9 +154,17 @@ def _enrich_leave_notification(
 
 
 @router.post("/leave/{leave_id}/approve")
-def approve_leave(leave_id: str):
-    """Set Leave Application status to Approved and submit."""
+def approve_leave(leave_id: str, background_tasks: BackgroundTasks):
+    """Set Leave Application status to Approved and submit.
+
+    Idempotent: a re-click on an already-decided application is a no-op, so it
+    can't create duplicate calendar events.
+    """
     client = ERPNextClient()
+    existing = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
+    if existing.get("docstatus") == 1 or existing.get("status") in ("Approved", "Rejected"):
+        log.info("leave_approve_noop", leave=leave_id, status=existing.get("status"))
+        return {"success": True, "already_processed": True}
     try:
         _approve_and_submit(client, leave_id)
     except Exception as e:
@@ -173,11 +181,11 @@ def approve_leave(leave_id: str):
         date_range = format_date_range(from_d, to_d) if from_d and to_d else ""
         msg = f"Your {leave_type} ({date_range}, {fmt_days(days)} days) has been Approved by {approver_name}"
         _enrich_leave_notification(client, leave_id, msg)
-        # Add OOO event to Google Calendar
+        # Add OOO event to Google Calendar in the background (non-blocking).
         if from_d and to_d:
             emp = client._get(f"/api/resource/Employee/{app.get('employee', '')}").get("data", {})
             first_name = emp.get("first_name") or app.get("employee_name", "")
-            add_ooo_event(first_name, from_d, to_d)
+            background_tasks.add_task(add_ooo_event, first_name, from_d, to_d)
     except Exception:
         pass  # non-critical
 
@@ -187,8 +195,15 @@ def approve_leave(leave_id: str):
 
 @router.post("/leave/{leave_id}/reject")
 def reject_leave(leave_id: str):
-    """Set Leave Application status to Rejected and submit."""
+    """Set Leave Application status to Rejected and submit.
+
+    Idempotent: a re-click on an already-decided application is a no-op.
+    """
     client = ERPNextClient()
+    existing = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
+    if existing.get("docstatus") == 1 or existing.get("status") in ("Approved", "Rejected"):
+        log.info("leave_reject_noop", leave=leave_id, status=existing.get("status"))
+        return {"success": True, "already_processed": True}
     try:
         client._post("/api/method/frappe.client.set_value", {
             "doctype": "Leave Application",
