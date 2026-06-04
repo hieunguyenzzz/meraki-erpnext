@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.google_calendar import add_ooo_event
 from webhook_v2.core.logging import get_logger
-from webhook_v2.routers.helpers import fmt_days, format_date_range, get_employee_name, submit_doc
+from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -184,8 +184,8 @@ def approve_leave(leave_id: str, background_tasks: BackgroundTasks):
         # Add OOO event to Google Calendar in the background (non-blocking).
         if from_d and to_d:
             emp = client._get(f"/api/resource/Employee/{app.get('employee', '')}").get("data", {})
-            first_name = emp.get("first_name") or app.get("employee_name", "")
-            background_tasks.add_task(add_ooo_event, first_name, from_d, to_d)
+            full = f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip() or app.get("employee_name", "")
+            background_tasks.add_task(add_ooo_event, calendar_name(full), from_d, to_d)
     except Exception:
         pass  # non-critical
 

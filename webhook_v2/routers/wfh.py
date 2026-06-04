@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.google_calendar import add_wfh_event
 from webhook_v2.core.logging import get_logger
-from webhook_v2.routers.helpers import fmt_days, format_date_range, get_employee_name, submit_doc
+from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -93,9 +93,7 @@ def approve_wfh(req_id: str, background_tasks: BackgroundTasks):
         # Google API call previously made this endpoint take ~8s, which looked
         # "stuck" and prompted double-clicks.
         if info["from_date"] and info["to_date"]:
-            emp = client._get(f"/api/resource/Employee/{info['employee']}").get("data", {})
-            first_name = emp.get("first_name") or info["employee_name"]
-            background_tasks.add_task(add_wfh_event, first_name, info["from_date"], info["to_date"])
+            background_tasks.add_task(add_wfh_event, calendar_name(info["employee_name"]), info["from_date"], info["to_date"])
     except Exception:
         pass
 

@@ -39,6 +39,18 @@ def get_employee_name(client: ERPNextClient, identifier: str) -> str:
         return identifier
 
 
+def calendar_name(full_name: str) -> str:
+    """Render a name in Western 'Given Family' order for calendar events.
+
+    Vietnamese names are stored family-name-first (e.g. 'Nguyễn Hà Bảo Châu').
+    Calendar events read better as given name + family name ('Châu Nguyễn').
+    """
+    parts = full_name.split()
+    if len(parts) < 2:
+        return full_name
+    return f"{parts[-1]} {parts[0]}"
+
+
 def submit_doc(client: ERPNextClient, doctype: str, name: str) -> None:
     """Fetch full doc and submit."""
     full_doc = client._get(f"/api/resource/{doctype}/{name}").get("data", {})
