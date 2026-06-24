@@ -184,8 +184,7 @@ def approve_leave(leave_id: str, background_tasks: BackgroundTasks):
         # Add OOO event to Google Calendar in the background (non-blocking).
         if from_d and to_d:
             emp = client._get(f"/api/resource/Employee/{app.get('employee', '')}").get("data", {})
-            full = f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip() or app.get("employee_name", "")
-            background_tasks.add_task(add_ooo_event, calendar_name(full), from_d, to_d)
+            background_tasks.add_task(add_ooo_event, calendar_name(emp.get("first_name", ""), emp.get("last_name", "")), from_d, to_d)
     except Exception:
         pass  # non-critical
 

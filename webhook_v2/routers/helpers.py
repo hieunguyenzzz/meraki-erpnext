@@ -39,15 +39,14 @@ def get_employee_name(client: ERPNextClient, identifier: str) -> str:
         return identifier
 
 
-def calendar_name(full_name: str) -> str:
-    """Given name only, for calendar events — matches the team's existing
-    'WFH - Mun' / 'OOO - Yến' convention.
+def calendar_name(first_name: str, last_name: str = "") -> str:
+    """'FirstName FamilyName' for calendar events — e.g. 'Hân Trương', 'Minh Lưu'.
 
-    Vietnamese names are stored family-name-first (e.g. 'Nguyễn Hà Bảo Châu'),
-    so the given name is the last token ('Châu').
+    Uses first_name + first token of last_name (the family name in Vietnamese order).
     """
-    parts = full_name.split()
-    return parts[-1] if parts else full_name
+    given = first_name.strip()
+    family = last_name.strip().split()[0] if last_name.strip() else ""
+    return f"{given} {family}".strip() if family else given
 
 
 def submit_doc(client: ERPNextClient, doctype: str, name: str) -> None:

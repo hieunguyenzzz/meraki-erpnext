@@ -53,6 +53,8 @@ def _get_wfh_details(client: ERPNextClient, req_id: str) -> dict:
     return {
         "employee": emp_id,
         "employee_name": get_employee_name(client, emp_id),
+        "first_name": emp.get("first_name", ""),
+        "last_name": emp.get("last_name", ""),
         "user_id": emp.get("user_id", ""),
         "from_date": from_d,
         "to_date": to_d,
@@ -93,7 +95,7 @@ def approve_wfh(req_id: str, background_tasks: BackgroundTasks):
         # Google API call previously made this endpoint take ~8s, which looked
         # "stuck" and prompted double-clicks.
         if info["from_date"] and info["to_date"]:
-            background_tasks.add_task(add_wfh_event, calendar_name(info["employee_name"]), info["from_date"], info["to_date"])
+            background_tasks.add_task(add_wfh_event, calendar_name(info["first_name"], info["last_name"]), info["from_date"], info["to_date"])
     except Exception:
         pass
 
