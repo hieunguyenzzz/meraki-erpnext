@@ -75,3 +75,45 @@ def add_ooo_event(first_name: str, from_date: str, to_date: str) -> str | None:
 
 def add_wfh_event(first_name: str, from_date: str, to_date: str) -> str | None:
     return _insert(f"WFH - {first_name} ({_fmt_range(from_date, to_date)})", from_date, to_date)
+
+
+def delete_ooo_events(from_date: str, to_date: str, name_tokens: list[str]) -> int:
+    """Delete OOO events overlapping [from_date, to_date] whose summary starts with
+    'OOO - ' and contains any of the employee's name tokens. Returns count deleted.
+
+    Matches on any name token (not just first_name) so events created under the older
+    'OOO - <last token>' title format are cleaned up too. The exact date window keeps
+    matching safe. No-op when the calendar is not configured.
+    """
+    svc = _service()
+    if not svc:
+        return 0
+    try:
+        # All-day events end on an exclusive date, so widen the window by a day.
+        # The API requires RFC3339 timestamps, not bare dates.
+        time_max = (date.fromisoformat(to_date) + timedelta(days=1)).isoformat()
+        events = svc.events().list(
+            calendarId=_CALENDAR_ID,
+            timeMin=f"{from_date}T00:00:00Z",
+            timeMax=f"{time_max}T00:00:00Z",
+            singleEvents=True,
+        ).execute()
+    except Exception as e:
+        log.warning("calendar_list_failed", from_date=from_date, to_date=to_date, error=str(e))
+        return 0
+
+    deleted = 0
+    for ev in events.get("items", []):
+        summary = ev.get("summary", "")
+        if not summary.startswith("OOO - "):
+            continue
+        if not any(tok and tok in summary for tok in name_tokens):
+            continue
+        event_id = ev.get("id")
+        try:
+            svc.events().delete(calendarId=_CALENDAR_ID, eventId=event_id).execute()
+            deleted += 1
+            log.info("calendar_event_deleted", summary=summary, event_id=event_id)
+        except Exception as e:
+            log.warning("calendar_event_delete_failed", event_id=event_id, error=str(e))
+    return deleted

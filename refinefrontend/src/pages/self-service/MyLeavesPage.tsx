@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Plus, Calendar } from "lucide-react";
+import { Plus, Calendar, X } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,27 @@ export default function MyLeavesPage() {
   const { employee, employeeId, isLoading: employeeLoading } = useMyEmployee();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  async function handleCancelSelf(leaveId: string) {
+    if (!employeeId) return;
+    setCancellingId(leaveId);
+    try {
+      const res = await fetch(`/inquiry-api/leave/${leaveId}/cancel-self`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employee: employeeId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail ?? "Failed to cancel leave");
+        return;
+      }
+      fetchApps();
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   const [leaveApps, setLeaveApps] = useState<LeaveApplication[]>([]);
   const [isLoadingApps, setIsLoadingApps] = useState(true);
@@ -164,6 +185,27 @@ export default function MyLeavesPage() {
           {row.original.description || "-"}
         </span>
       ),
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => {
+        const leave = row.original;
+        const isFuture = leave.from_date >= new Date().toISOString().slice(0, 10);
+        const cancellable = leave.docstatus !== 2 && leave.status !== "Rejected" && isFuture;
+        if (!cancellable) return null;
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+            disabled={cancellingId === leave.name}
+            onClick={() => handleCancelSelf(leave.name)}
+          >
+            <X className="h-3 w-3 mr-1" />
+            {cancellingId === leave.name ? "..." : "Cancel"}
+          </Button>
+        );
+      },
     },
   ];
 

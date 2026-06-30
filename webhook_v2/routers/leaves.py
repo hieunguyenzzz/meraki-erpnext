@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
-from webhook_v2.services.google_calendar import add_ooo_event
+from webhook_v2.services.google_calendar import add_ooo_event, delete_ooo_events
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
 
@@ -503,6 +503,60 @@ def delete_leave(leave_id: str):
         raise HTTPException(status_code=400, detail=f"Failed to delete leave: {e}")
 
     log.info("leave_deleted", leave=leave_id)
+    return {"success": True}
+
+
+class CancelSelfLeaveRequest(BaseModel):
+    employee: str  # must match the leave's employee — ownership check
+
+
+@router.post("/leave/{leave_id}/cancel-self")
+def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, background_tasks: BackgroundTasks):
+    """Staff-facing cancel: allowed only when from_date >= today and leave belongs to the employee."""
+    client = ERPNextClient()
+    app = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
+    if not app:
+        raise HTTPException(status_code=404, detail="Leave application not found")
+    if app.get("employee") != body.employee:
+        raise HTTPException(status_code=403, detail="You can only cancel your own leave")
+    if app.get("docstatus") == 2:
+        raise HTTPException(status_code=400, detail="Leave is already cancelled")
+    from_d = (app.get("from_date") or "")[:10]
+    to_d = (app.get("to_date") or "")[:10]
+    if not from_d or date.fromisoformat(from_d) < date.today():
+        raise HTTPException(status_code=400, detail="Cannot cancel a leave that has already started or passed")
+
+    # Capture name tokens before deletion so we can remove the OOO calendar event after.
+    emp = client._get(f"/api/resource/Employee/{body.employee}").get("data", {})
+    name_tokens = f"{emp.get('first_name', '')} {emp.get('last_name', '')}".split()
+
+    try:
+        if app.get("docstatus") == 1:
+            client._post("/api/method/frappe.client.cancel", {
+                "doctype": "Leave Application", "name": leave_id,
+            })
+        attendances = client._get("/api/resource/Attendance", params={
+            "filters": f'[["leave_application","=","{leave_id}"]]',
+            "fields": '["name","docstatus"]',
+            "limit_page_length": 100,
+        }).get("data", [])
+        for att in attendances:
+            if att.get("docstatus") == 1:
+                client._post("/api/method/frappe.client.cancel", {
+                    "doctype": "Attendance", "name": att["name"],
+                })
+            client._delete(f"/api/resource/Attendance/{att['name']}")
+        client._delete(f"/api/resource/Leave Application/{leave_id}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to cancel leave: {e}")
+
+    # Remove the OOO event from Google Calendar in the background (non-blocking).
+    if from_d and to_d and name_tokens:
+        background_tasks.add_task(delete_ooo_events, from_d, to_d, name_tokens)
+
+    log.info("leave_cancelled_self", leave=leave_id, employee=body.employee)
     return {"success": True}
 
 
