@@ -26,6 +26,7 @@ interface PwaNotification {
   reference_document_type: string;
   reference_document_name: string;
   creation: string;
+  is_pending: boolean;
 }
 
 export function NotificationCenter() {
@@ -125,6 +126,9 @@ function NotificationBell() {
             {notifications.map((notif) => {
               const isLeave = notif.reference_document_type === "Leave Application";
               const isWfh = notif.reference_document_type === "Attendance Request";
+              // Only show Approve/Reject on still-pending requests (the approver's copy),
+              // never on outcome notices like "Your leave has been Approved".
+              const isActionable = notif.is_pending && (isLeave || isWfh);
               const isProcessing = processingId === notif.name;
 
               const routeFn = DOC_ROUTES[notif.reference_document_type];
@@ -146,7 +150,7 @@ function NotificationBell() {
                     </p>
                   </div>
                   <div className="mt-2 flex gap-1.5">
-                    {(isLeave || isWfh) && (
+                    {isActionable && (
                       <>
                         <Button
                           size="sm"
