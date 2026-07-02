@@ -527,6 +527,50 @@ def list_expenses(project: str | None = None):
     return result
 
 
+@router.get("/expense/descriptions")
+def expense_descriptions():
+    """Return a {PI name: description} map for all Draft/Submitted expenses.
+
+    The description lives on the PI's first line item (item_name), a child table
+    that the frontend's parent-only list query can't read. Fetch it in a single
+    parent-list query with a backtick JOIN, then dedup to the first item per PI.
+    """
+    client = ERPNextClient()
+
+    rows = client._get("/api/resource/Purchase Invoice", params={
+        "fields": json.dumps([
+            "name",
+            "`tabPurchase Invoice Item`.idx",
+            "`tabPurchase Invoice Item`.item_name",
+            "`tabPurchase Invoice Item`.expense_account",
+        ]),
+        "filters": json.dumps([["docstatus", "in", [0, 1]]]),
+        "limit_page_length": 0,
+    }).get("data", [])
+
+    # Keep the lowest-idx (first) item per PI — matches list_expenses semantics.
+    first: dict[str, dict] = {}
+    for row in rows:
+        name = row.get("name")
+        if not name:
+            continue
+        idx = row.get("idx") or 999
+        if name not in first or idx < (first[name].get("idx") or 999):
+            first[name] = row
+
+    result: dict[str, str] = {}
+    for name, row in first.items():
+        description = row.get("item_name") or ""
+        category = row.get("expense_account") or ""
+        # Strip category prefix for cleaner display (mirrors list_expenses).
+        if category and description.startswith(f"{category}: "):
+            description = description[len(f"{category}: "):]
+        result[name] = description
+
+    log.info("expense_descriptions", pi_count=len(result))
+    return result
+
+
 @router.post("/expense/wedding-with-receipt")
 async def create_wedding_expense_with_receipt(
     project: str = Form(...),

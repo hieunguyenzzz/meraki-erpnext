@@ -68,6 +68,7 @@ const initialInvoiceForm = {
 function getColumns(
   onEdit: (expense: Expense) => void,
   projectMap: Record<string, string>,
+  descriptionMap: Record<string, string>,
 ): ColumnDef<Expense, unknown>[] {
   return [
     {
@@ -97,6 +98,16 @@ function getColumns(
           {row.original.name}
         </Link>
       ),
+    },
+    {
+      id: "description",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Description" />,
+      cell: ({ row }) => {
+        const description = descriptionMap[row.original.name];
+        if (!description) return <span className="text-muted-foreground">—</span>;
+        return <div className="truncate max-w-[280px]" title={description}>{description}</div>;
+      },
+      enableSorting: false,
     },
     {
       accessorKey: "posting_date",
@@ -180,6 +191,9 @@ export default function ExpensesPage() {
   // Quick Expense form state
   const [quickForm, setQuickForm] = useState(initialQuickForm);
 
+  // Expense descriptions (PI name -> first item_name), fetched from backend
+  const [descriptionMap, setDescriptionMap] = useState<Record<string, string>>({});
+
   // Category combobox state
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [categoryOpen, setCategoryOpen] = useState(false);
@@ -229,6 +243,14 @@ export default function ExpensesPage() {
     fetch("/inquiry-api/expense/categories")
       .then(r => r.json())
       .then(data => setCategories(data))
+      .catch(() => {});
+  }, []);
+
+  // Fetch expense descriptions (from PI line items) from API
+  useEffect(() => {
+    fetch("/inquiry-api/expense/descriptions")
+      .then(r => r.json())
+      .then(data => setDescriptionMap(data))
       .catch(() => {});
   }, []);
 
@@ -532,7 +554,7 @@ export default function ExpensesPage() {
     return m;
   }, [projects]);
 
-  const columns = getColumns(openEditSheet, projectMap);
+  const columns = getColumns(openEditSheet, projectMap, descriptionMap);
 
   return (
     <div className="space-y-4">
