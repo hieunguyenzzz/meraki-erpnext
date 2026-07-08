@@ -23,10 +23,9 @@ export interface PlannerEmployee {
   last_name?: string;
 }
 
-/** Mirror of the backend `_display_name()` helper (projects.py). */
+/** Mirror of the backend `_display_name()` helper (projects.py): first name only. */
 function displayName(emp: PlannerEmployee): string {
-  const parts = [emp.last_name, emp.first_name].filter(Boolean);
-  return parts.join(" ") || emp.employee_name || emp.name;
+  return emp.first_name || emp.employee_name || emp.name;
 }
 
 interface PlannerCellProps {
