@@ -14,9 +14,8 @@ router = APIRouter()
 
 
 def _display_name(emp: dict) -> str:
-    parts = [emp.get("last_name"), emp.get("first_name")]
-    name = " ".join(p for p in parts if p)
-    return name or emp.get("employee_name") or emp.get("name", "")
+    # First name only (given name) for compact planner columns/cards
+    return emp.get("first_name") or emp.get("employee_name") or emp.get("name", "")
 
 
 @router.get("/projects/kanban")
