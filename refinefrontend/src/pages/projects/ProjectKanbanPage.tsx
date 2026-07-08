@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryState } from "nuqs";
-import { usePermissions } from "@refinedev/core";
+import { usePermissions, useList } from "@refinedev/core";
 import { LayoutGrid, LayoutList, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { type ColumnDef } from "@tanstack/react-table";
@@ -19,7 +19,8 @@ import {
   type ProjectKanbanItem,
 } from "@/lib/projectKanban";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
-import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES } from "@/lib/roles";
+import { PlannerCell, type PlannerEmployee } from "@/components/projects/PlannerCell";
+import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES, CRM_ROLES } from "@/lib/roles";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
 export default function ProjectKanbanPage() {
@@ -33,6 +34,7 @@ export default function ProjectKanbanPage() {
   });
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
+  const canEditPlanners = hasModuleAccess(roles ?? [], CRM_ROLES);
   const { employeeId } = useMyEmployee();
   const isWeddingManager = hasModuleAccess(roles ?? [], WEDDING_MANAGER_ROLES);
   const [showMyWeddings, setShowMyWeddings] = useState<boolean>(() => {
@@ -67,6 +69,41 @@ export default function ProjectKanbanPage() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // Active employees for the inline planner dropdowns (only when editing is allowed)
+  const { result: employeesResult } = useList<PlannerEmployee>({
+    resource: "Employee",
+    pagination: { mode: "off" },
+    filters: [{ field: "status", operator: "eq", value: "Active" }],
+    meta: { fields: ["name", "employee_name", "first_name", "last_name"] },
+    queryOptions: { enabled: canEditPlanners },
+  });
+  const employees = useMemo(
+    () => (employeesResult?.data ?? []) as PlannerEmployee[],
+    [employeesResult]
+  );
+
+  // Map each planner field to its display-name field so we can patch both on update
+  const NAME_FIELD: Record<string, keyof ProjectKanbanItem> = useMemo(() => ({
+    custom_lead_planner: "lead_planner_name",
+    custom_support_planner: "support_planner_name",
+    custom_assistant_1: "assistant_1_name",
+    custom_assistant_2: "assistant_2_name",
+  }), []);
+
+  const handlePlannerUpdated = useCallback(
+    (projectId: string, field: string, newId: string | null, newName: string) => {
+      const nameField = NAME_FIELD[field];
+      setItems((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? { ...p, [field]: newId ?? undefined, [nameField]: newName || undefined }
+            : p
+        )
+      );
+    },
+    [NAME_FIELD]
+  );
+
   const availableYears = useMemo(() => {
     const years = new Set<string>();
     for (const item of items) {
@@ -95,6 +132,32 @@ export default function ProjectKanbanPage() {
   }, [items, yearFilter, showMyWeddings, employeeId]);
 
   const columns = useMemo<ColumnDef<ProjectKanbanItem>[]>(() => {
+    const plannerCol = (
+      idField: keyof ProjectKanbanItem,
+      nameField: keyof ProjectKanbanItem,
+      title: string,
+    ): ColumnDef<ProjectKanbanItem> => ({
+      accessorKey: nameField,
+      header: ({ column }) => <DataTableColumnHeader column={column} title={title} />,
+      cell: ({ row }) => {
+        const item = row.original;
+        const name = item[nameField] as string | undefined;
+        if (canEditPlanners) {
+          return (
+            <PlannerCell
+              projectId={item.id}
+              field={idField}
+              currentId={item[idField] as string | undefined}
+              currentName={name}
+              employees={employees}
+              onUpdated={handlePlannerUpdated}
+            />
+          );
+        }
+        return name ?? <span className="text-muted-foreground">{"—"}</span>;
+      },
+    });
+
     const cols: ColumnDef<ProjectKanbanItem>[] = [
       {
         accessorKey: "customer_name",
@@ -146,11 +209,10 @@ export default function ProjectKanbanPage() {
         },
         filterFn: "arrIncludesSome",
       },
-      {
-        accessorKey: "lead_planner_name",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Lead Planner" />,
-        cell: ({ row }) => row.getValue("lead_planner_name") ?? <span className="text-muted-foreground">{"\u2014"}</span>,
-      },
+      plannerCol("custom_lead_planner", "lead_planner_name", "Lead Planner"),
+      plannerCol("custom_support_planner", "support_planner_name", "2nd Planner"),
+      plannerCol("custom_assistant_1", "assistant_1_name", "Assistant 1"),
+      plannerCol("custom_assistant_2", "assistant_2_name", "Assistant 2"),
     ];
     if (isFinance) {
       cols.push(
@@ -217,7 +279,7 @@ export default function ProjectKanbanPage() {
       ),
     });
     return cols;
-  }, [isFinance]);
+  }, [isFinance, canEditPlanners, employees, handlePlannerUpdated]);
 
   const filterableColumns: FilterableColumn[] = useMemo(() => [
     {
