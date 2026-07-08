@@ -51,6 +51,8 @@ ORDERED_PHASES = [
     "v085_notification_action_wfh_status",
     "v086_disable_custom_leave_submit_notification",
     "v087_set_all_leave_approvers_xuanhoang",
+    "v088_leave_submit_notify_hr",
+    "v089_project_ignore_employee_user_permissions",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -125,6 +127,8 @@ def run_pending(client) -> int:
             v085_notification_action_wfh_status,
             v086_disable_custom_leave_submit_notification,
             v087_set_all_leave_approvers_xuanhoang,
+            v088_leave_submit_notify_hr,
+            v089_project_ignore_employee_user_permissions,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -171,6 +175,8 @@ def run_pending(client) -> int:
             v085_notification_action_wfh_status,
             v086_disable_custom_leave_submit_notification,
             v087_set_all_leave_approvers_xuanhoang,
+            v088_leave_submit_notify_hr,
+            v089_project_ignore_employee_user_permissions,
         )
 
     phase_fns = {
@@ -221,6 +227,8 @@ def run_pending(client) -> int:
         "v085_notification_action_wfh_status": v085_notification_action_wfh_status.run,
         "v086_disable_custom_leave_submit_notification": v086_disable_custom_leave_submit_notification.run,
         "v087_set_all_leave_approvers_xuanhoang": v087_set_all_leave_approvers_xuanhoang.run,
+        "v088_leave_submit_notify_hr": v088_leave_submit_notify_hr.run,
+        "v089_project_ignore_employee_user_permissions": v089_project_ignore_employee_user_permissions.run,
     }
 
     state_file = get_state_file()

@@ -20,7 +20,7 @@ import {
 } from "@/lib/projectKanban";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
 import { PlannerCell, type PlannerEmployee } from "@/components/projects/PlannerCell";
-import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES, CRM_ROLES } from "@/lib/roles";
+import { hasModuleAccess, FINANCE_ROLES, CRM_ROLES } from "@/lib/roles";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
 export default function ProjectKanbanPage() {
@@ -36,21 +36,11 @@ export default function ProjectKanbanPage() {
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
   const canEditPlanners = hasModuleAccess(roles ?? [], CRM_ROLES);
   const { employeeId } = useMyEmployee();
-  const isWeddingManager = hasModuleAccess(roles ?? [], WEDDING_MANAGER_ROLES);
   const [showMyWeddings, setShowMyWeddings] = useState<boolean>(() => {
     const stored = localStorage.getItem("wedding-my-filter");
     if (stored !== null) return stored === "true";
-    return false;
+    return false; // everyone defaults to All Weddings
   });
-
-  useEffect(() => {
-    if (!roles) return;
-    if (!hasModuleAccess(roles, WEDDING_MANAGER_ROLES)) {
-      setShowMyWeddings(true);
-    } else if (localStorage.getItem("wedding-my-filter") === null) {
-      setShowMyWeddings(false);
-    }
-  }, [roles]);
 
   const handleViewChange = (mode: "kanban" | "list") => {
     setViewMode(mode);
@@ -340,7 +330,7 @@ export default function ProjectKanbanPage() {
       />
 
       <div className="flex items-center gap-3 flex-wrap">
-        {employeeId && isWeddingManager && (
+        {employeeId && (
           <div className="flex items-center gap-1 border rounded-md p-1">
             <Button
               variant={showMyWeddings ? "default" : "ghost"}
