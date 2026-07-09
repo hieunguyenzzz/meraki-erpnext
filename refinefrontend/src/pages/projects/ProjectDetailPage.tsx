@@ -1358,7 +1358,7 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
-                    {project?.custom_total_budget > 0 && (
+                    {isFinance && project?.custom_total_budget > 0 && (
                       <div className="flex items-start gap-3 text-sm">
                         <DollarSign className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                         <div>
