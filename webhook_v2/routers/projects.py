@@ -78,7 +78,7 @@ def projects_kanban():
 
     # Fetch employees (all statuses for planner name resolution)
     employees = client._get("/api/resource/Employee", params={
-        "fields": json.dumps(["name", "employee_name", "first_name", "last_name"]),
+        "fields": json.dumps(["name", "employee_name", "first_name", "last_name", "status"]),
         "limit_page_length": 500,
     }).get("data", [])
 
@@ -168,4 +168,16 @@ def projects_kanban():
             "custom_wedding_type": p.get("custom_wedding_type") or (linked_so or {}).get("custom_wedding_type") or None,
         })
 
-    return {"data": items}
+    # Active staff for the wedding-list "filter by staff" dropdown.
+    # Built here (API-key backed) so every role gets the full list — a frontend
+    # Employee query is blocked by User Permissions that pin staff to their own record.
+    staff = sorted(
+        (
+            {"id": e["name"], "name": _display_name(e)}
+            for e in employees
+            if e.get("status") == "Active"
+        ),
+        key=lambda s: s["name"].lower(),
+    )
+
+    return {"data": items, "staff": staff}

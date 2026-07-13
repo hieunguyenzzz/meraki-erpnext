@@ -30,6 +30,12 @@ export interface ProjectKanbanItem {
   custom_assistant_5?: string;
 }
 
+/** A staff option for the wedding-list "filter by staff" dropdown (from /projects/kanban). */
+export interface StaffOption {
+  id: string;
+  name: string;
+}
+
 export interface ProjectColumnDef {
   key: ProjectColumnKey;
   label: string;
