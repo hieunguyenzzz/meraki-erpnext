@@ -17,9 +17,11 @@ import {
   getProjectColumnKey,
   formatDaysUntilWedding,
   type ProjectKanbanItem,
+  type StaffOption,
 } from "@/lib/projectKanban";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
 import { PlannerCell, type PlannerEmployee } from "@/components/projects/PlannerCell";
+import { StaffFilterSelect } from "@/components/projects/StaffFilterSelect";
 import { hasModuleAccess, FINANCE_ROLES, CRM_ROLES } from "@/lib/roles";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
@@ -36,10 +38,9 @@ export default function ProjectKanbanPage() {
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
   const canEditPlanners = hasModuleAccess(roles ?? [], CRM_ROLES);
   const { employeeId } = useMyEmployee();
-  const [showMyWeddings, setShowMyWeddings] = useState<boolean>(() => {
-    const stored = localStorage.getItem("wedding-my-filter");
-    if (stored !== null) return stored === "true";
-    return false; // everyone defaults to All Weddings
+  const [staffFilter, setStaffFilter] = useQueryState("staff", {
+    defaultValue: "",
+    clearOnDefault: true,
   });
 
   const handleViewChange = (mode: "kanban" | "list") => {
@@ -49,12 +50,16 @@ export default function ProjectKanbanPage() {
 
   // Fetch all project data from backend (replaces 6 separate useList calls)
   const [items, setItems] = useState<ProjectKanbanItem[]>([]);
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetch("/inquiry-api/projects/kanban", { credentials: "include" })
       .then((r) => r.json())
-      .then((data) => setItems(data?.data ?? []))
+      .then((data) => {
+        setItems(data?.data ?? []);
+        setStaffOptions(data?.staff ?? []);
+      })
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
   }, []);
@@ -108,18 +113,18 @@ export default function ProjectKanbanPage() {
     if (yearFilter) {
       result = result.filter((p) => p.expected_end_date?.startsWith(yearFilter));
     }
-    if (showMyWeddings && employeeId) {
+    if (staffFilter) {
       const FIELDS = [
         "custom_lead_planner", "custom_support_planner",
         "custom_assistant_1", "custom_assistant_2", "custom_assistant_3",
         "custom_assistant_4", "custom_assistant_5",
       ] as const;
       result = result.filter((p) =>
-        FIELDS.some((f) => p[f] === employeeId)
+        FIELDS.some((f) => p[f] === staffFilter)
       );
     }
     return result;
-  }, [items, yearFilter, showMyWeddings, employeeId]);
+  }, [items, yearFilter, staffFilter]);
 
   const columns = useMemo<ColumnDef<ProjectKanbanItem>[]>(() => {
     const plannerCol = (
@@ -330,21 +335,13 @@ export default function ProjectKanbanPage() {
       />
 
       <div className="flex items-center gap-3 flex-wrap">
-        {employeeId && (
-          <div className="flex items-center gap-1 border rounded-md p-1">
-            <Button
-              variant={showMyWeddings ? "default" : "ghost"}
-              size="sm"
-              className="h-7 px-3 text-xs"
-              onClick={() => { setShowMyWeddings(true); localStorage.setItem("wedding-my-filter", "true"); }}
-            >My Weddings</Button>
-            <Button
-              variant={!showMyWeddings ? "default" : "ghost"}
-              size="sm"
-              className="h-7 px-3 text-xs"
-              onClick={() => { setShowMyWeddings(false); localStorage.setItem("wedding-my-filter", "false"); }}
-            >All Weddings</Button>
-          </div>
+        {staffOptions.length > 0 && (
+          <StaffFilterSelect
+            staff={staffOptions}
+            value={staffFilter}
+            onChange={setStaffFilter}
+            myEmployeeId={employeeId ?? undefined}
+          />
         )}
         {availableYears.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
