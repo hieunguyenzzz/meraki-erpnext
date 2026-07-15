@@ -83,6 +83,7 @@ export default function ProjectKanbanPage() {
     custom_support_planner: "support_planner_name",
     custom_assistant_1: "assistant_1_name",
     custom_assistant_2: "assistant_2_name",
+    custom_assistant_3: "assistant_3_name",
   }), []);
 
   const handlePlannerUpdated = useCallback(
@@ -208,6 +209,7 @@ export default function ProjectKanbanPage() {
       plannerCol("custom_support_planner", "support_planner_name", "2nd Planner"),
       plannerCol("custom_assistant_1", "assistant_1_name", "Assistant 1"),
       plannerCol("custom_assistant_2", "assistant_2_name", "Assistant 2"),
+      plannerCol("custom_assistant_3", "assistant_3_name", "Support"),
     ];
     if (isFinance) {
       cols.push(

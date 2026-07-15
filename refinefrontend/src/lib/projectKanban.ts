@@ -15,6 +15,7 @@ export interface ProjectKanbanItem {
   support_planner_name?: string;
   assistant_1_name?: string;
   assistant_2_name?: string;
+  assistant_3_name?: string;
   custom_service_type?: string;  // Full Package, Partial, Coordinator
   custom_wedding_type?: string;  // HCM or Destination
   package_amount?: number;      // from Sales Order grand_total

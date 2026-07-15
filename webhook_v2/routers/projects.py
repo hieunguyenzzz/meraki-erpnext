@@ -162,6 +162,7 @@ def projects_kanban():
             "custom_assistant_2": p.get("custom_assistant_2"),
             "assistant_2_name": emp_map.get(p.get("custom_assistant_2") or ""),
             "custom_assistant_3": p.get("custom_assistant_3"),
+            "assistant_3_name": emp_map.get(p.get("custom_assistant_3") or ""),
             "custom_assistant_4": p.get("custom_assistant_4"),
             "custom_assistant_5": p.get("custom_assistant_5"),
             "custom_service_type": p.get("custom_service_type") or None,
