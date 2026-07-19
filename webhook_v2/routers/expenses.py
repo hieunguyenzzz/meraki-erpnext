@@ -54,7 +54,7 @@ class SupplierInvoiceRequest(BaseModel):
 
 
 class WeddingExpenseRequest(BaseModel):
-    project: str           # PROJ-XXXX
+    project: str | None = None  # PROJ-XXXX — optional; blank = company expense
     date: str              # YYYY-MM-DD
     description: str
     amount: float
@@ -151,7 +151,7 @@ def _notify_finance_managers(client: ERPNextClient, pi_name: str, amount: float,
     """Send PWA Notification to all Finance Managers about a new expense."""
     try:
         # Get project name for readable message
-        project_name = project
+        project_name = project or "Company Expense"
         if project:
             proj = client._get(f"/api/resource/Project/{project}", params={
                 "fields": json.dumps(["project_name"]),
@@ -589,7 +589,7 @@ def expense_descriptions():
 
 @router.post("/expense/wedding-with-receipt")
 async def create_wedding_expense_with_receipt(
-    project: str = Form(...),
+    project: str = Form(""),
     date: str = Form(...),
     description: str = Form(...),
     amount: float = Form(...),
@@ -602,7 +602,7 @@ async def create_wedding_expense_with_receipt(
     from fastapi import Form as _  # noqa — already imported above
 
     req = WeddingExpenseRequest(
-        project=project, date=date, description=description,
+        project=project or None, date=date, description=description,
         amount=amount, category=category, supplier=supplier,
         staff=staff or None,
     )
@@ -650,7 +650,6 @@ def create_wedding_expense(req: WeddingExpenseRequest):
         "posting_date": req.date,
         "set_posting_time": 1,
         "company": COMPANY,
-        "project": req.project,
         "update_stock": 0,
         "remarks": req.category,
         "items": [{
@@ -660,9 +659,11 @@ def create_wedding_expense(req: WeddingExpenseRequest):
             "expense_account": expense_account,
             "qty": 1,
             "rate": amount,
-            "project": req.project,
         }],
     }
+    if req.project:
+        pi_values["project"] = req.project
+        pi_values["items"][0]["project"] = req.project
     if req.staff:
         pi_values["custom_expense_staff"] = req.staff
 

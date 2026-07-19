@@ -125,7 +125,7 @@ export default function AddExpensePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.project || !form.date || !form.category || !form.amount || !form.description) {
+    if (!form.date || !form.category || !form.amount || !form.description) {
       setError("Please fill in all required fields");
       return;
     }
@@ -193,7 +193,7 @@ export default function AddExpensePage() {
 
         {/* Wedding */}
         <div>
-          <Label>Wedding *</Label>
+          <Label>Wedding <span className="text-muted-foreground font-normal">(optional)</span></Label>
           <Select
             value={form.project}
             onValueChange={(v) => setForm((prev) => ({ ...prev, project: v }))}
@@ -209,6 +209,9 @@ export default function AddExpensePage() {
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Leave blank for company expenses (not tied to a wedding).
+          </p>
         </div>
 
         {/* Bill Photo */}
