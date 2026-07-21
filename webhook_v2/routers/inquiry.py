@@ -5,8 +5,10 @@ Receives form submissions from the public-facing inquiry page,
 verifies reCAPTCHA, and creates a Lead in ERPNext.
 """
 
+import re
+
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from webhook_v2.config import settings
@@ -105,6 +107,102 @@ Personal story: {form.personal_story}"""
         return {"success": True, "lead": lead_name}
     except Exception as e:
         log.error("inquiry_lead_error", error=str(e), couple=form.couple_names)
+        raise HTTPException(status_code=500, detail="Failed to create inquiry")
+
+
+class WebsiteInquiryForm(BaseModel):
+    """Payload from the public website contact form (/lets-connect)."""
+
+    firstName: str
+    lastName: str
+    email: str
+    lang: str = ""
+    role: str = ""
+    partnerName: str = ""
+    phone: str = ""
+    location: str = ""
+    weddingDate: str = ""
+    venue: str = ""
+    guestCount: str | int | None = None
+    budget: str = ""
+    extraEvents: list[str] = []
+    referralSource: list[str] = []
+    otherNotes: str = ""
+
+
+@router.post("/website-inquiry")
+async def create_website_inquiry(
+    form: WebsiteInquiryForm,
+    x_inquiry_secret: str = Header(default=""),
+):
+    """
+    Create an ERPNext Lead from the public website contact form.
+
+    Authenticated server-to-server via the X-Inquiry-Secret header. The Lead is
+    created with status "Lead" so it lands in the CRM Kanban "New" column.
+    """
+    if settings.website_inquiry_secret:
+        if x_inquiry_secret != settings.website_inquiry_secret:
+            log.warning("website_inquiry_auth_failed", email=form.email)
+            raise HTTPException(status_code=401, detail="Unauthorized")
+    else:
+        log.warning(
+            "website_inquiry_secret_unset",
+            reason="WEBSITE_INQUIRY_SECRET not configured; accepting request",
+        )
+
+    couple_name = f"{form.firstName} {form.lastName}".strip()
+    guest_count = str(form.guestCount).strip() if form.guestCount is not None else ""
+    extra_events = ", ".join(form.extraEvents) if form.extraEvents else ""
+    referral = ", ".join(form.referralSource) if form.referralSource else ""
+
+    notes_text = f"""Language: {form.lang}
+Role: {form.role}
+Partner name: {form.partnerName}
+Current location: {form.location}
+Wedding date: {form.weddingDate}
+Venue: {form.venue}
+Guest count: {guest_count}
+Budget: {form.budget}
+Extra events: {extra_events}
+How they found us: {referral}
+Other notes: {form.otherNotes}"""
+
+    lead_data: dict = {
+        "doctype": "Lead",
+        "first_name": form.firstName,
+        "last_name": form.lastName,
+        "email_id": form.email,
+        "mobile_no": form.phone,
+        "source": _map_referral(referral),
+        "status": "Lead",
+        "notes": [{"note": notes_text}],
+        "custom_couple_name": couple_name,
+    }
+    # Wedding date: keep the raw text for display; also set the parsed Date field
+    # (used for conflict detection) when the value is a clean ISO date.
+    if form.weddingDate:
+        lead_data["custom_wedding_date_raw"] = form.weddingDate
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", form.weddingDate.strip()):
+            lead_data["custom_wedding_date"] = form.weddingDate.strip()
+    # Budget is free text (e.g. "40,000 USD"); store as raw (what the UI displays).
+    if form.budget:
+        lead_data["custom_budget_raw"] = form.budget
+    if guest_count:
+        lead_data["custom_guest_count_raw"] = guest_count
+        if guest_count.isdigit():
+            lead_data["custom_guest_count"] = int(guest_count)
+    if form.venue:
+        lead_data["custom_wedding_venue"] = form.venue
+
+    try:
+        client = ERPNextClient()
+        result = client._post("/api/resource/Lead", lead_data)
+        lead_name = result.get("data", {}).get("name")
+        log.info("website_inquiry_lead_created", lead_name=lead_name, couple=couple_name, email=form.email)
+        return {"success": True, "lead": lead_name}
+    except Exception as e:
+        log.error("website_inquiry_lead_error", error=str(e), couple=couple_name, email=form.email)
         raise HTTPException(status_code=500, detail="Failed to create inquiry")
 
 

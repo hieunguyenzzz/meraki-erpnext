@@ -160,6 +160,8 @@ services:
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
       # reCAPTCHA (public inquiry form)
       - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY:-}
+      # Website contact form shared secret (server-to-server)
+      - WEBSITE_INQUIRY_SECRET=${WEBSITE_INQUIRY_SECRET:-local-inquiry-secret}
       # MinIO
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio-api.hieunguyen.dev}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}

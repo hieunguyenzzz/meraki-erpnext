@@ -54,6 +54,7 @@ ORDERED_PHASES = [
     "v088_leave_submit_notify_hr",
     "v089_project_ignore_employee_user_permissions",
     "v090_probation_auto_clear",
+    "v091_ensure_lead_sources",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -131,6 +132,7 @@ def run_pending(client) -> int:
             v088_leave_submit_notify_hr,
             v089_project_ignore_employee_user_permissions,
             v090_probation_auto_clear,
+            v091_ensure_lead_sources,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -180,6 +182,7 @@ def run_pending(client) -> int:
             v088_leave_submit_notify_hr,
             v089_project_ignore_employee_user_permissions,
             v090_probation_auto_clear,
+            v091_ensure_lead_sources,
         )
 
     phase_fns = {
@@ -233,6 +236,7 @@ def run_pending(client) -> int:
         "v088_leave_submit_notify_hr": v088_leave_submit_notify_hr.run,
         "v089_project_ignore_employee_user_permissions": v089_project_ignore_employee_user_permissions.run,
         "v090_probation_auto_clear": v090_probation_auto_clear.run,
+        "v091_ensure_lead_sources": v091_ensure_lead_sources.run,
     }
 
     state_file = get_state_file()

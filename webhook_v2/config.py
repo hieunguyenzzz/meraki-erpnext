@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # reCAPTCHA (for public inquiry form)
     recaptcha_secret_key: str = ""
 
+    # Shared secret for the public website contact form (server-to-server)
+    website_inquiry_secret: str = ""
+
     # Meraki domains (for detecting outgoing emails)
     meraki_domains: list[str] = ["merakiweddingplanner.com", "merakiwp.com"]
 
