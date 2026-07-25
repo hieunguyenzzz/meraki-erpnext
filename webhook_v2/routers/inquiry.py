@@ -179,15 +179,27 @@ Other notes: {form.otherNotes}"""
         "notes": [{"note": notes_text}],
         "custom_couple_name": couple_name,
     }
+    if form.role:
+        lead_data["custom_relationship"] = _map_relationship(form.role)
+    if form.partnerName:
+        lead_data["custom_partner_name"] = form.partnerName
+    if form.location:
+        lead_data["custom_current_location"] = form.location
+    if extra_events:
+        lead_data["custom_extra_events"] = extra_events
     # Wedding date: keep the raw text for display; also set the parsed Date field
     # (used for conflict detection) when the value is a clean ISO date.
     if form.weddingDate:
         lead_data["custom_wedding_date_raw"] = form.weddingDate
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}", form.weddingDate.strip()):
             lead_data["custom_wedding_date"] = form.weddingDate.strip()
-    # Budget is free text (e.g. "40,000 USD"); store as raw (what the UI displays).
+    # Budget is free text (e.g. "40,000 USD"); store as raw (what the UI displays)
+    # and also try to parse a numeric amount for the Currency field.
     if form.budget:
         lead_data["custom_budget_raw"] = form.budget
+        budget_amount = _parse_budget_amount(form.budget)
+        if budget_amount is not None:
+            lead_data["custom_estimated_budget"] = budget_amount
     if guest_count:
         lead_data["custom_guest_count_raw"] = guest_count
         if guest_count.isdigit():
@@ -300,3 +312,26 @@ def _map_referral(source: str) -> str:
         if key in lower:
             return val
     return "Other"
+
+
+def _map_relationship(role: str) -> str:
+    """Map free-text role input to the Lead custom_relationship Select options."""
+    lower = role.lower()
+    if any(k in lower for k in ("bride", "groom", "cô dâu", "chú rể")):
+        return "Bride/Groom"
+    if any(k in lower for k in ("parent", "mother", "father", "mom", "dad", "cha", "mẹ")):
+        return "Mother of Bride/Groom"
+    if any(k in lower for k in ("friend", "family", "bạn")):
+        return "Friend of Bride/Groom"
+    return "Other" if role.strip() else ""
+
+
+def _parse_budget_amount(budget: str) -> float | None:
+    """Extract a numeric amount from free-text budget (e.g. "35,000 USD" -> 35000)."""
+    digits = re.sub(r"[^\d.]", "", budget)
+    if not digits:
+        return None
+    try:
+        return float(digits)
+    except ValueError:
+        return None
