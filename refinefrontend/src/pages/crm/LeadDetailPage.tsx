@@ -146,6 +146,12 @@ export default function LeadDetailPage() {
 
   const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.lead_name;
 
+  // Lead.notes is a CRM Note child table; the website form writes the whole
+  // enquiry (role, partner, extra events, other notes...) as one block per row.
+  const submissionNotes: string[] = (lead.notes ?? [])
+    .map((row: { note?: string }) => row?.note?.trim())
+    .filter((note: string | undefined): note is string => Boolean(note));
+
   // Sidebar content (reused in both desktop and mobile)
   const SidebarContent = () => (
     <div className="space-y-6">
@@ -157,7 +163,7 @@ export default function LeadDetailPage() {
           <ReadOnlyField label="Email" value={lead.email_id ?? ""} />
           <ReadOnlyField label="Phone" value={lead.phone ?? ""} />
           {lead.mobile_no && <ReadOnlyField label="Mobile" value={lead.mobile_no} />}
-          <ReadOnlyField label="Location" value={lead.city ?? ""} />
+          <ReadOnlyField label="Location" value={lead.custom_current_location ?? lead.city ?? ""} />
           <EditableField
             label="Source"
             value={lead.source}
@@ -187,6 +193,23 @@ export default function LeadDetailPage() {
               <ReadOnlyField label="Budget" value={lead.custom_budget_raw || formatVND(lead.custom_estimated_budget)} />
             )}
             {lead.custom_couple_name && <ReadOnlyField label="Couple" value={lead.custom_couple_name} />}
+          </div>
+        </div>
+      )}
+
+      {/* Submission notes - the full enquiry text as the couple sent it */}
+      {submissionNotes.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Submission</h3>
+          <div className="space-y-2">
+            {submissionNotes.map((note, index) => (
+              <p
+                key={index}
+                className="whitespace-pre-line break-words text-sm text-muted-foreground"
+              >
+                {note}
+              </p>
+            ))}
           </div>
         </div>
       )}
