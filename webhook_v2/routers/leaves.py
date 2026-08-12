@@ -29,14 +29,26 @@ def _compute_accrued(
     period_from: date,
     today: date,
     relieving_date: date | None = None,
+    entitlement_year: int | None = None,
 ) -> float:
     """Months fully completed since period start → ceil(allocation × elapsed / 12).
 
-    If relieving_date is set, accrual stops on that date.
+    Accrual stops at whichever comes first: today, the relieving_date, or the end
+    of the entitlement year. The allocation's own to_date is an expiry deadline,
+    not an earning window — year N's entitlement is earned over calendar year N
+    but stays usable until 31 Jul N+1 (MWP-57).
+
+    The year-end clamp lands on 1 Jan N+1 rather than 31 Dec N because `elapsed`
+    counts *completed* months: 31 Dec N reads as 11, which would under-award a
+    full-year employee.
     """
     accrual_end = today
     if relieving_date is not None and relieving_date < accrual_end:
         accrual_end = relieving_date
+    if entitlement_year is not None:
+        year_end = date(entitlement_year + 1, 1, 1)
+        if year_end < accrual_end:
+            accrual_end = year_end
     if accrual_end < period_from:
         return 0.0
     elapsed = (accrual_end.year - period_from.year) * 12 + (accrual_end.month - period_from.month)
@@ -124,7 +136,9 @@ def _available_for_leave_date(
             accrual_start = a["_from"]
             if doj and doj > accrual_start:
                 accrual_start = doj
-            entitled = _compute_accrued(entitled, accrual_start, today, rel_date)
+            entitled = _compute_accrued(
+                entitled, accrual_start, today, rel_date, a["_from"].year
+            )
         consumed = consumed_per_alloc[a["name"]]
         total += max(0.0, entitled - consumed)
 
@@ -941,7 +955,7 @@ def get_leave_balance(employee: str, as_of: date | None = None):
         if doj and doj > accrual_start:
             accrual_start = doj
         data["new_accrued"] = _compute_accrued(
-            data["new_allocation"], accrual_start, today, rel_date
+            data["new_allocation"], accrual_start, today, rel_date, accrual_year
         )
 
     return {"data": list(result.values()), "before_august": today.month < 8}
