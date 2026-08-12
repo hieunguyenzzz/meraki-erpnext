@@ -74,7 +74,7 @@ export default function MyLeavesPage() {
   useEffect(() => { fetchApps(); }, [fetchApps]);
 
   // Fetch leave balances from backend (computed as admin, avoids field permission issues)
-  const [balanceData, setBalanceData] = useState<{ data: any[]; before_august: boolean } | null>(null);
+  const [balanceData, setBalanceData] = useState<{ data: any[]; old_period_active: boolean } | null>(null);
   useEffect(() => {
     if (!employeeId) return;
     fetch(`/inquiry-api/leave/balance?employee=${employeeId}`)
@@ -85,7 +85,7 @@ export default function MyLeavesPage() {
 
   const leaveBalances = useMemo(() => {
     if (!balanceData?.data) return [];
-    const beforeAugust = balanceData.before_august;
+    const oldPeriodActive = balanceData.old_period_active;
 
     return balanceData.data
       .filter((item: any) => item.leave_type !== "Sick Leave")
@@ -112,7 +112,7 @@ export default function MyLeavesPage() {
 
       return {
         leaveType: item.leave_type,
-        showOldPeriod: beforeAugust && oldAllocDays > 0,
+        showOldPeriod: oldPeriodActive && oldAllocDays > 0,
         oldAllocDays,
         oldAccrued,
         oldTaken: cappedOldTaken,

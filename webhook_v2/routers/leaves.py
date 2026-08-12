@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.google_calendar import add_ooo_event, delete_ooo_events
+from webhook_v2.services.leave_balance import Pool, available_on, build_pools
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
 
@@ -24,37 +25,49 @@ log = get_logger(__name__)
 router = APIRouter()
 
 
-def _compute_accrued(
-    allocation_days: float,
-    period_from: date,
+def _employee_pools(
+    client: ERPNextClient,
+    employee: str,
     today: date,
-    relieving_date: date | None = None,
-    entitlement_year: int | None = None,
-) -> float:
-    """Months fully completed since period start → ceil(allocation × elapsed / 12).
+    leave_type: str | None = None,
+) -> dict[str, list[Pool]]:
+    """Fetch an employee's allocations + applications and charge one against the other.
 
-    Accrual stops at whichever comes first: today, the relieving_date, or the end
-    of the entitlement year. The allocation's own to_date is an expiry deadline,
-    not an earning window — year N's entitlement is earned over calendar year N
-    but stays usable until 31 Jul N+1 (MWP-57).
-
-    The year-end clamp lands on 1 Jan N+1 rather than 31 Dec N because `elapsed`
-    counts *completed* months: 31 Dec N reads as 11, which would under-award a
-    full-year employee.
+    All the arithmetic lives in `services.leave_balance` so every surface that
+    reports leave agrees on the answer (MWP-56).
     """
-    accrual_end = today
-    if relieving_date is not None and relieving_date < accrual_end:
-        accrual_end = relieving_date
-    if entitlement_year is not None:
-        year_end = date(entitlement_year + 1, 1, 1)
-        if year_end < accrual_end:
-            accrual_end = year_end
-    if accrual_end < period_from:
-        return 0.0
-    elapsed = (accrual_end.year - period_from.year) * 12 + (accrual_end.month - period_from.month)
-    if elapsed <= 0:
-        return 0.0
-    return min(allocation_days, math.ceil(allocation_days * elapsed / 12))
+    emp = client._get(f"/api/resource/Employee/{employee}").get("data") or {}
+    rel_str = (emp.get("relieving_date") or "")[:10]
+    doj_str = (emp.get("date_of_joining") or "")[:10]
+
+    alloc_filters = [["employee", "=", employee], ["docstatus", "=", 1]]
+    app_filters = [
+        ["employee", "=", employee],
+        ["docstatus", "!=", 2],
+        ["status", "!=", "Rejected"],
+    ]
+    if leave_type:
+        alloc_filters.append(["leave_type", "=", leave_type])
+        app_filters.append(["leave_type", "=", leave_type])
+
+    allocs = client._get("/api/resource/Leave Allocation", params={
+        "filters": json.dumps(alloc_filters),
+        "fields": '["name","leave_type","from_date","to_date","new_leaves_allocated","total_leaves_allocated"]',
+        "limit_page_length": 200,
+    }).get("data", [])
+
+    apps = client._get("/api/resource/Leave Application", params={
+        "filters": json.dumps(app_filters),
+        "fields": '["name","leave_type","from_date","to_date","total_leave_days","status","docstatus"]',
+        "limit_page_length": 500,
+    }).get("data", [])
+
+    return build_pools(
+        allocs, apps,
+        today=today,
+        date_of_joining=date.fromisoformat(doj_str) if doj_str else None,
+        relieving_date=date.fromisoformat(rel_str) if rel_str else None,
+    )
 
 
 def _available_for_leave_date(
@@ -63,86 +76,14 @@ def _available_for_leave_date(
     leave_type: str,
     leave_from_date: date,
 ) -> float:
-    """How many days of `leave_type` are available to consume on `leave_from_date`.
+    """How many days of `leave_type` are bookable on `leave_from_date`.
 
-    Sums across all submitted Leave Allocations whose date range covers `leave_from_date`.
-    Long-span allocations (>365 days) are treated as accruing — capped at the accrued
-    portion (with relieving_date as the cap end). Approved + pending Leave Applications
-    are attributed to the overlapping allocation that contains their from_date.
+    Every allocation covering an application's own from_date funds it, earliest
+    expiry first — so a pool expiring can't re-attribute the leave it already
+    funded onto a still-live pool (MWP-56).
     """
-    today = date.today()
-    emp = client._get(f"/api/resource/Employee/{employee}").get("data") or {}
-    rel_str = (emp.get("relieving_date") or "")[:10]
-    rel_date = date.fromisoformat(rel_str) if rel_str else None
-    doj_str = (emp.get("date_of_joining") or "")[:10]
-    doj = date.fromisoformat(doj_str) if doj_str else None
-
-    allocs = client._get("/api/resource/Leave Allocation", params={
-        "filters": json.dumps([
-            ["employee", "=", employee],
-            ["leave_type", "=", leave_type],
-            ["docstatus", "=", 1],
-        ]),
-        "fields": '["name","from_date","to_date","new_leaves_allocated","total_leaves_allocated"]',
-        "limit_page_length": 100,
-    }).get("data", [])
-
-    overlapping = []
-    for a in allocs:
-        fd = (a.get("from_date") or "")[:10]
-        td = (a.get("to_date") or "")[:10]
-        if not fd or not td:
-            continue
-        a_from = date.fromisoformat(fd)
-        a_to = date.fromisoformat(td)
-        if a_from <= leave_from_date <= a_to:
-            overlapping.append({**a, "_from": a_from, "_to": a_to})
-
-    if not overlapping:
-        return 0.0
-
-    apps = client._get("/api/resource/Leave Application", params={
-        "filters": json.dumps([
-            ["employee", "=", employee],
-            ["leave_type", "=", leave_type],
-            ["docstatus", "!=", 2],
-            ["status", "!=", "Rejected"],
-        ]),
-        "fields": '["name","from_date","total_leave_days"]',
-        "limit_page_length": 500,
-    }).get("data", [])
-
-    consumed_per_alloc = {a["name"]: 0.0 for a in overlapping}
-    for app in apps:
-        app_fd_str = (app.get("from_date") or "")[:10]
-        if not app_fd_str:
-            continue
-        app_fd = date.fromisoformat(app_fd_str)
-        # When multiple allocations overlap a given date, prefer the shortest-span
-        # one — that's typically the carry-over/short-period allocation, which
-        # should be consumed before a long-running annual allocation.
-        candidates = sorted(
-            [a for a in overlapping if a["_from"] <= app_fd <= a["_to"]],
-            key=lambda a: ((a["_to"] - a["_from"]).days, a["_from"]),
-        )
-        if candidates:
-            consumed_per_alloc[candidates[0]["name"]] += float(app.get("total_leave_days") or 0)
-
-    total = 0.0
-    for a in overlapping:
-        entitled = float(a.get("total_leaves_allocated") or a.get("new_leaves_allocated") or 0)
-        span_days = (a["_to"] - a["_from"]).days
-        if span_days > 365:
-            accrual_start = a["_from"]
-            if doj and doj > accrual_start:
-                accrual_start = doj
-            entitled = _compute_accrued(
-                entitled, accrual_start, today, rel_date, a["_from"].year
-            )
-        consumed = consumed_per_alloc[a["name"]]
-        total += max(0.0, entitled - consumed)
-
-    return total
+    pools = _employee_pools(client, employee, date.today(), leave_type)
+    return available_on(pools.get(leave_type, []), leave_from_date)
 
 
 def _enrich_leave_notification(
@@ -857,108 +798,54 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
 
 @router.get("/leave/balance")
 def get_leave_balance(employee: str, as_of: date | None = None):
-    """Return leave allocations and taken days for an employee, computed server-side."""
+    """Return per-leave-type allocations and consumption for an employee.
+
+    "old" is the carry-over pool (a single short period, forfeited at its
+    to_date); "new" is the accruing annual pool. Both are derived from the
+    allocations themselves rather than from the calendar month, so the split
+    stays correct in any year (MWP-56).
+    """
     client = ERPNextClient()
     today = as_of if as_of is not None else date.today()
-
-    emp = client._get(f"/api/resource/Employee/{employee}").get("data") or {}
-    rel_str = (emp.get("relieving_date") or "")[:10]
-    rel_date = date.fromisoformat(rel_str) if rel_str else None
-    doj_str = (emp.get("date_of_joining") or "")[:10]
-    doj = date.fromisoformat(doj_str) if doj_str else None
-
-    allocs = client._get("/api/resource/Leave Allocation", params={
-        "filters": f'[["employee","=","{employee}"],["docstatus","=",1]]',
-        "fields": '["name","leave_type","from_date","to_date","new_leaves_allocated"]',
-        "limit_page_length": 100,
-    }).get("data", [])
-
-    apps = client._get("/api/resource/Leave Application", params={
-        "filters": f'[["employee","=","{employee}"],["docstatus","!=",2]]',
-        "fields": '["name","leave_type","from_date","total_leave_days","status","docstatus"]',
-        "limit_page_length": 500,
-    }).get("data", [])
+    pools_by_type = _employee_pools(client, employee, today)
 
     result = {}
-    period_starts: dict[str, dict[str, date]] = {}
-    for alloc in allocs:
-        lt = alloc.get("leave_type", "")
-        fd_str = (alloc.get("from_date") or "")[:10]
-        alloc_days = float(alloc.get("new_leaves_allocated", 0))
-        td_str = (alloc.get("to_date") or "")[:10]
-        is_old = (
-            bool(fd_str) and bool(td_str)
-            and date.fromisoformat(fd_str).year == date.fromisoformat(td_str).year
+    old_period_active = False
+    for lt, pools in pools_by_type.items():
+        carry = [p for p in pools if not p.is_accruing]
+        annual = [p for p in pools if p.is_accruing]
+        if any(p.covers(today) for p in carry):
+            old_period_active = True
+
+        old_allocation = sum(p.allocated for p in carry)
+        old_taken = sum(p.taken for p in carry)
+        old_pending = sum(p.pending for p in carry)
+        # A carry-over pool that no longer covers today has lapsed: what it
+        # funded stays charged to it, but nothing is left to book.
+        old_usable = sum(
+            p.allocated if p.covers(today) else (p.taken + p.pending) for p in carry
         )
 
-        if lt not in result:
-            result[lt] = {
-                "leave_type": lt,
-                "old_allocation": 0, "new_allocation": 0,
-                "old_taken": 0, "old_pending": 0,
-                "new_taken": 0, "new_pending": 0,
-            }
-        if is_old:
-            result[lt]["old_allocation"] += alloc_days
-        else:
-            result[lt]["new_allocation"] += alloc_days
+        result[lt] = {
+            "leave_type": lt,
+            "old_allocation": old_allocation,
+            "new_allocation": sum(p.allocated for p in annual),
+            "old_taken": old_taken,
+            "old_pending": old_pending,
+            "new_taken": sum(p.taken for p in annual),
+            "new_pending": sum(p.pending for p in annual),
+            "old_accrued": old_usable,
+            "new_accrued": sum(p.usable for p in annual),
+            "old_balance": sum(p.balance for p in carry if p.covers(today)),
+            "new_balance": sum(p.balance for p in annual),
+        }
 
-        if fd_str:
-            fd = date.fromisoformat(fd_str)
-            period_key = "old" if is_old else "new"
-            ps = period_starts.setdefault(lt, {})
-            if period_key not in ps or fd < ps[period_key]:
-                ps[period_key] = fd
-
-    for app in apps:
-        lt = app.get("leave_type", "")
-        status = app.get("status", "")
-        if status == "Rejected":
-            continue
-        if lt not in result:
-            continue
-
-        fd = app.get("from_date", "")[:10] if app.get("from_date") else ""
-        days = float(app.get("total_leave_days", 0))
-        is_old = bool(fd) and date.fromisoformat(fd).month < 8
-        is_taken = status == "Approved" or app.get("docstatus") == 1
-
-        if is_old:
-            if is_taken:
-                result[lt]["old_taken"] += days
-            else:
-                result[lt]["old_pending"] += days
-        else:
-            if is_taken:
-                result[lt]["new_taken"] += days
-            else:
-                result[lt]["new_pending"] += days
-
-    for lt, data in result.items():
-        overflow = max(0.0, data["old_taken"] - data["old_allocation"])
-        if overflow > 0:
-            data["old_taken"]  = data["old_allocation"]
-            data["new_taken"] += overflow
-
-    for lt, data in result.items():
-        ps = period_starts.get(lt, {})
-        new_alloc_start = ps.get("new")
-
-        old_expired = today.month >= 8
-        data["old_accrued"] = data["old_taken"] if old_expired else data["old_allocation"]
-
-        # Accrual starts Jan 1 of the new period, but no earlier than the
-        # employee's date of joining — otherwise new hires get credit for
-        # months before they joined (matches reports.py / _available_for_leave_date).
-        accrual_year = new_alloc_start.year if new_alloc_start else today.year
-        accrual_start = date(accrual_year, 1, 1)
-        if doj and doj > accrual_start:
-            accrual_start = doj
-        data["new_accrued"] = _compute_accrued(
-            data["new_allocation"], accrual_start, today, rel_date, accrual_year
-        )
-
-    return {"data": list(result.values()), "before_august": today.month < 8}
+    return {
+        "data": list(result.values()),
+        "old_period_active": old_period_active,
+        # Deprecated alias — kept so a cached frontend keeps rendering.
+        "before_august": old_period_active,
+    }
 
 
 def _format_period_label(from_date: date, to_date: date) -> str:
@@ -975,77 +862,46 @@ def _period_key(from_str: str, to_str: str) -> str:
 
 @router.get("/leave/employee-detail")
 def get_leave_employee_detail(employee: str):
-    """Return period-grouped leave balance for an employee's detail page."""
+    """Return period-grouped leave balance for an employee's detail page.
+
+    Each application is charged to exactly one pool by the shared helper, so
+    periods that share a start date no longer compete for it (MWP-56).
+    """
     client = ERPNextClient()
     today = date.today()
-
-    allocs = client._get("/api/resource/Leave Allocation", params={
-        "filters": f'[["employee","=","{employee}"],["docstatus","=",1]]',
-        "fields": '["name","leave_type","from_date","to_date","new_leaves_allocated"]',
-        "limit_page_length": 200,
-    }).get("data", [])
-
-    apps = client._get("/api/resource/Leave Application", params={
-        "filters": f'[["employee","=","{employee}"],["status","=","Approved"],["docstatus","=",1]]',
-        "fields": '["name","leave_type","from_date","to_date","total_leave_days"]',
-        "limit_page_length": 500,
-    }).get("data", [])
+    pools_by_type = _employee_pools(client, employee, today)
 
     periods: dict[str, dict] = {}
-    for alloc in allocs:
-        fd_str = (alloc.get("from_date") or "")[:10]
-        td_str = (alloc.get("to_date") or "")[:10]
-        if not fd_str or not td_str:
-            continue
-        key = _period_key(fd_str, td_str)
-        fd = date.fromisoformat(fd_str)
-        td = date.fromisoformat(td_str)
-        if key not in periods:
-            periods[key] = {
-                "from_date": fd_str,
-                "to_date": td_str,
-                "label": _format_period_label(fd, td),
-                "is_current": fd <= today <= td,
-                "allocations": [],
-            }
-        periods[key]["allocations"].append({
-            "name": alloc["name"],
-            "leave_type": alloc.get("leave_type", ""),
-            "allocated": float(alloc.get("new_leaves_allocated", 0)),
-            "taken": 0.0,
-            "balance": 0.0,
-        })
-
-    for app in apps:
-        app_fd_str = (app.get("from_date") or "")[:10]
-        if not app_fd_str:
-            continue
-        app_fd = date.fromisoformat(app_fd_str)
-        app_days = float(app.get("total_leave_days", 0))
-        app_lt = app.get("leave_type", "")
-
-        matched = False
-        for key, period in periods.items():
-            p_fd = date.fromisoformat(period["from_date"])
-            p_td = date.fromisoformat(period["to_date"])
-            if p_fd <= app_fd <= p_td:
-                for alloc_entry in period["allocations"]:
-                    if alloc_entry["leave_type"] == app_lt:
-                        alloc_entry["taken"] += app_days
-                        matched = True
-                        break
-                if matched:
-                    break
+    for pools in pools_by_type.values():
+        for pool in pools:
+            key = _period_key(pool.from_date.isoformat(), pool.to_date.isoformat())
+            if key not in periods:
+                periods[key] = {
+                    "from_date": pool.from_date.isoformat(),
+                    "to_date": pool.to_date.isoformat(),
+                    "label": _format_period_label(pool.from_date, pool.to_date),
+                    "is_current": pool.covers(today),
+                    "allocations": [],
+                }
+            periods[key]["allocations"].append({
+                "name": pool.name,
+                "leave_type": pool.leave_type,
+                "allocated": pool.allocated,
+                "usable": pool.usable,
+                "taken": round(pool.taken * 10) / 10,
+                "pending": round(pool.pending * 10) / 10,
+                "balance": round(pool.balance * 10) / 10,
+            })
 
     total_allocated = 0.0
     total_taken = 0.0
-
+    total_remaining = 0.0
     for period in periods.values():
-        for alloc_entry in period["allocations"]:
-            alloc_entry["taken"] = round(alloc_entry["taken"] * 10) / 10
-            alloc_entry["balance"] = round((alloc_entry["allocated"] - alloc_entry["taken"]) * 10) / 10
-            total_allocated += alloc_entry["allocated"]
-            total_taken += alloc_entry["taken"]
+        for entry in period["allocations"]:
+            total_allocated += entry["allocated"]
+            total_taken += entry["taken"]
+            if period["is_current"]:
+                total_remaining += entry["balance"]
 
     current = [p for p in periods.values() if p["is_current"]]
     previous = sorted(
@@ -1053,14 +909,14 @@ def get_leave_employee_detail(employee: str):
         key=lambda p: p["from_date"],
         reverse=True,
     )
-    sorted_periods = current + previous
 
     return {
-        "periods": sorted_periods,
+        "periods": current + previous,
         "summary": {
             "allocated": total_allocated,
             "taken": round(total_taken * 10) / 10,
-            "remaining": round((total_allocated - total_taken) * 10) / 10,
+            # Only live pools count — expired days are forfeited, not remaining.
+            "remaining": round(total_remaining * 10) / 10,
         },
     }
 
