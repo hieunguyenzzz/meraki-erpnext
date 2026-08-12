@@ -36,17 +36,24 @@ def _compute_accrued(
     accrual_start: date,
     today: date,
     relieving_date: date | None = None,
+    entitlement_year: int | None = None,
 ) -> float:
     """Accrued days: ceil(allocation * elapsed_months / 12), capped at allocation.
 
-    If relieving_date is set, accrual stops on that date — leavers don't keep
-    earning leave after their last working day.
+    Accrual stops at whichever comes first: today, the relieving_date (leavers
+    don't keep earning after their last working day), or the end of the
+    entitlement year (MWP-57 — the allocation's to_date is an expiry deadline,
+    not an earning window). See leaves.py::_compute_accrued for the clamp detail.
     """
     if allocation <= 0:
         return 0.0
     accrual_end = today
     if relieving_date is not None and relieving_date < accrual_end:
         accrual_end = relieving_date
+    if entitlement_year is not None:
+        year_end = date(entitlement_year + 1, 1, 1)
+        if year_end < accrual_end:
+            accrual_end = year_end
     if accrual_end < accrual_start:
         return 0.0
     elapsed = (accrual_end.year - accrual_start.year) * 12 + (accrual_end.month - accrual_start.month)
@@ -248,7 +255,9 @@ def leave_report(status: str = "Active"):
                 accrual_start = doj
         rel_str = (emp.get("relieving_date") or "")[:10]
         rel_date = _parse_date(rel_str) if rel_str else None
-        new_accrued = _compute_accrued(new_allocation_days, accrual_start, today, rel_date)
+        new_accrued = _compute_accrued(
+            new_allocation_days, accrual_start, today, rel_date, accrual_year
+        )
         new_usable = new_accrued
 
         old_balance = old_allocation_days - capped_old_taken
