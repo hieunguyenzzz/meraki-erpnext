@@ -7,7 +7,7 @@ Accrual must therefore stop at the end of the entitlement year.
 
 from datetime import date
 
-from webhook_v2.routers.leaves import _compute_accrued
+from webhook_v2.services.leave_balance import compute_accrued as _compute_accrued
 
 
 class TestAccrualWithinEntitlementYear:

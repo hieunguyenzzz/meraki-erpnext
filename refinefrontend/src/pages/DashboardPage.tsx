@@ -247,7 +247,7 @@ export default function DashboardPage() {
   const weddingsLoading = myProjectsQuery?.isLoading;
 
   // --- Leave Balance (planner dashboard) ---
-  const [leaveBalanceData, setLeaveBalanceData] = useState<{ data: any[]; before_august: boolean } | null>(null);
+  const [leaveBalanceData, setLeaveBalanceData] = useState<{ data: any[]; old_period_active: boolean } | null>(null);
   const [leaveBalanceLoading, setLeaveBalanceLoading] = useState(false);
 
   useEffect(() => {

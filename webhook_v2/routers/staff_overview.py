@@ -8,6 +8,7 @@ import json
 from datetime import date
 from fastapi import APIRouter
 from webhook_v2.services.erpnext import ERPNextClient
+from webhook_v2.services.leave_balance import build_pools
 from webhook_v2.core.logging import get_logger
 
 log = get_logger(__name__)
@@ -68,14 +69,15 @@ def staff_overview():
     Joins:
     - Employees (active)
     - Leave Allocations (submitted)
-    - Leave Applications (approved)
+    - Leave Applications (approved + pending)
 
     Returns each employee with:
     - Basic info (name, designation, department, etc.)
-    - Leave balance (allocated, taken, remaining)
+    - Annual Leave balance for the live pools (allocated, taken, remaining)
     - Review status (computed from custom_last_review_date)
     """
     client = ERPNextClient()
+    today = date.today()
 
     # Fetch active employees
     employees = client._get("/api/resource/Employee", params={
@@ -92,46 +94,54 @@ def staff_overview():
 
     # Fetch submitted leave allocations
     allocations = client._get("/api/resource/Leave Allocation", params={
-        "filters": json.dumps([["docstatus", "=", 1]]),
+        "filters": json.dumps([["docstatus", "=", 1], ["leave_type", "=", "Annual Leave"]]),
         "fields": json.dumps([
-            "name", "employee", "leave_type",
+            "name", "employee", "leave_type", "from_date", "to_date",
             "total_leaves_allocated", "new_leaves_allocated",
         ]),
         "limit_page_length": 2000,
     }).get("data", [])
 
-    # Fetch approved leave applications
+    # Include pending requests so reserved days aren't shown as available
     applications = client._get("/api/resource/Leave Application", params={
         "filters": json.dumps([
-            ["status", "=", "Approved"],
-            ["docstatus", "=", 1],
+            ["docstatus", "!=", 2],
+            ["status", "!=", "Rejected"],
+            ["leave_type", "=", "Annual Leave"],
         ]),
         "fields": json.dumps([
-            "name", "employee", "leave_type", "total_leave_days",
+            "name", "employee", "leave_type", "from_date",
+            "total_leave_days", "status", "docstatus",
         ]),
         "limit_page_length": 2000,
     }).get("data", [])
 
-    # Build leave maps: sum allocations and taken per employee
-    alloc_map: dict[str, float] = {}
+    allocs_by_emp: dict[str, list] = {}
     for alloc in allocations:
-        emp_id = alloc["employee"]
-        days = float(alloc.get("total_leaves_allocated") or alloc.get("new_leaves_allocated") or 0)
-        alloc_map[emp_id] = alloc_map.get(emp_id, 0) + days
+        allocs_by_emp.setdefault(alloc["employee"], []).append(alloc)
 
-    taken_map: dict[str, float] = {}
+    apps_by_emp: dict[str, list] = {}
     for app in applications:
-        emp_id = app["employee"]
-        days = float(app.get("total_leave_days") or 0)
-        taken_map[emp_id] = taken_map.get(emp_id, 0) + days
+        apps_by_emp.setdefault(app["employee"], []).append(app)
 
     # Build result
     rows = []
     for emp in employees:
         emp_id = emp["name"]
-        allocated = alloc_map.get(emp_id, 0)
-        taken = taken_map.get(emp_id, 0)
-        remaining = allocated - taken
+        # Annual Leave only, and only pools that are still live — an expired
+        # carry-over pool's unused days are forfeited, not "remaining" (MWP-56).
+        doj = emp.get("date_of_joining")
+        rel = emp.get("relieving_date")
+        pools = build_pools(
+            allocs_by_emp.get(emp_id, []), apps_by_emp.get(emp_id, []),
+            today=today,
+            date_of_joining=date.fromisoformat(doj[:10]) if doj else None,
+            relieving_date=date.fromisoformat(rel[:10]) if rel else None,
+        ).get("Annual Leave", [])
+        live = [p for p in pools if p.covers(today)]
+        allocated = sum(p.usable for p in live)
+        taken = sum(p.taken + p.pending for p in live)
+        remaining = sum(p.balance for p in live)
 
         review_date = emp.get("custom_last_review_date")
         status = _review_status(review_date)

@@ -10,6 +10,7 @@ import json
 from datetime import date, timedelta
 from fastapi import APIRouter, Query
 from webhook_v2.services.erpnext import ERPNextClient
+from webhook_v2.services.leave_balance import build_pools
 from webhook_v2.core.logging import get_logger
 
 log = get_logger(__name__)
@@ -29,37 +30,6 @@ def _seniority_years(date_of_joining: str) -> int:
     if (today.month, today.day) < (doj.month, doj.day):
         years -= 1
     return max(0, years)
-
-
-def _compute_accrued(
-    allocation: float,
-    accrual_start: date,
-    today: date,
-    relieving_date: date | None = None,
-    entitlement_year: int | None = None,
-) -> float:
-    """Accrued days: ceil(allocation * elapsed_months / 12), capped at allocation.
-
-    Accrual stops at whichever comes first: today, the relieving_date (leavers
-    don't keep earning after their last working day), or the end of the
-    entitlement year (MWP-57 — the allocation's to_date is an expiry deadline,
-    not an earning window). See leaves.py::_compute_accrued for the clamp detail.
-    """
-    if allocation <= 0:
-        return 0.0
-    accrual_end = today
-    if relieving_date is not None and relieving_date < accrual_end:
-        accrual_end = relieving_date
-    if entitlement_year is not None:
-        year_end = date(entitlement_year + 1, 1, 1)
-        if year_end < accrual_end:
-            accrual_end = year_end
-    if accrual_end < accrual_start:
-        return 0.0
-    elapsed = (accrual_end.year - accrual_start.year) * 12 + (accrual_end.month - accrual_start.month)
-    if elapsed <= 0:
-        return 0.0
-    return min(allocation, round(allocation * elapsed / 12))
 
 
 def _count_working_days(start: date, end: date, holidays: set) -> int:
@@ -140,22 +110,26 @@ def leave_report(status: str = "Active"):
             ["docstatus", "=", 1],
         ]),
         "fields": json.dumps([
-            "name", "employee", "from_date", "to_date", "new_leaves_allocated",
-            "total_leaves_allocated",
+            "name", "employee", "leave_type", "from_date", "to_date",
+            "new_leaves_allocated", "total_leaves_allocated",
         ]),
         "limit_page_length": 1000,
     }).get("data", [])
 
-    # Fetch approved Annual Leave applications in range
+    # Fetch Annual Leave applications in range. Pending ones are included so this
+    # report reserves them like every other surface does (MWP-56); the monthly
+    # breakdown below still counts approved leave only.
     applications = client._get("/api/resource/Leave Application", params={
         "filters": json.dumps([
             ["leave_type", "=", "Annual Leave"],
-            ["status", "=", "Approved"],
+            ["docstatus", "!=", 2],
+            ["status", "!=", "Rejected"],
             ["from_date", ">=", f"{current_year - 1}-01-01"],
             ["to_date", "<=", f"{current_year + 1}-12-31"],
         ]),
         "fields": json.dumps([
-            "name", "employee", "from_date", "to_date", "total_leave_days", "status",
+            "name", "employee", "leave_type", "from_date", "to_date",
+            "total_leave_days", "status", "docstatus",
         ]),
         "limit_page_length": 2000,
     }).get("data", [])
@@ -186,55 +160,41 @@ def leave_report(status: str = "Active"):
         emp_allocs = alloc_by_emp.get(emp_id, [])
         emp_apps = apps_by_emp.get(emp_id, [])
 
-        # Classify allocations: "old" = same-year (carry-over), "new" = cross-year (annual)
-        old_allocation_days = 0.0
-        new_allocation_days = 0.0
-        new_alloc_from: date | None = None  # earliest from_date of new-period allocation
-        old_alloc_to: date | None = None    # to_date of old-period allocation (= cutoff)
-        for a in emp_allocs:
-            fd_str = (a.get("from_date") or "")[:10]
-            td_str = (a.get("to_date") or "")[:10]
-            if not fd_str or not td_str:
-                continue
-            days = float(a.get("new_leaves_allocated", 0))
-            if _parse_date(fd_str).year == _parse_date(td_str).year:
-                # Old (carry-over): e.g. Jan 1 2026 → Jul 31 2026
-                old_allocation_days += days
-                old_alloc_to = _parse_date(td_str)
-            else:
-                # New (annual): e.g. Aug 1 2026 → Jul 31 2027
-                new_allocation_days += days
-                fd = _parse_date(fd_str)
-                if new_alloc_from is None or fd < new_alloc_from:
-                    new_alloc_from = fd
+        # Charge applications to pools via the shared helper so this report
+        # agrees with the apply path and the self-service pages (MWP-56).
+        doj_str = (emp.get("date_of_joining") or "")[:10]
+        rel_str = (emp.get("relieving_date") or "")[:10]
+        pools = build_pools(
+            emp_allocs, emp_apps,
+            today=today,
+            date_of_joining=_parse_date(doj_str) if doj_str else None,
+            relieving_date=_parse_date(rel_str) if rel_str else None,
+        ).get("Annual Leave", [])
 
-        # Skip employees with no allocations at all
-        if old_allocation_days == 0 and new_allocation_days == 0:
+        if not pools:
             continue
 
-        # Cutoff between old/new: day after old period ends, or new period start
-        old_cutoff = (old_alloc_to + timedelta(days=1)) if old_alloc_to else new_alloc_from
-        if old_cutoff is None:
-            old_cutoff = date(current_year, 8, 1)  # fallback
+        # "old" = the carry-over pool (short, expires first); "new" = the
+        # accruing annual pool. Derived from the allocations, not the month.
+        carry = [p for p in pools if not p.is_accruing]
+        annual = [p for p in pools if p.is_accruing]
 
-        # Taken for old period (apps with from_date before cutoff)
-        old_apps = [a for a in emp_apps if _parse_date(a["from_date"]) < old_cutoff]
-        old_taken_raw = sum(float(a.get("total_leave_days", 0)) for a in old_apps)
+        old_allocation_days = sum(p.allocated for p in carry)
+        capped_old_taken = sum(p.taken + p.pending for p in carry)
+        old_balance = sum(p.balance for p in carry if p.covers(today))
 
-        # Taken for new period (apps with from_date >= cutoff)
-        new_apps = [a for a in emp_apps if _parse_date(a["from_date"]) >= old_cutoff]
-        new_taken_raw = sum(float(a.get("total_leave_days", 0)) for a in new_apps)
+        new_allocation_days = sum(p.allocated for p in annual)
+        effective_new_taken = sum(p.taken + p.pending for p in annual)
+        new_accrued = sum(p.usable for p in annual)
+        new_usable = new_accrued
+        new_balance = sum(p.balance for p in annual)
 
-        # Cap old taken at allocation; overflow spills into new period
-        capped_old_taken = min(old_taken_raw, old_allocation_days)
-        overflow = old_taken_raw - capped_old_taken
-        effective_new_taken = new_taken_raw + overflow
-
-        # Monthly breakdown for current year
+        # Monthly breakdown for current year — approved leave only
+        approved_apps = [a for a in emp_apps if a.get("status") == "Approved"]
         monthly_leave = []
         for month_idx in range(12):
             total = 0.0
-            for app in emp_apps:
+            for app in approved_apps:
                 total += _leave_days_in_month(
                     _parse_date(app["from_date"]),
                     _parse_date(app["to_date"]),
@@ -242,26 +202,6 @@ def leave_report(status: str = "Active"):
                     current_year, month_idx + 1, holidays,
                 )
             monthly_leave.append(round(total * 10) / 10)
-
-        # Accrual for new period: from Jan 1 of the year the new allocation starts,
-        # but no earlier than the employee's date of joining (otherwise new hires
-        # get credit for months before they joined).
-        accrual_year = new_alloc_from.year if new_alloc_from else current_year
-        accrual_start = date(accrual_year, 1, 1)
-        doj_str = (emp.get("date_of_joining") or "")[:10]
-        if doj_str:
-            doj = _parse_date(doj_str)
-            if doj > accrual_start:
-                accrual_start = doj
-        rel_str = (emp.get("relieving_date") or "")[:10]
-        rel_date = _parse_date(rel_str) if rel_str else None
-        new_accrued = _compute_accrued(
-            new_allocation_days, accrual_start, today, rel_date, accrual_year
-        )
-        new_usable = new_accrued
-
-        old_balance = old_allocation_days - capped_old_taken
-        new_balance = new_usable - effective_new_taken
 
         rows.append({
             "employee": emp_id,
