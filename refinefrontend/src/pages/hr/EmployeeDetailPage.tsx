@@ -170,17 +170,23 @@ export default function EmployeeDetailPage() {
     ...p,
     allocations: (p.allocations ?? []).filter((a: any) => a.leave_type !== "Sick Leave"),
   })).filter((p: any) => p.allocations.length > 0);
-  const leaveBalance = leavePeriods.reduce(
-    (acc: any, p: any) => {
-      for (const a of p.allocations as any[]) {
-        acc.allocated += a.allocated;
-        acc.taken += a.taken;
-        acc.remaining += a.balance;
-      }
-      return acc;
-    },
-    { allocated: 0, taken: 0, remaining: 0 },
-  );
+  // Current period only — an expired pool's days are forfeited, so counting them
+  // in the total made a healthy balance look spent (12/35 instead of 12/19).
+  // The expired pool stays visible in the per-period breakdown below.
+  const leaveBalance = leavePeriods
+    .filter((p: any) => p.is_current)
+    .reduce(
+      (acc: any, p: any) => {
+        for (const a of p.allocations as any[]) {
+          acc.allocated += a.allocated;
+          acc.accrued += a.usable ?? a.allocated;
+          acc.taken += a.taken;
+          acc.remaining += a.balance;
+        }
+        return acc;
+      },
+      { allocated: 0, accrued: 0, taken: 0, remaining: 0 },
+    );
 
   // Fetch display roles for the employee when user_id becomes available
   useEffect(() => {
@@ -750,6 +756,11 @@ export default function EmployeeDetailPage() {
                       <span>Used: {leaveBalance.taken} days</span>
                       <span>Remaining: {leaveBalance.remaining} days</span>
                     </div>
+                    {leaveBalance.accrued < leaveBalance.allocated && (
+                      <p className="text-xs text-muted-foreground">
+                        {leaveBalance.accrued} of {leaveBalance.allocated} days accrued so far
+                      </p>
+                    )}
                     {leavePeriods.length > 0 && (
                       <div className="border-t pt-2 space-y-2">
                         {leavePeriods.map((period) => (
