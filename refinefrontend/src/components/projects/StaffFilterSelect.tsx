@@ -21,6 +21,7 @@ interface StaffFilterSelectProps {
   value: string;              // "" = all weddings
   onChange: (staffId: string) => void;
   myEmployeeId?: string;
+  allLabel?: string;          // label for the "no filter" option; defaults to "All weddings"
 }
 
 /** Filter-bar combobox: pick a staff member to show only their weddings. Read-only view filter. */
@@ -29,6 +30,7 @@ export function StaffFilterSelect({
   value,
   onChange,
   myEmployeeId,
+  allLabel = "All weddings",
 }: StaffFilterSelectProps) {
   const [open, setOpen] = useState(false);
 
@@ -38,7 +40,7 @@ export function StaffFilterSelect({
   const selected = value ? staff.find((s) => s.id === value) : undefined;
   const triggerLabel = value
     ? (me && value === me.id ? `Me · ${me.name}` : selected?.name ?? value)
-    : "All weddings";
+    : allLabel;
 
   function pick(id: string) {
     onChange(id);
@@ -73,7 +75,7 @@ export function StaffFilterSelect({
             <CommandGroup>
               <CommandItem value="__all__" onSelect={() => pick("")}>
                 <Check className={cn("mr-2 h-4 w-4", value === "" ? "opacity-100" : "opacity-0")} />
-                All weddings
+                {allLabel}
               </CommandItem>
               {me && (
                 <CommandItem value={`Me ${me.name} ${me.id}`} onSelect={() => pick(me.id)}>
