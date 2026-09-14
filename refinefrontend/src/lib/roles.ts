@@ -54,6 +54,7 @@ export const MODULES: ModuleConfig[] = [
     roles: PLANNER_ROLES,
     children: [
       { label: "Kanban", path: "/projects", icon: FolderKanban },
+      { label: "Events", path: "/projects/events", icon: CalendarDays },
       { label: "Venues", path: "/venues",   icon: MapPin },
       { label: "Vendors", path: "/vendors", icon: Store },
     ],

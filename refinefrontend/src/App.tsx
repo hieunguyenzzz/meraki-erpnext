@@ -24,6 +24,7 @@ import KanbanPage from "@/pages/crm/KanbanPage";
 import ChatsPage from "@/pages/crm/ChatsPage";
 import ProjectKanbanPage from "@/pages/projects/ProjectKanbanPage";
 import ProjectDetailPage from "@/pages/projects/ProjectDetailPage";
+import EventsPage from "@/pages/projects/EventsPage";
 import EmployeesPage from "@/pages/hr/EmployeesPage";
 import EmployeeDetailPage from "@/pages/hr/EmployeeDetailPage";
 import PayrollPage from "@/pages/hr/PayrollPage";
@@ -158,6 +159,7 @@ export default function App() {
 
               {/* Weddings/Projects */}
               <Route path="/projects" element={<ProjectKanbanPage />} />
+              <Route path="/projects/events" element={<EventsPage />} />
               <Route path="/projects/:name" element={<ProjectDetailPage />} />
 
               {/* Venues */}

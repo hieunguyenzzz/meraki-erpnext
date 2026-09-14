@@ -55,6 +55,7 @@ import {
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
+import { ProjectEventsTab } from "@/components/projects/ProjectEventsTab";
 import { cn } from "@/lib/utils";
 import { uploadFile } from "@/lib/fileUpload";
 import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES } from "@/lib/roles";
@@ -1273,6 +1274,9 @@ export default function ProjectDetailPage() {
               <TabsTrigger value="vendors" className="flex-1 lg:flex-none">
                 Vendors
               </TabsTrigger>
+              <TabsTrigger value="events" className="flex-1 lg:flex-none">
+                Events
+              </TabsTrigger>
               <TabsTrigger value="tasks" className="flex-1 lg:flex-none">
                 Tasks
               </TabsTrigger>
@@ -1565,6 +1569,11 @@ export default function ProjectDetailPage() {
                   <ReadOnlyField label="Booking Date" value={project.custom_booking_date ? formatDate(project.custom_booking_date) : "—"} />
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Events Tab */}
+            <TabsContent value="events" className="mt-4">
+              <ProjectEventsTab projectId={name!} venue={salesOrder?.custom_venue} />
             </TabsContent>
 
             {/* Vendors Tab */}
