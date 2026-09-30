@@ -10,6 +10,7 @@ import { formatTimeShort, interviewStatusVariant } from "@/lib/interview-schedul
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { CRM_ROLES, HR_ROLES, PLANNER_ROLES, hasModuleAccess, getDashboardOptions, type DashboardOption } from "@/lib/roles";
 import DirectorSection from "@/components/dashboard/DirectorSection";
+import MyPayrollCard from "@/components/dashboard/MyPayrollCard";
 import { formatDaysUntilWedding } from "@/lib/projectKanban";
 
 function priorityVariant(priority: string) {
@@ -416,6 +417,11 @@ export default function DashboardPage() {
           </Link>
         </div>
       )}
+
+      {/* My Payroll (all staff) */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <MyPayrollCard />
+      </div>
 
       {/* My Upcoming Interviews */}
       {showInterviewsCard && (
