@@ -47,11 +47,28 @@ function monthLabel(dateStr: string): string {
   return new Date(y, m - 1, d).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 }
 
+function getAmount(lines: SlipLine[], component: string): number {
+  return lines.find((l) => l.salary_component === component)?.amount ?? 0;
+}
+
 function SlipRow({ slip, defaultOpen }: { slip: MySlip; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
+
+  // gross_pay from the backend is already net of "Salary Proration Adj" (a
+  // deduction ERPNext applies for prorated/probation slips). To keep the
+  // breakdown reconciling — sum(earnings) === Gross, Gross - Total Deductions
+  // === Net Pay — we move that adjustment out of Deductions and show it as a
+  // negative Earnings line instead, then total the visible deduction lines
+  // ourselves rather than trusting the raw total_deduction (which still
+  // includes the proration amount).
+  const prorationAdj = getAmount(slip.deductions, "Salary Proration Adj");
   const visibleDeductions = slip.deductions.filter(
     (d) => !HIDDEN_DEDUCTION_COMPONENTS.includes(d.salary_component)
   );
+  const displayEarnings = prorationAdj !== 0
+    ? [...slip.earnings, { salary_component: "Proration / probation adjustment", amount: -prorationAdj }]
+    : slip.earnings;
+  const totalDeductions = visibleDeductions.reduce((sum, d) => sum + d.amount, 0);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -71,7 +88,7 @@ function SlipRow({ slip, defaultOpen }: { slip: MySlip; defaultOpen: boolean }) 
               </div>
               <div className="text-right hidden sm:block">
                 <p className="text-xs text-muted-foreground">Deductions</p>
-                <p className="text-sm font-medium">{formatVND(slip.total_deduction)}</p>
+                <p className="text-sm font-medium">{formatVND(totalDeductions)}</p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Net Pay</p>
@@ -97,7 +114,7 @@ function SlipRow({ slip, defaultOpen }: { slip: MySlip; defaultOpen: boolean }) 
             <div>
               <p className="text-sm font-medium mb-2">Earnings</p>
               <div className="space-y-1">
-                {slip.earnings.map((e) => (
+                {displayEarnings.map((e) => (
                   <div key={e.salary_component} className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{e.salary_component}</span>
                     <span>{formatVND(e.amount)}</span>
@@ -125,7 +142,7 @@ function SlipRow({ slip, defaultOpen }: { slip: MySlip; defaultOpen: boolean }) 
                 )}
                 <div className="flex justify-between text-sm font-medium border-t pt-1 mt-1">
                   <span>Total Deductions</span>
-                  <span>{formatVND(slip.total_deduction)}</span>
+                  <span>{formatVND(totalDeductions)}</span>
                 </div>
               </div>
             </div>

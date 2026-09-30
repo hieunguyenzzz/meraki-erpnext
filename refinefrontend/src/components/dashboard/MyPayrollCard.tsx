@@ -28,9 +28,18 @@ export default function MyPayrollCard() {
   useEffect(() => {
     let cancelled = false;
     fetch("/inquiry-api/payroll/my-slips")
-      .then((r) => (r.ok ? r.json() : { employee: null, data: [] }))
+      .then((r) => {
+        if (!r.ok) {
+          console.error(`MyPayrollCard: /inquiry-api/payroll/my-slips returned ${r.status}`);
+          return { employee: null, data: [] };
+        }
+        return r.json();
+      })
       .then((json: MySlipsResponse) => { if (!cancelled) setResponse(json); })
-      .catch(() => { if (!cancelled) setResponse({ employee: null, data: [] }); })
+      .catch((err: unknown) => {
+        console.error("MyPayrollCard: failed to load /inquiry-api/payroll/my-slips", err);
+        if (!cancelled) setResponse({ employee: null, data: [] });
+      })
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
   }, []);
