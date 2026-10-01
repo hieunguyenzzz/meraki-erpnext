@@ -8,12 +8,13 @@ POST /generate-allowances/{project_name} — create Additional Salary records
 import json
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
+from webhook_v2.auth import require_roles, DIRECTOR
 
 log = get_logger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_roles(*DIRECTOR))])
 
 
 def _get_rate(employee: dict, wedding_type: str, service_type: str) -> float:

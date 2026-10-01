@@ -11,14 +11,15 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
+from webhook_v2.auth import require_roles, PLANNER
 
 log = get_logger(__name__)
-router = APIRouter(prefix="/venues", tags=["venues"])
+router = APIRouter(prefix="/venues", tags=["venues"], dependencies=[Depends(require_roles(*PLANNER))])
 
 
 _SUPPLIER_FIELDS = [

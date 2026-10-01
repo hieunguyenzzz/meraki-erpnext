@@ -6,17 +6,24 @@ GET /dashboard/my-interviews?email=...  — upcoming interviews for the given in
 
 import json
 from datetime import date
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
+from webhook_v2.auth import get_current_user
 
 log = get_logger(__name__)
 router = APIRouter()
 
 
 @router.get("/dashboard/my-interviews")
-def my_interviews(email: str = Query(..., description="Interviewer email")):
-    """Return upcoming interviews where the given email is an interviewer."""
+def my_interviews(request: Request, email: str = Query(None, description="Ignored — identity comes from the session")):
+    """Return upcoming interviews where the session user is an interviewer.
+
+    `email` is accepted for backward compatibility but ignored — identity is
+    always the logged-in session user, so a caller can't query another
+    interviewer's schedule.
+    """
+    email = get_current_user(request)
     client = ERPNextClient()
     today = date.today().isoformat()
 

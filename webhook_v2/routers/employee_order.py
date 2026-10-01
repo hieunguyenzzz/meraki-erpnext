@@ -2,11 +2,12 @@
 Bulk employee display order endpoint.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
+from webhook_v2.auth import require_roles, HR
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_roles(*HR))])
 
 
 class OrderEntry(BaseModel):

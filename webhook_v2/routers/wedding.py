@@ -10,10 +10,11 @@ Full deletion order:
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
+from webhook_v2.auth import require_roles, FINANCE, PLANNER, WEDDING_MANAGER
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -101,7 +102,7 @@ def _delete_single_invoice(client: ERPNextClient, invoice_name: str) -> int:
 
 
 @router.post("/wedding/{project_name}/delete")
-def delete_wedding(project_name: str):
+def delete_wedding(project_name: str, _user: str = Depends(require_roles(*WEDDING_MANAGER))):
     """Fully delete a wedding project and all linked documents."""
     client = ERPNextClient()
 
@@ -138,7 +139,7 @@ def delete_wedding(project_name: str):
 
 
 @router.post("/wedding/{project_name}/milestone")
-def create_milestone(project_name: str, req: MilestoneRequest):
+def create_milestone(project_name: str, req: MilestoneRequest, _user: str = Depends(require_roles(*FINANCE))):
     """Create a Sales Invoice and Payment Entry atomically (milestone paid immediately)."""
     client = ERPNextClient()
 
@@ -210,7 +211,7 @@ def create_milestone(project_name: str, req: MilestoneRequest):
 
 
 @router.put("/wedding/{project_name}/milestone/{invoice_name}")
-def edit_milestone(project_name: str, invoice_name: str, req: MilestoneRequest):
+def edit_milestone(project_name: str, invoice_name: str, req: MilestoneRequest, _user: str = Depends(require_roles(*FINANCE))):
     """Edit a payment milestone by deleting the old one and recreating with new values."""
     client = ERPNextClient()
 
@@ -286,7 +287,7 @@ def edit_milestone(project_name: str, invoice_name: str, req: MilestoneRequest):
 
 
 @router.delete("/wedding/{project_name}/milestone/{invoice_name}")
-def delete_milestone(project_name: str, invoice_name: str):
+def delete_milestone(project_name: str, invoice_name: str, _user: str = Depends(require_roles(*FINANCE))):
     """Delete a single payment milestone (Sales Invoice + Payment Entries)."""
     client = ERPNextClient()
 
@@ -327,7 +328,7 @@ class UpdateWeddingDetailsRequest(BaseModel):
 
 
 @router.put("/wedding/{project_name}/details")
-def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest):
+def update_wedding_details(project_name: str, req: UpdateWeddingDetailsRequest, _user: str = Depends(require_roles(*WEDDING_MANAGER))):
     """
     Update wedding details atomically:
     1. set_value custom_venue on Sales Order
@@ -516,7 +517,7 @@ class VendorsRequest(BaseModel):
 
 
 @router.put("/wedding/{project_name}/vendors")
-def update_vendors(project_name: str, req: VendorsRequest):
+def update_vendors(project_name: str, req: VendorsRequest, _user: str = Depends(require_roles(*PLANNER))):
     """Overwrite the custom_wedding_vendors child table on a Project."""
     client = ERPNextClient()
 
@@ -544,7 +545,7 @@ class CreateSupplierRequest(BaseModel):
 
 
 @router.post("/wedding/vendors/create-supplier")
-def create_vendor_supplier(req: CreateSupplierRequest):
+def create_vendor_supplier(req: CreateSupplierRequest, _user: str = Depends(require_roles(*PLANNER))):
     """Create a Supplier in the 'Wedding Vendors' group."""
     client = ERPNextClient()
     supplier_name = req.supplier_name.strip()
@@ -572,7 +573,7 @@ class AddonItemCreateRequest(BaseModel):
     item_name: str
 
 @router.get("/wedding/addon-items")
-def list_addon_items():
+def list_addon_items(_user: str = Depends(require_roles(*PLANNER))):
     """Return all Items in the 'Add-on Services' group."""
     client = ERPNextClient()
     data = client._get("/api/resource/Item", params={
@@ -583,7 +584,7 @@ def list_addon_items():
     return {"data": data}
 
 @router.post("/wedding/addon-item")
-def create_addon_item(req: AddonItemCreateRequest):
+def create_addon_item(req: AddonItemCreateRequest, _user: str = Depends(require_roles(*PLANNER))):
     """Create a new add-on Item in ERPNext, or return the existing one."""
     client = ERPNextClient()
     item_name = req.item_name.strip()

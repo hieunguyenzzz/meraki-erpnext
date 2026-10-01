@@ -141,15 +141,15 @@ async def create_website_inquiry(
     Authenticated server-to-server via the X-Inquiry-Secret header. The Lead is
     created with status "Lead" so it lands in the CRM Kanban "New" column.
     """
-    if settings.website_inquiry_secret:
-        if x_inquiry_secret != settings.website_inquiry_secret:
-            log.warning("website_inquiry_auth_failed", email=form.email)
-            raise HTTPException(status_code=401, detail="Unauthorized")
-    else:
-        log.warning(
+    if not settings.website_inquiry_secret:
+        log.error(
             "website_inquiry_secret_unset",
-            reason="WEBSITE_INQUIRY_SECRET not configured; accepting request",
+            reason="WEBSITE_INQUIRY_SECRET not configured; rejecting request",
         )
+        raise HTTPException(status_code=503, detail="Website inquiry endpoint is not configured")
+    if x_inquiry_secret != settings.website_inquiry_secret:
+        log.warning("website_inquiry_auth_failed", email=form.email)
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
     couple_name = f"{form.firstName} {form.lastName}".strip()
     guest_count = str(form.guestCount).strip() if form.guestCount is not None else ""

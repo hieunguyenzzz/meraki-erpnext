@@ -8,14 +8,15 @@ import json
 from datetime import date
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries, _delete_single_invoice
+from webhook_v2.auth import require_roles, FINANCE
 
 log = get_logger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_roles(*FINANCE))])
 
 
 @router.get("/financial-overview")

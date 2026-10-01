@@ -11,9 +11,7 @@ from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.allowance import _get_rate, _get_project_data
-from webhook_v2.auth import require_roles, get_current_user
-
-PAYROLL_ROLES = ("System Manager", "HR Manager", "HR User")
+from webhook_v2.auth import require_roles, get_current_user, HR
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -137,7 +135,7 @@ def _cancel_additional_salary_allowances(client: ERPNextClient, start_date: str,
 
 
 @router.post("/generate-payroll")
-async def generate_payroll(request: GeneratePayrollRequest, user: str = Depends(require_roles(*PAYROLL_ROLES))):
+async def generate_payroll(request: GeneratePayrollRequest, user: str = Depends(require_roles(*HR))):
     """
     Orchestrate full payroll generation for a period:
     1. Get or create Payroll Entry
@@ -592,7 +590,7 @@ class SubmitPayrollRequest(BaseModel):
 
 
 @router.post("/payroll/submit-all")
-async def submit_payroll(request: SubmitPayrollRequest, user: str = Depends(require_roles(*PAYROLL_ROLES))):
+async def submit_payroll(request: SubmitPayrollRequest, user: str = Depends(require_roles(*HR))):
     """
     Submit all draft Salary Slips for a Payroll Entry + create GL accrual JV.
 
@@ -807,7 +805,7 @@ def _enrich_slip(full_slip: dict, emp_info: dict) -> dict:
 
 
 @router.get("/payroll/slips")
-def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"), user: str = Depends(require_roles(*PAYROLL_ROLES))):
+def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"), user: str = Depends(require_roles(*HR))):
     """
     Return enriched salary slips for a Payroll Entry.
 

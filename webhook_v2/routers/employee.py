@@ -8,13 +8,28 @@ leave_approver) that causes 417 errors when saving via frappe.client.set_value.
 The Server Script is created by migration phase v015.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
+from webhook_v2.auth import require_roles, has_roles, HR, FINANCE, DIRECTOR
 
 log = get_logger(__name__)
 router = APIRouter()
+
+# Fields EmployeeDetailPage only shows/edits behind isFinance (Commission
+# Structure + Allowance Rates cards) — reject these from non-finance callers.
+FINANCE_ONLY_FIELDS = {
+    "custom_lead_commission_pct",
+    "custom_support_commission_pct",
+    "custom_assistant_commission_pct",
+    "custom_full_package_commission_pct",
+    "custom_partial_package_commission_pct",
+    "custom_allowance_hcm_full",
+    "custom_allowance_hcm_partial",
+    "custom_allowance_dest_full",
+    "custom_allowance_dest_partial",
+}
 
 
 def _should_send_welcome_email(client: ERPNextClient) -> int:
@@ -82,16 +97,28 @@ class EmployeeUpdateRequest(BaseModel):
 
 
 @router.patch("/employee/{employee_id}")
-async def update_employee(employee_id: str, request: EmployeeUpdateRequest):
+async def update_employee(
+    employee_id: str,
+    body: EmployeeUpdateRequest,
+    http_request: Request,
+    _user: str = Depends(require_roles(*HR)),
+):
     """
     Update employee fields via the meraki_set_employee_fields Server Script.
     Uses frappe.db.set_value internally — no link validation.
     """
     client = ERPNextClient()
 
-    updates = {k: v for k, v in request.values.items() if k in ALLOWED_FIELDS}
+    updates = {k: v for k, v in body.values.items() if k in ALLOWED_FIELDS}
     if not updates:
         raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    finance_fields_sent = FINANCE_ONLY_FIELDS & updates.keys()
+    if finance_fields_sent and not has_roles(http_request, FINANCE):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Finance role required to update: {', '.join(sorted(finance_fields_sent))}",
+        )
 
     # If first_name or last_name is changing, compute employee_name
     if "first_name" in updates or "last_name" in updates:
@@ -183,7 +210,7 @@ class LinkUserRequest(BaseModel):
 
 
 @router.post("/employee/{employee_id}/link-user")
-async def link_user_to_employee(employee_id: str, request: LinkUserRequest):
+async def link_user_to_employee(employee_id: str, request: LinkUserRequest, _user: str = Depends(require_roles(*HR))):
     """
     Find or create an ERPNext User for the given email, assign roles from
     employee's custom_staff_roles, then link the user to the employee.
@@ -263,7 +290,7 @@ class InviteStaffRequest(BaseModel):
 
 
 @router.post("/staff/invite")
-async def invite_staff(request: InviteStaffRequest):
+async def invite_staff(request: InviteStaffRequest, _user: str = Depends(require_roles(*HR))):
     """
     Invite a new staff member:
     1. Create User with Employee Self Service role
@@ -362,7 +389,7 @@ class SetRolesRequest(BaseModel):
 
 
 @router.post("/employee/{employee_id}/set-roles")
-async def set_employee_roles(employee_id: str, request: SetRolesRequest):
+async def set_employee_roles(employee_id: str, request: SetRolesRequest, _user: str = Depends(require_roles(*DIRECTOR))):
     """
     Directly set ERPNext User roles for the employee's linked user.
     Always includes Employee + Employee Self Service.
@@ -414,7 +441,7 @@ async def get_employees_directory():
 
 
 @router.get("/employees/roles-map")
-async def get_employees_roles_map():
+async def get_employees_roles_map(_user: str = Depends(require_roles(*HR))):
     """
     Returns {employee_name: [role1, role2, ...]} for all employees that have a linked user.
     Only returns roles from ASSIGNABLE_ROLES.

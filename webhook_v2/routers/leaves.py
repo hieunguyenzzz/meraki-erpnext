@@ -13,13 +13,14 @@ GET  /leave/my-applications     — list leave applications for an employee
 import json
 import math
 from datetime import date, timedelta
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.google_calendar import add_ooo_event, delete_ooo_events
 from webhook_v2.services.leave_balance import Pool, available_on, build_pools
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
+from webhook_v2.auth import require_roles, resolve_employee, get_current_user, HR
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -108,7 +109,7 @@ def _enrich_leave_notification(
         log.warning("enrich_notification_failed", leave=leave_app_name, error=str(e))
 
 
-@router.post("/leave/{leave_id}/approve")
+@router.post("/leave/{leave_id}/approve", dependencies=[Depends(require_roles(*HR))])
 def approve_leave(leave_id: str, background_tasks: BackgroundTasks):
     """Set Leave Application status to Approved and submit.
 
@@ -147,7 +148,7 @@ def approve_leave(leave_id: str, background_tasks: BackgroundTasks):
     return {"success": True}
 
 
-@router.post("/leave/{leave_id}/reject")
+@router.post("/leave/{leave_id}/reject", dependencies=[Depends(require_roles(*HR))])
 def reject_leave(leave_id: str):
     """Set Leave Application status to Rejected and submit.
 
@@ -422,7 +423,7 @@ def _compute_total_leave_days(
     return float(_count_leave_days(from_date, to_date, holidays, weekly_off))
 
 
-@router.delete("/leave/{leave_id}")
+@router.delete("/leave/{leave_id}", dependencies=[Depends(require_roles(*HR))])
 def delete_leave(leave_id: str):
     """Cancel (if submitted) + delete linked Attendance records + delete the leave application."""
     client = ERPNextClient()
@@ -466,13 +467,18 @@ class CancelSelfLeaveRequest(BaseModel):
 
 
 @router.post("/leave/{leave_id}/cancel-self")
-def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, background_tasks: BackgroundTasks):
-    """Staff-facing cancel: allowed only when from_date >= today and leave belongs to the employee."""
+def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, background_tasks: BackgroundTasks, request: Request):
+    """Staff-facing cancel: allowed only when from_date >= today and leave belongs to the employee.
+
+    Ownership is checked against the session employee — the `employee` field
+    in the request body is accepted for backward compatibility but ignored.
+    """
+    session_employee = resolve_employee(request, None)
     client = ERPNextClient()
     app = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
     if not app:
         raise HTTPException(status_code=404, detail="Leave application not found")
-    if app.get("employee") != body.employee:
+    if app.get("employee") != session_employee:
         raise HTTPException(status_code=403, detail="You can only cancel your own leave")
     if app.get("docstatus") == 2:
         raise HTTPException(status_code=400, detail="Leave is already cancelled")
@@ -482,7 +488,7 @@ def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, background_tas
         raise HTTPException(status_code=400, detail="Cannot cancel a leave that has already started or passed")
 
     # Capture name tokens before deletion so we can remove the OOO calendar event after.
-    emp = client._get(f"/api/resource/Employee/{body.employee}").get("data", {})
+    emp = client._get(f"/api/resource/Employee/{session_employee}").get("data", {})
     name_tokens = f"{emp.get('first_name', '')} {emp.get('last_name', '')}".split()
 
     try:
@@ -511,11 +517,11 @@ def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, background_tas
     if from_d and to_d and name_tokens:
         background_tasks.add_task(delete_ooo_events, from_d, to_d, name_tokens)
 
-    log.info("leave_cancelled_self", leave=leave_id, employee=body.employee)
+    log.info("leave_cancelled_self", leave=leave_id, employee=session_employee)
     return {"success": True}
 
 
-@router.post("/leave/{leave_id}/re-approve")
+@router.post("/leave/{leave_id}/re-approve", dependencies=[Depends(require_roles(*HR))])
 def re_approve_leave(leave_id: str):
     """Re-approve a Rejected leave: cancel it, recreate with same data, approve + submit."""
     client = ERPNextClient()
@@ -557,7 +563,7 @@ class LeaveAllocationUpdate(BaseModel):
     new_leaves_allocated: float
 
 
-@router.post("/leave/allocation/{name}")
+@router.post("/leave/allocation/{name}", dependencies=[Depends(require_roles(*HR))])
 def update_leave_allocation(name: str, body: LeaveAllocationUpdate):
     """Update annual entitlement on a submitted Leave Allocation.
 
@@ -613,9 +619,14 @@ def update_leave_allocation(name: str, body: LeaveAllocationUpdate):
 
 
 @router.post("/leave/apply")
-def apply_leave(body: LeaveApplyRequest):
+def apply_leave(body: LeaveApplyRequest, request: Request):
     """Create leave application(s). For Annual Leave with insufficient balance,
-    automatically splits into Annual Leave + Leave Without Pay."""
+    automatically splits into Annual Leave + Leave Without Pay.
+
+    `employee` defaults to the caller's own Employee; filing for someone else
+    (HrAddLeaveSheet) requires HR.
+    """
+    body.employee = resolve_employee(request, body.employee, override_roles=HR)
     client = ERPNextClient()
 
     # Prepend half-day AM/PM to description so it shows in notifications
@@ -733,8 +744,9 @@ class LeavePreviewResponse(BaseModel):
 
 
 @router.get("/leave/preview")
-def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
+def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str, request: Request):
     """Return split preview without creating any documents."""
+    employee = resolve_employee(request, employee, override_roles=HR)
     client = ERPNextClient()
 
     if leave_type != "Annual Leave":
@@ -797,7 +809,7 @@ def preview_leave(employee: str, leave_type: str, from_date: str, to_date: str):
 
 
 @router.get("/leave/balance")
-def get_leave_balance(employee: str, as_of: date | None = None):
+def get_leave_balance(employee: str, request: Request, as_of: date | None = None):
     """Return per-leave-type allocations and consumption for an employee.
 
     "old" is the carry-over pool (a single short period, forfeited at its
@@ -805,6 +817,7 @@ def get_leave_balance(employee: str, as_of: date | None = None):
     allocations themselves rather than from the calendar month, so the split
     stays correct in any year (MWP-56).
     """
+    employee = resolve_employee(request, employee, override_roles=HR)
     client = ERPNextClient()
     today = as_of if as_of is not None else date.today()
     pools_by_type = _employee_pools(client, employee, today)
@@ -860,7 +873,7 @@ def _period_key(from_str: str, to_str: str) -> str:
     return f"{from_str[:10]}|{to_str[:10]}"
 
 
-@router.get("/leave/employee-detail")
+@router.get("/leave/employee-detail", dependencies=[Depends(require_roles(*HR))])
 def get_leave_employee_detail(employee: str):
     """Return period-grouped leave balance for an employee's detail page.
 
@@ -922,8 +935,9 @@ def get_leave_employee_detail(employee: str):
 
 
 @router.get("/leave/my-applications")
-def list_my_leave_applications(employee: str):
+def list_my_leave_applications(employee: str, request: Request):
     """Return leave applications for an employee (all statuses except cancelled)."""
+    employee = resolve_employee(request, employee, override_roles=HR)
     client = ERPNextClient()
     apps = client._get("/api/resource/Leave Application", params={
         "filters": f'[["employee","=","{employee}"],["docstatus","!=",2]]',

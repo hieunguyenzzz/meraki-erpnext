@@ -10,12 +10,13 @@ GET  /wfh/list-all          — list all WFH (admin)
 
 import re
 from datetime import date
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.google_calendar import add_wfh_event
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
+from webhook_v2.auth import require_roles, resolve_employee, HR
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -63,7 +64,7 @@ def _get_wfh_details(client: ERPNextClient, req_id: str) -> dict:
     }
 
 
-@router.post("/wfh/{req_id}/approve")
+@router.post("/wfh/{req_id}/approve", dependencies=[Depends(require_roles(*HR))])
 def approve_wfh(req_id: str, background_tasks: BackgroundTasks):
     """Submit Attendance Request (approve WFH), setting custom_status=Approved first.
 
@@ -103,7 +104,7 @@ def approve_wfh(req_id: str, background_tasks: BackgroundTasks):
     return {"success": True}
 
 
-@router.post("/wfh/{req_id}/reject")
+@router.post("/wfh/{req_id}/reject", dependencies=[Depends(require_roles(*HR))])
 def reject_wfh(req_id: str):
     """Set custom_status to Rejected on Attendance Request and submit.
 
@@ -164,7 +165,7 @@ def _resolve_employee_names(client: ERPNextClient, reqs: list) -> list:
     return reqs
 
 
-@router.get("/wfh/list-all")
+@router.get("/wfh/list-all", dependencies=[Depends(require_roles(*HR))])
 def list_all_wfh_requests():
     """Return all WFH (Attendance Request) records for admin management."""
     client = ERPNextClient()
@@ -178,8 +179,9 @@ def list_all_wfh_requests():
 
 
 @router.get("/wfh/list")
-def list_wfh_requests(employee: str):
+def list_wfh_requests(employee: str, request: Request):
     """Return WFH (Attendance Request) records for an employee."""
+    employee = resolve_employee(request, employee, override_roles=HR)
     client = ERPNextClient()
     reqs = client._get("/api/resource/Attendance Request", params={
         "filters": f'[["employee","=","{employee}"],["reason","=","Work From Home"]]',
@@ -198,8 +200,9 @@ class WfhApplyRequest(BaseModel):
 
 
 @router.post("/wfh/apply")
-def apply_wfh_request(body: WfhApplyRequest):
-    """Create a Work From Home Attendance Request."""
+def apply_wfh_request(body: WfhApplyRequest, request: Request):
+    """Create a Work From Home Attendance Request. `employee` must be the caller's own."""
+    body.employee = resolve_employee(request, body.employee)
     client = ERPNextClient()
     try:
         result = client._post("/api/resource/Attendance Request", {

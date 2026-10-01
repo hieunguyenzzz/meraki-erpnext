@@ -8,13 +8,14 @@ GET  /conflicts      — check for date conflicts
 import json
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
+from webhook_v2.auth import require_roles, PLANNER
 
 log = get_logger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_roles(*PLANNER))])
 
 
 class AddonItem(BaseModel):
