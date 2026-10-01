@@ -1,6 +1,6 @@
 import { Outlet, NavLink, Link } from "react-router";
 import { useGetIdentity, useLogout, usePermissions } from "@refinedev/core";
-import { LogOut, User, Calendar, Home, ArrowLeft } from "lucide-react";
+import { LogOut, User, Calendar, Home, ArrowLeft, Wallet } from "lucide-react";
 import { motion } from "framer-motion";
 import { ThemeProvider } from "@/context/theme-context";
 import { ThemeSwitch } from "@/components/theme-switch";
@@ -14,6 +14,7 @@ const navItems = [
   { to: "/my-profile", label: "My Profile", icon: User },
   { to: "/my-leaves", label: "My Leaves", icon: Calendar },
   { to: "/my-attendance", label: "My Attendance", icon: Home },
+  { to: "/my-payroll", label: "My Payroll", icon: Wallet },
 ];
 
 function MobileSelfServiceNav({ onLogout }: { onLogout: () => void }) {

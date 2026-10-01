@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.allowance import _get_rate, _get_project_data
-from webhook_v2.auth import require_roles
+from webhook_v2.auth import require_roles, get_current_user
 
 PAYROLL_ROLES = ("System Manager", "HR Manager", "HR User")
 
@@ -722,6 +722,90 @@ _SI_EMPLOYEE_PCT = 10.5  # BHXH 8% + BHYT 1.5% + BHTN 1%
 _SI_EMPLOYER_PCT = 21.5  # BHXH 17.5% + BHYT 3% + BHTN 1%
 
 
+_EMPLOYEE_INFO_FIELDS = [
+    "name", "first_name", "last_name", "employee_name",
+    "custom_number_of_dependents", "custom_is_probation", "custom_pit_method",
+]
+
+
+def _build_emp_info_map(employees: list[dict]) -> dict[str, dict]:
+    """Build display name / dependents / probation / PIT method info per employee."""
+    emp_info: dict[str, dict] = {}
+    for emp in employees:
+        display = [emp.get("last_name"), emp.get("first_name")]
+        display = " ".join(p for p in display if p)
+        if not display or (emp.get("employee_name") or "").startswith("HR-EMP-"):
+            display = display or emp.get("employee_name") or emp["name"]
+        emp_info[emp["name"]] = {
+            "display_name": display,
+            "dependents": int(emp.get("custom_number_of_dependents") or 0),
+            "is_probation": bool(emp.get("custom_is_probation")),
+            "pit_method": emp.get("custom_pit_method") or "",
+        }
+    return emp_info
+
+
+def _enrich_slip(full_slip: dict, emp_info: dict) -> dict:
+    """Enrich a full Salary Slip doc with pre-computed payroll fields.
+
+    Shared by /payroll/slips (HR, any PE) and /payroll/my-slips (staff self-service).
+    """
+    emp_id = full_slip.get("employee", "")
+    info = emp_info.get(emp_id, {"display_name": emp_id, "dependents": 0, "is_probation": False})
+
+    earnings = full_slip.get("earnings", [])
+    deductions = full_slip.get("deductions", [])
+
+    # Compute SI total (employee portion)
+    si_total = sum(
+        d.get("amount", 0) for d in deductions
+        if d.get("salary_component", "").startswith(("BHXH", "BHYT", "BHTN"))
+        and "Employer" not in d.get("salary_component", "")
+    )
+
+    # Employer BHXH = employee SI * (21.5 / 10.5)
+    employer_bhxh = round(si_total / _SI_EMPLOYEE_PCT * _SI_EMPLOYER_PCT) if si_total > 0 else 0
+
+    # Proration/probation adjustment (deducted from ERPNext gross)
+    proration_adj = sum(
+        d.get("amount", 0) for d in deductions
+        if d.get("salary_component") == "Salary Proration Adj"
+    )
+
+    # Tax computations — use effective gross (after proration/probation correction)
+    gross = full_slip.get("gross_pay", 0) - proration_adj
+    dependents = info["dependents"]
+    if info["pit_method"] == "Flat 10%":
+        tax_reduction = 0
+        taxable_income = gross  # flat 10% on gross, no deductions
+    else:
+        tax_reduction = PIT_PERSONAL_DEDUCTION + dependents * PIT_DEPENDENT_DEDUCTION
+        taxable_income = gross - si_total - tax_reduction
+
+    return {
+        "name": full_slip.get("name"),
+        "employee": emp_id,
+        "employee_name": full_slip.get("employee_name", ""),
+        "employee_display_name": info["display_name"],
+        "dependents": dependents,
+        "gross_pay": gross,
+        "total_deduction": full_slip.get("total_deduction", 0),
+        "net_pay": full_slip.get("net_pay", 0),
+        "posting_date": full_slip.get("posting_date"),
+        "docstatus": full_slip.get("docstatus", 0),
+        "modified": full_slip.get("modified"),
+        "earnings": [{"salary_component": e.get("salary_component"), "amount": e.get("amount", 0)} for e in earnings],
+        "deductions": [{"salary_component": d.get("salary_component"), "amount": d.get("amount", 0)} for d in deductions],
+        # Pre-computed fields
+        "si_employee": si_total,
+        "employer_bhxh": employer_bhxh,
+        "tax_reduction": tax_reduction,
+        "taxable_income": taxable_income,
+        "is_probation": info["is_probation"],
+        "pit_method": info["pit_method"],
+    }
+
+
 @router.get("/payroll/slips")
 def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"), user: str = Depends(require_roles(*PAYROLL_ROLES))):
     """
@@ -748,82 +832,74 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
     emp_ids = list({s["employee"] for s in slips})
     employees = client._get("/api/resource/Employee", params={
         "filters": json.dumps([["name", "in", emp_ids]]),
-        "fields": json.dumps(["name", "first_name", "last_name", "employee_name", "custom_number_of_dependents", "custom_is_probation", "custom_pit_method"]),
+        "fields": json.dumps(_EMPLOYEE_INFO_FIELDS),
         "limit_page_length": 200,
     }).get("data", [])
 
-    emp_info: dict[str, dict] = {}
-    for emp in employees:
-        display = [emp.get("last_name"), emp.get("first_name")]
-        display = " ".join(p for p in display if p)
-        if not display or (emp.get("employee_name") or "").startswith("HR-EMP-"):
-            display = display or emp.get("employee_name") or emp["name"]
-        emp_info[emp["name"]] = {
-            "display_name": display,
-            "dependents": int(emp.get("custom_number_of_dependents") or 0),
-            "is_probation": bool(emp.get("custom_is_probation")),
-            "pit_method": emp.get("custom_pit_method") or "",
-        }
+    emp_info = _build_emp_info_map(employees)
 
-    # 3. Fetch each slip's full doc (earnings + deductions)
-    result = []
-    for slip in slips:
-        full = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
-        emp_id = full.get("employee", "")
-        info = emp_info.get(emp_id, {"display_name": emp_id, "dependents": 0, "is_probation": False})
-
-        earnings = full.get("earnings", [])
-        deductions = full.get("deductions", [])
-
-        # Compute SI total (employee portion)
-        si_total = sum(
-            d.get("amount", 0) for d in deductions
-            if d.get("salary_component", "").startswith(("BHXH", "BHYT", "BHTN"))
-            and "Employer" not in d.get("salary_component", "")
-        )
-
-        # Employer BHXH = employee SI * (21.5 / 10.5)
-        employer_bhxh = round(si_total / _SI_EMPLOYEE_PCT * _SI_EMPLOYER_PCT) if si_total > 0 else 0
-
-        # Proration/probation adjustment (deducted from ERPNext gross)
-        proration_adj = sum(
-            d.get("amount", 0) for d in deductions
-            if d.get("salary_component") == "Salary Proration Adj"
-        )
-
-        # Tax computations — use effective gross (after proration/probation correction)
-        gross = full.get("gross_pay", 0) - proration_adj
-        dependents = info["dependents"]
-        if info["pit_method"] == "Flat 10%":
-            tax_reduction = 0
-            taxable_income = gross  # flat 10% on gross, no deductions
-        else:
-            tax_reduction = PIT_PERSONAL_DEDUCTION + dependents * PIT_DEPENDENT_DEDUCTION
-            taxable_income = gross - si_total - tax_reduction
-
-        result.append({
-            "name": full.get("name"),
-            "employee": emp_id,
-            "employee_name": full.get("employee_name", ""),
-            "employee_display_name": info["display_name"],
-            "dependents": dependents,
-            "gross_pay": gross,
-            "total_deduction": full.get("total_deduction", 0),
-            "net_pay": full.get("net_pay", 0),
-            "posting_date": full.get("posting_date"),
-            "docstatus": full.get("docstatus", 0),
-            "modified": full.get("modified"),
-            "earnings": [{"salary_component": e.get("salary_component"), "amount": e.get("amount", 0)} for e in earnings],
-            "deductions": [{"salary_component": d.get("salary_component"), "amount": d.get("amount", 0)} for d in deductions],
-            # Pre-computed fields
-            "si_employee": si_total,
-            "employer_bhxh": employer_bhxh,
-            "tax_reduction": tax_reduction,
-            "taxable_income": taxable_income,
-            "is_probation": info["is_probation"],
-            "pit_method": info["pit_method"],
-        })
+    # 3. Fetch each slip's full doc (earnings + deductions) and enrich
+    result = [
+        _enrich_slip(client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {}), emp_info)
+        for slip in slips
+    ]
 
     # Sort by display name
     result.sort(key=lambda s: s["employee_display_name"])
     return {"data": result}
+
+
+@router.get("/payroll/my-slips")
+def get_my_payroll_slips(user: str = Depends(get_current_user)):
+    """
+    Return the calling user's own submitted salary slips — nobody else's.
+
+    Identity comes only from the `sid` session cookie (via get_current_user);
+    this endpoint intentionally accepts no employee/user parameter so a staff
+    member cannot request another employee's payslips by changing a query param.
+    """
+    client = ERPNextClient()
+
+    employees = client._get("/api/resource/Employee", params={
+        "filters": json.dumps([["user_id", "=", user]]),
+        "fields": json.dumps(_EMPLOYEE_INFO_FIELDS),
+        "limit_page_length": 5,
+    }).get("data", [])
+
+    if not employees:
+        log.info("my_slips_no_employee", user=user)
+        return {"employee": None, "data": []}
+
+    if len(employees) > 1:
+        log.warning("my_slips_multiple_employees", user=user, count=len(employees))
+        return {"employee": None, "data": []}
+
+    emp_id = employees[0]["name"]
+    emp_info = _build_emp_info_map(employees)
+
+    slips = client._get("/api/resource/Salary Slip", params={
+        "filters": json.dumps([["employee", "=", emp_id], ["docstatus", "=", 1]]),
+        "fields": json.dumps(["name"]),
+        "order_by": "start_date desc",
+        "limit_page_length": 500,
+    }).get("data", [])
+
+    result = []
+    for slip in slips:
+        full = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
+        # Defence in depth: never return a slip that isn't this employee's.
+        if full.get("employee") != emp_id:
+            log.warning("my_slips_employee_mismatch", user=user, employee=emp_id, slip=slip["name"])
+            continue
+        enriched = _enrich_slip(full, emp_info)
+        enriched["start_date"] = full.get("start_date")
+        enriched["end_date"] = full.get("end_date")
+        enriched["payroll_entry"] = full.get("payroll_entry")
+        result.append(enriched)
+
+    log.info("my_slips_fetched", user=user, employee=emp_id, count=len(result))
+
+    return {
+        "employee": {"name": emp_id, "display_name": emp_info[emp_id]["display_name"]},
+        "data": result,
+    }

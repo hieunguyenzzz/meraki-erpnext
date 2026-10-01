@@ -49,6 +49,7 @@ import OverviewPage from "@/pages/finance/OverviewPage";
 import MyProfilePage from "@/pages/self-service/MyProfilePage";
 import MyLeavesPage from "@/pages/self-service/MyLeavesPage";
 import MyAttendancePage from "@/pages/self-service/MyAttendancePage";
+import MyPayrollPage from "@/pages/self-service/MyPayrollPage";
 import SettingsPage from "@/pages/admin/SettingsPage";
 import VenuesPage from "@/pages/venues/VenuesPage";
 import LeaveReportPage from "@/pages/reports/LeaveReportPage";
@@ -217,6 +218,7 @@ export default function App() {
               <Route path="/my-profile" element={<MyProfilePage />} />
               <Route path="/my-leaves" element={<MyLeavesPage />} />
               <Route path="/my-attendance" element={<MyAttendancePage />} />
+              <Route path="/my-payroll" element={<MyPayrollPage />} />
             </Route>
 
             {/* Catch-all: redirect unknown routes */}
