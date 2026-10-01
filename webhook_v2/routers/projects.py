@@ -5,12 +5,16 @@ GET /projects/kanban  — enriched project list with SO, invoice, employee, venu
 """
 
 import json
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
+from webhook_v2.auth import require_roles, has_roles, PLANNER, FINANCE
 
 log = get_logger(__name__)
 router = APIRouter()
+
+# Fields ProjectKanbanPage only renders behind isFinance — strip for everyone else.
+FINANCE_ONLY_FIELDS = {"custom_service_type", "package_amount", "tax_type", "commission_base", "per_billed"}
 
 
 def _display_name(emp: dict) -> str:
@@ -19,7 +23,7 @@ def _display_name(emp: dict) -> str:
 
 
 @router.get("/projects/kanban")
-def projects_kanban():
+def projects_kanban(request: Request, _user: str = Depends(require_roles(*PLANNER))):
     """
     Return enriched project list ready for kanban/list display.
 
@@ -180,5 +184,10 @@ def projects_kanban():
         ),
         key=lambda s: s["name"].lower(),
     )
+
+    if not has_roles(request, FINANCE):
+        for item in items:
+            for field in FINANCE_ONLY_FIELDS:
+                item.pop(field, None)
 
     return {"data": items, "staff": staff}

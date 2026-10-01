@@ -10,13 +10,14 @@ POST /applicants/{name}/comment       — add comment with @mention → Communic
 """
 
 import re
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
+from webhook_v2.auth import require_roles, HR
 
 log = get_logger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_roles(*HR))])
 
 
 class TagRequest(BaseModel):

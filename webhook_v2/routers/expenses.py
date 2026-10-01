@@ -15,15 +15,18 @@ New (wedding expenses with approval):
 
 import json
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.classifier_client import RemoteClassifierClient
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries
+from webhook_v2.auth import require_roles, has_roles, resolve_employee, PLANNER, FINANCE, WEDDING_MANAGER, DIRECTOR
 
 log = get_logger(__name__)
 router = APIRouter()
+
+PLANNER_OR_FINANCE = tuple(set(PLANNER) | set(FINANCE))
 
 COMPANY = "Meraki Wedding Planner"
 CASH_ACCOUNT = "Cash - MWP"
@@ -205,7 +208,7 @@ async def scan_bill(file: UploadFile = File(...)):
     return result
 
 
-@router.post("/expense/{pi_name}/attach")
+@router.post("/expense/{pi_name}/attach", dependencies=[Depends(require_roles(*DIRECTOR))])
 async def attach_receipt(pi_name: str, file: UploadFile = File(...)):
     """Attach a receipt image to a Purchase Invoice (uses admin API keys)."""
     file_data = await file.read()
@@ -249,7 +252,7 @@ def list_expense_categories():
     ]
 
 
-@router.post("/expense/categories")
+@router.post("/expense/categories", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
 def create_expense_category(req: CreateCategoryRequest):
     """Create a new expense account under Indirect Expenses."""
     client = ERPNextClient()
@@ -287,7 +290,7 @@ def create_expense_category(req: CreateCategoryRequest):
 # Existing endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/expense/quick")
+@router.post("/expense/quick", dependencies=[Depends(require_roles(*FINANCE))])
 def create_quick_expense(req: QuickExpenseRequest):
     """Create and submit a Purchase Invoice for a quick expense (atomic)."""
     client = ERPNextClient()
@@ -337,7 +340,7 @@ def create_quick_expense(req: QuickExpenseRequest):
     return {"purchase_invoice": pi_name}
 
 
-@router.post("/expense/supplier-invoice")
+@router.post("/expense/supplier-invoice", dependencies=[Depends(require_roles(*FINANCE))])
 def create_supplier_invoice(req: SupplierInvoiceRequest):
     """Create and submit a Purchase Invoice for a supplier expense (atomic)."""
     client = ERPNextClient()
@@ -392,7 +395,7 @@ def create_supplier_invoice(req: SupplierInvoiceRequest):
 # New: Wedding expense endpoints (with approval workflow)
 # ---------------------------------------------------------------------------
 
-@router.get("/payments")
+@router.get("/payments", dependencies=[Depends(require_roles(*FINANCE))])
 def list_payments():
     """List Payment Entries with description/category derived from linked Purchase Invoice."""
     client = ERPNextClient()
@@ -442,8 +445,16 @@ def list_payments():
 
 
 @router.get("/expenses")
-def list_expenses(project: str | None = None):
-    """List Purchase Invoices used as expenses (Draft=pending + Submitted=approved)."""
+def list_expenses(request: Request, project: str | None = None):
+    """List Purchase Invoices used as expenses (Draft=pending + Submitted=approved).
+
+    Scoped to a project: any PLANNER or FINANCE caller. Unscoped (all
+    expenses company-wide): FINANCE only.
+    """
+    required_roles = PLANNER_OR_FINANCE if project else FINANCE
+    if not has_roles(request, required_roles):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     client = ERPNextClient()
 
     filters = [["docstatus", "in", [0, 1]]]
@@ -527,7 +538,7 @@ def list_expenses(project: str | None = None):
     return result
 
 
-@router.get("/expense/descriptions")
+@router.get("/expense/descriptions", dependencies=[Depends(require_roles(*FINANCE))])
 def expense_descriptions():
     """Return a {PI name: {description, staff}} map for Draft/Submitted expenses.
 
@@ -587,8 +598,17 @@ def expense_descriptions():
     return result
 
 
+# /expense/wedding-with-receipt (AddExpensePage) always sends the caller's own
+# id, so naming someone else there is an edge case reserved for Finance/the
+# wedding manager. /expense/wedding (ProjectDetailPage) is used by the whole
+# wedding team to log an expense for any teammate on that wedding, so its
+# override is the same PLANNER ∪ FINANCE group as the route's own gate.
+RECEIPT_STAFF_OVERRIDE_ROLES = FINANCE + WEDDING_MANAGER
+
+
 @router.post("/expense/wedding-with-receipt")
 async def create_wedding_expense_with_receipt(
+    request: Request,
     project: str = Form(""),
     date: str = Form(...),
     description: str = Form(...),
@@ -598,7 +618,15 @@ async def create_wedding_expense_with_receipt(
     staff: str = Form(""),
     receipt: UploadFile | None = File(None),
 ):
-    """Create a Draft PI and attach receipt in one atomic request."""
+    """Create a Draft PI and attach receipt in one atomic request.
+
+    Gated by LOGIN only (no route-level role check): AddExpensePage is open to
+    every non-ESS-only staff member logging their own receipt, and the result
+    is a Draft that Finance still has to approve. `staff` is always resolved
+    from the session — defaulting to the caller's own Employee even when
+    omitted — so the expense can never land unattributed or attributed to
+    someone else without FINANCE/WEDDING_MANAGER.
+    """
     from fastapi import Form as _  # noqa — already imported above
 
     req = WeddingExpenseRequest(
@@ -606,8 +634,9 @@ async def create_wedding_expense_with_receipt(
         amount=amount, category=category, supplier=supplier,
         staff=staff or None,
     )
-    # Reuse existing logic
-    result = create_wedding_expense(req)
+    req.staff = resolve_employee(request, req.staff, override_roles=RECEIPT_STAFF_OVERRIDE_ROLES)
+    # Reuse existing logic (shared core — not the gated route handler)
+    result = _create_wedding_expense_core(req)
 
     # Attach receipt if provided
     if receipt and receipt.size and result.get("name"):
@@ -628,9 +657,22 @@ async def create_wedding_expense_with_receipt(
     return result
 
 
-@router.post("/expense/wedding")
-def create_wedding_expense(req: WeddingExpenseRequest):
-    """Create a Draft Purchase Invoice for a wedding expense (pending approval)."""
+@router.post("/expense/wedding", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
+def create_wedding_expense(req: WeddingExpenseRequest, request: Request):
+    """Create a Draft Purchase Invoice for a wedding expense (pending approval).
+
+    `staff` defaults to the caller's own Employee; naming a teammate is open
+    to anyone who can reach this route (PLANNER or FINANCE) — the wedding
+    team routinely logs expenses for each other, Finance still approves.
+    """
+    if req.staff:
+        req.staff = resolve_employee(request, req.staff, override_roles=PLANNER_OR_FINANCE)
+    return _create_wedding_expense_core(req)
+
+
+def _create_wedding_expense_core(req: WeddingExpenseRequest) -> dict:
+    """Shared by /expense/wedding and /expense/wedding-with-receipt — no auth here,
+    callers are already gated."""
     client = ERPNextClient()
 
     if req.amount <= 0:
@@ -684,7 +726,7 @@ def create_wedding_expense(req: WeddingExpenseRequest):
     return {"name": pi_name, "status": "Pending"}
 
 
-@router.post("/expense/{pi_name}/approve")
+@router.post("/expense/{pi_name}/approve", dependencies=[Depends(require_roles(*FINANCE))])
 def approve_expense(pi_name: str):
     """Approve (submit) a Draft Purchase Invoice."""
     client = ERPNextClient()
@@ -706,7 +748,7 @@ def approve_expense(pi_name: str):
     return {"success": True}
 
 
-@router.post("/expense/approve-all")
+@router.post("/expense/approve-all", dependencies=[Depends(require_roles(*FINANCE))])
 def approve_all_expenses(project: str):
     """Approve all pending (Draft, non-rejected) Purchase Invoices for a project."""
     client = ERPNextClient()
@@ -741,7 +783,7 @@ def approve_all_expenses(project: str):
     return {"approved": len(approved), "failed": len(failed), "details": failed}
 
 
-@router.post("/expense/{pi_name}/reject")
+@router.post("/expense/{pi_name}/reject", dependencies=[Depends(require_roles(*FINANCE))])
 def reject_expense(pi_name: str):
     """Reject a Draft Purchase Invoice (marks as rejected, keeps visible)."""
     client = ERPNextClient()
@@ -769,9 +811,13 @@ class EditExpenseRequest(BaseModel):
     staff: str | None = None      # Employee ID
 
 
-@router.put("/expense/{pi_name}")
-def edit_expense(pi_name: str, req: EditExpenseRequest):
-    """Edit an expense. Draft PIs are updated in-place; submitted PIs are deleted and recreated."""
+@router.put("/expense/{pi_name}", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
+def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
+    """Edit an expense. Draft PIs are updated in-place; submitted PIs are deleted and recreated.
+
+    Non-FINANCE callers (plain PLANNER) may only edit Draft (pending) expenses —
+    an already-approved/submitted expense requires FINANCE.
+    """
     client = ERPNextClient()
 
     if req.amount <= 0:
@@ -784,6 +830,9 @@ def edit_expense(pi_name: str, req: EditExpenseRequest):
     old_items = pi.get("items", [])
     first_item = old_items[0] if old_items else {}
     docstatus = pi.get("docstatus", 0)
+
+    if docstatus != 0 and not has_roles(request, FINANCE):
+        raise HTTPException(status_code=403, detail="Only Finance can edit an approved expense")
 
     posting_date = req.date or pi.get("posting_date")
     description = req.description if req.description is not None else (first_item.get("item_name") or "Expense")
@@ -881,9 +930,13 @@ def edit_expense(pi_name: str, req: EditExpenseRequest):
     return {"success": True, "name": new_name}
 
 
-@router.delete("/expense/{pi_name}")
-def delete_expense(pi_name: str):
-    """Delete a Purchase Invoice (Draft: just delete; Submitted: cancel first)."""
+@router.delete("/expense/{pi_name}", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
+def delete_expense(pi_name: str, request: Request):
+    """Delete a Purchase Invoice (Draft: just delete; Submitted: cancel first).
+
+    Non-FINANCE callers (plain PLANNER) may only delete Draft (pending) expenses —
+    an already-approved/submitted expense requires FINANCE.
+    """
     client = ERPNextClient()
 
     pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
@@ -891,6 +944,9 @@ def delete_expense(pi_name: str):
         raise HTTPException(status_code=404, detail="Purchase Invoice not found")
 
     docstatus = pi.get("docstatus", 0)
+
+    if docstatus != 0 and not has_roles(request, FINANCE):
+        raise HTTPException(status_code=403, detail="Only Finance can delete an approved expense")
 
     if docstatus == 1:
         # Submitted — cancel, then clean up ledger entries

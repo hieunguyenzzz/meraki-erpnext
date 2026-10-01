@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from webhook_v2.auth import require_login
+from webhook_v2.auth import require_login, require_roles, DIRECTOR
 from webhook_v2.config import settings
 from webhook_v2.core.logging import configure_logging, get_logger
 from webhook_v2.core.database import Database
@@ -167,7 +167,7 @@ async def health():
     return {"status": "healthy", "version": "2.0.0"}
 
 
-@app.get("/stats", response_model=StatsResponse)
+@app.get("/stats", response_model=StatsResponse, dependencies=[Depends(require_roles(*DIRECTOR))])
 async def get_stats():
     """Get processing statistics."""
     db = Database()
@@ -175,7 +175,7 @@ async def get_stats():
     return StatsResponse(**stats)
 
 
-@app.post("/process")
+@app.post("/process", dependencies=[Depends(require_roles(*DIRECTOR))])
 async def trigger_processing(
     request: ProcessRequest,
     background_tasks: BackgroundTasks,
@@ -199,7 +199,7 @@ async def trigger_processing(
     return {"status": "processing_started", "doctype": request.doctype}
 
 
-@app.post("/backfill")
+@app.post("/backfill", dependencies=[Depends(require_roles(*DIRECTOR))])
 async def trigger_backfill(
     request: BackfillRequest,
     background_tasks: BackgroundTasks,
@@ -246,7 +246,7 @@ async def trigger_backfill(
     }
 
 
-@app.post("/fetch")
+@app.post("/fetch", dependencies=[Depends(require_roles(*DIRECTOR))])
 async def trigger_fetch(
     request: FetchRequest,
     background_tasks: BackgroundTasks,
@@ -273,7 +273,7 @@ class ExpenseProcessRequest(BaseModel):
     days: int = 30  # How far back to look for emails
 
 
-@app.post("/process/expenses")
+@app.post("/process/expenses", dependencies=[Depends(require_roles(*DIRECTOR))])
 async def trigger_expense_processing(
     request: ExpenseProcessRequest,
     background_tasks: BackgroundTasks,

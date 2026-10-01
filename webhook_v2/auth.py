@@ -12,6 +12,8 @@ By default every route requires a logged-in ERPNext session (see
 must be reachable without a session are explicitly listed in PUBLIC_ROUTES.
 """
 
+import json
+
 import requests
 from fastapi import HTTPException, Request
 
@@ -19,6 +21,16 @@ from webhook_v2.core.logging import get_logger
 from webhook_v2.services.erpnext import ERPNextClient
 
 log = get_logger(__name__)
+
+# Role groups — mirror refinefrontend/src/lib/roles.ts exactly. Administrator
+# always passes (handled separately in has_roles/require_roles).
+CRM = ("System Manager", "Sales Manager", "Sales User")
+PLANNER = CRM + ("Projects User",)
+HR = ("System Manager", "HR Manager", "HR User")
+REPORT = HR
+FINANCE = ("System Manager", "Accounts Manager", "Accounts User")
+WEDDING_MANAGER = ("System Manager", "Sales Manager")
+DIRECTOR = ("System Manager",)
 
 # (method, path) pairs reachable without an ERPNext session.
 # Path matches request.url.path as FastAPI sees it (after nginx strips the
@@ -89,20 +101,43 @@ def get_current_user(request: Request) -> str:
     return user
 
 
+def _get_user_roles(request: Request) -> set[str]:
+    """Resolve + cache the caller's ERPNext roles for this request.
+
+    Administrator is represented as {"Administrator"} — has_roles() treats it
+    as an automatic pass against every role group.
+    """
+    cached = getattr(request.state, "roles", None)
+    if cached is not None:
+        return cached
+
+    user = get_current_user(request)
+    if user == "Administrator":
+        roles: set[str] = {"Administrator"}
+    else:
+        client = ERPNextClient()
+        user_data = client._get(f"/api/resource/User/{user}").get("data", {})
+        roles = {r["role"] for r in user_data.get("roles", [])}
+
+    request.state.roles = roles
+    return roles
+
+
+def has_roles(request: Request, roles) -> bool:
+    """True if the caller is Administrator or holds one of `roles`."""
+    user_roles = _get_user_roles(request)
+    if "Administrator" in user_roles:
+        return True
+    return bool(user_roles & set(roles))
+
+
 def require_roles(*roles: str):
     """FastAPI dependency: caller must be logged in and hold one of `roles`."""
 
     def dependency(request: Request) -> str:
         user = get_current_user(request)
 
-        if user == "Administrator":
-            return user
-
-        client = ERPNextClient()
-        user_data = client._get(f"/api/resource/User/{user}").get("data", {})
-        user_roles = {r["role"] for r in user_data.get("roles", [])}
-
-        if not user_roles & set(roles):
+        if not has_roles(request, roles):
             log.warning(
                 "auth_forbidden",
                 user=user,
@@ -115,3 +150,45 @@ def require_roles(*roles: str):
         return user
 
     return dependency
+
+
+def resolve_employee(request: Request, requested: str | None, override_roles: tuple[str, ...] = ()) -> str:
+    """Resolve the Employee a self-service call should act on.
+
+    The session user's own Employee record is the default. A caller may
+    request a *different* employee only when they hold one of
+    `override_roles` — that check happens first, so a caller exercising a
+    valid override (e.g. Administrator, or HR acting on someone else's leave)
+    never needs their own Employee record to exist. Only once no override
+    applies do we require the session user to be linked to exactly one
+    Employee (403 "not linked" otherwise), and then only allow `requested` if
+    it matches that own record.
+    """
+    if requested and override_roles and has_roles(request, override_roles):
+        return requested
+
+    user = get_current_user(request)
+    client = ERPNextClient()
+    employees = client._get("/api/resource/Employee", params={
+        "filters": json.dumps([["user_id", "=", user]]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 2,
+    }).get("data", [])
+
+    if len(employees) != 1:
+        log.warning("resolve_employee_not_linked", user=user, path=request.url.path, matches=len(employees))
+        raise HTTPException(status_code=403, detail="Your account is not linked to exactly one employee record")
+
+    session_employee = employees[0]["name"]
+
+    if requested and requested != session_employee:
+        log.warning(
+            "resolve_employee_forbidden",
+            user=user,
+            path=request.url.path,
+            session_employee=session_employee,
+            requested=requested,
+        )
+        raise HTTPException(status_code=403, detail="Not authorized to access this employee's data")
+
+    return session_employee

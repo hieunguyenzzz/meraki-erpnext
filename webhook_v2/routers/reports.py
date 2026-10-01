@@ -8,13 +8,14 @@ GET /reports/wedding-expenses/projects   — lightweight project list for dropdo
 
 import json
 from datetime import date, timedelta
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.leave_balance import build_pools
 from webhook_v2.core.logging import get_logger
+from webhook_v2.auth import require_roles, REPORT
 
 log = get_logger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_roles(*REPORT))])
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 

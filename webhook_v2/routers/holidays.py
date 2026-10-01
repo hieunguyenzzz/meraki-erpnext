@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from datetime import date
 from pydantic import BaseModel
 
 from webhook_v2.services.erpnext import ERPNextClient
+from webhook_v2.auth import require_roles, DIRECTOR
 
 router = APIRouter()
 
@@ -47,7 +48,7 @@ def get_holidays(year: int = None):
     return {"data": result, "year": target_year, "exists": True}
 
 
-@router.post("/settings/holidays")
+@router.post("/settings/holidays", dependencies=[Depends(require_roles(*DIRECTOR))])
 def add_holiday(body: HolidayCreate):
     """Add a public holiday to the ERPNext holiday list."""
     client = ERPNextClient()
@@ -80,7 +81,7 @@ def add_holiday(body: HolidayCreate):
     }
 
 
-@router.delete("/settings/holidays/{holiday_date}")
+@router.delete("/settings/holidays/{holiday_date}", dependencies=[Depends(require_roles(*DIRECTOR))])
 def delete_holiday(holiday_date: str):
     """Remove a public holiday by date."""
     client = ERPNextClient()
