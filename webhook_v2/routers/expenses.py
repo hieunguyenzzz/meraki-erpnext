@@ -620,8 +620,12 @@ async def create_wedding_expense_with_receipt(
 ):
     """Create a Draft PI and attach receipt in one atomic request.
 
-    `staff` defaults to the caller's own Employee; naming someone else
-    requires FINANCE or WEDDING_MANAGER (see resolve_employee).
+    Gated by LOGIN only (no route-level role check): AddExpensePage is open to
+    every non-ESS-only staff member logging their own receipt, and the result
+    is a Draft that Finance still has to approve. `staff` is always resolved
+    from the session — defaulting to the caller's own Employee even when
+    omitted — so the expense can never land unattributed or attributed to
+    someone else without FINANCE/WEDDING_MANAGER.
     """
     from fastapi import Form as _  # noqa — already imported above
 
@@ -630,8 +634,7 @@ async def create_wedding_expense_with_receipt(
         amount=amount, category=category, supplier=supplier,
         staff=staff or None,
     )
-    if req.staff:
-        req.staff = resolve_employee(request, req.staff, override_roles=RECEIPT_STAFF_OVERRIDE_ROLES)
+    req.staff = resolve_employee(request, req.staff, override_roles=RECEIPT_STAFF_OVERRIDE_ROLES)
     # Reuse existing logic (shared core — not the gated route handler)
     result = _create_wedding_expense_core(req)
 

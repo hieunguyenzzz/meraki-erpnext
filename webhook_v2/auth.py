@@ -155,11 +155,18 @@ def require_roles(*roles: str):
 def resolve_employee(request: Request, requested: str | None, override_roles: tuple[str, ...] = ()) -> str:
     """Resolve the Employee a self-service call should act on.
 
-    The session user's own Employee record is always the default. A caller
-    may request a *different* employee only when they hold one of
-    `override_roles` — otherwise 403. Raises 403 if the session user isn't
-    linked to exactly one Employee.
+    The session user's own Employee record is the default. A caller may
+    request a *different* employee only when they hold one of
+    `override_roles` — that check happens first, so a caller exercising a
+    valid override (e.g. Administrator, or HR acting on someone else's leave)
+    never needs their own Employee record to exist. Only once no override
+    applies do we require the session user to be linked to exactly one
+    Employee (403 "not linked" otherwise), and then only allow `requested` if
+    it matches that own record.
     """
+    if requested and override_roles and has_roles(request, override_roles):
+        return requested
+
     user = get_current_user(request)
     client = ERPNextClient()
     employees = client._get("/api/resource/Employee", params={
@@ -174,17 +181,14 @@ def resolve_employee(request: Request, requested: str | None, override_roles: tu
 
     session_employee = employees[0]["name"]
 
-    if not requested or requested == session_employee:
-        return session_employee
+    if requested and requested != session_employee:
+        log.warning(
+            "resolve_employee_forbidden",
+            user=user,
+            path=request.url.path,
+            session_employee=session_employee,
+            requested=requested,
+        )
+        raise HTTPException(status_code=403, detail="Not authorized to access this employee's data")
 
-    if override_roles and has_roles(request, override_roles):
-        return requested
-
-    log.warning(
-        "resolve_employee_forbidden",
-        user=user,
-        path=request.url.path,
-        session_employee=session_employee,
-        requested=requested,
-    )
-    raise HTTPException(status_code=403, detail="Not authorized to access this employee's data")
+    return session_employee
