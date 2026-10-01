@@ -20,7 +20,7 @@ from webhook_v2.services.google_calendar import add_ooo_event, delete_ooo_events
 from webhook_v2.services.leave_balance import Pool, available_on, build_pools
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
-from webhook_v2.auth import require_roles, resolve_employee, get_current_user, HR
+from webhook_v2.auth import require_roles, resolve_employee, get_current_user, has_roles, HR
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -624,8 +624,12 @@ def apply_leave(body: LeaveApplyRequest, request: Request):
     automatically splits into Annual Leave + Leave Without Pay.
 
     `employee` defaults to the caller's own Employee; filing for someone else
-    (HrAddLeaveSheet) requires HR.
+    (HrAddLeaveSheet) requires HR. `auto_approve` (create + approve + submit in
+    one call) also requires HR — otherwise a staff member could self-approve
+    their own leave.
     """
+    if body.auto_approve and not has_roles(request, HR):
+        raise HTTPException(status_code=403, detail="HR role required to auto-approve a leave application")
     body.employee = resolve_employee(request, body.employee, override_roles=HR)
     client = ERPNextClient()
 

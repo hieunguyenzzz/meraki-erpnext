@@ -598,7 +598,12 @@ def expense_descriptions():
     return result
 
 
-STAFF_OVERRIDE_ROLES = FINANCE + WEDDING_MANAGER
+# /expense/wedding-with-receipt (AddExpensePage) always sends the caller's own
+# id, so naming someone else there is an edge case reserved for Finance/the
+# wedding manager. /expense/wedding (ProjectDetailPage) is used by the whole
+# wedding team to log an expense for any teammate on that wedding, so its
+# override is the same PLANNER ∪ FINANCE group as the route's own gate.
+RECEIPT_STAFF_OVERRIDE_ROLES = FINANCE + WEDDING_MANAGER
 
 
 @router.post("/expense/wedding-with-receipt")
@@ -626,7 +631,7 @@ async def create_wedding_expense_with_receipt(
         staff=staff or None,
     )
     if req.staff:
-        req.staff = resolve_employee(request, req.staff, override_roles=STAFF_OVERRIDE_ROLES)
+        req.staff = resolve_employee(request, req.staff, override_roles=RECEIPT_STAFF_OVERRIDE_ROLES)
     # Reuse existing logic (shared core — not the gated route handler)
     result = _create_wedding_expense_core(req)
 
@@ -653,11 +658,12 @@ async def create_wedding_expense_with_receipt(
 def create_wedding_expense(req: WeddingExpenseRequest, request: Request):
     """Create a Draft Purchase Invoice for a wedding expense (pending approval).
 
-    `staff` defaults to the caller's own Employee; naming someone else
-    requires FINANCE or WEDDING_MANAGER (see resolve_employee).
+    `staff` defaults to the caller's own Employee; naming a teammate is open
+    to anyone who can reach this route (PLANNER or FINANCE) — the wedding
+    team routinely logs expenses for each other, Finance still approves.
     """
     if req.staff:
-        req.staff = resolve_employee(request, req.staff, override_roles=STAFF_OVERRIDE_ROLES)
+        req.staff = resolve_employee(request, req.staff, override_roles=PLANNER_OR_FINANCE)
     return _create_wedding_expense_core(req)
 
 
