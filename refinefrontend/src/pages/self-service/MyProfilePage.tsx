@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useUpdate, usePermissions } from "@refinedev/core";
+import { usePermissions } from "@refinedev/core";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { getDashboardOptions, type DashboardOption } from "@/lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,7 +73,6 @@ const INITIAL_FORM: FormData = {
 
 export default function MyProfilePage() {
   const { employee, employeeId, isLoading, refetch } = useMyEmployee();
-  const { mutateAsync: updateAsync } = useUpdate();
   const { data: roles } = usePermissions<string[]>({});
   const dashboardOptions = getDashboardOptions(roles ?? []);
 
@@ -125,11 +124,16 @@ export default function MyProfilePage() {
     setIsSaving(true);
     try {
       const { addr_street, addr_ward, addr_district, addr_province, ...rest } = form;
-      await updateAsync({
-        resource: "Employee",
-        id: employeeId,
-        values: { ...rest, current_address: joinAddress(form) },
+      const res = await fetch("/inquiry-api/me/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: { ...rest, current_address: joinAddress(form) } }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Failed to save profile (${res.status})`);
+      }
       setSaveSuccess(true);
       refetch();
     } finally {

@@ -57,6 +57,7 @@ ORDERED_PHASES = [
     "v091_ensure_lead_sources",
     "v092_wedding_event_model",
     "v093_restrict_salary_slip_employee_read",
+    "v094_employee_field_permissions",
     "v095_guard_api_server_scripts",
 ]
 
@@ -138,6 +139,7 @@ def run_pending(client) -> int:
             v091_ensure_lead_sources,
             v092_wedding_event_model,
             v093_restrict_salary_slip_employee_read,
+            v094_employee_field_permissions,
             v095_guard_api_server_scripts,
         )
     except ModuleNotFoundError:
@@ -191,6 +193,7 @@ def run_pending(client) -> int:
             v091_ensure_lead_sources,
             v092_wedding_event_model,
             v093_restrict_salary_slip_employee_read,
+            v094_employee_field_permissions,
             v095_guard_api_server_scripts,
         )
 
@@ -248,6 +251,7 @@ def run_pending(client) -> int:
         "v091_ensure_lead_sources": v091_ensure_lead_sources.run,
         "v092_wedding_event_model": v092_wedding_event_model.run,
         "v093_restrict_salary_slip_employee_read": v093_restrict_salary_slip_employee_read.run,
+        "v094_employee_field_permissions": v094_employee_field_permissions.run,
         "v095_guard_api_server_scripts": v095_guard_api_server_scripts.run,
     }
 
