@@ -36,6 +36,9 @@ SERVER_SCRIPTS = [
         "api_method": "update_leave_status",
         "allow_guest": 0,
         "script": (
+            '# MWP-69 guard\n'
+            'if frappe.session.user != "Administrator":\n'
+            '    frappe.throw("Not permitted", frappe.PermissionError)\n'
             'name = frappe.form_dict.name\n'
             'status = frappe.form_dict.status\n'
             'if status not in {"Approved", "Rejected"}:\n'
