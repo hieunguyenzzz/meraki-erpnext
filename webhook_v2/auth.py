@@ -6,6 +6,10 @@ admin API key. These helpers piggyback on the ERPNext session cookie (`sid`)
 the React app already sends (same-origin, credentials: "include") to answer
 "who is calling" and "do they have an HR role", so admin-only endpoints like
 payroll generation aren't open to any staff member with a valid ERPNext login.
+
+By default every route requires a logged-in ERPNext session (see
+`require_login`, wired as an app-level dependency in main.py). Routes that
+must be reachable without a session are explicitly listed in PUBLIC_ROUTES.
 """
 
 import requests
@@ -16,9 +20,42 @@ from webhook_v2.services.erpnext import ERPNextClient
 
 log = get_logger(__name__)
 
+# (method, path) pairs reachable without an ERPNext session.
+# Path matches request.url.path as FastAPI sees it (after nginx strips the
+# /inquiry-api or /api prefix) — i.e. the route path declared in the router.
+PUBLIC_ROUTES: set[tuple[str, str]] = {
+    ("POST", "/inquiry"),
+    ("POST", "/website-inquiry"),
+    ("POST", "/client-questionnaire"),
+    ("GET", "/jobs"),
+    ("POST", "/jobs/apply"),
+    ("GET", "/health"),
+}
+
+
+def require_login(request: Request) -> None:
+    """App-level dependency: 401 unless the caller has a valid ERPNext session.
+
+    Lets CORS preflight (OPTIONS) and PUBLIC_ROUTES through untouched.
+    """
+    if request.method == "OPTIONS":
+        return
+    if (request.method, request.url.path) in PUBLIC_ROUTES:
+        return
+    request.state.user = get_current_user(request)
+
 
 def get_current_user(request: Request) -> str:
-    """Resolve the ERPNext user for the caller's `sid` cookie, or 401."""
+    """Resolve the ERPNext user for the caller's `sid` cookie, or 401.
+
+    Returns the cached value from `require_login` when already resolved for
+    this request, so routes that depend on both `require_login` (app-level)
+    and `require_roles` don't hit ERPNext twice.
+    """
+    cached_user = getattr(request.state, "user", None)
+    if cached_user:
+        return cached_user
+
     sid = request.cookies.get("sid")
     if not sid or sid == "Guest":
         log.warning("auth_missing_sid", path=request.url.path)

@@ -4,10 +4,11 @@ FastAPI application for email processing webhooks.
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from webhook_v2.auth import require_login
 from webhook_v2.config import settings
 from webhook_v2.core.logging import configure_logging, get_logger
 from webhook_v2.core.database import Database
@@ -89,6 +90,10 @@ app = FastAPI(
     description="Email processing pipeline for Meraki Wedding Planner",
     version="2.0.0",
     lifespan=lifespan,
+    dependencies=[Depends(require_login)],
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 app.add_middleware(
