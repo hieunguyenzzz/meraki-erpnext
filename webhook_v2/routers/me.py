@@ -82,6 +82,14 @@ async def get_my_profile(request: Request):
 async def update_my_profile(body: ProfileUpdateRequest, request: Request):
     employee_id = resolve_employee(request, None)
 
+    # A list/dict value would otherwise reach meraki_set_employee_fields's
+    # frappe.db.set_value call and fail there with a 500 (SQL can't bind a
+    # list/dict) — reject it here with a clean 400 instead.
+    bad_types = sorted(k for k, v in body.values.items() if not isinstance(v, (str, type(None))))
+    if bad_types:
+        log.warning("me_profile_update_invalid_type", employee=employee_id, fields=bad_types)
+        raise HTTPException(status_code=400, detail=f"Values must be strings: {', '.join(bad_types)}")
+
     rejected = sorted(set(body.values.keys()) - WRITABLE_FIELDS)
     if rejected:
         log.warning("me_profile_update_rejected", employee=employee_id, fields=rejected)

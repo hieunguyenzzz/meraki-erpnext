@@ -29,11 +29,24 @@ both the standard DocPerm fixture and live Custom DocPerm), so none is added
 at levels 1/2 either — mirroring "whatever level-0 access exists" leaves it
 untouched; Administrator bypasses all permission checks regardless.
 
+Code review (MWP-68 PR #43) flagged a second gap: health/personal-background
+fields and exit-record fields were still readable by every colleague
+(including via the single-doc GET, which has no field filter at all). Also
+moved here:
+- Personal/health narrative: family_background, health_details,
+  marital_status, blood_group.
+- Exit record: reason_for_leaving, feedback, held_on (exit interview date),
+  new_workplace, leave_encashed, encashment_date. relieving_date and
+  resignation_letter_date are included too — both mark an employee's actual
+  departure date and are part of the same exit record, not just
+  operationally-relevant metadata (relieving_date is only edited by HR on
+  EmployeeDetailPage today — grepped the frontend, no non-HR page reads it).
+- custom_sales_commission_pct moves from 0 to 2 with the other commission
+  fields — it's legacy/superseded in the UI but still in
+  meraki_set_employee_fields's ALLOWED_FIELDS and still carries live values.
+
 Fields considered but left at permlevel 0 (out of the salary/bank/
-government-ID scope this phase targets): custom_sales_commission_pct (legacy
-commission field, superseded by the per-role commission fields, unused in
-the frontend), salary/health narrative fields (family_background,
-health_details, marital_status, blood_group), and attendance_device_id
+government-ID/exit-record scope this phase targets): attendance_device_id
 (a biometric/RF tag id, not a government ID).
 """
 
@@ -59,6 +72,20 @@ STANDARD_FIELD_PERMLEVELS = {
     "person_to_be_contacted": 1,
     "relation": 1,
     "emergency_phone_number": 1,
+    # Personal / health narrative
+    "family_background": 1,
+    "health_details": 1,
+    "marital_status": 1,
+    "blood_group": 1,
+    # Exit record
+    "reason_for_leaving": 1,
+    "feedback": 1,
+    "held_on": 1,
+    "new_workplace": 1,
+    "leave_encashed": 1,
+    "encashment_date": 1,
+    "relieving_date": 1,
+    "resignation_letter_date": 1,
 }
 
 CUSTOM_FIELD_PERMLEVELS = {
@@ -78,6 +105,7 @@ CUSTOM_FIELD_PERMLEVELS = {
     "custom_allowance_hcm_partial": 2,
     "custom_allowance_dest_full": 2,
     "custom_allowance_dest_partial": 2,
+    "custom_sales_commission_pct": 2,
 }
 
 # (role, permlevel, read, write)
