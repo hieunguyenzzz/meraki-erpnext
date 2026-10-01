@@ -342,23 +342,26 @@ export function ActivitySection({ references }: ActivitySectionProps) {
 
   const primaryRef = references[0];
 
-  const { result: employeesResult } = useList({
-    resource: "Employee",
-    pagination: { pageSize: 100 },
-    filters: [{ field: "status", operator: "eq", value: "Active" }],
-    meta: { fields: ["name", "employee_name", "company_email", "personal_email"] },
+  const { data: directoryResult } = useQuery({
+    queryKey: ["employees-directory"],
+    queryFn: async () => {
+      const res = await fetch("/inquiry-api/employees/directory", { credentials: "include" });
+      if (!res.ok) throw new Error(`Directory failed: ${res.status}`);
+      return res.json() as Promise<{ data: any[] }>;
+    },
   });
 
   const employees = useMemo(() => {
-    const data = (employeesResult as any)?.data ?? [];
+    const data = directoryResult?.data ?? [];
     return data
-      .map((e: any) => ({
+      .filter((e) => e.status === "Active")
+      .map((e) => ({
         id: e.name as string,
         name: e.employee_name as string,
-        email: (e.company_email || e.personal_email || "") as string,
+        email: (e.notification_email || "") as string,
       }))
       .filter((e: { email: string }) => e.email);
-  }, [employeesResult]);
+  }, [directoryResult]);
 
   function toggleEmployee(id: string) {
     setSelectedEmployees((prev) => {

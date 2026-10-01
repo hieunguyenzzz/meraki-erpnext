@@ -57,6 +57,7 @@ ORDERED_PHASES = [
     "v091_ensure_lead_sources",
     "v092_wedding_event_model",
     "v093_restrict_salary_slip_employee_read",
+    "v094_employee_field_permissions",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -137,6 +138,7 @@ def run_pending(client) -> int:
             v091_ensure_lead_sources,
             v092_wedding_event_model,
             v093_restrict_salary_slip_employee_read,
+            v094_employee_field_permissions,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -189,6 +191,7 @@ def run_pending(client) -> int:
             v091_ensure_lead_sources,
             v092_wedding_event_model,
             v093_restrict_salary_slip_employee_read,
+            v094_employee_field_permissions,
         )
 
     phase_fns = {
@@ -245,6 +248,7 @@ def run_pending(client) -> int:
         "v091_ensure_lead_sources": v091_ensure_lead_sources.run,
         "v092_wedding_event_model": v092_wedding_event_model.run,
         "v093_restrict_salary_slip_employee_read": v093_restrict_salary_slip_employee_read.run,
+        "v094_employee_field_permissions": v094_employee_field_permissions.run,
     }
 
     state_file = get_state_file()

@@ -1,40 +1,28 @@
-import { useGetIdentity, useList, useOne } from "@refinedev/core";
+import { useQuery } from "@tanstack/react-query";
 import type { EmployeeProfile } from "@/lib/types";
 
-const PROFILE_FIELDS = [
-  "name", "employee_name", "first_name", "middle_name", "last_name",
-  "gender", "date_of_birth", "designation", "department", "status",
-  "date_of_joining", "cell_number", "personal_email",
-  "current_address", "permanent_address",
-  "person_to_be_contacted", "emergency_phone_number", "relation",
-  "bank_name", "bank_ac_no", "iban",
-];
+// Fields returned by GET /inquiry-api/me/profile — kept in sync with
+// PROFILE_FIELDS in webhook_v2/routers/me.py.
 
 export function useMyEmployee() {
-  const { data: identity } = useGetIdentity<{ email: string }>();
-  const email = identity?.email;
-
-  const { result: listResult, query: listQuery } = useList<{ name: string }>({
-    resource: "Employee",
-    filters: email ? [{ field: "user_id", operator: "eq", value: email }] : [],
-    meta: { fields: ["name"] },
-    pagination: { mode: "off" },
-    queryOptions: { enabled: !!email },
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["me-profile"],
+    queryFn: async () => {
+      const res = await fetch("/inquiry-api/me/profile", { credentials: "include" });
+      if (!res.ok) throw new Error(`Failed to load profile: ${res.status}`);
+      return res.json() as Promise<{ data: EmployeeProfile }>;
+    },
   });
 
-  const employeeId = listResult?.data?.[0]?.name;
-
-  const { result: employee, query: oneQuery } = useOne<EmployeeProfile>({
-    resource: "Employee",
-    id: employeeId ?? "",
-    meta: { fields: PROFILE_FIELDS },
-    queryOptions: { enabled: !!employeeId },
-  });
+  // Backend returns {data: {}} for sessions with no linked Employee (e.g.
+  // Administrator) — normalize to null so callers' `!employee` checks behave
+  // the same as before this hook talked to a dedicated endpoint.
+  const employee = data?.data?.name ? data.data : null;
 
   return {
-    employee: employee ?? null,
-    employeeId: employeeId ?? null,
-    isLoading: listQuery.isLoading || oneQuery.isLoading,
-    refetch: oneQuery.refetch,
+    employee,
+    employeeId: employee?.name ?? null,
+    isLoading,
+    refetch,
   };
 }

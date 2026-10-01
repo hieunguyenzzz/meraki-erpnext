@@ -431,12 +431,20 @@ async def get_employees_directory():
     Used by the frontend to resolve employee IDs to names without requiring
     Employee doctype read access on every staff record (which restricted
     roles like Employee Self Service don't have).
+
+    `notification_email` is computed server-side (company_email falling back
+    to personal_email) so callers get a usable address without personal_email
+    itself being exposed — it moved to Custom DocPerm permlevel 1 in
+    migration v094 (HR-only).
     """
     client = ERPNextClient()
     emps = client._get("/api/resource/Employee", params={
-        "fields": '["name","employee_name","first_name","last_name","user_id","status","designation","department","custom_display_order"]',
+        "fields": '["name","employee_name","first_name","last_name","user_id","status","designation","department","custom_display_order","company_email","personal_email"]',
         "limit_page_length": 0,
     }).get("data", [])
+    for emp in emps:
+        personal_email = emp.pop("personal_email", "") or ""
+        emp["notification_email"] = emp.get("company_email") or personal_email
     return {"data": emps}
 
 
