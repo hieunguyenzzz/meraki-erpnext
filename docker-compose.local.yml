@@ -158,6 +158,13 @@ services:
       # Gemini (fallback if remote classifier disabled)
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      - HOADON_IMAP_USER=${HOADON_IMAP_USER:-hoadon.merakiwp@gmail.com}
+      - HOADON_IMAP_PASSWORD=${HOADON_IMAP_PASSWORD}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-6.1-sol}
+      - OPENAI_REASONING_EFFORT=${OPENAI_REASONING_EFFORT:-high}
+      - FLIGHT_SYNC_ENABLED=${FLIGHT_SYNC_ENABLED:-true}
+      - FLIGHT_BACKFILL_SINCE=${FLIGHT_BACKFILL_SINCE:-2026-01-01}
       # reCAPTCHA (public inquiry form)
       - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY:-}
       # Website contact form shared secret (server-to-server)

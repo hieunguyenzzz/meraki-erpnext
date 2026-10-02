@@ -3,6 +3,7 @@ APScheduler job runner for periodic email processing.
 """
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from webhook_v2.config import settings
@@ -116,6 +117,41 @@ def update_project_stages_job():
         log.error("scheduled_job_error", job="update_project_stages", error=str(e))
 
 
+def flight_sync_job():
+    """Daily flight bookings sync (MWP-72). Skips when a run (e.g. Sync now) is already in progress."""
+    from webhook_v2.processors.flights import FlightProcessor, SyncAlreadyRunning, sync_lock
+
+    if not sync_lock.acquire(blocking=False):
+        log.warning("scheduled_job_skipped", job="flight_sync", reason="already running")
+        return
+    log.info("scheduled_job_starting", job="flight_sync")
+    try:
+        stats = FlightProcessor().run()
+        log.info("scheduled_job_complete", job="flight_sync", **stats)
+    except SyncAlreadyRunning as e:  # a run started from another process holds the Postgres lock
+        log.warning("scheduled_job_skipped", job="flight_sync", reason="already running", detail=str(e))
+    except Exception as e:
+        log.error("scheduled_job_error", job="flight_sync", error=str(e))
+    finally:
+        sync_lock.release()
+
+
+def _add_flight_sync_job(scheduler: BackgroundScheduler) -> None:
+    if not settings.flight_sync_enabled:
+        log.info("flight_sync_disabled")
+        return
+    job = scheduler.add_job(
+        flight_sync_job,
+        trigger=CronTrigger(hour=settings.flight_sync_hour, minute=0, timezone="Asia/Ho_Chi_Minh"),
+        id="flight_sync",
+        name="Sync flight bookings",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    log.info("flight_sync_scheduled", next_run=str(job.next_run_time))
+
+
 def start_fetch_scheduler() -> BackgroundScheduler:
     """
     Start the fetch-only scheduler (IMAP fetch without processing).
@@ -154,6 +190,7 @@ def start_fetch_scheduler() -> BackgroundScheduler:
     )
 
     _scheduler.start()
+    _add_flight_sync_job(_scheduler)  # after start(), so the job has its next run time to log
     log.info(
         "fetch_scheduler_started",
         interval_minutes=settings.scheduler_fetch_interval_minutes,
@@ -212,6 +249,7 @@ def start_scheduler(interval_minutes: int = 5) -> BackgroundScheduler:
     )
 
     _scheduler.start()
+    _add_flight_sync_job(_scheduler)  # after start(), so the job has its next run time to log
     log.info("scheduler_started", interval_minutes=interval_minutes)
 
     return _scheduler
