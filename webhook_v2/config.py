@@ -21,6 +21,18 @@ class Settings(BaseSettings):
     zoho_email: str = ""
     zoho_password: str = ""
 
+    # Flight bookings (MWP-72): invoice Gmail mailbox + OpenAI extraction
+    hoadon_imap_host: str = "imap.gmail.com"
+    hoadon_imap_port: int = 993
+    hoadon_imap_user: str = ""
+    hoadon_imap_password: str = ""
+    flight_backfill_since: str = "2026-01-01"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-6.1-sol"
+    openai_reasoning_effort: str = "high"
+    flight_sync_enabled: bool = True
+    flight_sync_hour: int = 6  # Asia/Ho_Chi_Minh
+
     # Email Storage Database (new container)
     email_storage_host: str = "email-storage"
     email_storage_port: int = 5432

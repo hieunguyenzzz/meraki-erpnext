@@ -111,12 +111,173 @@ class Database:
 
         CREATE INDEX IF NOT EXISTS idx_logs_email ON processing_logs(email_id);
         CREATE INDEX IF NOT EXISTS idx_logs_action ON processing_logs(action);
+
+        -- flight_emails: per-email state for the flight bookings pipeline (MWP-72)
+        CREATE TABLE IF NOT EXISTS flight_emails (
+            message_id VARCHAR(512) PRIMARY KEY,
+            imap_uid BIGINT,
+            subject TEXT,
+            received_at TIMESTAMPTZ,
+            status VARCHAR(20) NOT NULL,          -- done | skipped | unmatched | failed
+            email_type VARCHAR(30),
+            booking VARCHAR(40),                  -- Flight Booking name
+            attempts INT NOT NULL DEFAULT 0,
+            error TEXT,
+            extraction JSONB,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        -- where imap_uid is valid: retries by UID are only safe in the same folder and UIDVALIDITY
+        ALTER TABLE flight_emails ADD COLUMN IF NOT EXISTS imap_folder TEXT;
+        ALTER TABLE flight_emails ADD COLUMN IF NOT EXISTS uidvalidity BIGINT;
+
+        -- flight_sync_runs: one row per pipeline run
+        CREATE TABLE IF NOT EXISTS flight_sync_runs (
+            id SERIAL PRIMARY KEY,
+            started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            finished_at TIMESTAMPTZ,
+            status VARCHAR(20),
+            stats JSONB,
+            error TEXT
+        );
         """
 
         with self.get_connection() as conn:
             conn.execute(schema_sql)
             conn.commit()
             log.info("database_schema_initialized")
+
+    # ---- Flight bookings (MWP-72) ----
+
+    FLIGHT_EMAIL_COLUMNS = (
+        "imap_uid", "subject", "received_at", "status", "email_type",
+        "booking", "error", "extraction", "imap_folder", "uidvalidity",
+    )
+
+    def get_flight_email(self, message_id: str) -> dict | None:
+        with self.get_connection() as conn:
+            return conn.execute(
+                "SELECT * FROM flight_emails WHERE message_id = %s", (message_id,)
+            ).fetchone()
+
+    def upsert_flight_email(self, message_id: str, **fields: Any) -> None:
+        """Insert or update a flight email's state; attempts is incremented on each 'failed' write."""
+        unknown = set(fields) - set(self.FLIGHT_EMAIL_COLUMNS)
+        if unknown:
+            raise ValueError(f"Unknown flight_emails columns: {sorted(unknown)}")
+        if "status" not in fields:
+            raise ValueError("status is required")
+        if fields.get("extraction") is not None:
+            fields["extraction"] = psycopg.types.json.Json(fields["extraction"])
+
+        columns = ", ".join(fields)
+        placeholders = ", ".join(f"%({name})s" for name in fields)
+        updates = ", ".join(f"{name} = EXCLUDED.{name}" for name in fields)
+        sql = f"""
+        INSERT INTO flight_emails (message_id, {columns}, attempts)
+        VALUES (%(message_id)s, {placeholders}, %(initial_attempts)s)
+        ON CONFLICT (message_id) DO UPDATE SET
+            {updates},
+            attempts = flight_emails.attempts + %(initial_attempts)s,
+            updated_at = now()
+        """
+        params = {
+            **fields,
+            "message_id": message_id,
+            "initial_attempts": 1 if fields["status"] == "failed" else 0,
+        }
+        with self.get_connection() as conn:
+            conn.execute(sql, params)
+            conn.commit()
+        log.info("flight_email_upserted", message_id=message_id, status=fields["status"])
+
+    def start_flight_run(self) -> int:
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "INSERT INTO flight_sync_runs (status) VALUES ('running') RETURNING id"
+            ).fetchone()
+            conn.commit()
+        log.info("flight_run_started", run_id=row["id"])
+        return row["id"]
+
+    FLIGHT_RUN_LOCK_KEY = 720_072  # pg advisory lock id for the flight sync (MWP-72)
+
+    @contextmanager
+    def flight_run_lock(self) -> Generator[bool, None, None]:
+        """Cross-process flight sync lock: yields True if granted, held until the block exits.
+
+        A session-level advisory lock on its own connection, so it is also released if the process dies.
+        """
+        conn = psycopg.connect(self.connection_string, row_factory=dict_row, autocommit=True)
+        granted = False
+        try:
+            granted = conn.execute("SELECT pg_try_advisory_lock(%s) AS ok", (self.FLIGHT_RUN_LOCK_KEY,)).fetchone()["ok"]
+            log.info("flight_run_lock", granted=granted)
+            yield granted
+        finally:
+            try:
+                if granted:
+                    conn.execute("SELECT pg_advisory_unlock(%s)", (self.FLIGHT_RUN_LOCK_KEY,))
+            except psycopg.Error as exc:
+                log.error("flight_run_unlock_failed", error=repr(exc))  # closing the session releases it anyway
+            finally:
+                conn.close()
+
+    def interrupt_flight_runs(self) -> int:
+        """Close runs left 'running' by a restart. Call only while holding flight_run_lock (no run can be live)."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE flight_sync_runs SET status = 'error', error = 'interrupted', finished_at = now() "
+                "WHERE status = 'running'"
+            )
+            conn.commit()
+        if cursor.rowcount:
+            log.warning("flight_runs_interrupted", count=cursor.rowcount)
+        return cursor.rowcount
+
+    def finish_flight_run(self, run_id: int, status: str, stats: dict, error: str | None = None) -> None:
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE flight_sync_runs
+                SET finished_at = now(), status = %s, stats = %s, error = %s
+                WHERE id = %s
+                """,
+                (status, psycopg.types.json.Json(stats), error, run_id),
+            )
+            conn.commit()
+        log.info("flight_run_finished", run_id=run_id, status=status, error=error)
+
+    def last_flight_run(self, statuses: tuple[str, ...] | None = None) -> dict | None:
+        """The latest run, or the latest run with one of `statuses`."""
+        with self.get_connection() as conn:
+            if statuses:
+                return conn.execute(
+                    "SELECT * FROM flight_sync_runs WHERE status = ANY(%s) ORDER BY id DESC LIMIT 1",
+                    (list(statuses),),
+                ).fetchone()
+            return conn.execute(
+                "SELECT * FROM flight_sync_runs ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+
+    def flight_emails_to_retry(self, max_attempts: int) -> list[dict]:
+        """Unmatched emails (always retried) and failed ones with attempts left."""
+        with self.get_connection() as conn:
+            return conn.execute(
+                """
+                SELECT * FROM flight_emails
+                WHERE status = 'unmatched' OR (status = 'failed' AND attempts < %s)
+                ORDER BY received_at NULLS LAST, imap_uid
+                """,
+                (max_attempts,),
+            ).fetchall()
+
+    def count_flight_emails(self, status: str) -> int:
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT count(*) AS n FROM flight_emails WHERE status = %s", (status,)
+            ).fetchone()
+            return row["n"]
 
     def email_exists(self, message_id: str) -> bool:
         """Check if email already exists by message_id."""

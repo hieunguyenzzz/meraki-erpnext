@@ -37,6 +37,7 @@ import LeavesPage from "@/pages/hr/LeavesPage";
 import WfhPage from "@/pages/hr/WfhPage";
 import StaffReviewsPage from "@/pages/hr/StaffReviewsPage";
 import StaffReviewDetailPage from "@/pages/hr/StaffReviewDetailPage";
+import FlightBookingsPage from "@/pages/finance/FlightBookingsPage";
 import JobApplyPage from "@/pages/public/JobApplyPage";
 import InvoicesPage from "@/pages/finance/InvoicesPage";
 import InvoiceDetailPage from "@/pages/finance/InvoiceDetailPage";
@@ -198,6 +199,7 @@ export default function App() {
               <Route path="/finance/payments" element={<PaymentsPage />} />
               <Route path="/finance/payments/:name" element={<PaymentDetailPage />} />
               <Route path="/finance/journals" element={<JournalsPage />} />
+              <Route path="/finance/flights" element={<FlightBookingsPage />} />
               <Route path="/finance/overview" element={<OverviewPage />} />
 
               {/* Notifications */}
