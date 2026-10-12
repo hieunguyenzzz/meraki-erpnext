@@ -29,3 +29,21 @@ export async function uploadFile(
   const json = await res.json();
   return { file_url: json.message.file_url, name: json.message.name };
 }
+
+/** Attach a receipt to a Purchase Invoice via the backend (planners lack ERPNext PI permissions). */
+export async function attachExpenseReceipt(file: File, piName: string): Promise<{ file_url: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`/inquiry-api/expense/${encodeURIComponent(piName)}/attach`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Receipt upload failed (${res.status})`);
+  }
+  return res.json();
+}
