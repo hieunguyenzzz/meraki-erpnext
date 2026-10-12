@@ -31,9 +31,14 @@ export async function uploadFile(
 }
 
 /** Attach a receipt to a Purchase Invoice via the backend (planners lack ERPNext PI permissions). */
-export async function attachExpenseReceipt(file: File, piName: string): Promise<{ file_url: string }> {
+export async function attachExpenseReceipt(
+  file: File,
+  piName: string,
+  { replace = false }: { replace?: boolean } = {}
+): Promise<{ file_url: string; warning?: string }> {
   const formData = new FormData();
   formData.append("file", file);
+  if (replace) formData.append("replace", "true");
 
   const res = await fetch(`/inquiry-api/expense/${encodeURIComponent(piName)}/attach`, {
     method: "POST",
@@ -44,6 +49,20 @@ export async function attachExpenseReceipt(file: File, piName: string): Promise<
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Receipt upload failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/** Delete all receipts attached to a Purchase Invoice via the backend. */
+export async function deleteExpenseReceipt(piName: string): Promise<{ deleted: number }> {
+  const res = await fetch(`/inquiry-api/expense/${encodeURIComponent(piName)}/receipt`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Receipt delete failed (${res.status})`);
   }
   return res.json();
 }

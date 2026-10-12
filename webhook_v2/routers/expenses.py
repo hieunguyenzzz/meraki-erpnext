@@ -209,28 +209,79 @@ async def scan_bill(file: UploadFile = File(...)):
     return result
 
 
+def _get_pi_or_404(client: ERPNextClient, pi_name: str, user: str, action: str) -> dict:
+    try:
+        return client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            log.warning(f"receipt_{action}_pi_not_found", pi=pi_name, user=user)
+            raise HTTPException(status_code=404, detail="Purchase Invoice not found")
+        raise
+
+
+def _check_receipt_delete_allowed(request: Request, pi: dict, pi_name: str, user: str) -> None:
+    """Non-FINANCE callers may only remove receipts from Pending wedding expenses.
+
+    Receipts on approved expenses are audit evidence.
+    """
+    if has_roles(request, FINANCE):
+        return
+    if not pi.get("project") or pi.get("docstatus") != 0:
+        log.warning("receipt_delete_denied", pi=pi_name, user=user, project=pi.get("project"), docstatus=pi.get("docstatus"))
+        raise HTTPException(status_code=403, detail="Only Finance can remove receipts from approved or non-wedding expenses")
+
+
+class ReceiptDeleteError(Exception):
+    """Raised when removing receipt Files fails part-way."""
+
+    def __init__(self, deleted: int, total: int | None, file: str | None, cause: Exception):
+        super().__init__(str(cause))
+        self.deleted, self.total, self.file = deleted, total, file
+
+
+def _delete_receipt_files(client: ERPNextClient, pi_name: str, keep: str | None = None) -> int:
+    """Delete File docs attached to the PI (except `keep`). Frappe removes the
+    physical file only when no other File doc shares the same file_url.
+    Raises ReceiptDeleteError (with the partial count) on failure."""
+    deleted, names, current = 0, None, None
+    try:
+        files = client._get("/api/resource/File", params={
+            "filters": json.dumps([
+                ["attached_to_doctype", "=", "Purchase Invoice"],
+                ["attached_to_name", "=", pi_name],
+            ]),
+            "fields": json.dumps(["name"]),
+            "limit_page_length": 0,
+        }).get("data", [])
+        names = [f["name"] for f in files if f["name"] != keep]
+        for current in names:
+            client._delete(f"/api/resource/File/{current}")
+            deleted += 1
+    except Exception as e:
+        raise ReceiptDeleteError(deleted, len(names) if names is not None else None, current, e) from e
+    return deleted
+
+
 @router.post("/expense/{pi_name}/attach", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
-async def attach_receipt(pi_name: str, request: Request, file: UploadFile = File(...)):
+async def attach_receipt(pi_name: str, request: Request, file: UploadFile = File(...), replace: bool = Form(False)):
     """Attach a receipt image to a Purchase Invoice (uses admin API keys).
 
     Planners may only attach to wedding (project-linked) expenses; expenses
     with no project (overheads) require FINANCE. Planners have no Purchase
     Invoice permission in ERPNext, so the upload goes through here.
+    With replace=true, existing receipts are removed after the new upload
+    succeeds (same permission rules as delete).
     """
     user = request.state.user
     client = ERPNextClient()
 
-    try:
-        pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
-    except requests.HTTPError as e:
-        if e.response is not None and e.response.status_code == 404:
-            log.warning("receipt_attach_pi_not_found", pi=pi_name, user=user)
-            raise HTTPException(status_code=404, detail="Purchase Invoice not found")
-        raise
+    pi = _get_pi_or_404(client, pi_name, user, "attach")
 
     if not pi.get("project") and not has_roles(request, FINANCE):
         log.warning("receipt_attach_denied", pi=pi_name, user=user, reason="non-wedding expense")
         raise HTTPException(status_code=403, detail="Only Finance can attach receipts to non-wedding expenses")
+    if replace:
+        _check_receipt_delete_allowed(request, pi, pi_name, user)
 
     file_data = await file.read()
     if not file_data:
@@ -244,12 +295,42 @@ async def attach_receipt(pi_name: str, request: Request, file: UploadFile = File
             docname=pi_name,
             is_private=False,
         )
-        file_url = result.get("message", {}).get("file_url")
-        log.info("receipt_attached", pi=pi_name, user=user, file_url=file_url)
-        return {"file_url": file_url}
     except Exception as e:
         log.error("receipt_attach_failed", pi=pi_name, user=user, error=str(e))
         raise HTTPException(status_code=400, detail=f"Failed to attach receipt: {e}")
+
+    message = result.get("message", {})
+    file_url = message.get("file_url")
+    log.info("receipt_attached", pi=pi_name, user=user, file_url=file_url)
+    if not replace:
+        return {"file_url": file_url}
+
+    try:
+        removed = _delete_receipt_files(client, pi_name, keep=message.get("name"))
+    except ReceiptDeleteError as e:
+        log.error("receipt_replace_cleanup_failed", pi=pi_name, user=user, file=e.file, deleted_so_far=e.deleted, error=str(e))
+        return {"file_url": file_url, "warning": "New receipt attached but old receipt could not be removed"}
+    log.info("receipt_replaced", pi=pi_name, user=user, removed=removed)
+    return {"file_url": file_url}
+
+
+@router.delete("/expense/{pi_name}/receipt", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
+def delete_receipt(pi_name: str, request: Request):
+    """Delete all receipt files attached to a Purchase Invoice."""
+    user = request.state.user
+    client = ERPNextClient()
+
+    pi = _get_pi_or_404(client, pi_name, user, "delete")
+    _check_receipt_delete_allowed(request, pi, pi_name, user)
+
+    try:
+        count = _delete_receipt_files(client, pi_name)
+    except ReceiptDeleteError as e:
+        log.error("receipt_delete_failed", pi=pi_name, user=user, file=e.file, deleted_so_far=e.deleted, error=str(e))
+        removed_of = f"{e.deleted} of {e.total}" if e.total is not None else "0"
+        raise HTTPException(status_code=502, detail=f"Removed {removed_of} receipts; the rest failed, please retry")
+    log.info("receipt_deleted", pi=pi_name, user=user, count=count)
+    return {"deleted": count}
 
 
 @router.get("/expense/categories")
