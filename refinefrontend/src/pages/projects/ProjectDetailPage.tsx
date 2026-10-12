@@ -57,7 +57,7 @@ import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { ProjectEventsTab } from "@/components/projects/ProjectEventsTab";
 import { cn } from "@/lib/utils";
-import { attachExpenseReceipt } from "@/lib/fileUpload";
+import { attachExpenseReceipt, deleteExpenseReceipt } from "@/lib/fileUpload";
 import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES } from "@/lib/roles";
 interface ExpenseCategory { name: string; account_name: string; }
 import { useMyEmployee } from "@/hooks/useMyEmployee";
@@ -2205,12 +2205,34 @@ export default function ProjectDetailPage() {
                                           <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
                                             const file = e.target.files?.[0];
                                             if (!file) return;
+                                            setExpenseError(null);
                                             try {
-                                              await attachExpenseReceipt(file, exp.name);
+                                              await attachExpenseReceipt(file, exp.name, { replace: true });
                                               fetchExpenses(name!);
-                                            } catch {}
+                                            } catch (error) {
+                                              setExpenseError(error instanceof Error ? error.message : "Failed to replace receipt");
+                                            }
                                           }} />
                                         </label>
+                                      )}
+                                      {exp.status === "Pending" && (
+                                        <button
+                                          type="button"
+                                          className="p-1 rounded hover:bg-white/20 transition-colors"
+                                          title="Delete receipt"
+                                          onClick={async () => {
+                                            if (!confirm("Delete this receipt?")) return;
+                                            setExpenseError(null);
+                                            try {
+                                              await deleteExpenseReceipt(exp.name);
+                                              fetchExpenses(name!);
+                                            } catch (error) {
+                                              setExpenseError(error instanceof Error ? error.message : "Failed to delete receipt");
+                                            }
+                                          }}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5 text-white" />
+                                        </button>
                                       )}
                                     </div>
                                   </div>
