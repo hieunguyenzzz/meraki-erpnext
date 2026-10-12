@@ -58,7 +58,7 @@ import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { ProjectEventsTab } from "@/components/projects/ProjectEventsTab";
 import { cn } from "@/lib/utils";
 import { attachExpenseReceipt, deleteExpenseReceipt } from "@/lib/fileUpload";
-import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES } from "@/lib/roles";
+import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES, WEDDING_EXPENSE_ROLES } from "@/lib/roles";
 interface ExpenseCategory { name: string; account_name: string; }
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
@@ -510,7 +510,7 @@ export default function ProjectDetailPage() {
     ].includes(myEmployeeId);
   }, [myEmployeeId, project]);
 
-  const showExpensesTab = isFinance || isOnTeam;
+  const showExpensesTab = isFinance || isOnTeam || hasModuleAccess(roles ?? [], WEDDING_EXPENSE_ROLES);
 
   const fetchExpenses = useCallback(async (projectName: string) => {
     try {
