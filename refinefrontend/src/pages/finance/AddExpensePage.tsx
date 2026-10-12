@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useList, usePermissions } from "@refinedev/core";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
-import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
+import { hasModuleAccess, FINANCE_ROLES, WEDDING_EXPENSE_ROLES } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,7 @@ export default function AddExpensePage() {
   const { employeeId } = useMyEmployee();
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
+  const seesAllWeddings = isFinance || hasModuleAccess(roles ?? [], WEDDING_EXPENSE_ROLES);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
@@ -62,14 +63,14 @@ export default function AddExpensePage() {
   });
   const allProjects = (projectsResult?.data ?? []) as Record<string, string>[];
 
-  // Finance sees all projects; staff sees only their assigned weddings
+  // Finance and Wedding Expense Managers see all projects; staff sees only their assigned weddings
   const projects = useMemo(() => {
-    if (isFinance) return allProjects;
+    if (seesAllWeddings) return allProjects;
     if (!employeeId) return [];
     return allProjects.filter((p) =>
       ASSIGNMENT_FIELDS.some((f) => p[f] === employeeId)
     );
-  }, [allProjects, employeeId, isFinance]);
+  }, [allProjects, employeeId, seesAllWeddings]);
 
   // Fetch expense categories
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);

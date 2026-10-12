@@ -52,6 +52,7 @@ ASSIGNABLE_ROLES_PY = [
     {"role": "Accounts User",    "label": "Finance"},
     {"role": "Projects User",    "label": "Planner"},
     {"role": "Inbox User",       "label": "Inbox"},
+    {"role": "Wedding Expense Manager", "label": "Expense Mgr"},
 ]
 
 # Must match ALLOWED_FIELDS in migration/phases/v015_employee_set_value_script.py

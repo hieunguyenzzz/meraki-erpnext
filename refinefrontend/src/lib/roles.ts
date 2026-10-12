@@ -24,6 +24,7 @@ export const PLANNER_ROLES = [...CRM_ROLES, "Projects User"];
 export const HR_ROLES = ["System Manager", "HR Manager", "HR User"];
 export const FINANCE_ROLES = ["System Manager", "Accounts Manager", "Accounts User"];
 export const WEDDING_MANAGER_ROLES = ["System Manager", "Sales Manager"];
+export const WEDDING_EXPENSE_ROLES = ["Wedding Expense Manager"];
 export const REPORT_ROLES = ["System Manager", "HR Manager", "HR User"];
 export const DIRECTOR_ROLES = ["System Manager"];
 
@@ -127,6 +128,7 @@ export const ASSIGNABLE_ROLES = [
   { role: "Accounts User",    label: "Finance",       variant: "secondary" },
   { role: "Projects User",    label: "Planner",       variant: "success" },
   { role: "Inbox User",       label: "Inbox",         variant: "default" },
+  { role: "Wedding Expense Manager", label: "Expense Mgr", variant: "secondary" },
 ] as const;
 
 export type AssignableRole = typeof ASSIGNABLE_ROLES[number]["role"];
