@@ -270,7 +270,7 @@ async def link_user_to_employee(employee_id: str, request: LinkUserRequest, _use
     # 5. Link user to employee
     try:
         client._post("/api/method/meraki_set_employee_fields", {
-            "employee_name": employee_id,
+            "employee_id": employee_id,
             "user_id": email,
         })
     except Exception as e:

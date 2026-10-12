@@ -59,6 +59,7 @@ ORDERED_PHASES = [
     "v093_restrict_salary_slip_employee_read",
     "v094_employee_field_permissions",
     "v095_guard_api_server_scripts",
+    "v097_fix_employee_name_overwrite",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -141,6 +142,7 @@ def run_pending(client) -> int:
             v093_restrict_salary_slip_employee_read,
             v094_employee_field_permissions,
             v095_guard_api_server_scripts,
+            v097_fix_employee_name_overwrite,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -195,6 +197,7 @@ def run_pending(client) -> int:
             v093_restrict_salary_slip_employee_read,
             v094_employee_field_permissions,
             v095_guard_api_server_scripts,
+            v097_fix_employee_name_overwrite,
         )
 
     phase_fns = {
@@ -253,6 +256,7 @@ def run_pending(client) -> int:
         "v093_restrict_salary_slip_employee_read": v093_restrict_salary_slip_employee_read.run,
         "v094_employee_field_permissions": v094_employee_field_permissions.run,
         "v095_guard_api_server_scripts": v095_guard_api_server_scripts.run,
+        "v097_fix_employee_name_overwrite": v097_fix_employee_name_overwrite.run,
     }
 
     state_file = get_state_file()

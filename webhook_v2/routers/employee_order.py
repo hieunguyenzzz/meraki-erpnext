@@ -6,6 +6,9 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.auth import require_roles, HR
+from webhook_v2.core.logging import get_logger
+
+log = get_logger(__name__)
 
 router = APIRouter(dependencies=[Depends(require_roles(*HR))])
 
@@ -26,9 +29,9 @@ async def set_employee_order(request: BulkOrderRequest):
     for item in request.items:
         try:
             client._post("/api/method/meraki_set_employee_fields", {
-                "employee_name": item.employee,
+                "employee_id": item.employee,
                 "custom_display_order": str(item.order),
             })
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("employee_order_update_failed", employee=item.employee, error=str(e))
     return {"status": "ok", "updated": len(request.items)}
