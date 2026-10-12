@@ -35,7 +35,7 @@ export async function attachExpenseReceipt(
   file: File,
   piName: string,
   { replace = false }: { replace?: boolean } = {}
-): Promise<{ file_url: string }> {
+): Promise<{ file_url: string; warning?: string }> {
   const formData = new FormData();
   formData.append("file", file);
   if (replace) formData.append("replace", "true");
