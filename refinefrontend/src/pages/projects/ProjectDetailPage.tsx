@@ -187,6 +187,7 @@ export default function ProjectDetailPage() {
   const [addingExpense, setAddingExpense] = useState(false);
   const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "" });
   const [isSavingExpense, setIsSavingExpense] = useState(false);
+  const [receiptBusy, setReceiptBusy] = useState<Record<string, boolean>>({});
   const [expenseError, setExpenseError] = useState<string | null>(null);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [expCatOpen, setExpCatOpen] = useState(false);
@@ -611,6 +612,21 @@ export default function ProjectDetailPage() {
       setExpenseError(error instanceof Error ? error.message : "Failed to create expense");
     } finally {
       setIsSavingExpense(false);
+    }
+  }
+
+  /** Run a receipt upload/delete with a per-row spinner; waits for the refetch so the new thumbnail is there when it clears. */
+  async function runReceiptAction(piName: string, fallbackError: string, action: () => Promise<string | undefined | void>) {
+    setExpenseError(null);
+    setReceiptBusy(b => ({ ...b, [piName]: true }));
+    try {
+      const warning = await action();
+      if (warning) setExpenseError(warning);
+      await fetchExpenses(name!);
+    } catch (error) {
+      setExpenseError(error instanceof Error ? error.message : fallbackError);
+    } finally {
+      setReceiptBusy(b => ({ ...b, [piName]: false }));
     }
   }
 
@@ -2164,7 +2180,7 @@ export default function ProjectDetailPage() {
                                   <Button variant="ghost" size="icon" className="h-7 w-7"
                                     onClick={handleAddExpense}
                                     disabled={!newExpense.description || !newExpense.amount || !newExpense.category || isSavingExpense}>
-                                    <Check className="h-4 w-4" />
+                                    {isSavingExpense ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                                   </Button>
                                   <Button variant="ghost" size="icon" className="h-7 w-7"
                                     onClick={() => {
@@ -2190,7 +2206,12 @@ export default function ProjectDetailPage() {
                                       alt=""
                                       className="w-12 h-12 rounded object-cover"
                                     />
-                                    <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {receiptBusy[exp.name] && (
+                                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded">
+                                        <Loader2 className="h-4 w-4 text-white animate-spin" />
+                                      </div>
+                                    )}
+                                    <div className={`absolute inset-0 flex items-center justify-center gap-1 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity ${receiptBusy[exp.name] ? "hidden" : ""}`}>
                                       <button
                                         type="button"
                                         className="p-1 rounded hover:bg-white/20 transition-colors"
@@ -2206,16 +2227,9 @@ export default function ProjectDetailPage() {
                                             const input = e.target;
                                             const file = input.files?.[0];
                                             if (!file) return;
-                                            setExpenseError(null);
-                                            try {
-                                              const result = await attachExpenseReceipt(file, exp.name, { replace: true });
-                                              if (result.warning) setExpenseError(result.warning);
-                                              fetchExpenses(name!);
-                                            } catch (error) {
-                                              setExpenseError(error instanceof Error ? error.message : "Failed to replace receipt");
-                                            } finally {
-                                              input.value = "";
-                                            }
+                                            await runReceiptAction(exp.name, "Failed to replace receipt", async () =>
+                                              (await attachExpenseReceipt(file, exp.name, { replace: true })).warning);
+                                            input.value = "";
                                           }} />
                                         </label>
                                       )}
@@ -2226,13 +2240,7 @@ export default function ProjectDetailPage() {
                                           title="Delete receipt"
                                           onClick={async () => {
                                             if (!confirm("Delete this receipt?")) return;
-                                            setExpenseError(null);
-                                            try {
-                                              await deleteExpenseReceipt(exp.name);
-                                              fetchExpenses(name!);
-                                            } catch (error) {
-                                              setExpenseError(error instanceof Error ? error.message : "Failed to delete receipt");
-                                            }
+                                            await runReceiptAction(exp.name, "Failed to delete receipt", () => deleteExpenseReceipt(exp.name).then(() => undefined));
                                           }}
                                         >
                                           <Trash2 className="h-3.5 w-3.5 text-white" />
@@ -2240,19 +2248,17 @@ export default function ProjectDetailPage() {
                                       )}
                                     </div>
                                   </div>
+                                ) : receiptBusy[exp.name] ? (
+                                  <div className="flex items-center justify-center w-12 h-12 rounded bg-muted">
+                                    <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+                                  </div>
                                 ) : exp.status === "Pending" ? (
                                   <label className="flex items-center justify-center w-12 h-12 rounded bg-muted/50 hover:bg-muted cursor-pointer transition-colors">
                                     <Plus className="h-4 w-4 text-muted-foreground/40" />
                                     <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
-                                      setExpenseError(null);
-                                      try {
-                                        await attachExpenseReceipt(file, exp.name);
-                                        fetchExpenses(name!);
-                                      } catch (error) {
-                                        setExpenseError(error instanceof Error ? error.message : "Failed to attach receipt");
-                                      }
+                                      await runReceiptAction(exp.name, "Failed to attach receipt", () => attachExpenseReceipt(file, exp.name).then(() => undefined));
                                     }} />
                                   </label>
                                 ) : null}
