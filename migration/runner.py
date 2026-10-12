@@ -62,6 +62,7 @@ ORDERED_PHASES = [
     "v097_fix_employee_name_overwrite",
     "v098_notification_type_filter",
     "v099_wedding_expense_manager_role",
+    "v100_expense_category_cleanup",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -147,6 +148,7 @@ def run_pending(client) -> int:
             v097_fix_employee_name_overwrite,
             v098_notification_type_filter,
             v099_wedding_expense_manager_role,
+            v100_expense_category_cleanup,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -204,6 +206,7 @@ def run_pending(client) -> int:
             v097_fix_employee_name_overwrite,
             v098_notification_type_filter,
             v099_wedding_expense_manager_role,
+            v100_expense_category_cleanup,
         )
 
     phase_fns = {
@@ -265,6 +268,7 @@ def run_pending(client) -> int:
         "v097_fix_employee_name_overwrite": v097_fix_employee_name_overwrite.run,
         "v098_notification_type_filter": v098_notification_type_filter.run,
         "v099_wedding_expense_manager_role": v099_wedding_expense_manager_role.run,
+        "v100_expense_category_cleanup": v100_expense_category_cleanup.run,
     }
 
     state_file = get_state_file()

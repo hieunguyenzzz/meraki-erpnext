@@ -41,6 +41,12 @@ Uses the Standard Template chart of accounts with the following key accounts:
   - Software Expenses - MWP
   - Miscellaneous Expenses - MWP
 
+**Expense categories (MWP-79)**: the categories staff pick from are leaf accounts under two group accounts in `Indirect Expenses - MWP`, all with `is_custom_wedding_expense=1`.
+- `Wedding Categories - MWP`: Ăn uống, Di chuyển, Vé máy bay, Lưu trú, Dụng cụ/Thiết bị, Khác, Site check, Lương CTV (Tax Free)
+- `Office Categories - MWP`: BHBV, Company Trip, internet, Nước uống VP, Phí kế toán, Sinh nhật, Thuế, Vận chuyển, Vệ Sinh VP
+- `GET /expense/categories?scope=wedding|office` filters by group (no scope = all). `POST /expense/categories` takes `scope` (default `wedding`).
+- "Travel Expenses", "Khách Sạn" and "Viettel Post" were merged into Di chuyển, Lưu trú and Vận chuyển by migration v100.
+
 Cost categories from the source database map to these expense accounts: Office, Marketing, Travel, and Software map to their respective accounts; all others default to Miscellaneous Expenses.
 
 ## Items

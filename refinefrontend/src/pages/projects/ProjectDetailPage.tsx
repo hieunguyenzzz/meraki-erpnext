@@ -545,7 +545,7 @@ export default function ProjectDetailPage() {
 
   // Fetch expense categories
   useEffect(() => {
-    fetch("/inquiry-api/expense/categories")
+    fetch("/inquiry-api/expense/categories?scope=wedding")
       .then(r => r.json())
       .then(data => setExpenseCategories(data))
       .catch(() => {});
@@ -558,15 +558,18 @@ export default function ProjectDetailPage() {
       const resp = await fetch("/inquiry-api/expense/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: expCatSearch.trim() }),
+        body: JSON.stringify({ name: expCatSearch.trim(), scope: "wedding" }),
       });
-      if (!resp.ok) throw new Error("Failed to create category");
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to create category");
+      }
       const newCat = await resp.json();
       setExpenseCategories(prev => [...prev, newCat]);
       setNewExpense(prev => ({ ...prev, category: newCat.name }));
       setExpCatOpen(false);
-    } catch {
-      setExpenseError("Failed to create category");
+    } catch (error) {
+      setExpenseError(error instanceof Error ? error.message : "Failed to create category");
     } finally {
       setCreatingExpCat(false);
     }

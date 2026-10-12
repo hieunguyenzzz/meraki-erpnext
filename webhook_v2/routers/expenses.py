@@ -14,6 +14,7 @@ New (wedding expenses with approval):
 """
 
 import json
+from typing import Literal
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
@@ -62,7 +63,7 @@ class WeddingExpenseRequest(BaseModel):
     date: str              # YYYY-MM-DD
     description: str
     amount: float
-    category: str          # expense account name (e.g. "Travel Expenses - MWP") or legacy label
+    category: str          # expense account name (e.g. "Di chuyển - MWP") or legacy label
     supplier: str = "Company Expense"
     staff: str | None = None  # Employee ID (e.g. "HR-EMP-00001") — who incurred the expense
     note: str | None = Field(None, max_length=1000)  # free-text note -> Purchase Invoice.remarks
@@ -75,9 +76,9 @@ class WeddingExpenseRequest(BaseModel):
 
 # Map wedding expense categories → GL expense accounts
 CATEGORY_TO_ACCOUNT = {
-    "Taxi": "Travel Expenses - MWP",
-    "Flight Ticket": "Travel Expenses - MWP",
-    "Hotel": "Travel Expenses - MWP",
+    "Taxi": "Di chuyển - MWP",
+    "Flight Ticket": "Vé máy bay - MWP",
+    "Hotel": "Lưu trú - MWP",
     "F&B": "Entertainment Expenses - MWP",
     "Decoration": "Miscellaneous Expenses - MWP",
     "Printing": "Office Expenses - MWP",
@@ -87,6 +88,13 @@ CATEGORY_TO_ACCOUNT = {
     "Other": "Miscellaneous Expenses - MWP",
 }
 DEFAULT_EXPENSE_ACCOUNT = "Miscellaneous Expenses - MWP"
+
+# Category scopes (MWP-79): categories live under one of two group accounts so the
+# wedding picker can hide office-only ones. Created by migration v100.
+SCOPE_GROUP_ACCOUNTS = {
+    "wedding": "Wedding Categories - MWP",
+    "office": "Office Categories - MWP",
+}
 
 # Accounts to hide from the category picker (internal/system accounts)
 HIDDEN_EXPENSE_ACCOUNTS = {
@@ -204,6 +212,7 @@ def _notify_finance_managers(client: ERPNextClient, pi_name: str, amount: float,
 
 class CreateCategoryRequest(BaseModel):
     name: str  # e.g. "Office Rent"
+    scope: Literal["wedding", "office"] = "wedding"  # which picker the category belongs to
 
 
 @router.post("/expense/scan-bill")
@@ -351,16 +360,31 @@ def delete_receipt(pi_name: str, request: Request):
     return {"deleted": count}
 
 
+def _group_exists(client: ERPNextClient, group: str) -> bool:
+    found = client._get("/api/resource/Account", params={
+        "filters": json.dumps([["name", "=", group], ["is_group", "=", 1]]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 1,
+    }).get("data", [])
+    return bool(found)
+
+
 @router.get("/expense/categories")
-def list_expense_categories():
-    """List expense accounts tagged as wedding expense categories."""
+def list_expense_categories(scope: Literal["wedding", "office"] | None = None):
+    """List expense categories. scope=wedding|office filters by group account; no scope = all."""
     client = ERPNextClient()
+    filters = [
+        ["root_type", "=", "Expense"],
+        ["is_group", "=", 0],
+        ["is_custom_wedding_expense", "=", 1],
+    ]
+    if scope and _group_exists(client, SCOPE_GROUP_ACCOUNTS[scope]):
+        filters.append(["parent_account", "=", SCOPE_GROUP_ACCOUNTS[scope]])
+    elif scope:
+        # Migration v100 has not created the groups yet (deploy window): never return an empty picker
+        log.warning("expense_category_group_missing", scope=scope, group=SCOPE_GROUP_ACCOUNTS[scope], action="returning all categories")
     accounts = client._get("/api/resource/Account", params={
-        "filters": json.dumps([
-            ["root_type", "=", "Expense"],
-            ["is_group", "=", 0],
-            ["is_custom_wedding_expense", "=", 1],
-        ]),
+        "filters": json.dumps(filters),
         "fields": json.dumps(["name", "account_name"]),
         "limit_page_length": 0,
     }).get("data", [])
@@ -373,7 +397,7 @@ def list_expense_categories():
 
 @router.post("/expense/categories", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
 def create_expense_category(req: CreateCategoryRequest):
-    """Create a new expense account under Indirect Expenses."""
+    """Create a new expense category under the group account for its scope."""
     client = ERPNextClient()
     account_name = req.name.strip()
     if not account_name:
@@ -383,16 +407,24 @@ def create_expense_category(req: CreateCategoryRequest):
     full_name = f"{account_name} - MWP"
     existing = client._get("/api/resource/Account", params={
         "filters": json.dumps([["name", "=", full_name]]),
-        "fields": json.dumps(["name", "account_name"]),
+        "fields": json.dumps(["name", "account_name", "parent_account"]),
         "limit_page_length": 1,
     }).get("data", [])
     if existing:
+        other_scope = "office" if req.scope == "wedding" else "wedding"
+        if existing[0].get("parent_account") == SCOPE_GROUP_ACCOUNTS[other_scope]:
+            raise HTTPException(status_code=409, detail=f"'{account_name}' is already {'an' if other_scope == 'office' else 'a'} {other_scope} category")
         return {"name": existing[0]["name"], "account_name": existing[0]["account_name"]}
 
-    # Create under Indirect Expenses, tagged as wedding expense
+    parent = SCOPE_GROUP_ACCOUNTS[req.scope]
+    if not _group_exists(client, parent):
+        # Migration v100 has not created the groups yet (deploy window): old behaviour
+        log.warning("expense_category_group_missing", scope=req.scope, group=parent, action="creating under Indirect Expenses")
+        parent = "Indirect Expenses - MWP"
+
     result = client._post("/api/resource/Account", {
         "account_name": account_name,
-        "parent_account": "Indirect Expenses - MWP",
+        "parent_account": parent,
         "root_type": "Expense",
         "report_type": "Profit and Loss",
         "account_type": "Expense Account",
@@ -805,7 +837,7 @@ def _create_wedding_expense_core(req: WeddingExpenseRequest) -> dict:
 
     amount = round(req.amount)
 
-    # Accept either a full account name ("Travel Expenses - MWP") or a legacy label ("Taxi")
+    # Accept either a full account name ("Di chuyển - MWP") or a legacy label ("Taxi")
     if req.category.endswith(" - MWP"):
         expense_account = req.category
     else:
