@@ -1,7 +1,5 @@
 """PWA Notification management endpoints."""
 
-import json
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
@@ -49,41 +47,3 @@ def mark_all_notifications_read(user: str):
         raise HTTPException(status_code=400, detail=str(e))
     log.info("notifications_read_all", user=user)
     return {"success": True}
-
-
-BULK_CHUNK = 100
-
-
-@router.post("/notifications/read-all")
-def mark_own_notifications_read(request: Request, doc_type: str | None = None):
-    """Mark the caller's own unread notifications as read, optionally only one reference type."""
-    user = get_current_user(request)
-    filters = {"to_user": user, "read": 0}
-    if doc_type:
-        filters["reference_document_type"] = doc_type
-
-    client = ERPNextClient()
-    try:
-        rows = client._get("/api/resource/PWA Notification", {
-            "filters": json.dumps(filters),
-            "fields": json.dumps(["name"]),
-            "limit_page_length": 0,
-        }).get("data", [])
-        names = [r["name"] for r in rows]
-        failed = 0
-        for i in range(0, len(names), BULK_CHUNK):
-            docs = [
-                {"doctype": "PWA Notification", "docname": n, "read": 1}
-                for n in names[i:i + BULK_CHUNK]
-            ]
-            result = client._post("/api/method/frappe.client.bulk_update", {"docs": json.dumps(docs)})
-            failed += len((result.get("message") or {}).get("failed_docs") or [])
-    except Exception as e:
-        log.error("notifications_read_all_failed", user=user, doc_type=doc_type, error=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
-
-    marked = len(names) - failed
-    log.info("notifications_read_all", user=user, doc_type=doc_type, count=marked, failed=failed)
-    if failed:
-        raise HTTPException(status_code=500, detail=f"{failed} of {len(names)} notifications could not be marked read")
-    return {"success": True, "marked": marked}

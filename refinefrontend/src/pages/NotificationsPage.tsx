@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useCustom, useCustomMutation } from "@refinedev/core";
-import { Bell, Trash2, CheckCheck, Inbox, Check, X } from "lucide-react";
+import { Bell, Trash2, CheckCheck, Inbox, Check, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/format";
@@ -122,6 +122,7 @@ export default function NotificationsPage() {
   const [allNotifications, setAllNotifications] = useState<PwaNotification[]>([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [docType, setDocType] = useState(loadSavedFilter); // "" = All
   const [typeCounts, setTypeCounts] = useState<TypeCount[] | null>(null);
 
@@ -156,6 +157,7 @@ export default function NotificationsPage() {
   function selectType(type: string) {
     if (type === docType) return;
     saveFilter(type);
+    setError(null);
     setDocType(type);
     setPage(1);
     setAllNotifications([]);
@@ -210,18 +212,22 @@ export default function NotificationsPage() {
 
   async function handleMarkAllRead() {
     setMarkingAll(true);
+    setError(null);
     try {
       await customMutation({
-        url: `/inquiry-api/notifications/read-all${docType ? `?doc_type=${encodeURIComponent(docType)}` : ""}`,
+        url: "/api/method/handle_notification_action",
         method: "post",
-        values: {},
+        values: { action: "read_all", ...(docType && { doc_type: docType }) },
       });
-      setAllNotifications((prev) => prev.map((n) => ({ ...n, read: 1 })));
-      query.refetch();
-    } catch {
-      // user can retry
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not mark notifications as read");
     } finally {
+      // Always reload from the server so the list and counts are never stale, even after a failure
       setMarkingAll(false);
+      setPage(1);
+      setAllNotifications([]);
+      lastMergedKey.current = "";
+      query.refetch();
     }
   }
 
@@ -294,6 +300,13 @@ export default function NotificationsPage() {
           </Button>
         )}
       </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
 
       {typeCounts && typeCounts.length > 0 && (
         <NotificationTypeFilter

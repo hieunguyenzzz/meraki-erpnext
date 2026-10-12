@@ -1,17 +1,23 @@
 """Notifications page type filter (MWP-76).
 
-Patches the live `get_all_notifications` Server Script (kept in sync by v044/v060):
+Patches two live Server Scripts in place (anchored replacements; each has its own
+marker, so a partially applied earlier run cannot double-patch).
+
+1. `get_all_notifications` (kept in sync by v044/v060):
 - optional `doc_type` param filters `reference_document_type`
 - `total` / `unread` follow the active filter
 - new `type_counts` = [{type, total, unread}] across ALL the user's notifications,
   unfiltered, so the page can always show every type chip
 
 The live script is patched in place (anchored string replacements) so the rest of
-it stays untouched. A marker comment makes reruns a no-op. No `import` here or in
-the script: the Server Script sandbox forbids it.
+it stays untouched.
+
+2. `handle_notification_action` (last rewritten by v085): its `read_all` branch accepts an
+optional `doc_type` and then only marks that reference type read, for the session user.
+
+No `import` in either script: the Server Script sandbox forbids it.
 """
 
-SCRIPT_NAME = "get_all_notifications"
 MARKER = "# MWP-76 type filter"
 
 FILTERS_OLD = (
@@ -62,27 +68,54 @@ RESPONSE_OLD = '    "unread": unread,\n'
 RESPONSE_NEW = '    "unread": unread,\n    "type_counts": type_counts,\n'
 
 
-def patch(script: str) -> str:
-    for old in (FILTERS_OLD, COUNTS_OLD, RESPONSE_OLD):
+READ_ALL_OLD = (
+    '    frappe.db.sql(\n'
+    '        "UPDATE `tabPWA Notification` SET `read`=1 WHERE to_user=%s AND `read`=0",\n'
+    '        frappe.session.user\n'
+    '    )\n'
+)
+# The sandbox rejects write SQL ("Query must be of SELECT or read-only WITH type"), so the
+# original frappe.db.sql UPDATE never worked from this script. set_value with a filter dict
+# updates every matching row in one query and is allowed.
+READ_ALL_NEW = (
+    f'    {MARKER}\n'
+    '    read_filters = {"to_user": frappe.session.user, "read": 0}\n'
+    '    doc_type = frappe.form_dict.get("doc_type") or ""\n'
+    '    if doc_type:\n'
+    '        read_filters["reference_document_type"] = doc_type\n'
+    '    frappe.db.set_value("PWA Notification", read_filters, "read", 1)\n'
+)
+
+# script name -> [(anchor, replacement), ...]
+PATCHES = {
+    "get_all_notifications": [
+        (FILTERS_OLD, FILTERS_NEW),
+        (COUNTS_OLD, COUNTS_NEW),
+        (RESPONSE_OLD, RESPONSE_NEW),
+    ],
+    "handle_notification_action": [(READ_ALL_OLD, READ_ALL_NEW)],
+}
+
+
+def patch(name: str, script: str) -> str:
+    for old, new in PATCHES[name]:
         if script.count(old) != 1:
-            raise RuntimeError(f"{SCRIPT_NAME}: expected anchor not found exactly once:\n{old}")
-    return (
-        script.replace(FILTERS_OLD, FILTERS_NEW)
-        .replace(COUNTS_OLD, COUNTS_NEW)
-        .replace(RESPONSE_OLD, RESPONSE_NEW)
-    )
+            raise RuntimeError(f"{name}: expected anchor not found exactly once:\n{old}")
+        script = script.replace(old, new)
+    return script
 
 
 def run(client):
-    existing = client.get("Server Script", SCRIPT_NAME)
-    if not existing:
-        print(f"  Server Script '{SCRIPT_NAME}' not found, skipping")
-        return
+    for name in PATCHES:
+        existing = client.get("Server Script", name)
+        if not existing:
+            print(f"  Server Script '{name}' not found, skipping")
+            continue
 
-    current = existing.get("script") or ""
-    if MARKER in current:
-        print(f"  {SCRIPT_NAME} already has the type filter, skipping")
-        return
+        current = existing.get("script") or ""
+        if MARKER in current:
+            print(f"  {name} already has the type filter, skipping")
+            continue
 
-    client.update("Server Script", SCRIPT_NAME, {"script": patch(current)})
-    print(f"  Updated Server Script: {SCRIPT_NAME}")
+        client.update("Server Script", name, {"script": patch(name, current)})
+        print(f"  Updated Server Script: {name}")
