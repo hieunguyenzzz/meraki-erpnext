@@ -10,8 +10,8 @@ Applications copied the bad value into their notification emails.
 2. Employee: rebuild employee_name (as ERPNext's set_employee_name does) where
    it equals the ID.
 3. Backfill employee_name on documents that copied the bad value. Many are
-   submitted, so this is done with SQL in a temporary Administrator-guarded
-   Server Script that is deleted at the end.
+   submitted, so this is done with frappe.db.set_value row by row in a
+   temporary Administrator-guarded Server Script that is deleted at the end.
 """
 
 import time
@@ -26,8 +26,9 @@ TMP_SCRIPT_NAME = "meraki-tmp-fix-employee-name"
 TMP_API_METHOD = "meraki_tmp_fix_employee_name"
 
 BACKFILL_DOCTYPES = [
-    "Leave Application", "Leave Allocation", "Attendance",
-    "Attendance Request", "Salary Slip",
+    "Leave Application", "Leave Allocation", "Leave Ledger Entry", "Attendance",
+    "Attendance Request", "Salary Slip", "Salary Structure Assignment",
+    "Additional Salary", "Payroll Employee Detail", "Meraki Review",
 ]
 
 TMP_SCRIPT = '''if frappe.session.user != "Administrator":
@@ -49,6 +50,8 @@ for e in frappe.get_all("Employee", fields=["name", "employee_name", "first_name
 
 for dt in DOCTYPES:
     counts[dt] = 0
+    if not frappe.db.exists("DocType", dt):
+        continue
     for row in frappe.get_all(dt, fields=["name", "employee", "employee_name"]):
         if row.employee_name == row.employee and row.employee in real_names:
             frappe.db.set_value(dt, row.name, "employee_name", real_names[row.employee], update_modified=False)
