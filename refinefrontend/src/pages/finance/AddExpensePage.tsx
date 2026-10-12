@@ -6,6 +6,7 @@ import { hasModuleAccess, FINANCE_ROLES } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -41,6 +42,7 @@ export default function AddExpensePage() {
     category: "",
     amount: "",
     description: "",
+    note: "",
   });
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -143,6 +145,7 @@ export default function AddExpensePage() {
     formData.append("amount", String(amount));
     formData.append("category", form.category);
     formData.append("staff", employeeId || "");
+    formData.append("note", form.note.trim());
     if (photo) {
       formData.append("receipt", photo);
     }
@@ -343,6 +346,19 @@ export default function AddExpensePage() {
             value={form.description}
             onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
             placeholder="What was this expense for?"
+          />
+        </div>
+
+        {/* Note */}
+        <div>
+          <Label htmlFor="expense_note">Note</Label>
+          <Textarea
+            id="expense_note"
+            rows={2}
+            maxLength={1000}
+            value={form.note}
+            onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
+            placeholder="Optional"
           />
         </div>
 

@@ -68,7 +68,7 @@ const initialInvoiceForm = {
 function getColumns(
   onEdit: (expense: Expense) => void,
   projectMap: Record<string, string>,
-  rowInfo: Record<string, { description: string; staff: string }>,
+  rowInfo: Record<string, { description: string; staff: string; note: string }>,
 ): ColumnDef<Expense, unknown>[] {
   return [
     {
@@ -105,7 +105,13 @@ function getColumns(
       cell: ({ row }) => {
         const description = rowInfo[row.original.name]?.description;
         if (!description) return <span className="text-muted-foreground">—</span>;
-        return <div className="truncate max-w-[280px]" title={description}>{description}</div>;
+        const note = rowInfo[row.original.name]?.note;
+        return (
+          <div className="max-w-[280px]">
+            <div className="truncate" title={description}>{description}</div>
+            {note && <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2" title={note}>{note}</div>}
+          </div>
+        );
       },
       enableSorting: false,
     },
@@ -202,7 +208,7 @@ export default function ExpensesPage() {
   const [quickForm, setQuickForm] = useState(initialQuickForm);
 
   // Per-PI extra info (description + staff) resolved by the backend
-  const [rowInfo, setRowInfo] = useState<Record<string, { description: string; staff: string }>>({});
+  const [rowInfo, setRowInfo] = useState<Record<string, { description: string; staff: string; note: string }>>({});
 
   // Category combobox state
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
