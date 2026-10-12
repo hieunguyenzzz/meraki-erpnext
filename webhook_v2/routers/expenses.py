@@ -77,8 +77,8 @@ class WeddingExpenseRequest(BaseModel):
 # Map wedding expense categories → GL expense accounts
 CATEGORY_TO_ACCOUNT = {
     "Taxi": "Di chuyển - MWP",
-    "Flight Ticket": "Di chuyển - MWP",
-    "Hotel": "Di chuyển - MWP",
+    "Flight Ticket": "Vé máy bay - MWP",
+    "Hotel": "Lưu trú - MWP",
     "F&B": "Entertainment Expenses - MWP",
     "Decoration": "Miscellaneous Expenses - MWP",
     "Printing": "Office Expenses - MWP",
