@@ -212,6 +212,8 @@ export default function ExpensesPage() {
 
   // Category combobox state
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  // Quick-expense picker: wedding categories when linked to a wedding, otherwise all
+  const [quickCategories, setQuickCategories] = useState<ExpenseCategory[]>([]);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [creatingCategory, setCreatingCategory] = useState(false);
@@ -262,6 +264,16 @@ export default function ExpensesPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    fetch(`/inquiry-api/expense/categories${quickForm.wedding ? "?scope=wedding" : ""}`)
+      .then(r => r.json())
+      .then((data: ExpenseCategory[]) => {
+        setQuickCategories(data);
+        setQuickForm(prev => (data.some(c => c.name === prev.category) ? prev : { ...prev, category: "" }));
+      })
+      .catch(() => {});
+  }, [quickForm.wedding]);
+
   // Fetch per-PI description + staff (resolved server-side) from API
   useEffect(() => {
     fetch("/inquiry-api/expense/descriptions")
@@ -282,7 +294,7 @@ export default function ExpensesPage() {
       const resp = await fetch("/inquiry-api/expense/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: categorySearch.trim() }),
+        body: JSON.stringify({ name: categorySearch.trim(), scope: quickForm.wedding ? "wedding" : "office" }),
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -290,6 +302,7 @@ export default function ExpensesPage() {
       }
       const newCat = await resp.json();
       setCategories(prev => [...prev, newCat]);
+      setQuickCategories(prev => [...prev, newCat]);
       setQuickForm({ ...quickForm, category: newCat.name });
       setCategoryOpen(false);
     } catch (error) {
@@ -755,7 +768,7 @@ export default function ExpensesPage() {
                     >
                       <span className={quickForm.category ? "" : "text-muted-foreground"}>
                         {quickForm.category
-                          ? (categories.find(c => c.name === quickForm.category)?.account_name ?? quickForm.category)
+                          ? (quickCategories.find(c => c.name === quickForm.category)?.account_name ?? quickForm.category)
                           : "Search categories..."}
                       </span>
                       <ChevronsUpDown className="h-4 w-4 opacity-50" />
@@ -787,7 +800,7 @@ export default function ExpensesPage() {
                           </div>
                         </CommandEmpty>
                         <CommandGroup>
-                          {categories
+                          {quickCategories
                             .filter(c => !categorySearch || c.account_name.toLowerCase().includes(categorySearch.toLowerCase()))
                             .map(c => (
                               <CommandItem
@@ -803,7 +816,7 @@ export default function ExpensesPage() {
                               </CommandItem>
                             ))}
                         </CommandGroup>
-                        {categorySearch.trim() && categories.some(c => c.account_name.toLowerCase().includes(categorySearch.toLowerCase())) && (
+                        {categorySearch.trim() && quickCategories.some(c => c.account_name.toLowerCase().includes(categorySearch.toLowerCase())) && (
                           <CommandGroup heading="Create new">
                             <CommandItem
                               value={`__create_${categorySearch}`}

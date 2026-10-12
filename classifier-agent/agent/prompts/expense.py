@@ -53,7 +53,7 @@ Analyze the PDF content carefully and extract:
 For expense categorization, use these ERPNext accounts:
 - Office Expenses - MWP: office supplies, stationery, utilities
 - Marketing Expenses - MWP: advertising, promotions, social media
-- Travel Expenses - MWP: transportation, accommodation, meals during travel
+- Di chuyển - MWP: transportation, accommodation, meals during travel
 - Software Expenses - MWP: subscriptions, licenses, SaaS tools
 - Wedding Expenses - MWP: direct wedding-related vendor costs
 - Venue Expenses - MWP: venue rental, catering at venues
@@ -87,7 +87,7 @@ Analyze the image and extract:
 4. Currency (VND, USD, etc.)
 
 For expense categorization, use these categories:
-- Travel Expenses - MWP: transportation, accommodation, meals during travel
+- Di chuyển - MWP: transportation, accommodation, meals during travel
 - Entertainment Expenses - MWP: client entertainment, meals, drinks
 - Office Expenses - MWP: office supplies, stationery, utilities
 - Equipment Expenses - MWP: equipment rental, purchase
