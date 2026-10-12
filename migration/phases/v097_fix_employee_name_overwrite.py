@@ -52,6 +52,9 @@ for dt in DOCTYPES:
     counts[dt] = 0
     if not frappe.db.exists("DocType", dt):
         continue
+    meta = frappe.get_meta(dt)
+    if not (meta.has_field("employee") and meta.has_field("employee_name")):
+        continue
     for row in frappe.get_all(dt, fields=["name", "employee", "employee_name"]):
         if row.employee_name == row.employee and row.employee in real_names:
             frappe.db.set_value(dt, row.name, "employee_name", real_names[row.employee], update_modified=False)
@@ -109,8 +112,12 @@ def _run_tmp_script(client):
             time.sleep(3)
         raise Exception(f"Backfill failed: {last_err}")
     finally:
+        # client.delete returns False on Frappe's 202 success, so confirm by lookup.
         client.delete("Server Script", TMP_SCRIPT_NAME)
-        print(f"  Deleted temporary Server Script {TMP_SCRIPT_NAME}")
+        if not client.get("Server Script", TMP_SCRIPT_NAME):
+            print(f"  Deleted temporary Server Script {TMP_SCRIPT_NAME}")
+        else:
+            print(f"  WARNING: temporary Server Script {TMP_SCRIPT_NAME} was NOT deleted; remove it manually")
 
 
 def run(client):
