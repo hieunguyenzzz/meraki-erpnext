@@ -67,10 +67,10 @@ class WeddingExpenseRequest(BaseModel):
     staff: str | None = None  # Employee ID (e.g. "HR-EMP-00001") — who incurred the expense
     note: str | None = Field(None, max_length=1000)  # free-text note -> Purchase Invoice.remarks
 
-    @field_validator("note")
+    @field_validator("note", mode="before")
     @classmethod
     def _strip_note(cls, v):
-        return v.strip() if v is not None else v
+        return v.strip() if isinstance(v, str) else v
 
 
 # Map wedding expense categories → GL expense accounts
@@ -936,10 +936,10 @@ class EditExpenseRequest(BaseModel):
     staff: str | None = None      # Employee ID
     note: str | None = Field(None, max_length=1000)  # None = keep, "" = clear
 
-    @field_validator("note")
+    @field_validator("note", mode="before")
     @classmethod
     def _strip_note(cls, v):
-        return v.strip() if v is not None else v
+        return v.strip() if isinstance(v, str) else v
 
 
 @router.put("/expense/{pi_name}", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
@@ -970,7 +970,8 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
     expense_account = req.account or first_item.get("expense_account", DEFAULT_EXPENSE_ACCOUNT)
     amount = round(req.amount)
     staff = req.staff if req.staff is not None else pi.get("custom_expense_staff", "")
-    note = req.note if req.note is not None else _expense_note(pi.get("remarks"), first_item.get("expense_account"))
+    # None = keep the raw remarks untouched (it may be a migration audit link or legacy text)
+    remarks = req.note if req.note is not None else pi.get("remarks")
 
     # Draft: update in-place (preserves creation date and document name)
     if docstatus == 0:
@@ -978,7 +979,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
             "posting_date": posting_date,
             "set_posting_time": 1,
             "custom_expense_staff": staff,
-            **({"remarks": note} if req.note is not None else {}),
+            **({"remarks": req.note} if req.note is not None else {}),
             "items": [{
                 "name": first_item.get("name"),
                 "item_code": "EXPENSE-ITEM",
@@ -1029,7 +1030,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
         "posting_date": posting_date,
         "set_posting_time": 1,
         "company": COMPANY,
-        "remarks": note,
+        "remarks": remarks,
         "items": [{
             "item_code": "EXPENSE-ITEM",
             "item_name": description,
@@ -1060,7 +1061,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to submit expense: {e}")
 
-    log.info("expense_edited", old=pi_name, new=new_name, amount=amount, has_note=bool(note))
+    log.info("expense_edited", old=pi_name, new=new_name, amount=amount, note_changed=req.note is not None)
     return {"success": True, "name": new_name}
 
 

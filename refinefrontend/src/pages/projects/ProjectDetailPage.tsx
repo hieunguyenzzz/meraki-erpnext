@@ -716,7 +716,9 @@ export default function ProjectDetailPage() {
           amount: parseFloat(editExpValues.amount) || 0,
           account: editExpValues.category,
           staff: editExpValues.staff,
-          note: editExpValues.note,
+          // omit when unchanged so the backend keeps the raw remarks
+          ...(editExpValues.note.trim() !== (expenses.find(e => e.name === editingExpense)?.note || "")
+            ? { note: editExpValues.note.trim() } : {}),
         }),
       });
       if (!resp.ok) {
