@@ -17,7 +17,7 @@ import json
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.classifier_client import RemoteClassifierClient
 from webhook_v2.core.logging import get_logger
@@ -65,6 +65,12 @@ class WeddingExpenseRequest(BaseModel):
     category: str          # expense account name (e.g. "Travel Expenses - MWP") or legacy label
     supplier: str = "Company Expense"
     staff: str | None = None  # Employee ID (e.g. "HR-EMP-00001") — who incurred the expense
+    note: str | None = Field(None, max_length=1000)  # free-text note -> Purchase Invoice.remarks
+
+    @field_validator("note")
+    @classmethod
+    def _strip_note(cls, v):
+        return v.strip() if v is not None else v
 
 
 # Map wedding expense categories → GL expense accounts
@@ -90,6 +96,18 @@ HIDDEN_EXPENSE_ACCOUNTS = {
     "Impairment", "Round Off", "Salary", "Social Insurance Expense",
     "Stock Adjustment", "Write Off", "Commission on Sales",
 }
+
+
+def _expense_note(remarks: str | None, expense_account: str | None) -> str:
+    """Return the staff-written note held in a PI's remarks, or "".
+
+    Older PIs hold non-notes in remarks: ERPNext's "No Remarks" default, the
+    category account name (written before MWP-77), or "Converted from JE-…".
+    """
+    text = (remarks or "").strip()
+    if not text or text == "No Remarks" or text == (expense_account or "") or text.startswith("Converted from "):
+        return ""
+    return text
 
 
 def _mark_pi_paid(client: ERPNextClient, pi_name: str) -> str | None:
@@ -567,7 +585,7 @@ def list_expenses(request: Request, project: str | None = None):
         "fields": json.dumps([
             "name", "supplier", "supplier_name", "posting_date",
             "grand_total", "project", "docstatus", "owner",
-            "custom_rejected", "custom_expense_staff",
+            "custom_rejected", "custom_expense_staff", "remarks",
         ]),
         "order_by": "creation desc",
         "limit_page_length": 0,
@@ -634,6 +652,7 @@ def list_expenses(request: Request, project: str | None = None):
             "submitted_by": pi.get("owner", ""),
             "staff": pi.get("custom_expense_staff", ""),
             "receipt_url": file_map.get(pi["name"]),
+            "note": _expense_note(pi.get("remarks"), category),
         })
 
     return result
@@ -657,6 +676,7 @@ def expense_descriptions():
         "fields": json.dumps([
             "name",
             "custom_expense_staff",
+            "remarks",
             "`tabPurchase Invoice Item`.idx",
             "`tabPurchase Invoice Item`.item_name",
             "`tabPurchase Invoice Item`.expense_account",
@@ -693,6 +713,7 @@ def expense_descriptions():
         result[name] = {
             "description": description,
             "staff": emp_names.get(staff_id, staff_id) if staff_id else "",
+            "note": _expense_note(row.get("remarks"), category),
         }
 
     log.info("expense_descriptions", pi_count=len(result))
@@ -717,6 +738,7 @@ async def create_wedding_expense_with_receipt(
     category: str = Form(...),
     supplier: str = Form("Company Expense"),
     staff: str = Form(""),
+    note: str = Form(""),
     receipt: UploadFile | None = File(None),
 ):
     """Create a Draft PI and attach receipt in one atomic request.
@@ -730,10 +752,12 @@ async def create_wedding_expense_with_receipt(
     """
     from fastapi import Form as _  # noqa — already imported above
 
+    if len(note.strip()) > 1000:
+        raise HTTPException(status_code=400, detail="Note must be 1000 characters or fewer")
     req = WeddingExpenseRequest(
         project=project or None, date=date, description=description,
         amount=amount, category=category, supplier=supplier,
-        staff=staff or None,
+        staff=staff or None, note=note,
     )
     req.staff = resolve_employee(request, req.staff, override_roles=RECEIPT_STAFF_OVERRIDE_ROLES)
     # Reuse existing logic (shared core — not the gated route handler)
@@ -794,7 +818,7 @@ def _create_wedding_expense_core(req: WeddingExpenseRequest) -> dict:
         "set_posting_time": 1,
         "company": COMPANY,
         "update_stock": 0,
-        "remarks": req.category,
+        "remarks": req.note or "",
         "items": [{
             "item_code": "EXPENSE-ITEM",
             "item_name": item_name,
@@ -819,7 +843,7 @@ def _create_wedding_expense_core(req: WeddingExpenseRequest) -> dict:
     if not pi_name:
         raise HTTPException(status_code=500, detail="Purchase Invoice created but name not returned")
 
-    log.info("wedding_expense_created", pi=pi_name, project=req.project, amount=amount)
+    log.info("wedding_expense_created", pi=pi_name, project=req.project, amount=amount, has_note=bool(req.note))
 
     # Notify Finance Managers (fire-and-forget)
     _notify_finance_managers(client, pi_name, amount, req.project, req.description or req.category)
@@ -910,6 +934,12 @@ class EditExpenseRequest(BaseModel):
     date: str | None = None       # YYYY-MM-DD
     account: str | None = None    # expense account
     staff: str | None = None      # Employee ID
+    note: str | None = Field(None, max_length=1000)  # None = keep, "" = clear
+
+    @field_validator("note")
+    @classmethod
+    def _strip_note(cls, v):
+        return v.strip() if v is not None else v
 
 
 @router.put("/expense/{pi_name}", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
@@ -940,6 +970,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
     expense_account = req.account or first_item.get("expense_account", DEFAULT_EXPENSE_ACCOUNT)
     amount = round(req.amount)
     staff = req.staff if req.staff is not None else pi.get("custom_expense_staff", "")
+    note = req.note if req.note is not None else _expense_note(pi.get("remarks"), first_item.get("expense_account"))
 
     # Draft: update in-place (preserves creation date and document name)
     if docstatus == 0:
@@ -947,6 +978,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
             "posting_date": posting_date,
             "set_posting_time": 1,
             "custom_expense_staff": staff,
+            **({"remarks": note} if req.note is not None else {}),
             "items": [{
                 "name": first_item.get("name"),
                 "item_code": "EXPENSE-ITEM",
@@ -962,7 +994,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
             client._put(f"/api/resource/Purchase Invoice/{pi_name}", update_values)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to update expense: {e}")
-        log.info("expense_edited_inplace", pi=pi_name, amount=amount)
+        log.info("expense_edited_inplace", pi=pi_name, amount=amount, note_changed=req.note is not None)
         return {"success": True, "name": pi_name}
 
     # Submitted: delete and recreate (existing logic for approved expenses)
@@ -997,6 +1029,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
         "posting_date": posting_date,
         "set_posting_time": 1,
         "company": COMPANY,
+        "remarks": note,
         "items": [{
             "item_code": "EXPENSE-ITEM",
             "item_name": description,
@@ -1027,7 +1060,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to submit expense: {e}")
 
-    log.info("expense_edited", old=pi_name, new=new_name, amount=amount)
+    log.info("expense_edited", old=pi_name, new=new_name, amount=amount, has_note=bool(note))
     return {"success": True, "name": new_name}
 
 

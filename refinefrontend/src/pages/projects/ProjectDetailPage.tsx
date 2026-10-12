@@ -185,7 +185,7 @@ export default function ProjectDetailPage() {
   // Expense tab state
   const [expenses, setExpenses] = useState<any[]>([]);
   const [addingExpense, setAddingExpense] = useState(false);
-  const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "" });
+  const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "", note: "" });
   const [isSavingExpense, setIsSavingExpense] = useState(false);
   const [receiptBusy, setReceiptBusy] = useState<Record<string, boolean>>({});
   const [expenseError, setExpenseError] = useState<string | null>(null);
@@ -196,7 +196,7 @@ export default function ProjectDetailPage() {
   const [expenseFile, setExpenseFile] = useState<File | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [editingExpense, setEditingExpense] = useState<string | null>(null);
-  const [editExpValues, setEditExpValues] = useState({ date: "", description: "", amount: "", category: "", staff: "" });
+  const [editExpValues, setEditExpValues] = useState({ date: "", description: "", amount: "", category: "", staff: "", note: "" });
   const [editExpCatOpen, setEditExpCatOpen] = useState(false);
   const expenseFileRef = useRef<HTMLInputElement>(null);
 
@@ -588,6 +588,7 @@ export default function ProjectDetailPage() {
           amount: parseFloat(newExpense.amount),
           category: newExpense.category,
           ...(newExpense.staff ? { staff: newExpense.staff } : {}),
+          ...(newExpense.note.trim() ? { note: newExpense.note.trim() } : {}),
         }),
       });
       if (!resp.ok) {
@@ -604,7 +605,7 @@ export default function ProjectDetailPage() {
         }
       }
       setAddingExpense(false);
-      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "" });
+      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "", note: "" });
       setExpenseFile(null);
       if (expenseFileRef.current) expenseFileRef.current.value = "";
       fetchExpenses(name!);
@@ -698,6 +699,7 @@ export default function ProjectDetailPage() {
       amount: String(exp.amount || ""),
       category: exp.account || "",
       staff: exp.staff || "",
+      note: exp.note || "",
     });
   }
 
@@ -714,6 +716,7 @@ export default function ProjectDetailPage() {
           amount: parseFloat(editExpValues.amount) || 0,
           account: editExpValues.category,
           staff: editExpValues.staff,
+          note: editExpValues.note,
         }),
       });
       if (!resp.ok) {
@@ -2101,6 +2104,8 @@ export default function ProjectDetailPage() {
                               <td className="px-3 py-2">
                                 <Input className="h-8 w-full" placeholder="Description" value={newExpense.description}
                                   onChange={e => setNewExpense({ ...newExpense, description: e.target.value })} />
+                                <Input className="h-8 w-full mt-1" placeholder="Note (optional)" maxLength={1000} value={newExpense.note}
+                                  onChange={e => setNewExpense({ ...newExpense, note: e.target.value })} />
                               </td>
                               <td className="px-3 py-2">
                                 <Select value={newExpense.staff || "__none__"} onValueChange={v => setNewExpense({ ...newExpense, staff: v === "__none__" ? "" : v })}>
@@ -2185,7 +2190,7 @@ export default function ProjectDetailPage() {
                                   <Button variant="ghost" size="icon" className="h-7 w-7"
                                     onClick={() => {
                                       setAddingExpense(false);
-                                      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "" });
+                                      setNewExpense({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "", staff: "", note: "" });
                                       setExpenseFile(null);
                                       if (expenseFileRef.current) expenseFileRef.current.value = "";
                                       setExpenseError(null);
@@ -2272,6 +2277,8 @@ export default function ProjectDetailPage() {
                                   <td className="px-3 py-2">
                                     <Input className="h-8 w-full" value={editExpValues.description}
                                       onChange={e => setEditExpValues({ ...editExpValues, description: e.target.value })} />
+                                    <Input className="h-8 w-full mt-1" placeholder="Note (optional)" maxLength={1000} value={editExpValues.note}
+                                      onChange={e => setEditExpValues({ ...editExpValues, note: e.target.value })} />
                                   </td>
                                   <td className="px-3 py-2">
                                     <Select value={editExpValues.staff || "__none__"} onValueChange={v => setEditExpValues({ ...editExpValues, staff: v === "__none__" ? "" : v })}>
@@ -2330,7 +2337,10 @@ export default function ProjectDetailPage() {
                               ) : (
                                 <>
                                   <td className="px-3 py-2 whitespace-nowrap">{formatDate(exp.posting_date)}</td>
-                                  <td className="px-3 py-2">{exp.description}</td>
+                                  <td className="px-3 py-2">
+                                    {exp.description}
+                                    {exp.note && <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2" title={exp.note}>{exp.note}</div>}
+                                  </td>
                                   <td className="px-3 py-2 text-muted-foreground">
                                     {exp.staff ? (employees.find(e => e.id === exp.staff)?.name ?? exp.staff) : "—"}
                                   </td>
