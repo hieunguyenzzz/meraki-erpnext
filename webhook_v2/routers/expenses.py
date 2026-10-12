@@ -15,6 +15,7 @@ New (wedding expenses with approval):
 
 import json
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
@@ -208,14 +209,33 @@ async def scan_bill(file: UploadFile = File(...)):
     return result
 
 
-@router.post("/expense/{pi_name}/attach", dependencies=[Depends(require_roles(*DIRECTOR))])
-async def attach_receipt(pi_name: str, file: UploadFile = File(...)):
-    """Attach a receipt image to a Purchase Invoice (uses admin API keys)."""
+@router.post("/expense/{pi_name}/attach", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
+async def attach_receipt(pi_name: str, request: Request, file: UploadFile = File(...)):
+    """Attach a receipt image to a Purchase Invoice (uses admin API keys).
+
+    Planners may only attach to wedding (project-linked) expenses; expenses
+    with no project (overheads) require FINANCE. Planners have no Purchase
+    Invoice permission in ERPNext, so the upload goes through here.
+    """
+    user = request.state.user
+    client = ERPNextClient()
+
+    try:
+        pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            log.warning("receipt_attach_pi_not_found", pi=pi_name, user=user)
+            raise HTTPException(status_code=404, detail="Purchase Invoice not found")
+        raise
+
+    if not pi.get("project") and not has_roles(request, FINANCE):
+        log.warning("receipt_attach_denied", pi=pi_name, user=user, reason="non-wedding expense")
+        raise HTTPException(status_code=403, detail="Only Finance can attach receipts to non-wedding expenses")
+
     file_data = await file.read()
     if not file_data:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    client = ERPNextClient()
     try:
         result = client.upload_file(
             file_data=file_data,
@@ -225,10 +245,10 @@ async def attach_receipt(pi_name: str, file: UploadFile = File(...)):
             is_private=False,
         )
         file_url = result.get("message", {}).get("file_url")
-        log.info("receipt_attached", pi=pi_name, file_url=file_url)
+        log.info("receipt_attached", pi=pi_name, user=user, file_url=file_url)
         return {"file_url": file_url}
     except Exception as e:
-        log.error("receipt_attach_failed", pi=pi_name, error=str(e))
+        log.error("receipt_attach_failed", pi=pi_name, user=user, error=str(e))
         raise HTTPException(status_code=400, detail=f"Failed to attach receipt: {e}")
 
 

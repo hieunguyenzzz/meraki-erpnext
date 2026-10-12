@@ -57,7 +57,7 @@ import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
 import { ProjectEventsTab } from "@/components/projects/ProjectEventsTab";
 import { cn } from "@/lib/utils";
-import { uploadFile } from "@/lib/fileUpload";
+import { attachExpenseReceipt } from "@/lib/fileUpload";
 import { hasModuleAccess, FINANCE_ROLES, WEDDING_MANAGER_ROLES } from "@/lib/roles";
 interface ExpenseCategory { name: string; account_name: string; }
 import { useMyEmployee } from "@/hooks/useMyEmployee";
@@ -597,7 +597,7 @@ export default function ProjectDetailPage() {
       // Upload receipt image if provided
       if (expenseFile && result.name) {
         try {
-          await uploadFile(expenseFile, "Purchase Invoice", result.name);
+          await attachExpenseReceipt(expenseFile, result.name);
         } catch (err) {
           console.error("Receipt upload failed:", err);
         }
@@ -2206,8 +2206,7 @@ export default function ProjectDetailPage() {
                                             const file = e.target.files?.[0];
                                             if (!file) return;
                                             try {
-                                              const { uploadFile } = await import("@/lib/fileUpload");
-                                              await uploadFile(file, "Purchase Invoice", exp.name);
+                                              await attachExpenseReceipt(file, exp.name);
                                               fetchExpenses(name!);
                                             } catch {}
                                           }} />
@@ -2222,8 +2221,7 @@ export default function ProjectDetailPage() {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
                                       try {
-                                        const { uploadFile } = await import("@/lib/fileUpload");
-                                        await uploadFile(file, "Purchase Invoice", exp.name);
+                                        await attachExpenseReceipt(file, exp.name);
                                         fetchExpenses(name!);
                                       } catch {}
                                     }} />
