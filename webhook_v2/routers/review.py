@@ -187,7 +187,7 @@ async def schedule_review(employee_name: str, request: ScheduleReviewRequest):
     # Update employee's custom_last_review_date via Server Script
     try:
         client._post("/api/method/meraki_set_employee_fields", {
-            "employee_name": employee_name,
+            "employee_id": employee_name,
             "custom_last_review_date": request.review_date,
         })
     except Exception as e:
@@ -321,7 +321,7 @@ def create_review(request: CreateReviewRequest):
     # Best-effort: update employee's last review date
     try:
         client._post("/api/method/meraki_set_employee_fields", {
-            "employee_name": request.employee,
+            "employee_id": request.employee,
             "custom_last_review_date": request.review_date,
         })
     except Exception as e:
