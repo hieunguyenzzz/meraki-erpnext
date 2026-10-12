@@ -265,13 +265,15 @@ export default function ExpensesPage() {
   }, []);
 
   useEffect(() => {
-    fetch(`/inquiry-api/expense/categories${quickForm.wedding ? "?scope=wedding" : ""}`)
+    const controller = new AbortController();
+    fetch(`/inquiry-api/expense/categories${quickForm.wedding ? "?scope=wedding" : ""}`, { signal: controller.signal })
       .then(r => r.json())
       .then((data: ExpenseCategory[]) => {
         setQuickCategories(data);
         setQuickForm(prev => (data.some(c => c.name === prev.category) ? prev : { ...prev, category: "" }));
       })
       .catch(() => {});
+    return () => controller.abort();
   }, [quickForm.wedding]);
 
   // Fetch per-PI description + staff (resolved server-side) from API

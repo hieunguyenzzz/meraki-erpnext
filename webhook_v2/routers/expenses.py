@@ -360,6 +360,15 @@ def delete_receipt(pi_name: str, request: Request):
     return {"deleted": count}
 
 
+def _group_exists(client: ERPNextClient, group: str) -> bool:
+    found = client._get("/api/resource/Account", params={
+        "filters": json.dumps([["name", "=", group], ["is_group", "=", 1]]),
+        "fields": json.dumps(["name"]),
+        "limit_page_length": 1,
+    }).get("data", [])
+    return bool(found)
+
+
 @router.get("/expense/categories")
 def list_expense_categories(scope: Literal["wedding", "office"] | None = None):
     """List expense categories. scope=wedding|office filters by group account; no scope = all."""
@@ -369,8 +378,11 @@ def list_expense_categories(scope: Literal["wedding", "office"] | None = None):
         ["is_group", "=", 0],
         ["is_custom_wedding_expense", "=", 1],
     ]
-    if scope:
+    if scope and _group_exists(client, SCOPE_GROUP_ACCOUNTS[scope]):
         filters.append(["parent_account", "=", SCOPE_GROUP_ACCOUNTS[scope]])
+    elif scope:
+        # Migration v100 has not created the groups yet (deploy window): never return an empty picker
+        log.warning("expense_category_group_missing", scope=scope, group=SCOPE_GROUP_ACCOUNTS[scope], action="returning all categories")
     accounts = client._get("/api/resource/Account", params={
         "filters": json.dumps(filters),
         "fields": json.dumps(["name", "account_name"]),
@@ -395,15 +407,24 @@ def create_expense_category(req: CreateCategoryRequest):
     full_name = f"{account_name} - MWP"
     existing = client._get("/api/resource/Account", params={
         "filters": json.dumps([["name", "=", full_name]]),
-        "fields": json.dumps(["name", "account_name"]),
+        "fields": json.dumps(["name", "account_name", "parent_account"]),
         "limit_page_length": 1,
     }).get("data", [])
     if existing:
+        other_scope = "office" if req.scope == "wedding" else "wedding"
+        if existing[0].get("parent_account") == SCOPE_GROUP_ACCOUNTS[other_scope]:
+            raise HTTPException(status_code=409, detail=f"'{account_name}' is already {'an' if other_scope == 'office' else 'a'} {other_scope} category")
         return {"name": existing[0]["name"], "account_name": existing[0]["account_name"]}
+
+    parent = SCOPE_GROUP_ACCOUNTS[req.scope]
+    if not _group_exists(client, parent):
+        # Migration v100 has not created the groups yet (deploy window): old behaviour
+        log.warning("expense_category_group_missing", scope=req.scope, group=parent, action="creating under Indirect Expenses")
+        parent = "Indirect Expenses - MWP"
 
     result = client._post("/api/resource/Account", {
         "account_name": account_name,
-        "parent_account": SCOPE_GROUP_ACCOUNTS[req.scope],
+        "parent_account": parent,
         "root_type": "Expense",
         "report_type": "Profit and Loss",
         "account_type": "Expense Account",

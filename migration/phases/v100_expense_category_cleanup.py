@@ -10,7 +10,9 @@
    (Not named "Office Expenses"/"Wedding Expenses": a standard "Office Expenses - MWP"
    ledger already exists.)
 
-Order matters: merges run before any re-parenting.
+Order: groups, re-parent, merges, deletes. Merges are last because they can fail
+(ERPNext refuses them within 5 minutes of the last GL Entry update); a failure then
+leaves the scoped pickers already working, and the rerun finishes the merges.
 
 Idempotent: each step is skipped when already done. Fails loudly: the client's
 get/create/update swallow errors and the runner records a phase as applied once
@@ -116,10 +118,10 @@ def _merge(client, old, new):
     if _get_account(client, new) is None:
         raise RuntimeError(f"Cannot merge {old}: target {new} does not exist")
 
-    gl_expected = _gl_entry_count(client, old) + _gl_entry_count(client, new)
-    pi_expected = _pi_line_count(client, old) + _pi_line_count(client, new)
-
     for attempt in range(1, IDLE_RETRIES + 1):
+        # Counted right before each call, so postings made while waiting do not matter.
+        gl_before = _gl_entry_count(client, old) + _gl_entry_count(client, new)
+        pi_before = _pi_line_count(client, old) + _pi_line_count(client, new)
         response = _request(client, "POST", "/api/method/erpnext.accounts.doctype.account.account.merge_account",
                             json={"old": old, "new": new})
         if response.status_code == 200:
@@ -133,9 +135,10 @@ def _merge(client, old, new):
     if _get_account(client, old) is not None:
         raise RuntimeError(f"{old} still exists after merging into {new}")
     gl_after, pi_after = _gl_entry_count(client, new), _pi_line_count(client, new)
-    if gl_after != gl_expected or pi_after != pi_expected:
+    # >=, not ==: a concurrent posting to the target must not make a good merge raise.
+    if gl_after < gl_before or pi_after < pi_before:
         raise RuntimeError(
-            f"Merge {old} -> {new}: expected {gl_expected} GL / {pi_expected} PI lines on target, "
+            f"Merge {old} -> {new}: expected at least {gl_before} GL / {pi_before} PI lines on target, "
             f"found {gl_after} / {pi_after}"
         )
     print(f"  Merged {old} -> {new} ({gl_after} GL Entries, {pi_after} PI lines now on target)")
@@ -189,14 +192,16 @@ def _warn_unplaced(client):
 
 
 def run(client):
-    for old, new in MERGES:
-        _merge(client, old, new)
-    for name in DELETES:
-        _delete_unused(client, name)
+    # Groups and re-parenting come first: the API/frontend scope filters depend on them and
+    # go live alongside this phase, while a merge can fail after its 5-minute wait.
     _ensure_group(client, WEDDING_GROUP)
     _ensure_group(client, OFFICE_GROUP)
     for name in WEDDING_CATEGORIES:
         _reparent(client, name, WEDDING_GROUP)
     for name in OFFICE_CATEGORIES:
         _reparent(client, name, OFFICE_GROUP)
+    for old, new in MERGES:
+        _merge(client, old, new)
+    for name in DELETES:
+        _delete_unused(client, name)
     _warn_unplaced(client)

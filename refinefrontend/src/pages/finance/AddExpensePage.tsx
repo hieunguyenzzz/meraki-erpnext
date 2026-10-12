@@ -76,13 +76,15 @@ export default function AddExpensePage() {
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   // A wedding expense only offers wedding categories; a company expense offers all of them
   useEffect(() => {
-    fetch(`/inquiry-api/expense/categories${form.project ? "?scope=wedding" : ""}`)
+    const controller = new AbortController();
+    fetch(`/inquiry-api/expense/categories${form.project ? "?scope=wedding" : ""}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((data: ExpenseCategory[]) => {
         setCategories(data);
         setForm((prev) => (data.some((c) => c.name === prev.category) ? prev : { ...prev, category: "" }));
       })
       .catch(() => {});
+    return () => controller.abort();
   }, [form.project]);
 
   function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
