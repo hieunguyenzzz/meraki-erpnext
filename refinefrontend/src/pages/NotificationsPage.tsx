@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useCustom, useCustomMutation } from "@refinedev/core";
-import { Bell, Trash2, CheckCheck, Inbox, Check, X } from "lucide-react";
+import { Bell, Trash2, CheckCheck, Inbox, Check, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/format";
+import { NotificationTypeFilter, type TypeCount } from "@/components/notifications/NotificationTypeFilter";
 
 interface PwaNotification {
   name: string;
@@ -30,6 +31,36 @@ const DOC_ROUTES: Record<string, (name: string) => string> = {
   "Purchase Invoice": (name) => `/finance/expenses/${encodeURIComponent(name)}`,
   "Attendance Request": () => "/hr/wfh",
 };
+
+const TYPE_LABELS: Record<string, string> = {
+  "Purchase Invoice": "Expenses",
+  "Leave Application": "Leave",
+  "Attendance Request": "WFH",
+  "Job Applicant": "Recruiting",
+  "Lead": "CRM",
+  "Project": "Projects",
+  "Employee": "Employees",
+};
+
+const labelForType = (type: string) => TYPE_LABELS[type] ?? type;
+
+const FILTER_STORAGE_KEY = "notifications.typeFilter";
+
+function loadSavedFilter(): string {
+  try {
+    return localStorage.getItem(FILTER_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveFilter(type: string) {
+  try {
+    localStorage.setItem(FILTER_STORAGE_KEY, type);
+  } catch {
+    // storage unavailable (private mode etc.) — the filter just won't persist
+  }
+}
 
 /**
  * Strip HTML tags to extract plain text.
@@ -91,11 +122,17 @@ export default function NotificationsPage() {
   const [allNotifications, setAllNotifications] = useState<PwaNotification[]>([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [docType, setDocType] = useState(loadSavedFilter); // "" = All
+  const [typeCounts, setTypeCounts] = useState<TypeCount[] | null>(null);
+
+  // dataProvider.custom ignores `config.query`, so the params go in the URL itself
+  const params = new URLSearchParams({ page: String(page), page_size: "50" });
+  if (docType) params.set("doc_type", docType);
 
   const { query, result } = useCustom({
-    url: "/api/method/get_all_notifications",
+    url: `/api/method/get_all_notifications?${params}`,
     method: "get",
-    config: { query: { page, page_size: 50 } },
   });
 
   const message = (result?.data as any)?.message;
@@ -103,10 +140,35 @@ export default function NotificationsPage() {
   const total: number = message?.total ?? 0;
   const unread: number = message?.unread ?? 0;
 
+  // type_counts is unfiltered, so keep the last one to avoid chip flicker while a new type loads
+  useEffect(() => {
+    if (message?.type_counts) {
+      setTypeCounts([...message.type_counts].sort((a: TypeCount, b: TypeCount) => b.total - a.total));
+    }
+  }, [message?.type_counts]);
+
+  // Saved type no longer exists (e.g. all its notifications were deleted) -> back to All
+  useEffect(() => {
+    if (typeCounts && docType && !typeCounts.some((t) => t.type === docType)) {
+      selectType("");
+    }
+  }, [typeCounts, docType]);
+
+  function selectType(type: string) {
+    if (type === docType) return;
+    saveFilter(type);
+    setError(null);
+    setDocType(type);
+    setPage(1);
+    setAllNotifications([]);
+    lastMergedKey.current = "";
+  }
+
   // Track which fetch we've already merged to avoid re-running
   const lastMergedKey = useRef("");
   useEffect(() => {
-    if (fetchedNotifs.length === 0) return;
+    // While a new type/page is loading, `result` may still hold the previous query's data
+    if (query.isFetching || fetchedNotifs.length === 0) return;
     const key = fetchedNotifs.map((n) => n.name).join(",");
     if (key === lastMergedKey.current) return;
     lastMergedKey.current = key;
@@ -120,7 +182,7 @@ export default function NotificationsPage() {
         return [...prev, ...unique];
       });
     }
-  }, [fetchedNotifs, page]);
+  }, [fetchedNotifs, page, query.isFetching]);
 
   const hasMore = allNotifications.length < total;
 
@@ -150,18 +212,22 @@ export default function NotificationsPage() {
 
   async function handleMarkAllRead() {
     setMarkingAll(true);
+    setError(null);
     try {
       await customMutation({
         url: "/api/method/handle_notification_action",
         method: "post",
-        values: { action: "read_all" },
+        values: { action: "read_all", ...(docType && { doc_type: docType }) },
       });
-      setAllNotifications((prev) => prev.map((n) => ({ ...n, read: 1 })));
-      query.refetch();
-    } catch {
-      // user can retry
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not mark notifications as read");
     } finally {
+      // Always reload from the server so the list and counts are never stale, even after a failure
       setMarkingAll(false);
+      setPage(1);
+      setAllNotifications([]);
+      lastMergedKey.current = "";
+      query.refetch();
     }
   }
 
@@ -230,10 +296,26 @@ export default function NotificationsPage() {
             disabled={markingAll}
           >
             <CheckCheck className="mr-1.5 h-4 w-4" />
-            {markingAll ? "Marking..." : "Mark all as read"}
+            {markingAll ? "Marking..." : docType ? `Mark ${labelForType(docType)} as read` : "Mark all as read"}
           </Button>
         )}
       </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {typeCounts && typeCounts.length > 0 && (
+        <NotificationTypeFilter
+          types={typeCounts}
+          selected={docType}
+          onSelect={selectType}
+          labelFor={labelForType}
+        />
+      )}
 
       {/* Notification groups */}
       {allNotifications.length === 0 && !query.isLoading ? (

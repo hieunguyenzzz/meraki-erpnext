@@ -60,6 +60,7 @@ ORDERED_PHASES = [
     "v094_employee_field_permissions",
     "v095_guard_api_server_scripts",
     "v097_fix_employee_name_overwrite",
+    "v098_notification_type_filter",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -143,6 +144,7 @@ def run_pending(client) -> int:
             v094_employee_field_permissions,
             v095_guard_api_server_scripts,
             v097_fix_employee_name_overwrite,
+            v098_notification_type_filter,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -198,6 +200,7 @@ def run_pending(client) -> int:
             v094_employee_field_permissions,
             v095_guard_api_server_scripts,
             v097_fix_employee_name_overwrite,
+            v098_notification_type_filter,
         )
 
     phase_fns = {
@@ -257,6 +260,7 @@ def run_pending(client) -> int:
         "v094_employee_field_permissions": v094_employee_field_permissions.run,
         "v095_guard_api_server_scripts": v095_guard_api_server_scripts.run,
         "v097_fix_employee_name_overwrite": v097_fix_employee_name_overwrite.run,
+        "v098_notification_type_filter": v098_notification_type_filter.run,
     }
 
     state_file = get_state_file()
