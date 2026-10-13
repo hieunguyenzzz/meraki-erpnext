@@ -25,6 +25,7 @@ services:
       default:
         aliases:
           - erpnext-frontend
+          - meraki-erp-frontend
       traefik:
 
   react-frontend:
