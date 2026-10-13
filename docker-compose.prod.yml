@@ -204,10 +204,10 @@ services:
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.meraki-react.rule=Host(`app.merakiwp.com`)"
-      - "traefik.http.routers.meraki-react.entrypoints=websecure"
-      - "traefik.http.routers.meraki-react.tls.certresolver=letsencrypt"
-      - "traefik.http.services.meraki-react.loadbalancer.server.port=8090"
+      - "traefik.http.routers.${TRAEFIK_PREFIX:-meraki}-react.rule=Host(`${APP_DOMAIN:-app.merakiwp.com}`)"
+      - "traefik.http.routers.${TRAEFIK_PREFIX:-meraki}-react.entrypoints=websecure"
+      - "traefik.http.routers.${TRAEFIK_PREFIX:-meraki}-react.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${TRAEFIK_PREFIX:-meraki}-react.loadbalancer.server.port=8090"
       - "traefik.docker.network=dokploy-network"
     networks:
       - default
@@ -270,7 +270,7 @@ services:
     restart: unless-stopped
     environment:
       - ZOHO_HOST=${ZOHO_IMAP_HOST:-imappro.zoho.com}
-      - ZOHO_EMAIL=${ZOHO_EMAIL:-info@merakiweddingplanner.com}
+      - ZOHO_EMAIL=${ZOHO_EMAIL-info@merakiweddingplanner.com}
       - ZOHO_PASSWORD=${ZOHO_PASSWORD}
       - EMAIL_STORAGE_HOST=email-storage
       - EMAIL_STORAGE_PORT=5432
@@ -282,6 +282,9 @@ services:
       - ERPNEXT_API_SECRET=${ERPNEXT_API_SECRET}
       - CLASSIFIER_SERVICE_URL=http://classifier-agent:8002
       - USE_REMOTE_CLASSIFIER=${USE_REMOTE_CLASSIFIER:-true}
+      # Defaults equal webhook_v2/config.py defaults; staging sets SCHEDULER_FETCH_ENABLED=false
+      - SCHEDULER_ENABLED=${SCHEDULER_ENABLED:-false}
+      - SCHEDULER_FETCH_ENABLED=${SCHEDULER_FETCH_ENABLED:-true}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
       - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY}
@@ -330,11 +333,11 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.meraki-client.rule=Host(`client.merakiweddingplanner.com`)"
-      - "traefik.http.routers.meraki-client.entrypoints=websecure"
-      - "traefik.http.routers.meraki-client.tls.certresolver=letsencrypt"
-      - "traefik.http.services.meraki-client.loadbalancer.server.port=80"
+      - "traefik.enable=${CLIENT_SITE_ENABLED:-true}"
+      - "traefik.http.routers.${TRAEFIK_PREFIX:-meraki}-client.rule=Host(`${CLIENT_DOMAIN:-client.merakiweddingplanner.com}`)"
+      - "traefik.http.routers.${TRAEFIK_PREFIX:-meraki}-client.entrypoints=websecure"
+      - "traefik.http.routers.${TRAEFIK_PREFIX:-meraki}-client.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${TRAEFIK_PREFIX:-meraki}-client.loadbalancer.server.port=80"
       - "traefik.docker.network=dokploy-network"
     networks:
       - default
