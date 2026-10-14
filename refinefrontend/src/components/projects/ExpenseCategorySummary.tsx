@@ -10,13 +10,14 @@ interface Props {
 
 export function ExpenseCategorySummary({ expenses, categories }: Props) {
   const { rows, totals } = useMemo(() => {
-    const byCategory = new Map<string, { label: string; approved: number; pending: number }>();
+    const byCategory = new Map<string, { key: string; label: string; approved: number; pending: number }>();
     for (const e of expenses) {
       if (e.status === "Rejected") continue;
       const key: string = e.category || "";
       let row = byCategory.get(key);
       if (!row) {
         row = {
+          key: key || "__none__",
           label: key ? (categories.find(c => c.name === key)?.account_name ?? key) : "Uncategorised",
           approved: 0,
           pending: 0,
@@ -53,7 +54,7 @@ export function ExpenseCategorySummary({ expenses, categories }: Props) {
           </thead>
           <tbody>
             {rows.map(r => (
-              <tr key={r.label} className="border-b last:border-0">
+              <tr key={r.key} className="border-b last:border-0">
                 <td className="px-3 py-2">{r.label}</td>
                 <td className="px-3 py-2 text-right">{formatVND(r.approved)}</td>
                 <td className="px-3 py-2 text-right">{formatVND(r.pending)}</td>
