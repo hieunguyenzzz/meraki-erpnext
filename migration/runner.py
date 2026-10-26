@@ -63,6 +63,7 @@ ORDERED_PHASES = [
     "v098_notification_type_filter",
     "v099_wedding_expense_manager_role",
     "v100_expense_category_cleanup",
+    "v101_leave_calendar_webhooks",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -149,6 +150,7 @@ def run_pending(client) -> int:
             v098_notification_type_filter,
             v099_wedding_expense_manager_role,
             v100_expense_category_cleanup,
+            v101_leave_calendar_webhooks,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -207,6 +209,7 @@ def run_pending(client) -> int:
             v098_notification_type_filter,
             v099_wedding_expense_manager_role,
             v100_expense_category_cleanup,
+            v101_leave_calendar_webhooks,
         )
 
     phase_fns = {
@@ -269,6 +272,7 @@ def run_pending(client) -> int:
         "v098_notification_type_filter": v098_notification_type_filter.run,
         "v099_wedding_expense_manager_role": v099_wedding_expense_manager_role.run,
         "v100_expense_category_cleanup": v100_expense_category_cleanup.run,
+        "v101_leave_calendar_webhooks": v101_leave_calendar_webhooks.run,
     }
 
     state_file = get_state_file()

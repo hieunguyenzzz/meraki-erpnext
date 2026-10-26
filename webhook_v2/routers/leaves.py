@@ -16,10 +16,10 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
-from webhook_v2.services.google_calendar import add_ooo_event, delete_ooo_events
+from webhook_v2.services.leave_calendar import sync_leave_calendar
 from webhook_v2.services.leave_balance import Pool, available_on, build_pools
 from webhook_v2.core.logging import get_logger
-from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
+from webhook_v2.routers.helpers import fmt_days, format_date_range, get_employee_name, submit_doc
 from webhook_v2.auth import require_roles, resolve_employee, get_current_user, has_roles, HR
 
 log = get_logger(__name__)
@@ -109,12 +109,24 @@ def _enrich_leave_notification(
         log.warning("enrich_notification_failed", leave=leave_app_name, error=str(e))
 
 
+class CalendarSyncRequest(BaseModel):
+    name: str
+
+
+@router.post("/leave/calendar-sync")
+def leave_calendar_sync(body: CalendarSyncRequest, background_tasks: BackgroundTasks):
+    """ERPNext webhook target (Leave Application submit/cancel/trash). Public, so only
+    the leave name is used; sync_leave_calendar re-reads the truth from ERPNext."""
+    background_tasks.add_task(sync_leave_calendar, body.name)
+    return {"queued": True}
+
+
 @router.post("/leave/{leave_id}/approve", dependencies=[Depends(require_roles(*HR))])
-def approve_leave(leave_id: str, background_tasks: BackgroundTasks):
+def approve_leave(leave_id: str):
     """Set Leave Application status to Approved and submit.
 
-    Idempotent: a re-click on an already-decided application is a no-op, so it
-    can't create duplicate calendar events.
+    Idempotent: a re-click on an already-decided application is a no-op. The
+    Google Calendar event is created by the on_submit webhook (/leave/calendar-sync).
     """
     client = ERPNextClient()
     existing = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
@@ -126,7 +138,7 @@ def approve_leave(leave_id: str, background_tasks: BackgroundTasks):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to approve leave: {e}")
 
-    # Enrich PWA notification with leave details + add calendar event
+    # Enrich PWA notification with leave details
     try:
         app = client._get(f"/api/resource/Leave Application/{leave_id}").get("data", {})
         leave_type = app.get("leave_type", "Leave")
@@ -137,10 +149,6 @@ def approve_leave(leave_id: str, background_tasks: BackgroundTasks):
         date_range = format_date_range(from_d, to_d) if from_d and to_d else ""
         msg = f"Your {leave_type} ({date_range}, {fmt_days(days)} days) has been Approved by {approver_name}"
         _enrich_leave_notification(client, leave_id, msg)
-        # Add OOO event to Google Calendar in the background (non-blocking).
-        if from_d and to_d:
-            emp = client._get(f"/api/resource/Employee/{app.get('employee', '')}").get("data", {})
-            background_tasks.add_task(add_ooo_event, calendar_name(emp.get("first_name", ""), emp.get("last_name", "")), from_d, to_d)
     except Exception:
         pass  # non-critical
 
@@ -232,17 +240,21 @@ def _approve_and_submit(client: ERPNextClient, leave_id: str) -> None:
 
 
 def _finalize_apply(
-    client: ERPNextClient, body: LeaveApplyRequest, created: list[dict], split: bool
+    client: ERPNextClient, body: LeaveApplyRequest, created: list[dict], split: bool,
+    background_tasks: BackgroundTasks,
 ) -> dict:
     """Optionally auto-approve each created Leave Application, then return the payload.
 
     Skip docs already submitted via the Server Script bypass (docstatus=1).
+    The bypass uses db_insert, which fires no webhook, so sync the calendar here.
     """
     if body.auto_approve:
         for app in created:
             name = app.get("name")
             if name and app.get("docstatus") != 1:
                 _approve_and_submit(client, name)
+            elif name:
+                background_tasks.add_task(sync_leave_calendar, name)
     return {"created": created, "split": split}
 
 
@@ -467,7 +479,7 @@ class CancelSelfLeaveRequest(BaseModel):
 
 
 @router.post("/leave/{leave_id}/cancel-self")
-def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, background_tasks: BackgroundTasks, request: Request):
+def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, request: Request):
     """Staff-facing cancel: allowed only when from_date >= today and leave belongs to the employee.
 
     Ownership is checked against the session employee — the `employee` field
@@ -486,10 +498,6 @@ def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, background_tas
     to_d = (app.get("to_date") or "")[:10]
     if not from_d or date.fromisoformat(from_d) < date.today():
         raise HTTPException(status_code=400, detail="Cannot cancel a leave that has already started or passed")
-
-    # Capture name tokens before deletion so we can remove the OOO calendar event after.
-    emp = client._get(f"/api/resource/Employee/{session_employee}").get("data", {})
-    name_tokens = f"{emp.get('first_name', '')} {emp.get('last_name', '')}".split()
 
     try:
         if app.get("docstatus") == 1:
@@ -512,10 +520,6 @@ def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, background_tas
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to cancel leave: {e}")
-
-    # Remove the OOO event from Google Calendar in the background (non-blocking).
-    if from_d and to_d and name_tokens:
-        background_tasks.add_task(delete_ooo_events, from_d, to_d, name_tokens)
 
     log.info("leave_cancelled_self", leave=leave_id, employee=session_employee)
     return {"success": True}
@@ -619,7 +623,7 @@ def update_leave_allocation(name: str, body: LeaveAllocationUpdate):
 
 
 @router.post("/leave/apply")
-def apply_leave(body: LeaveApplyRequest, request: Request):
+def apply_leave(body: LeaveApplyRequest, request: Request, background_tasks: BackgroundTasks):
     """Create leave application(s). For Annual Leave with insufficient balance,
     automatically splits into Annual Leave + Leave Without Pay.
 
@@ -684,7 +688,7 @@ def apply_leave(body: LeaveApplyRequest, request: Request):
             if balance_days == 0:
                 app = _create("Leave Without Pay", body.from_date, body.to_date, body.half_day)
                 _enrich_apply_notification(client, body.employee, app, description)
-                return _finalize_apply(client, body, [app], True)
+                return _finalize_apply(client, body, [app], True, background_tasks)
 
             include_holiday = _leave_type_includes_holidays(client, "Annual Leave")
             casual_to_date = lwp_from_date = requested = None
@@ -721,13 +725,13 @@ def apply_leave(body: LeaveApplyRequest, request: Request):
                     raise
                 _enrich_apply_notification(client, body.employee, cl_app, description)
                 _enrich_apply_notification(client, body.employee, lwp_app, description)
-                return _finalize_apply(client, body, [cl_app, lwp_app], True)
+                return _finalize_apply(client, body, [cl_app, lwp_app], True, background_tasks)
 
         app = _create(body.leave_type, body.from_date, body.to_date, body.half_day)
         _enrich_apply_notification(client, body.employee, app, description)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return _finalize_apply(client, body, [app], False)
+    return _finalize_apply(client, body, [app], False, background_tasks)
 
 
 class HolidayInfo(BaseModel):
