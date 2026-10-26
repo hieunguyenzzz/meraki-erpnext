@@ -14,7 +14,7 @@ import json
 import math
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.leave_calendar import sync_leave_calendar
 from webhook_v2.services.leave_balance import Pool, available_on, build_pools
@@ -110,7 +110,7 @@ def _enrich_leave_notification(
 
 
 class CalendarSyncRequest(BaseModel):
-    name: str
+    name: str = Field(pattern=r"^HR-LAP-[\w-]+$")
 
 
 @router.post("/leave/calendar-sync")

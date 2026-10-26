@@ -4,6 +4,8 @@ Driven by ERPNext webhooks (submit/cancel/trash) and the HR auto-approve path.
 Only the leave name is trusted; the desired state is always read from ERPNext.
 """
 
+import threading
+
 import requests
 
 from webhook_v2.core.logging import get_logger
@@ -13,18 +15,32 @@ from webhook_v2.services.erpnext import ERPNextClient
 
 log = get_logger(__name__)
 
+# One lock per leave id: webhook retries, amends and the backfill can overlap, and
+# find-then-insert would otherwise create duplicate events.
+_locks: dict[str, threading.Lock] = {}
+
 
 def _fetch_leave(client: ERPNextClient, leave_id: str) -> dict | None:
     try:
         return client._get(f"/api/resource/Leave Application/{leave_id}").get("data") or None
     except requests.HTTPError as e:
+        # A wrong Host/site also returns 404, so only a genuine DoesNotExistError means "deleted".
         if e.response is not None and e.response.status_code == 404:
-            return None
+            try:
+                if e.response.json().get("exc_type") == "DoesNotExistError":
+                    return None
+            except ValueError:
+                pass
         raise
 
 
 def sync_leave_calendar(leave_id: str) -> str:
     """Make the calendar match ERPNext for one leave. Idempotent. Returns the decision."""
+    with _locks.setdefault(leave_id, threading.Lock()):
+        return _sync(leave_id)
+
+
+def _sync(leave_id: str) -> str:
     if not gcal.is_configured():
         log.info("leave_calendar_sync", leave=leave_id, decision="not_configured")
         return "not_configured"

@@ -4,7 +4,7 @@
 
 Per Approved, submitted Leave Application with to_date >= today:
   - tagged event exists          -> skip
-  - untagged 'OOO - ' event overlapping the dates that names the employee -> tag it
+  - untagged 'OOO - ' event starting on from_date whose name has a whole-word match with the employee -> tag it
   - otherwise                    -> create via sync_leave_calendar
 Idempotent: a second run skips everything.
 """
@@ -32,6 +32,11 @@ def _approved_future_leaves(client: ERPNextClient) -> list[dict]:
     }).get("data", [])
 
 
+def _title_words(summary: str) -> list[str]:
+    """Whole words of the name part of 'OOO - Name (dates)', so 'An' never matches 'Anh'."""
+    return summary.removeprefix("OOO - ").split(" (")[0].split()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="print actions, change nothing")
@@ -49,10 +54,11 @@ def main() -> None:
             print(f"skip    {leave_id} (already tagged)")
             continue
         emp = client._get(f"/api/resource/Employee/{leave['employee']}").get("data", {})
-        tokens = f"{emp.get('first_name', '')} {emp.get('last_name', '')}".split()
+        tokens = set(f"{emp.get('first_name', '')} {emp.get('last_name', '')}".split())
         match = next(
             (ev for ev in gcal.list_untagged_ooo_events(from_d, to_d)
-             if any(tok in ev["summary"] for tok in tokens)),
+             if ev.get("start", {}).get("date") == from_d
+             and tokens & set(_title_words(ev["summary"]))),
             None,
         )
         if match:
