@@ -42,6 +42,7 @@ PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("GET", "/jobs"),
     ("POST", "/jobs/apply"),
     ("GET", "/health"),
+    ("POST", "/leave/calendar-sync"),
 }
 
 

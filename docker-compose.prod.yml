@@ -301,6 +301,10 @@ services:
         condition: service_started
       classifier-agent:
         condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - meraki-webhook-v2
     logging:
       driver: "json-file"
       options:

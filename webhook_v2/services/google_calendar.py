@@ -15,6 +15,8 @@ _CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "")
 _KEY_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 _ORGANIZER = os.getenv("GOOGLE_ORGANIZER_EMAIL", "")
 
+_LEAVE_TAG = "leave_application"
+
 _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -49,71 +51,100 @@ def _fmt_range(from_date: str, to_date: str) -> str:
         return f"{from_date} - {to_date}"
 
 
-def _insert(summary: str, from_date: str, to_date: str) -> str | None:
+def is_configured() -> bool:
+    return bool(_KEY_JSON and _CALENDAR_ID and _ORGANIZER)
+
+
+def _insert(summary: str, from_date: str, to_date: str, leave_id: str | None = None) -> str | None:
     svc = _service()
     if not svc:
         return None
     try:
         # Google Calendar all-day events: end date is exclusive
         end_exclusive = (date.fromisoformat(to_date) + timedelta(days=1)).isoformat()
-        event = svc.events().insert(calendarId=_CALENDAR_ID, body={
+        body = {
             "summary": summary,
             "start": {"date": from_date},
             "end": {"date": end_exclusive},
-        }).execute()
+        }
+        if leave_id:
+            # Lets us find and delete exactly this leave's event later.
+            body["extendedProperties"] = {"private": {_LEAVE_TAG: leave_id}}
+        event = svc.events().insert(calendarId=_CALENDAR_ID, body=body).execute()
         event_id = event.get("id")
-        log.info("calendar_event_added", summary=summary, event_id=event_id)
+        log.info("calendar_event_added", summary=summary, event_id=event_id, leave=leave_id)
         return event_id
     except Exception as e:
-        log.warning("calendar_event_failed", summary=summary, error=str(e))
+        log.warning("calendar_event_failed", summary=summary, leave=leave_id, error=str(e))
         return None
 
 
-def add_ooo_event(first_name: str, from_date: str, to_date: str) -> str | None:
-    return _insert(f"OOO - {first_name} ({_fmt_range(from_date, to_date)})", from_date, to_date)
+def add_ooo_event(first_name: str, from_date: str, to_date: str, leave_id: str) -> str | None:
+    return _insert(f"OOO - {first_name} ({_fmt_range(from_date, to_date)})", from_date, to_date, leave_id)
 
 
 def add_wfh_event(first_name: str, from_date: str, to_date: str) -> str | None:
     return _insert(f"WFH - {first_name} ({_fmt_range(from_date, to_date)})", from_date, to_date)
 
 
-def delete_ooo_events(from_date: str, to_date: str, name_tokens: list[str]) -> int:
-    """Delete OOO events overlapping [from_date, to_date] whose summary starts with
-    'OOO - ' and contains any of the employee's name tokens. Returns count deleted.
+def find_leave_events(leave_id: str) -> list[dict]:
+    """Events tagged with this leave application. Raises on API failure so callers
+    never mistake 'could not look' for 'none exist' (which would duplicate events)."""
+    svc = _service()
+    if not svc:
+        return []
+    result = svc.events().list(
+        calendarId=_CALENDAR_ID,
+        privateExtendedProperty=f"{_LEAVE_TAG}={leave_id}",
+    ).execute()
+    return result.get("items", [])
 
-    Matches on any name token (not just first_name) so events created under the older
-    'OOO - <last token>' title format are cleaned up too. The exact date window keeps
-    matching safe. No-op when the calendar is not configured.
-    """
+
+def delete_leave_events(leave_id: str) -> int:
+    """Delete every event tagged with this leave application. Returns count deleted."""
     svc = _service()
     if not svc:
         return 0
-    try:
-        # All-day events end on an exclusive date, so widen the window by a day.
-        # The API requires RFC3339 timestamps, not bare dates.
-        time_max = (date.fromisoformat(to_date) + timedelta(days=1)).isoformat()
-        events = svc.events().list(
-            calendarId=_CALENDAR_ID,
-            timeMin=f"{from_date}T00:00:00Z",
-            timeMax=f"{time_max}T00:00:00Z",
-            singleEvents=True,
-        ).execute()
-    except Exception as e:
-        log.warning("calendar_list_failed", from_date=from_date, to_date=to_date, error=str(e))
-        return 0
-
     deleted = 0
-    for ev in events.get("items", []):
-        summary = ev.get("summary", "")
-        if not summary.startswith("OOO - "):
-            continue
-        if not any(tok and tok in summary for tok in name_tokens):
-            continue
+    for ev in find_leave_events(leave_id):
         event_id = ev.get("id")
         try:
             svc.events().delete(calendarId=_CALENDAR_ID, eventId=event_id).execute()
             deleted += 1
-            log.info("calendar_event_deleted", summary=summary, event_id=event_id)
+            log.info("calendar_event_deleted", summary=ev.get("summary"), event_id=event_id, leave=leave_id)
         except Exception as e:
-            log.warning("calendar_event_delete_failed", event_id=event_id, error=str(e))
+            log.warning("calendar_event_delete_failed", event_id=event_id, leave=leave_id, error=str(e))
     return deleted
+
+
+def list_untagged_ooo_events(from_date: str, to_date: str) -> list[dict]:
+    """'OOO - ' events overlapping [from_date, to_date] that carry no leave tag (pre-MWP-84)."""
+    svc = _service()
+    if not svc:
+        return []
+    # All-day events end on an exclusive date, so widen the window by a day.
+    # The API requires RFC3339 timestamps, not bare dates.
+    time_max = (date.fromisoformat(to_date) + timedelta(days=1)).isoformat()
+    result = svc.events().list(
+        calendarId=_CALENDAR_ID,
+        timeMin=f"{from_date}T00:00:00Z",
+        timeMax=f"{time_max}T00:00:00Z",
+        singleEvents=True,
+    ).execute()
+    return [
+        ev for ev in result.get("items", [])
+        if ev.get("summary", "").startswith("OOO - ")
+        and _LEAVE_TAG not in ev.get("extendedProperties", {}).get("private", {})
+    ]
+
+
+def tag_event(event_id: str, leave_id: str) -> None:
+    svc = _service()
+    if not svc:
+        return
+    svc.events().patch(
+        calendarId=_CALENDAR_ID,
+        eventId=event_id,
+        body={"extendedProperties": {"private": {_LEAVE_TAG: leave_id}}},
+    ).execute()
+    log.info("calendar_event_tagged", event_id=event_id, leave=leave_id)
