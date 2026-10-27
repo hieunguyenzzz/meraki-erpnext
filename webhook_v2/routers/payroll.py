@@ -847,24 +847,25 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
     return {"data": result}
 
 
-def _strip_employer_lines(slip: dict, full_slip: dict) -> None:
-    """Remove employer-side insurance lines (HR-only) from an enriched slip, in place.
+_EMPTY_MY_SLIPS = {
+    "employee": None,
+    "has_commission": False,
+    "has_allowance": False,
+    "commission_components": COMMISSION_COMPONENTS,
+    "data": [],
+}
 
-    These lines are normally flagged do_not_include_in_total in ERPNext, so the
-    stored gross_pay / total_deduction already exclude them and only the lines are
-    dropped. If a line IS counted in the totals, its amount is subtracted so the
-    visible lines still reconcile. net_pay is never touched.
+
+def _strip_employer_lines(slip: dict) -> None:
+    """Remove employer-side insurance data (HR-only) from an enriched slip, in place.
+
+    Employer lines are flagged do_not_include_in_total in ERPNext, so the stored
+    gross_pay / total_deduction / net_pay already exclude them; only the lines
+    (and the derived employer_bhxh figure) are dropped.
     """
-    def counted(lines: list[dict]) -> float:
-        return sum(
-            l.get("amount", 0) for l in lines
-            if "Employer" in (l.get("salary_component") or "") and not l.get("do_not_include_in_total")
-        )
-
-    slip["gross_pay"] -= counted(full_slip.get("earnings", []))
-    slip["total_deduction"] -= counted(full_slip.get("deductions", []))
     slip["earnings"] = [e for e in slip["earnings"] if "Employer" not in (e["salary_component"] or "")]
     slip["deductions"] = [d for d in slip["deductions"] if "Employer" not in (d["salary_component"] or "")]
+    slip.pop("employer_bhxh", None)
 
 
 def _has_nonzero(slips: list[dict], components: list[str]) -> bool:
@@ -892,11 +893,11 @@ def get_my_payroll_slips(user: str = Depends(get_current_user)):
 
     if not employees:
         log.info("my_slips_no_employee", user=user)
-        return {"employee": None, "data": []}
+        return _EMPTY_MY_SLIPS
 
     if len(employees) > 1:
         log.warning("my_slips_multiple_employees", user=user, count=len(employees))
-        return {"employee": None, "data": []}
+        return _EMPTY_MY_SLIPS
 
     emp_id = employees[0]["name"]
     emp_info = _build_emp_info_map(employees)
@@ -919,7 +920,7 @@ def get_my_payroll_slips(user: str = Depends(get_current_user)):
         enriched["start_date"] = full.get("start_date")
         enriched["end_date"] = full.get("end_date")
         enriched["payroll_entry"] = full.get("payroll_entry")
-        _strip_employer_lines(enriched, full)
+        _strip_employer_lines(enriched)
         result.append(enriched)
 
     has_commission = _has_nonzero(result, COMMISSION_COMPONENTS)
