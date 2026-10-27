@@ -847,6 +847,32 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
     return {"data": result}
 
 
+def _strip_employer_lines(slip: dict, full_slip: dict) -> None:
+    """Remove employer-side insurance lines (HR-only) from an enriched slip, in place.
+
+    These lines are normally flagged do_not_include_in_total in ERPNext, so the
+    stored gross_pay / total_deduction already exclude them and only the lines are
+    dropped. If a line IS counted in the totals, its amount is subtracted so the
+    visible lines still reconcile. net_pay is never touched.
+    """
+    def counted(lines: list[dict]) -> float:
+        return sum(
+            l.get("amount", 0) for l in lines
+            if "Employer" in (l.get("salary_component") or "") and not l.get("do_not_include_in_total")
+        )
+
+    slip["gross_pay"] -= counted(full_slip.get("earnings", []))
+    slip["total_deduction"] -= counted(full_slip.get("deductions", []))
+    slip["earnings"] = [e for e in slip["earnings"] if "Employer" not in (e["salary_component"] or "")]
+    slip["deductions"] = [d for d in slip["deductions"] if "Employer" not in (d["salary_component"] or "")]
+
+
+def _has_nonzero(slips: list[dict], components: list[str]) -> bool:
+    return any(
+        e["amount"] for s in slips for e in s["earnings"] if e["salary_component"] in components
+    )
+
+
 @router.get("/payroll/my-slips")
 def get_my_payroll_slips(user: str = Depends(get_current_user)):
     """
@@ -893,11 +919,20 @@ def get_my_payroll_slips(user: str = Depends(get_current_user)):
         enriched["start_date"] = full.get("start_date")
         enriched["end_date"] = full.get("end_date")
         enriched["payroll_entry"] = full.get("payroll_entry")
+        _strip_employer_lines(enriched, full)
         result.append(enriched)
 
-    log.info("my_slips_fetched", user=user, employee=emp_id, count=len(result))
+    has_commission = _has_nonzero(result, COMMISSION_COMPONENTS)
+    has_allowance = _has_nonzero(result, ["Wedding Allowance"])
+    log.info(
+        "my_slips_fetched", user=user, employee=emp_id, count=len(result),
+        has_commission=has_commission, has_allowance=has_allowance,
+    )
 
     return {
         "employee": {"name": emp_id, "display_name": emp_info[emp_id]["display_name"]},
+        "has_commission": has_commission,
+        "has_allowance": has_allowance,
+        "commission_components": COMMISSION_COMPONENTS,
         "data": result,
     }
