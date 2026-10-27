@@ -849,8 +849,6 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
 
 _EMPTY_MY_SLIPS = {
     "employee": None,
-    "has_commission": False,
-    "has_allowance": False,
     "commission_components": COMMISSION_COMPONENTS,
     "data": [],
 }
@@ -879,12 +877,6 @@ def _to_staff_view(slip: dict) -> None:
         collapsed.append({"salary_component": "Income Tax", "amount": 0})
     slip["deductions"] = collapsed
     slip.pop("employer_bhxh", None)
-
-
-def _has_nonzero(slips: list[dict], components: list[str]) -> bool:
-    return any(
-        e["amount"] for s in slips for e in s["earnings"] if e["salary_component"] in components
-    )
 
 
 @router.get("/payroll/my-slips")
@@ -936,17 +928,10 @@ def get_my_payroll_slips(user: str = Depends(get_current_user)):
         _to_staff_view(enriched)
         result.append(enriched)
 
-    has_commission = _has_nonzero(result, COMMISSION_COMPONENTS)
-    has_allowance = _has_nonzero(result, ["Wedding Allowance"])
-    log.info(
-        "my_slips_fetched", user=user, employee=emp_id, count=len(result),
-        has_commission=has_commission, has_allowance=has_allowance,
-    )
+    log.info("my_slips_fetched", user=user, employee=emp_id, count=len(result))
 
     return {
         "employee": {"name": emp_id, "display_name": emp_info[emp_id]["display_name"]},
-        "has_commission": has_commission,
-        "has_allowance": has_allowance,
         "commission_components": COMMISSION_COMPONENTS,
         "data": result,
     }

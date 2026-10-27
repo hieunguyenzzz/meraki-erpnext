@@ -1,4 +1,4 @@
-from webhook_v2.routers.payroll import COMMISSION_COMPONENTS, _has_nonzero, _to_staff_view
+from webhook_v2.routers.payroll import _to_staff_view
 
 
 def _slip():
@@ -19,12 +19,6 @@ def test_employer_lines_and_employer_bhxh_removed_totals_unchanged():
     assert "employer_bhxh" not in slip
     assert slip["gross_pay"] == sum(e["amount"] for e in slip["earnings"])
     assert slip["gross_pay"] - sum(d["amount"] for d in slip["deductions"]) == slip["net_pay"]
-
-
-def test_has_nonzero_commission():
-    slip = _slip()
-    assert _has_nonzero([slip], COMMISSION_COMPONENTS)
-    assert not _has_nonzero([slip], ["Wedding Allowance"])
 
 
 def test_employee_insurance_lines_collapse_into_one_in_place():
