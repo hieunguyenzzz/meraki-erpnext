@@ -26,9 +26,6 @@ interface MySlip {
   earnings: SlipLine[];
   deductions: SlipLine[];
   si_employee?: number;
-  tax_reduction?: number;
-  taxable_income?: number;
-  dependents?: number;
   is_probation?: boolean;
   pit_method?: string;
 }
@@ -196,28 +193,6 @@ function SlipRow({ slip, defaultOpen, hasCommission, hasAllowance, commissionCom
                 <div className="flex justify-between text-sm font-medium border-t pt-1 mt-1">
                   <span>Total Deductions</span>
                   <span>{formatVND(totalDeductions)}</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-sm font-medium mb-2">Tax</p>
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Dependents</span>
-                  <span>{slip.dependents ?? 0}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax Reduction</span>
-                  <span>{formatVND(slip.tax_reduction ?? 0)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Taxable Income</span>
-                  <span>{formatVND(slip.taxable_income ?? 0)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Income Tax</span>
-                  <span>{formatVND(getAmount(slip.deductions, "Income Tax"))}</span>
                 </div>
               </div>
             </div>

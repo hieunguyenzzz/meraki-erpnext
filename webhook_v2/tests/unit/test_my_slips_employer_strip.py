@@ -15,7 +15,7 @@ def test_employer_lines_and_employer_bhxh_removed_totals_unchanged():
     slip = _slip()
     _to_staff_view(slip)
     assert [e["salary_component"] for e in slip["earnings"]] == ["Basic Salary", "Support Planner Commission"]
-    assert [d["salary_component"] for d in slip["deductions"]] == ["Social Insurance (10.5%)"]
+    assert [d["salary_component"] for d in slip["deductions"]] == ["Social Insurance (10.5%)", "Income Tax"]
     assert "employer_bhxh" not in slip
     assert slip["gross_pay"] == sum(e["amount"] for e in slip["earnings"])
     assert slip["gross_pay"] - sum(d["amount"] for d in slip["deductions"]) == slip["net_pay"]
@@ -25,20 +25,6 @@ def test_has_nonzero_commission():
     slip = _slip()
     assert _has_nonzero([slip], COMMISSION_COMPONENTS)
     assert not _has_nonzero([slip], ["Wedding Allowance"])
-
-
-def test_negative_taxable_income_clamped_to_zero():
-    slip = _slip()
-    slip["taxable_income"] = -15_500_000
-    _to_staff_view(slip)
-    assert slip["taxable_income"] == 0
-
-
-def test_positive_taxable_income_unchanged():
-    slip = _slip()
-    slip["taxable_income"] = 4_200_000
-    _to_staff_view(slip)
-    assert slip["taxable_income"] == 4_200_000
 
 
 def test_employee_insurance_lines_collapse_into_one_in_place():
@@ -56,8 +42,17 @@ def test_employee_insurance_lines_collapse_into_one_in_place():
     assert slip["gross_pay"] - sum(d["amount"] for d in slip["deductions"]) == slip["net_pay"]
 
 
-def test_no_insurance_line_when_none_present():
+def test_income_tax_zero_line_appended_when_absent():
     slip = _slip()
-    slip["deductions"] = [{"salary_component": "Income Tax", "amount": 5}]
     _to_staff_view(slip)
-    assert [d["salary_component"] for d in slip["deductions"]] == ["Income Tax"]
+    assert slip["deductions"][-1] == {"salary_component": "Income Tax", "amount": 0}
+    assert [d["salary_component"] for d in slip["deductions"]].count("Income Tax") == 1
+    assert slip["gross_pay"] - sum(d["amount"] for d in slip["deductions"]) == slip["net_pay"]
+
+
+def test_existing_income_tax_line_not_duplicated():
+    slip = _slip()
+    slip["deductions"].append({"salary_component": "Income Tax", "amount": 5})
+    _to_staff_view(slip)
+    assert [d for d in slip["deductions"] if d["salary_component"] == "Income Tax"] == [
+        {"salary_component": "Income Tax", "amount": 5}]
