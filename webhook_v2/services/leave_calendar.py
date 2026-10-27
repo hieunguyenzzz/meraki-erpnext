@@ -4,6 +4,7 @@ Driven by ERPNext webhooks (submit/cancel/trash) and the HR auto-approve path.
 Only the leave name is trusted; the desired state is always read from ERPNext.
 """
 
+import re
 import threading
 
 import requests
@@ -34,6 +35,19 @@ def _fetch_leave(client: ERPNextClient, leave_id: str) -> dict | None:
         raise
 
 
+def half_day_note(leave: dict) -> str:
+    """'half day AM' / 'half day PM 22 Oct' for half-day leaves, else ''. AM/PM lives in the
+    description prefix written by /leave/apply, not in a field."""
+    if not leave.get("half_day"):
+        return ""
+    match = re.match(r"^Half Day \((AM|PM)\)", leave.get("description") or "")
+    note = f"half day {match.group(1)}" if match else "half day"
+    from_date, to_date, half_date = leave["from_date"][:10], leave["to_date"][:10], leave.get("half_day_date")
+    if half_date and from_date != to_date:
+        note += f" {gcal._fmt_range(half_date[:10], half_date[:10])}"
+    return note
+
+
 def sync_leave_calendar(leave_id: str) -> str:
     """Make the calendar match ERPNext for one leave. Idempotent. Returns the decision."""
     with _locks.setdefault(leave_id, threading.Lock()):
@@ -58,6 +72,7 @@ def _sync(leave_id: str) -> str:
         event_id = gcal.add_ooo_event(
             calendar_name(emp.get("first_name", ""), emp.get("last_name", "")),
             leave["from_date"][:10], leave["to_date"][:10], leave_id,
+            half_day_note(leave),
         )
         decision = "create" if event_id else "create_failed"
         log.info("leave_calendar_sync", leave=leave_id, decision=decision, event_id=event_id)
