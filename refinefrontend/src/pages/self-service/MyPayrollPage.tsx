@@ -213,7 +213,7 @@ function SlipRow({ slip, defaultOpen, hasCommission, hasAllowance, commissionCom
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Taxable Income</span>
-                  <span className={(slip.taxable_income ?? 0) < 0 ? "text-muted-foreground" : ""}>{formatVND(slip.taxable_income ?? 0)}</span>
+                  <span>{formatVND(slip.taxable_income ?? 0)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Income Tax</span>

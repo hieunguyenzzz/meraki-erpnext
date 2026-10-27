@@ -861,11 +861,13 @@ def _strip_employer_lines(slip: dict) -> None:
 
     Employer lines are flagged do_not_include_in_total in ERPNext, so the stored
     gross_pay / total_deduction / net_pay already exclude them; only the lines
-    (and the derived employer_bhxh figure) are dropped.
+    (and the derived employer_bhxh figure) are dropped. Staff also never see a
+    negative taxable_income (HR's /payroll/slips keeps the real value).
     """
     slip["earnings"] = [e for e in slip["earnings"] if "Employer" not in (e["salary_component"] or "")]
     slip["deductions"] = [d for d in slip["deductions"] if "Employer" not in (d["salary_component"] or "")]
     slip.pop("employer_bhxh", None)
+    slip["taxable_income"] = max(0, slip.get("taxable_income") or 0)
 
 
 def _has_nonzero(slips: list[dict], components: list[str]) -> bool:

@@ -25,3 +25,17 @@ def test_has_nonzero_commission():
     slip = _slip()
     assert _has_nonzero([slip], COMMISSION_COMPONENTS)
     assert not _has_nonzero([slip], ["Wedding Allowance"])
+
+
+def test_negative_taxable_income_clamped_to_zero():
+    slip = _slip()
+    slip["taxable_income"] = -15_500_000
+    _strip_employer_lines(slip)
+    assert slip["taxable_income"] == 0
+
+
+def test_positive_taxable_income_unchanged():
+    slip = _slip()
+    slip["taxable_income"] = 4_200_000
+    _strip_employer_lines(slip)
+    assert slip["taxable_income"] == 4_200_000
