@@ -79,8 +79,9 @@ def _insert(summary: str, from_date: str, to_date: str, leave_id: str | None = N
         return None
 
 
-def add_ooo_event(first_name: str, from_date: str, to_date: str, leave_id: str) -> str | None:
-    return _insert(f"OOO - {first_name} ({_fmt_range(from_date, to_date)})", from_date, to_date, leave_id)
+def add_ooo_event(first_name: str, from_date: str, to_date: str, leave_id: str, note: str = "") -> str | None:
+    """All-day event already spans the dates, so the title carries only the name and optional note."""
+    return _insert(f"OOO - {first_name}" + (f" ({note})" if note else ""), from_date, to_date, leave_id)
 
 
 def add_wfh_event(first_name: str, from_date: str, to_date: str) -> str | None:

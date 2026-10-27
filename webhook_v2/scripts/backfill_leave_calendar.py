@@ -33,7 +33,7 @@ def _approved_future_leaves(client: ERPNextClient) -> list[dict]:
 
 
 def _title_words(summary: str) -> list[str]:
-    """Whole words of the name part of 'OOO - Name (dates)', so 'An' never matches 'Anh'."""
+    """Whole words of the name part of 'OOO - Name' or 'OOO - Name (note)', so 'An' never matches 'Anh'."""
     return summary.removeprefix("OOO - ").split(" (")[0].split()
 
 
