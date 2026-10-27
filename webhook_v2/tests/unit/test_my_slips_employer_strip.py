@@ -1,4 +1,4 @@
-from webhook_v2.routers.payroll import COMMISSION_COMPONENTS, _has_nonzero, _strip_employer_lines
+from webhook_v2.routers.payroll import COMMISSION_COMPONENTS, _has_nonzero, _to_staff_view
 
 
 def _slip():
@@ -13,9 +13,9 @@ def _slip():
 
 def test_employer_lines_and_employer_bhxh_removed_totals_unchanged():
     slip = _slip()
-    _strip_employer_lines(slip)
+    _to_staff_view(slip)
     assert [e["salary_component"] for e in slip["earnings"]] == ["Basic Salary", "Support Planner Commission"]
-    assert [d["salary_component"] for d in slip["deductions"]] == ["BHXH (Employee)"]
+    assert [d["salary_component"] for d in slip["deductions"]] == ["Social Insurance (10.5%)"]
     assert "employer_bhxh" not in slip
     assert slip["gross_pay"] == sum(e["amount"] for e in slip["earnings"])
     assert slip["gross_pay"] - sum(d["amount"] for d in slip["deductions"]) == slip["net_pay"]
@@ -30,12 +30,34 @@ def test_has_nonzero_commission():
 def test_negative_taxable_income_clamped_to_zero():
     slip = _slip()
     slip["taxable_income"] = -15_500_000
-    _strip_employer_lines(slip)
+    _to_staff_view(slip)
     assert slip["taxable_income"] == 0
 
 
 def test_positive_taxable_income_unchanged():
     slip = _slip()
     slip["taxable_income"] = 4_200_000
-    _strip_employer_lines(slip)
+    _to_staff_view(slip)
     assert slip["taxable_income"] == 4_200_000
+
+
+def test_employee_insurance_lines_collapse_into_one_in_place():
+    slip = _slip()
+    slip["deductions"] = [{"salary_component": n, "amount": a} for n, a in [
+        ("Advance", 100_000), ("BHXH (Employee)", 800_000), ("BHYT (Employee)", 150_000),
+        ("BHXH Employer Payable", 1_750_000), ("BHTN (Employee)", 100_000), ("Income Tax", 50_000)]]
+    slip["gross_pay"], slip["net_pay"] = 12_000_000, 12_000_000 - 1_200_000
+    _to_staff_view(slip)
+    assert slip["deductions"] == [
+        {"salary_component": "Advance", "amount": 100_000},
+        {"salary_component": "Social Insurance (10.5%)", "amount": 1_050_000},
+        {"salary_component": "Income Tax", "amount": 50_000},
+    ]
+    assert slip["gross_pay"] - sum(d["amount"] for d in slip["deductions"]) == slip["net_pay"]
+
+
+def test_no_insurance_line_when_none_present():
+    slip = _slip()
+    slip["deductions"] = [{"salary_component": "Income Tax", "amount": 5}]
+    _to_staff_view(slip)
+    assert [d["salary_component"] for d in slip["deductions"]] == ["Income Tax"]

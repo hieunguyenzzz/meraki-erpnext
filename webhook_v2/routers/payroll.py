@@ -856,16 +856,26 @@ _EMPTY_MY_SLIPS = {
 }
 
 
-def _strip_employer_lines(slip: dict) -> None:
-    """Remove employer-side insurance data (HR-only) from an enriched slip, in place.
+def _to_staff_view(slip: dict) -> None:
+    """Reduce an enriched slip to what staff may see, in place.
 
-    Employer lines are flagged do_not_include_in_total in ERPNext, so the stored
-    gross_pay / total_deduction / net_pay already exclude them; only the lines
-    (and the derived employer_bhxh figure) are dropped. Staff also never see a
-    negative taxable_income (HR's /payroll/slips keeps the real value).
+    - Employer-side insurance lines and employer_bhxh are dropped. They are flagged
+      do_not_include_in_total in ERPNext, so gross_pay / total_deduction / net_pay
+      already exclude them.
+    - Employee BHXH/BHYT/BHTN deductions collapse into one "Social Insurance (10.5%)"
+      line at the position of the first of them (omitted when the sum is 0).
+    - taxable_income is never negative (HR's /payroll/slips keeps the real value).
     """
     slip["earnings"] = [e for e in slip["earnings"] if "Employer" not in (e["salary_component"] or "")]
-    slip["deductions"] = [d for d in slip["deductions"] if "Employer" not in (d["salary_component"] or "")]
+    deductions = [d for d in slip["deductions"] if "Employer" not in (d["salary_component"] or "")]
+    is_si = lambda d: (d["salary_component"] or "").startswith(("BHXH", "BHYT", "BHTN"))
+    si_total = sum(d["amount"] for d in deductions if is_si(d))
+    first_si = next((i for i, d in enumerate(deductions) if is_si(d)), None)
+    collapsed = [d for d in deductions if not is_si(d)]
+    if first_si is not None and si_total:
+        pos = sum(1 for d in deductions[:first_si] if not is_si(d))
+        collapsed.insert(pos, {"salary_component": "Social Insurance (10.5%)", "amount": si_total})
+    slip["deductions"] = collapsed
     slip.pop("employer_bhxh", None)
     slip["taxable_income"] = max(0, slip.get("taxable_income") or 0)
 
@@ -922,7 +932,7 @@ def get_my_payroll_slips(user: str = Depends(get_current_user)):
         enriched["start_date"] = full.get("start_date")
         enriched["end_date"] = full.get("end_date")
         enriched["payroll_entry"] = full.get("payroll_entry")
-        _strip_employer_lines(enriched)
+        _to_staff_view(enriched)
         result.append(enriched)
 
     has_commission = _has_nonzero(result, COMMISSION_COMPONENTS)
