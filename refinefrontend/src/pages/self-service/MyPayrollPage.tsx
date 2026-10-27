@@ -35,6 +35,9 @@ interface MySlip {
 
 interface MySlipsResponse {
   employee: { name: string; display_name: string } | null;
+  has_commission: boolean;
+  has_allowance: boolean;
+  commission_components: string[];
   data: MySlip[];
 }
 
@@ -51,7 +54,23 @@ function getAmount(lines: SlipLine[], component: string): number {
   return lines.find((l) => l.salary_component === component)?.amount ?? 0;
 }
 
-function SlipRow({ slip, defaultOpen }: { slip: MySlip; defaultOpen: boolean }) {
+const ALLOWANCE_COMPONENT = "Wedding Allowance";
+const BONUS_COMPONENT = "Bonus";
+
+// Short labels for the indented commission role lines.
+function roleLabel(component: string): string {
+  return component.replace(/ Commission$/, "");
+}
+
+interface SlipRowProps {
+  slip: MySlip;
+  defaultOpen: boolean;
+  hasCommission: boolean;
+  hasAllowance: boolean;
+  commissionComponents: string[];
+}
+
+function SlipRow({ slip, defaultOpen, hasCommission, hasAllowance, commissionComponents }: SlipRowProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   // gross_pay from the backend is already net of "Salary Proration Adj" (a
@@ -65,9 +84,13 @@ function SlipRow({ slip, defaultOpen }: { slip: MySlip; defaultOpen: boolean }) 
   const visibleDeductions = slip.deductions.filter(
     (d) => !HIDDEN_DEDUCTION_COMPONENTS.includes(d.salary_component)
   );
-  const displayEarnings = prorationAdj !== 0
-    ? [...slip.earnings, { salary_component: "Proration / probation adjustment", amount: -prorationAdj }]
-    : slip.earnings;
+  const isSpecial = (c: string) =>
+    commissionComponents.includes(c) || c === ALLOWANCE_COMPONENT || c === BONUS_COMPONENT;
+  const baseEarnings = slip.earnings.filter((e) => !isSpecial(e.salary_component));
+  const commissionLines = slip.earnings.filter(
+    (e) => commissionComponents.includes(e.salary_component) && e.amount !== 0
+  );
+  const commissionTotal = commissionLines.reduce((sum, e) => sum + e.amount, 0);
   const totalDeductions = visibleDeductions.reduce((sum, d) => sum + d.amount, 0);
 
   return (
@@ -114,12 +137,42 @@ function SlipRow({ slip, defaultOpen }: { slip: MySlip; defaultOpen: boolean }) 
             <div>
               <p className="text-sm font-medium mb-2">Earnings</p>
               <div className="space-y-1">
-                {displayEarnings.map((e) => (
+                {baseEarnings.map((e) => (
                   <div key={e.salary_component} className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{e.salary_component}</span>
                     <span>{formatVND(e.amount)}</span>
                   </div>
                 ))}
+                {hasCommission && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Commission</span>
+                      <span>{formatVND(commissionTotal)}</span>
+                    </div>
+                    {commissionLines.map((e) => (
+                      <div key={e.salary_component} className="flex justify-between text-xs pl-4">
+                        <span className="text-muted-foreground">{roleLabel(e.salary_component)}</span>
+                        <span>{formatVND(e.amount)}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {hasAllowance && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{ALLOWANCE_COMPONENT}</span>
+                    <span>{formatVND(getAmount(slip.earnings, ALLOWANCE_COMPONENT))}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">{BONUS_COMPONENT}</span>
+                  <span>{formatVND(getAmount(slip.earnings, BONUS_COMPONENT))}</span>
+                </div>
+                {prorationAdj !== 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Proration / probation adjustment</span>
+                    <span>{formatVND(-prorationAdj)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm font-medium border-t pt-1 mt-1">
                   <span>Gross Pay</span>
                   <span>{formatVND(slip.gross_pay)}</span>
@@ -224,7 +277,14 @@ export default function MyPayrollPage() {
       {!isLoading && !error && response?.employee && response.data.length > 0 && (
         <div className="space-y-3">
           {response.data.map((slip, i) => (
-            <SlipRow key={slip.name} slip={slip} defaultOpen={i === 0} />
+            <SlipRow
+              key={slip.name}
+              slip={slip}
+              defaultOpen={i === 0}
+              hasCommission={response.has_commission}
+              hasAllowance={response.has_allowance}
+              commissionComponents={response.commission_components}
+            />
           ))}
         </div>
       )}

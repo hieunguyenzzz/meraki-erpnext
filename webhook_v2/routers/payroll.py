@@ -847,6 +847,33 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
     return {"data": result}
 
 
+_EMPTY_MY_SLIPS = {
+    "employee": None,
+    "has_commission": False,
+    "has_allowance": False,
+    "commission_components": COMMISSION_COMPONENTS,
+    "data": [],
+}
+
+
+def _strip_employer_lines(slip: dict) -> None:
+    """Remove employer-side insurance data (HR-only) from an enriched slip, in place.
+
+    Employer lines are flagged do_not_include_in_total in ERPNext, so the stored
+    gross_pay / total_deduction / net_pay already exclude them; only the lines
+    (and the derived employer_bhxh figure) are dropped.
+    """
+    slip["earnings"] = [e for e in slip["earnings"] if "Employer" not in (e["salary_component"] or "")]
+    slip["deductions"] = [d for d in slip["deductions"] if "Employer" not in (d["salary_component"] or "")]
+    slip.pop("employer_bhxh", None)
+
+
+def _has_nonzero(slips: list[dict], components: list[str]) -> bool:
+    return any(
+        e["amount"] for s in slips for e in s["earnings"] if e["salary_component"] in components
+    )
+
+
 @router.get("/payroll/my-slips")
 def get_my_payroll_slips(user: str = Depends(get_current_user)):
     """
@@ -866,11 +893,11 @@ def get_my_payroll_slips(user: str = Depends(get_current_user)):
 
     if not employees:
         log.info("my_slips_no_employee", user=user)
-        return {"employee": None, "data": []}
+        return _EMPTY_MY_SLIPS
 
     if len(employees) > 1:
         log.warning("my_slips_multiple_employees", user=user, count=len(employees))
-        return {"employee": None, "data": []}
+        return _EMPTY_MY_SLIPS
 
     emp_id = employees[0]["name"]
     emp_info = _build_emp_info_map(employees)
@@ -893,11 +920,20 @@ def get_my_payroll_slips(user: str = Depends(get_current_user)):
         enriched["start_date"] = full.get("start_date")
         enriched["end_date"] = full.get("end_date")
         enriched["payroll_entry"] = full.get("payroll_entry")
+        _strip_employer_lines(enriched)
         result.append(enriched)
 
-    log.info("my_slips_fetched", user=user, employee=emp_id, count=len(result))
+    has_commission = _has_nonzero(result, COMMISSION_COMPONENTS)
+    has_allowance = _has_nonzero(result, ["Wedding Allowance"])
+    log.info(
+        "my_slips_fetched", user=user, employee=emp_id, count=len(result),
+        has_commission=has_commission, has_allowance=has_allowance,
+    )
 
     return {
         "employee": {"name": emp_id, "display_name": emp_info[emp_id]["display_name"]},
+        "has_commission": has_commission,
+        "has_allowance": has_allowance,
+        "commission_components": COMMISSION_COMPONENTS,
         "data": result,
     }
