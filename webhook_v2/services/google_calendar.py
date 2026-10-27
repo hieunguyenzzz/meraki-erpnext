@@ -85,7 +85,8 @@ def add_ooo_event(first_name: str, from_date: str, to_date: str, leave_id: str, 
 
 
 def add_wfh_event(first_name: str, from_date: str, to_date: str) -> str | None:
-    return _insert(f"WFH - {first_name} ({_fmt_range(from_date, to_date)})", from_date, to_date)
+    """All-day event already spans the dates, so the title carries only the name."""
+    return _insert(f"WFH - {first_name}", from_date, to_date)
 
 
 def find_leave_events(leave_id: str) -> list[dict]:

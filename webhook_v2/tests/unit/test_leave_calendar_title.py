@@ -43,6 +43,12 @@ def test_titles():
     ]
 
 
+def test_wfh_title_has_no_date():
+    with patch.object(gcal, "_insert") as insert:
+        gcal.add_wfh_event("Nguyên", "2026-10-20", "2026-10-22")
+    insert.assert_called_once_with("WFH - Nguyên", "2026-10-20", "2026-10-22")
+
+
 def test_backfill_title_words_handle_no_parens():
     from webhook_v2.scripts.backfill_leave_calendar import _title_words
     assert _title_words("OOO - Nguyên Trần") == ["Nguyên", "Trần"]
