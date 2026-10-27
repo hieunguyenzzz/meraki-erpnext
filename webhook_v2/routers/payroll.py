@@ -849,8 +849,6 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
 
 _EMPTY_MY_SLIPS = {
     "employee": None,
-    "has_commission": False,
-    "has_allowance": False,
     "commission_components": COMMISSION_COMPONENTS,
     "data": [],
 }
@@ -864,7 +862,7 @@ def _to_staff_view(slip: dict) -> None:
       already exclude them.
     - Employee BHXH/BHYT/BHTN deductions collapse into one "Social Insurance (10.5%)"
       line at the position of the first of them (omitted when the sum is 0).
-    - taxable_income is never negative (HR's /payroll/slips keeps the real value).
+    - An "Income Tax" deduction line is always present (amount 0 when the slip has none).
     """
     slip["earnings"] = [e for e in slip["earnings"] if "Employer" not in (e["salary_component"] or "")]
     deductions = [d for d in slip["deductions"] if "Employer" not in (d["salary_component"] or "")]
@@ -875,15 +873,10 @@ def _to_staff_view(slip: dict) -> None:
     if first_si is not None and si_total:
         pos = sum(1 for d in deductions[:first_si] if not is_si(d))
         collapsed.insert(pos, {"salary_component": "Social Insurance (10.5%)", "amount": si_total})
+    if not any(d["salary_component"] == "Income Tax" for d in collapsed):
+        collapsed.append({"salary_component": "Income Tax", "amount": 0})
     slip["deductions"] = collapsed
     slip.pop("employer_bhxh", None)
-    slip["taxable_income"] = max(0, slip.get("taxable_income") or 0)
-
-
-def _has_nonzero(slips: list[dict], components: list[str]) -> bool:
-    return any(
-        e["amount"] for s in slips for e in s["earnings"] if e["salary_component"] in components
-    )
 
 
 @router.get("/payroll/my-slips")
@@ -935,17 +928,10 @@ def get_my_payroll_slips(user: str = Depends(get_current_user)):
         _to_staff_view(enriched)
         result.append(enriched)
 
-    has_commission = _has_nonzero(result, COMMISSION_COMPONENTS)
-    has_allowance = _has_nonzero(result, ["Wedding Allowance"])
-    log.info(
-        "my_slips_fetched", user=user, employee=emp_id, count=len(result),
-        has_commission=has_commission, has_allowance=has_allowance,
-    )
+    log.info("my_slips_fetched", user=user, employee=emp_id, count=len(result))
 
     return {
         "employee": {"name": emp_id, "display_name": emp_info[emp_id]["display_name"]},
-        "has_commission": has_commission,
-        "has_allowance": has_allowance,
         "commission_components": COMMISSION_COMPONENTS,
         "data": result,
     }

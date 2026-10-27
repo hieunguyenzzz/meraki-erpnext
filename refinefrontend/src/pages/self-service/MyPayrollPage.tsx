@@ -26,17 +26,12 @@ interface MySlip {
   earnings: SlipLine[];
   deductions: SlipLine[];
   si_employee?: number;
-  tax_reduction?: number;
-  taxable_income?: number;
-  dependents?: number;
   is_probation?: boolean;
   pit_method?: string;
 }
 
 interface MySlipsResponse {
   employee: { name: string; display_name: string } | null;
-  has_commission: boolean;
-  has_allowance: boolean;
   commission_components: string[];
   data: MySlip[];
 }
@@ -65,12 +60,10 @@ function roleLabel(component: string): string {
 interface SlipRowProps {
   slip: MySlip;
   defaultOpen: boolean;
-  hasCommission: boolean;
-  hasAllowance: boolean;
   commissionComponents: string[];
 }
 
-function SlipRow({ slip, defaultOpen, hasCommission, hasAllowance, commissionComponents }: SlipRowProps) {
+function SlipRow({ slip, defaultOpen, commissionComponents }: SlipRowProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   // gross_pay from the backend is already net of "Salary Proration Adj" (a
@@ -91,6 +84,7 @@ function SlipRow({ slip, defaultOpen, hasCommission, hasAllowance, commissionCom
     (e) => commissionComponents.includes(e.salary_component) && e.amount !== 0
   );
   const commissionTotal = commissionLines.reduce((sum, e) => sum + e.amount, 0);
+  const allowance = getAmount(slip.earnings, ALLOWANCE_COMPONENT);
   const totalDeductions = visibleDeductions.reduce((sum, d) => sum + d.amount, 0);
 
   return (
@@ -143,7 +137,7 @@ function SlipRow({ slip, defaultOpen, hasCommission, hasAllowance, commissionCom
                     <span>{formatVND(e.amount)}</span>
                   </div>
                 ))}
-                {hasCommission && (
+                {commissionTotal > 0 && (
                   <>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Commission</span>
@@ -157,10 +151,10 @@ function SlipRow({ slip, defaultOpen, hasCommission, hasAllowance, commissionCom
                     ))}
                   </>
                 )}
-                {hasAllowance && (
+                {allowance > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{ALLOWANCE_COMPONENT}</span>
-                    <span>{formatVND(getAmount(slip.earnings, ALLOWANCE_COMPONENT))}</span>
+                    <span>{formatVND(allowance)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
@@ -196,28 +190,6 @@ function SlipRow({ slip, defaultOpen, hasCommission, hasAllowance, commissionCom
                 <div className="flex justify-between text-sm font-medium border-t pt-1 mt-1">
                   <span>Total Deductions</span>
                   <span>{formatVND(totalDeductions)}</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-sm font-medium mb-2">Tax</p>
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Dependents</span>
-                  <span>{slip.dependents ?? 0}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax Reduction</span>
-                  <span>{formatVND(slip.tax_reduction ?? 0)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Taxable Income</span>
-                  <span>{formatVND(slip.taxable_income ?? 0)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Income Tax</span>
-                  <span>{formatVND(getAmount(slip.deductions, "Income Tax"))}</span>
                 </div>
               </div>
             </div>
@@ -303,8 +275,6 @@ export default function MyPayrollPage() {
               key={slip.name}
               slip={slip}
               defaultOpen={i === 0}
-              hasCommission={response.has_commission}
-              hasAllowance={response.has_allowance}
               commissionComponents={response.commission_components}
             />
           ))}
