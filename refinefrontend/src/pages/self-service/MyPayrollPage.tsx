@@ -200,6 +200,28 @@ function SlipRow({ slip, defaultOpen, hasCommission, hasAllowance, commissionCom
               </div>
             </div>
 
+            <div>
+              <p className="text-sm font-medium mb-2">Tax</p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Dependents</span>
+                  <span>{slip.dependents ?? 0}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tax Reduction</span>
+                  <span>{formatVND(slip.tax_reduction ?? 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Taxable Income</span>
+                  <span className={(slip.taxable_income ?? 0) < 0 ? "text-muted-foreground" : ""}>{formatVND(slip.taxable_income ?? 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Income Tax</span>
+                  <span>{formatVND(getAmount(slip.deductions, "Income Tax"))}</span>
+                </div>
+              </div>
+            </div>
+
             <div className="flex justify-between text-base font-bold border-t pt-3">
               <span>Net Pay</span>
               <span>{formatVND(slip.net_pay)}</span>
