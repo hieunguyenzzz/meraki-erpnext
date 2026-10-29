@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from pydantic import BaseModel, Field, field_validator
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.classifier_client import RemoteClassifierClient
+from webhook_v2.services.receipt_image import to_browser_image
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries
 from webhook_v2.auth import require_roles, has_roles, resolve_employee, PLANNER, FINANCE, WEDDING_MANAGER, DIRECTOR
@@ -314,10 +315,16 @@ async def attach_receipt(pi_name: str, request: Request, file: UploadFile = File
     if not file_data:
         raise HTTPException(status_code=400, detail="Empty file")
 
+    filename = file.filename or "receipt.jpg"
+    file_data, new_name = to_browser_image(file_data, filename)
+    if new_name != filename:
+        log.info("receipt_converted", pi=pi_name, original=filename, converted=new_name)
+    filename = new_name
+
     try:
         result = client.upload_file(
             file_data=file_data,
-            filename=file.filename or "receipt.jpg",
+            filename=filename,
             doctype="Purchase Invoice",
             docname=pi_name,
             is_private=False,
@@ -800,9 +807,13 @@ async def create_wedding_expense_with_receipt(
         try:
             file_data = await receipt.read()
             client = ERPNextClient()
+            original = receipt.filename or "receipt.jpg"
+            file_data, filename = to_browser_image(file_data, original)
+            if filename != original:
+                log.info("receipt_converted", pi=result["name"], original=original, converted=filename)
             client.upload_file(
                 file_data=file_data,
-                filename=receipt.filename or "receipt.jpg",
+                filename=filename,
                 doctype="Purchase Invoice",
                 docname=result["name"],
                 is_private=False,
