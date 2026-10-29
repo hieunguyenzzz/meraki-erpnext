@@ -111,7 +111,7 @@ export default function ExpenseDetailPage() {
       <FileAttachments
         doctype="Purchase Invoice"
         docname={name!}
-        upload={(f) => attachExpenseReceipt(f, name!, { isPrivate: true })}
+        upload={(f) => attachExpenseReceipt(f, name!)}
         accept=".pdf,.jpg,.jpeg,.png,.heic,.heif"
       />
     </div>
