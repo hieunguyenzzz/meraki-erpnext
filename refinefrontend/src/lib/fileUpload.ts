@@ -34,11 +34,12 @@ export async function uploadFile(
 export async function attachExpenseReceipt(
   file: File,
   piName: string,
-  { replace = false }: { replace?: boolean } = {}
+  { replace = false, isPrivate = false }: { replace?: boolean; isPrivate?: boolean } = {}
 ): Promise<{ file_url: string; warning?: string }> {
   const formData = new FormData();
   formData.append("file", file);
   if (replace) formData.append("replace", "true");
+  if (isPrivate) formData.append("is_private", "true");
 
   const res = await fetch(`/inquiry-api/expense/${encodeURIComponent(piName)}/attach`, {
     method: "POST",

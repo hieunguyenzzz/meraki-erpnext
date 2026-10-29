@@ -292,7 +292,8 @@ def _delete_receipt_files(client: ERPNextClient, pi_name: str, keep: str | None 
 
 
 @router.post("/expense/{pi_name}/attach", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
-async def attach_receipt(pi_name: str, request: Request, file: UploadFile = File(...), replace: bool = Form(False)):
+async def attach_receipt(pi_name: str, request: Request, file: UploadFile = File(...), replace: bool = Form(False),
+                         is_private: bool = Form(False)):
     """Attach a receipt image to a Purchase Invoice (uses admin API keys).
 
     Planners may only attach to wedding (project-linked) expenses; expenses
@@ -328,7 +329,7 @@ async def attach_receipt(pi_name: str, request: Request, file: UploadFile = File
             filename=filename,
             doctype="Purchase Invoice",
             docname=pi_name,
-            is_private=False,
+            is_private=is_private,
         )
     except Exception as e:
         log.error("receipt_attach_failed", pi=pi_name, user=user, error=str(e))
