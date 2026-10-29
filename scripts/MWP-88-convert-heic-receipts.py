@@ -18,7 +18,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from webhook_v2.services.receipt_image import is_heif, to_browser_image  # noqa: E402
 
 URL = os.environ["ERPNEXT_URL"].rstrip("/")
-HEADERS = {"Authorization": f"token {os.environ['ERPNEXT_API_KEY']}:{os.environ['ERPNEXT_API_SECRET']}"}
+HEADERS = {
+    "Authorization": f"token {os.environ['ERPNEXT_API_KEY']}:{os.environ['ERPNEXT_API_SECRET']}",
+    "X-Frappe-Site-Name": os.environ.get("ERPNEXT_SITE_NAME", "erp.merakiwp.com"),
+}
 
 
 def list_heic_files() -> list[dict]:
@@ -59,7 +62,7 @@ def process(f: dict, apply: bool) -> str:
         f"{URL}/api/method/upload_file",
         headers=HEADERS,
         files={"file": (new_name, jpeg)},
-        data={"doctype": "Purchase Invoice", "docname": f["attached_to_name"], "is_private": "0"},
+        data={"doctype": "Purchase Invoice", "docname": f["attached_to_name"], "is_private": "1" if f.get("is_private") else "0"},
         timeout=60,
     )
     up.raise_for_status()

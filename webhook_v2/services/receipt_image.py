@@ -28,9 +28,10 @@ def to_browser_image(data: bytes, filename: str) -> tuple[bytes, str]:
 
         register_heif_opener()
         with Image.open(io.BytesIO(data)) as img:
+            icc = img.info.get("icc_profile")
             img = ImageOps.exif_transpose(img).convert("RGB")
             out = io.BytesIO()
-            img.save(out, format="JPEG", quality=85)
+            img.save(out, format="JPEG", quality=85, icc_profile=icc)
     except Exception as e:
         log.warning("receipt_heic_convert_failed", filename=filename, error=str(e))
         return data, filename

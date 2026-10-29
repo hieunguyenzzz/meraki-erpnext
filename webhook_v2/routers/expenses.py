@@ -13,6 +13,7 @@ New (wedding expenses with approval):
   DELETE /expense/{name}         — delete expense (Draft or Submitted)
 """
 
+import asyncio
 import json
 from typing import Literal
 
@@ -316,7 +317,7 @@ async def attach_receipt(pi_name: str, request: Request, file: UploadFile = File
         raise HTTPException(status_code=400, detail="Empty file")
 
     filename = file.filename or "receipt.jpg"
-    file_data, new_name = to_browser_image(file_data, filename)
+    file_data, new_name = await asyncio.to_thread(to_browser_image, file_data, filename)
     if new_name != filename:
         log.info("receipt_converted", pi=pi_name, original=filename, converted=new_name)
     filename = new_name
@@ -808,7 +809,7 @@ async def create_wedding_expense_with_receipt(
             file_data = await receipt.read()
             client = ERPNextClient()
             original = receipt.filename or "receipt.jpg"
-            file_data, filename = to_browser_image(file_data, original)
+            file_data, filename = await asyncio.to_thread(to_browser_image, file_data, original)
             if filename != original:
                 log.info("receipt_converted", pi=result["name"], original=original, converted=filename)
             client.upload_file(

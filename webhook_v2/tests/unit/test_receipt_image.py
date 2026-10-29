@@ -47,3 +47,9 @@ def test_garbage_heic_passes_through():
 def test_corrupt_heif_passes_through():
     bad = b"\x00\x00\x00\x18ftypheic" + b"\x00" * 20
     assert to_browser_image(bad, "a.heic") == (bad, "a.heic")
+
+
+def test_input_shorter_than_ftyp_header_passes_through():
+    short = b"\x00\x00\x00\x0cftyp"
+    assert to_browser_image(short, "a.heic") == (short, "a.heic")
+    assert to_browser_image(b"", "a.heic") == (b"", "a.heic")
