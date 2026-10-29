@@ -2223,17 +2223,22 @@ export default function ProjectDetailPage() {
                                         <Loader2 className="h-4 w-4 text-white animate-spin" />
                                       </div>
                                     )}
-                                    <div className={`absolute inset-0 flex items-center justify-center gap-1 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity ${receiptBusy[exp.name] ? "hidden" : ""}`}>
-                                      <button
-                                        type="button"
-                                        className="p-1 rounded hover:bg-white/20 transition-colors"
-                                        onClick={() => setPreviewImage(exp.receipt_url)}
-                                        title="Preview"
-                                      >
-                                        <Eye className="h-3.5 w-3.5 text-white" />
-                                      </button>
+                                    <div className={`absolute inset-0 flex items-center justify-center gap-1 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-zoom-in ${receiptBusy[exp.name] ? "hidden" : ""}`}
+                                      onClick={() => setPreviewImage(exp.receipt_url)}
+                                      title="Preview"
+                                    >
+                                      {exp.status !== "Pending" && (
+                                        <button
+                                          type="button"
+                                          className="p-1 rounded hover:bg-white/20 transition-colors"
+                                          onClick={() => setPreviewImage(exp.receipt_url)}
+                                          title="Preview"
+                                        >
+                                          <Eye className="h-3.5 w-3.5 text-white" />
+                                        </button>
+                                      )}
                                       {exp.status === "Pending" && (
-                                        <label className="p-1 rounded hover:bg-white/20 transition-colors cursor-pointer" title="Replace">
+                                        <label className="p-1 rounded hover:bg-white/20 transition-colors cursor-pointer" title="Replace" onClick={(e) => e.stopPropagation()}>
                                           <Pencil className="h-3.5 w-3.5 text-white" />
                                           <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
                                             const input = e.target;
@@ -2250,7 +2255,8 @@ export default function ProjectDetailPage() {
                                           type="button"
                                           className="p-1 rounded hover:bg-white/20 transition-colors"
                                           title="Delete receipt"
-                                          onClick={async () => {
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
                                             if (!confirm("Delete this receipt?")) return;
                                             await runReceiptAction(exp.name, "Failed to delete receipt", () => deleteExpenseReceipt(exp.name).then(() => undefined));
                                           }}

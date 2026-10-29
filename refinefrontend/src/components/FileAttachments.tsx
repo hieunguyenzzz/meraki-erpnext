@@ -13,12 +13,17 @@ function formatFileSize(bytes: number): string {
 export default function FileAttachments({
   doctype,
   docname,
+  upload,
+  accept = ".pdf,.jpg,.jpeg,.png",
 }: {
   doctype: string;
   docname: string;
+  upload?: (file: File) => Promise<unknown>;
+  accept?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const invalidate = useInvalidate();
 
   const { result, query } = useList({
@@ -39,11 +44,13 @@ export default function FileAttachments({
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setError(null);
     try {
-      await uploadFile(file, doctype, docname);
+      await (upload ? upload(file) : uploadFile(file, doctype, docname));
       invalidate({ resource: "File", invalidates: ["list"] });
     } catch (err) {
       console.error("Upload failed:", err);
+      setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -58,7 +65,7 @@ export default function FileAttachments({
           <input
             ref={inputRef}
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
+            accept={accept}
             className="hidden"
             onChange={handleUpload}
           />
@@ -73,6 +80,9 @@ export default function FileAttachments({
         </div>
       </CardHeader>
       <CardContent>
+        {error && (
+          <div className="mb-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+        )}
         {query.isLoading ? (
           <p className="text-muted-foreground">Loading...</p>
         ) : files.length === 0 ? (

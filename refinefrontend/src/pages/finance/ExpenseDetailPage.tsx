@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import FileAttachments from "@/components/FileAttachments";
+import { attachExpenseReceipt } from "@/lib/fileUpload";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 
 function statusVariant(status: string) {
@@ -107,7 +108,12 @@ export default function ExpenseDetailPage() {
         )}
       </div>
 
-      <FileAttachments doctype="Purchase Invoice" docname={name!} />
+      <FileAttachments
+        doctype="Purchase Invoice"
+        docname={name!}
+        upload={(f) => attachExpenseReceipt(f, name!, { isPrivate: true })}
+        accept=".pdf,.jpg,.jpeg,.png,.heic,.heif"
+      />
     </div>
   );
 }
