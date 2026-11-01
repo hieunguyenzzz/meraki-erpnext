@@ -7,12 +7,13 @@ POST /generate-payroll — orchestrates: Payroll Entry + Salary Slips + Wedding 
 import json
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.allowance import _get_rate, _get_project_data
 from webhook_v2.auth import require_roles, get_current_user, HR
 from webhook_v2.services.payroll_pdf import build_report, render_pdf
+from webhook_v2.services.payroll_bonus import drop_bonus_rows, has_submitted_slip, upsert_bonus
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -271,8 +272,8 @@ async def generate_payroll(request: GeneratePayrollRequest, user: str = Depends(
     }
 
 
-def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start_date: str, end_date: str) -> dict:
-    """Calculate and apply wedding allowances + commissions to all draft salary slips.
+def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start_date: str, end_date: str, employee: str | None = None) -> dict:
+    """Calculate and apply wedding allowances + commissions to all draft salary slips (or one employee's).
 
     Both are written directly as earning rows on the slip (no Additional Salary docs).
     This is idempotent — old rows are stripped and fresh ones written each time.
@@ -311,8 +312,11 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
         }).get("data", [])
 
     # Fetch draft salary slips for this PE
+    slip_filters = [["payroll_entry", "=", pe_name], ["docstatus", "=", 0]]
+    if employee:
+        slip_filters.append(["employee", "=", employee])
     draft_slips = client._get("/api/resource/Salary Slip", params={
-        "filters": json.dumps([["payroll_entry", "=", pe_name], ["docstatus", "=", 0]]),
+        "filters": json.dumps(slip_filters),
         "fields": json.dumps(["name", "employee"]),
         "limit_page_length": 200,
     }).get("data", [])
@@ -869,6 +873,57 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
     Eliminates N+1 fetches and frontend business logic.
     """
     return {"data": _fetch_enriched_slips(ERPNextClient(), pe_name)}
+
+
+class SetBonusRequest(BaseModel):
+    pe_name: str
+    employee: str
+    amount: float = Field(ge=0)
+
+
+@router.post("/payroll/bonus")
+def set_payroll_bonus(request: SetBonusRequest, user: str = Depends(require_roles(*HR))):
+    """Set (or clear with 0) one employee's manual Bonus for a Payroll Entry's month, then recompute their draft slip."""
+    client = ERPNextClient()
+    ctx = {"pe": request.pe_name, "employee": request.employee, "amount": request.amount, "user": user}
+
+    pe = client._get(f"/api/resource/Payroll Entry/{request.pe_name}").get("data", {})
+    slips = client._get("/api/resource/Salary Slip", params={
+        "filters": json.dumps([
+            ["payroll_entry", "=", request.pe_name], ["employee", "=", request.employee], ["docstatus", "!=", 2],
+        ]),
+        "fields": json.dumps(["name", "docstatus"]),
+        "limit_page_length": 10,
+    }).get("data", [])
+    if not slips:
+        log.warning("bonus_no_slip", **ctx)
+        raise HTTPException(404, "No salary slip for this employee in this payroll entry")
+    if has_submitted_slip(slips):
+        log.warning("bonus_slip_submitted", **ctx)
+        raise HTTPException(409, "Salary slip is already submitted; bonus can no longer be changed")
+
+    start_date, end_date = str(pe["start_date"])[:10], str(pe["end_date"])[:10]
+    log.info("bonus_set_start", **ctx)
+    upsert_bonus(client, request.employee, request.amount, start_date, end_date)
+
+    # Re-save so ERPNext re-pulls Additional Salary (dropping a stale Bonus row), then recompute gross/PIT/net.
+    for slip in slips:
+        full = client._get(f"/api/resource/Salary Slip/{slip['name']}").get("data", {})
+        client._put(f"/api/resource/Salary Slip/{slip['name']}", {"earnings": drop_bonus_rows(full.get("earnings", []))})
+    result = _apply_allowances_and_commissions(client, request.pe_name, start_date, end_date, employee=request.employee)
+    if not result["applied"]:
+        log.error("bonus_recompute_failed", **ctx)
+        raise HTTPException(500, "Bonus saved but the salary slip could not be recalculated; re-run Recalculate")
+    log.info("bonus_set_done", **ctx)
+
+    emp_ids = [request.employee]
+    emp_info = _build_emp_info_map(client._get("/api/resource/Employee", params={
+        "filters": json.dumps([["name", "in", emp_ids]]),
+        "fields": json.dumps(_EMPLOYEE_INFO_FIELDS),
+    }).get("data", []))
+    return {"data": [
+        _enrich_slip(client._get(f"/api/resource/Salary Slip/{s['name']}").get("data", {}), emp_info) for s in slips
+    ]}
 
 
 @router.get("/payroll/slips/pdf")

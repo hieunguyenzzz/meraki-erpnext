@@ -65,6 +65,7 @@ ORDERED_PHASES = [
     "v100_expense_category_cleanup",
     "v101_leave_calendar_webhooks",
     "v102_bhxh_skip_early_leavers",
+    "v103_bonus_not_prorated",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -153,6 +154,7 @@ def run_pending(client) -> int:
             v100_expense_category_cleanup,
             v101_leave_calendar_webhooks,
             v102_bhxh_skip_early_leavers,
+            v103_bonus_not_prorated,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -213,6 +215,7 @@ def run_pending(client) -> int:
             v100_expense_category_cleanup,
             v101_leave_calendar_webhooks,
             v102_bhxh_skip_early_leavers,
+            v103_bonus_not_prorated,
         )
 
     phase_fns = {
@@ -277,6 +280,7 @@ def run_pending(client) -> int:
         "v100_expense_category_cleanup": v100_expense_category_cleanup.run,
         "v101_leave_calendar_webhooks": v101_leave_calendar_webhooks.run,
         "v102_bhxh_skip_early_leavers": v102_bhxh_skip_early_leavers.run,
+        "v103_bonus_not_prorated": v103_bonus_not_prorated.run,
     }
 
     state_file = get_state_file()
