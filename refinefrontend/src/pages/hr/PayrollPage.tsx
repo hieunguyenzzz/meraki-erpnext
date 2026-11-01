@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useList, useInvalidate } from "@refinedev/core";
 import { FileDown } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 import { formatVND } from "@/lib/format";
 import { extractErrorMessage } from "@/lib/errors";
+import { BonusCell } from "@/components/payroll/BonusCell";
 
 function now() { return new Date(); }
 function monthLabel(d: Date) { return d.toLocaleDateString("en-US", { month: "long", year: "numeric" }); }
@@ -77,7 +78,10 @@ interface PayrollEntry {
   number_of_employees: number;
 }
 
-function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDef<SalarySlip, unknown>[] {
+function buildSlipColumns(
+  weddingAllowanceMap: Record<string, number>,
+  onSetBonus: (employee: string, amount: number) => Promise<void>,
+): ColumnDef<SalarySlip, unknown>[] {
   return [
     {
       accessorKey: "employee_name",
@@ -116,7 +120,13 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDe
     {
       id: "bonus",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Bonus" className="text-right" />,
-      cell: ({ row }) => <div className="text-right">{formatVND(getEarningAmount(row.original.earnings, "Bonus"))}</div>,
+      cell: ({ row }) => (
+        <BonusCell
+          amount={getEarningAmount(row.original.earnings, "Bonus")}
+          editable={row.original.docstatus === 0}
+          onSave={(amount) => onSetBonus(row.original.employee, amount)}
+        />
+      ),
     },
     {
       accessorKey: "gross_pay",
@@ -282,7 +292,26 @@ export default function PayrollPage() {
     return map;
   }, [enrichedSlips]);
 
-  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap), [weddingAllowanceMap]);
+  const handleSetBonus = useCallback(async (employee: string, amount: number) => {
+    if (!selectedPE) return;
+    setError(null);
+    try {
+      const res = await fetch("/inquiry-api/payroll/bonus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pe_name: selectedPE.name, employee, amount }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Failed to set bonus: ${res.status}`);
+      }
+      setRefreshKey(k => k + 1);
+    } catch (err: any) {
+      setError(extractErrorMessage(err, "Failed to set bonus"));
+    }
+  }, [selectedPE?.name]);
+
+  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap, handleSetBonus), [weddingAllowanceMap, handleSetBonus]);
 
   async function handleGenerate() {
     setIsRunning(true);
