@@ -82,10 +82,14 @@ function buildSlipColumns(weddingAllowanceMap: Record<string, number>): ColumnDe
       accessorKey: "employee_name",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1">
           <span className="font-medium">{row.original.employee_display_name || row.original.employee_name}</span>
-          {row.original.is_probation && <Badge variant="outline" className="border-amber-500 text-amber-600 text-xs">85%</Badge>}
-          {row.original.pit_method === "Flat 10%" && <Badge variant="outline" className="border-violet-500 text-violet-600 text-xs">10% PIT</Badge>}
+          {(row.original.is_probation || row.original.pit_method === "Flat 10%") && (
+            <div className="flex gap-1">
+              {row.original.is_probation && <Badge variant="outline" className="border-amber-500 text-amber-600 text-xs">85%</Badge>}
+              {row.original.pit_method === "Flat 10%" && <Badge variant="outline" className="border-violet-500 text-violet-600 text-xs">10% PIT</Badge>}
+            </div>
+          )}
         </div>
       ),
       filterFn: "includesString",
