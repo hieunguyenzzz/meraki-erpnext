@@ -326,6 +326,7 @@ export default function EmployeeDetailPage() {
         custom_number_of_dependents: employee.custom_number_of_dependents ?? 0,
         leave_approver: employee.leave_approver || "",
         custom_is_probation: employee.custom_is_probation ?? 0,
+        custom_pit_method: employee.custom_pit_method ?? "",
         custom_probation_end_date: employee.custom_probation_end_date ?? "",
       });
       // Fetch current ERPNext user roles if a user is linked
@@ -576,6 +577,9 @@ export default function EmployeeDetailPage() {
             <Badge variant="outline" className="border-amber-500 text-amber-600">
               Probation{employee.custom_probation_end_date ? ` · ends ${employee.custom_probation_end_date}` : ""}
             </Badge>
+          )}
+          {employee.custom_pit_method === "Flat 10%" && (
+            <Badge variant="outline" className="border-violet-500 text-violet-600">Flat 10% PIT</Badge>
           )}
           <Button
             size="sm"
@@ -1364,6 +1368,19 @@ export default function EmployeeDetailPage() {
                       {users.map((u) => (
                         <SelectItem key={u.name} value={u.name}>{u.full_name || u.name}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tax method (PIT)</Label>
+                  <Select
+                    value={editValues.custom_pit_method || "__progressive__"}
+                    onValueChange={(v) => setEditValues((prev) => ({ ...prev, custom_pit_method: v === "__progressive__" ? "" : v }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__progressive__">Progressive (brackets)</SelectItem>
+                      <SelectItem value="Flat 10%">Flat 10%</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
