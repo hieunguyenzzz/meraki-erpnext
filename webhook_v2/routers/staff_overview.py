@@ -63,12 +63,12 @@ def _review_status_text(last_review_date: str | None) -> str:
 
 
 @router.get("/staff/overview")
-def staff_overview():
+def staff_overview(include_inactive: bool = False):
     """
     Return enriched employee list with leave balance and review status.
 
     Joins:
-    - Employees (active)
+    - Employees (active only, unless include_inactive=true)
     - Leave Allocations (submitted)
     - Leave Applications (approved + pending)
 
@@ -80,12 +80,13 @@ def staff_overview():
     client = ERPNextClient()
     today = date.today()
 
-    # Fetch active employees
+    # Fetch active employees (or everyone, including deactivated)
+    filters = [] if include_inactive else [["status", "=", "Active"]]
     employees = client._get("/api/resource/Employee", params={
-        "filters": json.dumps([["status", "=", "Active"]]),
+        "filters": json.dumps(filters),
         "fields": json.dumps([
-            "name", "employee_name", "first_name", "last_name",
-            "designation", "department", "date_of_joining",
+            "name", "employee_name", "first_name", "last_name", "status",
+            "designation", "department", "date_of_joining", "relieving_date",
             "custom_last_review_date", "custom_review_notes",
             "custom_display_order", "user_id", "custom_meraki_id", "custom_is_probation",
         ]),
@@ -155,6 +156,7 @@ def staff_overview():
             "last_name": emp.get("last_name"),
             "designation": emp.get("designation") or "-",
             "department": emp.get("department") or "-",
+            "status": emp.get("status"),
             "date_of_joining": emp.get("date_of_joining"),
             "custom_last_review_date": review_date,
             "custom_review_notes": emp.get("custom_review_notes"),

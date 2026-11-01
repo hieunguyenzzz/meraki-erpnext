@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { extractErrorMessage } from "@/lib/errors";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
@@ -27,6 +28,7 @@ interface StaffRow {
   last_name?: string;
   designation: string;
   department: string;
+  status: string;
   date_of_joining: string;
   custom_last_review_date?: string;
   custom_review_notes?: string;
@@ -48,6 +50,7 @@ interface StaffOverviewData {
     last_name?: string;
     designation: string;
     department: string;
+    status: string;
     date_of_joining: string;
     custom_last_review_date?: string;
     custom_review_notes?: string;
@@ -71,6 +74,7 @@ type SummaryFilter = "all" | "probation";
 
 export default function StaffOverviewPage() {
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>("all");
+  const [showInactive, setShowInactive] = useState(false);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [rolesDialogOpen, setRolesDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<StaffRow | null>(null);
@@ -121,12 +125,12 @@ export default function StaffOverviewPage() {
 
   useEffect(() => {
     setIsLoading(true);
-    fetch("/inquiry-api/staff/overview", { credentials: "include" })
+    fetch(`/inquiry-api/staff/overview${showInactive ? "?include_inactive=true" : ""}`, { credentials: "include" })
       .then((r) => r.json())
       .then((data) => setOverviewData(data))
       .catch(() => setOverviewData(null))
       .finally(() => setIsLoading(false));
-  }, [fetchVersion]);
+  }, [fetchVersion, showInactive]);
 
   // Fetch roles map once overview loads
   useEffect(() => {
@@ -147,6 +151,7 @@ export default function StaffOverviewPage() {
       last_name: emp.last_name,
       designation: emp.designation,
       department: emp.department,
+      status: emp.status,
       date_of_joining: emp.date_of_joining,
       custom_last_review_date: emp.custom_last_review_date,
       custom_review_notes: emp.custom_review_notes,
@@ -206,7 +211,7 @@ export default function StaffOverviewPage() {
   }
 
   // Summary counts
-  const totalStaff = overviewData?.data?.length ?? 0;
+  const totalStaff = staffData.filter((r) => r.status === "Active").length;
   const probationCount = staffData.filter((r) => r.is_probation).length;
 
   // Filter data by summary card selection
@@ -370,9 +375,14 @@ export default function StaffOverviewPage() {
       accessorKey: "employee_name",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
       cell: ({ row }) => (
-        <Link to={`/hr/employees/${row.original.name}`} className="font-medium text-primary hover:underline">
-          {displayName(row.original)}
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link to={`/hr/employees/${row.original.name}`} className="font-medium text-primary hover:underline">
+            {displayName(row.original)}
+          </Link>
+          {row.original.status !== "Active" && (
+            <Badge variant="secondary">{row.original.status}</Badge>
+          )}
+        </div>
       ),
       filterFn: (row, _id, filterValue) => {
         const name = displayName(row.original).toLowerCase();
@@ -491,6 +501,17 @@ export default function StaffOverviewPage() {
             <div className="text-2xl font-bold text-amber-600">{probationCount}</div>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="show-inactive"
+          checked={showInactive}
+          onCheckedChange={(v) => setShowInactive(!!v)}
+        />
+        <Label htmlFor="show-inactive" className="text-sm font-normal cursor-pointer">
+          Show deactivated staff
+        </Label>
       </div>
 
       {/* Staff Table */}
