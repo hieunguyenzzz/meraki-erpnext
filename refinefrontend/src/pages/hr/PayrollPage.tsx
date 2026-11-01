@@ -91,8 +91,8 @@ function buildSlipColumns(
           <span className="font-medium">{row.original.employee_display_name || row.original.employee_name}</span>
           {(row.original.is_probation || row.original.pit_method === "Flat 10%") && (
             <div className="flex gap-1">
-              {row.original.is_probation && <Badge variant="outline" className="border-amber-500 text-amber-600 text-xs">85%</Badge>}
-              {row.original.pit_method === "Flat 10%" && <Badge variant="outline" className="border-violet-500 text-violet-600 text-xs">10% PIT</Badge>}
+              {row.original.is_probation && <Badge variant="outline" className="border-amber-500 text-amber-600 whitespace-nowrap px-1.5 py-0 text-[10px] leading-4">85%</Badge>}
+              {row.original.pit_method === "Flat 10%" && <Badge variant="outline" className="border-violet-500 text-violet-600 whitespace-nowrap px-1.5 py-0 text-[10px] leading-4">10% PIT</Badge>}
             </div>
           )}
         </div>
