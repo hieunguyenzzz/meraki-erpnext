@@ -6,12 +6,13 @@ POST /generate-payroll — orchestrates: Payroll Entry + Salary Slips + Wedding 
 
 import json
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.allowance import _get_rate, _get_project_data
 from webhook_v2.auth import require_roles, get_current_user, HR
+from webhook_v2.services.payroll_pdf import build_report, render_pdf
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -803,6 +804,8 @@ def _enrich_slip(full_slip: dict, emp_info: dict) -> dict:
         "employee": emp_id,
         "employee_name": full_slip.get("employee_name", ""),
         "employee_display_name": info["display_name"],
+        "designation": full_slip.get("designation") or "",
+        "payment_days": full_slip.get("payment_days") or 0,
         "dependents": dependents,
         "gross_pay": gross,
         "total_deduction": full_slip.get("total_deduction", 0),
@@ -822,18 +825,8 @@ def _enrich_slip(full_slip: dict, emp_info: dict) -> dict:
     }
 
 
-@router.get("/payroll/slips")
-def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"), user: str = Depends(require_roles(*HR))):
-    """
-    Return enriched salary slips for a Payroll Entry.
-
-    Each slip includes earnings/deductions child tables plus pre-computed fields:
-    - employee_display_name, dependents
-    - employer_bhxh, tax_reduction, taxable_income
-    Eliminates N+1 fetches and frontend business logic.
-    """
-    client = ERPNextClient()
-
+def _fetch_enriched_slips(client: ERPNextClient, pe_name: str) -> list[dict]:
+    """Enriched slips of a Payroll Entry, sorted by display name."""
     # 1. Fetch basic slip list
     slips = client._get("/api/resource/Salary Slip", params={
         "filters": json.dumps([["payroll_entry", "=", pe_name]]),
@@ -842,7 +835,7 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
     }).get("data", [])
 
     if not slips:
-        return {"data": []}
+        return []
 
     # 2. Batch-fetch employee data (dependents, names)
     emp_ids = list({s["employee"] for s in slips})
@@ -862,7 +855,37 @@ def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"
 
     # Sort by display name
     result.sort(key=lambda s: s["employee_display_name"])
-    return {"data": result}
+    return result
+
+
+@router.get("/payroll/slips")
+def get_payroll_slips(pe_name: str = Query(..., description="Payroll Entry name"), user: str = Depends(require_roles(*HR))):
+    """
+    Return enriched salary slips for a Payroll Entry.
+
+    Each slip includes earnings/deductions child tables plus pre-computed fields:
+    - employee_display_name, dependents
+    - employer_bhxh, tax_reduction, taxable_income
+    Eliminates N+1 fetches and frontend business logic.
+    """
+    return {"data": _fetch_enriched_slips(ERPNextClient(), pe_name)}
+
+
+@router.get("/payroll/slips/pdf")
+def get_payroll_slips_pdf(pe_name: str = Query(..., description="Payroll Entry name"), user: str = Depends(require_roles(*HR))):
+    """Monthly payroll summary PDF (Vietnamese) for a Payroll Entry; same slips and numbers as /payroll/slips."""
+    client = ERPNextClient()
+    log.info("payroll_pdf_requested", pe=pe_name, user=user)
+    slips = _fetch_enriched_slips(client, pe_name)
+    if not slips:
+        log.warning("payroll_pdf_no_slips", pe=pe_name, user=user)
+        raise HTTPException(status_code=404, detail="No salary slips for this payroll entry")
+    month = client._get(f"/api/resource/Payroll Entry/{pe_name}").get("data", {}).get("start_date", "")[:7]
+    report = build_report(slips, month)
+    pdf = render_pdf(report)
+    log.info("payroll_pdf_generated", pe=pe_name, month=month, rows=len(report["rows"]), draft=report["is_draft"], bytes=len(pdf), user=user)
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="bang-luong-{month}.pdf"'})
 
 
 _EMPTY_MY_SLIPS = {
