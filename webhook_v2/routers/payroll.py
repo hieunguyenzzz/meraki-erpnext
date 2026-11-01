@@ -38,6 +38,8 @@ PIT_BRACKETS = [
     (float("inf"), 0.35, 14_500_000),
 ]
 PIT_COMPONENT = "Income Tax"
+PIT_FLAT_RATE = 0.10
+PIT_FLAT_MIN_GROSS = 2_000_000  # below this, flat-rate withholding does not apply
 STANDARD_WORKING_DAYS = 22  # Working days/month for salary proration (Mon–Fri, ~22/month)
 
 
@@ -49,6 +51,20 @@ def _working_days_in_range(start: date, end: date) -> int:
             count += 1
         d += timedelta(days=1)
     return count
+
+
+def _effective_pit_method(emp: dict, slip_end: date) -> str:
+    """Probation through slip_end forces Flat 10%; otherwise the employee's own method."""
+    if emp.get("custom_is_probation"):
+        prob_end_str = (emp.get("custom_probation_end_date") or "")[:10]
+        if not prob_end_str or date.fromisoformat(prob_end_str) >= slip_end:
+            return "Flat 10%"
+    return emp.get("custom_pit_method") or ""
+
+
+def _calc_flat_pit(gross: float) -> int:
+    """Flat 10% on gross (no deductions); nothing below the minimum gross."""
+    return round(gross * PIT_FLAT_RATE) if gross >= PIT_FLAT_MIN_GROSS else 0
 
 
 def _calc_pit(gross_pay: float, si_deductions: float, dependents: int) -> int:
@@ -561,9 +577,8 @@ def _apply_allowances_and_commissions(client: ERPNextClient, pe_name: str, start
                 if d.get("salary_component", "").startswith(("BHXH", "BHYT", "BHTN"))
                 and "Employer" not in d.get("salary_component", "")
             )
-            pit_method = emp_map.get(emp_id, {}).get("custom_pit_method") or ""
-            if pit_method == "Flat 10%":
-                pit = round(gross * 0.10) if gross > 0 else 0
+            if _effective_pit_method(emp_record, slip_end) == "Flat 10%":
+                pit = _calc_flat_pit(gross)
             else:
                 dependents = int(emp_map.get(emp_id, {}).get("custom_number_of_dependents") or 0)
                 pit = _calc_pit(gross, si, dependents)
@@ -723,6 +738,7 @@ _SI_EMPLOYER_PCT = 21.5  # BHXH 17.5% + BHYT 3% + BHTN 1%
 _EMPLOYEE_INFO_FIELDS = [
     "name", "first_name", "last_name", "employee_name",
     "custom_number_of_dependents", "custom_is_probation", "custom_pit_method",
+    "custom_probation_end_date",
 ]
 
 
@@ -738,7 +754,7 @@ def _build_emp_info_map(employees: list[dict]) -> dict[str, dict]:
             "display_name": display,
             "dependents": int(emp.get("custom_number_of_dependents") or 0),
             "is_probation": bool(emp.get("custom_is_probation")),
-            "pit_method": emp.get("custom_pit_method") or "",
+            "emp": emp,
         }
     return emp_info
 
@@ -749,7 +765,9 @@ def _enrich_slip(full_slip: dict, emp_info: dict) -> dict:
     Shared by /payroll/slips (HR, any PE) and /payroll/my-slips (staff self-service).
     """
     emp_id = full_slip.get("employee", "")
-    info = emp_info.get(emp_id, {"display_name": emp_id, "dependents": 0, "is_probation": False})
+    info = emp_info.get(emp_id, {"display_name": emp_id, "dependents": 0, "is_probation": False, "emp": {}})
+    slip_end = date.fromisoformat(str(full_slip.get("end_date"))[:10])
+    pit_method = _effective_pit_method(info["emp"], slip_end)
 
     earnings = full_slip.get("earnings", [])
     deductions = full_slip.get("deductions", [])
@@ -773,7 +791,7 @@ def _enrich_slip(full_slip: dict, emp_info: dict) -> dict:
     # Tax computations — use effective gross (after proration/probation correction)
     gross = full_slip.get("gross_pay", 0) - proration_adj
     dependents = info["dependents"]
-    if info["pit_method"] == "Flat 10%":
+    if pit_method == "Flat 10%":
         tax_reduction = 0
         taxable_income = gross  # flat 10% on gross, no deductions
     else:
@@ -800,7 +818,7 @@ def _enrich_slip(full_slip: dict, emp_info: dict) -> dict:
         "tax_reduction": tax_reduction,
         "taxable_income": taxable_income,
         "is_probation": info["is_probation"],
-        "pit_method": info["pit_method"],
+        "pit_method": pit_method,
     }
 
 
