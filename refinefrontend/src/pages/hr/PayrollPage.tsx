@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useList, useInvalidate } from "@refinedev/core";
+import { FileDown } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -185,6 +186,7 @@ export default function PayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStart);
   const [isRunning, setIsRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enrichedSlips, setEnrichedSlips] = useState<SalarySlip[]>([]);
   const [loadingSlips, setLoadingSlips] = useState(false);
@@ -331,6 +333,29 @@ export default function PayrollPage() {
     }
   }
 
+  async function handleExportPdf() {
+    if (!selectedPE) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/inquiry-api/payroll/slips/pdf?pe_name=${encodeURIComponent(selectedPE.name)}`, { credentials: "include" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `PDF export failed: ${res.status}`);
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bang-luong-${selectedMonth.slice(0, 7)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(extractErrorMessage(err, "Failed to export PDF"));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const isLoading = loadingSlips;
 
   return (
@@ -353,6 +378,10 @@ export default function PayrollPage() {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" onClick={handleExportPdf} disabled={!selectedPE || exporting || isLoading}>
+            <FileDown className="mr-2 h-4 w-4" />
+            {exporting ? "Đang xuất..." : "Xuất PDF"}
+          </Button>
           {!isLoading && !allSlipsSubmitted && (
             <Button onClick={handleGenerate} disabled={isRunning || submitting}>
               {isRunning ? "Generating..." : selectedPE ? `Recalculate` : `Generate`}
