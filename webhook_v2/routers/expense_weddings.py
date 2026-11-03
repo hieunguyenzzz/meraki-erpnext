@@ -3,7 +3,7 @@ Weddings the caller may log an expense against (MWP-100).
 
 GET /expense/weddings — one list for the Add Expense picker, scoped by role:
   * Finance / Wedding Expense Manager: every Open wedding;
-  * planner roles: Open weddings they are assigned to;
+  * any other admin role (planner, CRM, HR): Open weddings they are assigned to;
   * employee-only staff: the same set as /my/weddings (Open + recently Completed).
 `assigned` says whether the caller's own Employee is on the wedding, which the UI
 uses to pick a default. Venue names are resolved here so the picker can search them.
@@ -14,10 +14,10 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
-from webhook_v2.auth import FINANCE, PLANNER, WEDDING_EXPENSE, get_current_user, has_roles, resolve_employee
+from webhook_v2.auth import CRM, FINANCE, HR, PLANNER, WEDDING_EXPENSE, get_current_user, has_roles, resolve_employee
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.my_weddings import (
-    _LIST_FIELDS, _venue_names, bind_correlation_id, list_assigned_projects, role_on_project,
+    PROJECT_LIST_FIELDS, venue_names, bind_correlation_id, list_assigned_projects, role_on_project,
 )
 from webhook_v2.services.erpnext import ERPNextClient
 
@@ -38,18 +38,26 @@ def _my_employee(request: Request) -> str | None:
 def _open_projects(client: ERPNextClient) -> list[dict]:
     return client._get("/api/resource/Project", params={
         "filters": json.dumps([["status", "=", "Open"]]),
-        "fields": json.dumps(_LIST_FIELDS),
+        "fields": json.dumps(PROJECT_LIST_FIELDS),
         "limit_page_length": 0,
     }).get("data", [])
+
+
+# Any of these means the caller is not employee-only (mirrors isEmployeeSelfServiceOnly in roles.ts).
+ALL_ADMIN_ROLES = tuple(set(CRM) | set(PLANNER) | set(HR) | set(FINANCE))
 
 
 def _candidate_projects(request: Request, client: ERPNextClient, employee: str | None) -> tuple[list[dict], str]:
     """(projects the caller may log against, scope name for the log)."""
     if has_roles(request, FINANCE + WEDDING_EXPENSE):
         return _open_projects(client), "all"
-    if has_roles(request, PLANNER):
-        return [p for p in _open_projects(client) if employee and role_on_project(p, employee)], "planner"
-    return (list_assigned_projects(client, employee, date.today()) if employee else []), "employee"
+    if not employee:
+        return [], "no_employee"
+    if has_roles(request, ALL_ADMIN_ROLES):
+        # Planner / HR / CRM: Open weddings they are assigned to, filtered by ERPNext
+        return list_assigned_projects(client, employee, date.today(), recent_completed=False), "assigned_open"
+    # Employee-only: same set as /my/weddings (Open + recently Completed)
+    return list_assigned_projects(client, employee, date.today()), "employee"
 
 
 @router.get("/expense/weddings")
@@ -60,7 +68,7 @@ def expense_weddings(request: Request, response: Response):
     client = ERPNextClient()
 
     projects, scope = _candidate_projects(request, client, employee)
-    venues = _venue_names(client, {p["sales_order"] for p in projects if p.get("sales_order")})
+    venues = venue_names(client, {p["sales_order"] for p in projects if p.get("sales_order")})
     items = [
         {
             "id": p["name"],

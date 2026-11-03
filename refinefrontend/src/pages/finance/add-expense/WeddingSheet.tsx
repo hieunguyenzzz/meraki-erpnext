@@ -70,7 +70,10 @@ export function WeddingSheet({ open, onOpenChange, weddings, assignedIds, today,
               </button>
             </li>
           ))}
-          {matches.length === 0 && (
+          {weddings.length === 0 && !query && (
+            <li className="py-6 text-center text-sm text-muted-foreground">No weddings assigned to you yet</li>
+          )}
+          {matches.length === 0 && (weddings.length > 0 || query) && (
             <li className="flex flex-col items-center gap-1 py-6 text-center text-sm text-muted-foreground">
               No weddings match
               <button type="button" onClick={clear} className="h-11 px-4 font-semibold text-primary">Clear search</button>

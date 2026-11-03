@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useGetIdentity } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import type { ExpenseWedding } from "./defaults";
@@ -20,7 +21,12 @@ async function fetchWeddings(): Promise<ApiWedding[]> {
 /** Weddings the user may log an expense against; the backend applies the role rules. */
 export function useExpenseWeddings() {
   const { employeeId, isLoading: employeeLoading } = useMyEmployee();
-  const { data, isLoading, error } = useQuery({ queryKey: ["expense-weddings"], queryFn: fetchWeddings });
+  const { data: identity } = useGetIdentity<{ email?: string }>();
+  // Keyed by user so one person's list is never served to the next login on a shared device
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["expense-weddings", identity?.email],
+    queryFn: fetchWeddings,
+  });
 
   return useMemo(() => {
     const weddings: ExpenseWedding[] = (data ?? []).map((w) => ({

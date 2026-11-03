@@ -46,7 +46,7 @@ ASSIGNMENT_ROLES = {
 ALL_WEDDINGS_ROLES = tuple(set(PLANNER) | set(FINANCE) | set(WEDDING_EXPENSE))
 RECENT_DAYS = 30
 
-_LIST_FIELDS = [
+PROJECT_LIST_FIELDS = [
     "name", "project_name", "status", "custom_project_stage", "customer",
     "expected_end_date", "sales_order", "custom_wedding_type", "custom_service_type",
     *ASSIGNMENT_ROLES,
@@ -94,24 +94,35 @@ def require_assigned_unless_privileged(request: Request, project: str, employee:
     _load_assigned_project(ERPNextClient(), project, employee, get_current_user(request))
 
 
-def _venue_names(client: ERPNextClient, sales_order_ids: set[str]) -> dict[str, str]:
+VENUE_BATCH = 100  # ERPNext GET filters travel in the URL; ~150 ids would overflow the request line
+
+
+def _chunks(items, size: int = VENUE_BATCH):
+    items = list(items)
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+def _get_in(client: ERPNextClient, doctype: str, ids, fields: list[str]) -> list[dict]:
+    """GET a doctype's rows by name, in URL-safe batches."""
+    rows: list[dict] = []
+    for chunk in _chunks(ids):
+        rows += client._get(f"/api/resource/{doctype}", params={
+            "filters": json.dumps([["name", "in", chunk]]),
+            "fields": json.dumps(fields),
+            "limit_page_length": 0,
+        }).get("data", [])
+    return rows
+
+
+def venue_names(client: ERPNextClient, sales_order_ids: set[str]) -> dict[str, str]:
     """Sales Order name -> venue display name."""
     if not sales_order_ids:
         return {}
-    sos = client._get("/api/resource/Sales Order", params={
-        "filters": json.dumps([["name", "in", list(sales_order_ids)]]),
-        "fields": json.dumps(["name", "custom_venue"]),
-        "limit_page_length": 0,
-    }).get("data", [])
+    sos = _get_in(client, "Sales Order", sales_order_ids, ["name", "custom_venue"])
     venue_ids = {so["custom_venue"] for so in sos if so.get("custom_venue")}
-    suppliers = {}
-    if venue_ids:
-        suppliers = {s["name"]: s.get("supplier_name") or s["name"] for s in client._get(
-            "/api/resource/Supplier", params={
-                "filters": json.dumps([["name", "in", list(venue_ids)]]),
-                "fields": json.dumps(["name", "supplier_name"]),
-                "limit_page_length": 0,
-            }).get("data", [])}
+    suppliers = {s["name"]: s.get("supplier_name") or s["name"]
+                 for s in _get_in(client, "Supplier", venue_ids, ["name", "supplier_name"])} if venue_ids else {}
     return {so["name"]: suppliers.get(so.get("custom_venue"), so.get("custom_venue")) for so in sos if so.get("custom_venue")}
 
 
@@ -119,12 +130,14 @@ def _days_to_go(wedding_date: str | None, today: date) -> int | None:
     return (date.fromisoformat(wedding_date) - today).days if wedding_date else None
 
 
-def list_assigned_projects(client: ERPNextClient, employee: str, today: date) -> list[dict]:
-    """Projects `employee` is assigned to: Open, plus Completed within the last RECENT_DAYS days."""
+def list_assigned_projects(client: ERPNextClient, employee: str, today: date, recent_completed: bool = True) -> list[dict]:
+    """Projects `employee` is assigned to (filtered by ERPNext): Open, plus Completed within
+    the last RECENT_DAYS days when `recent_completed`."""
+    statuses = ["Open", "Completed"] if recent_completed else ["Open"]
     projects = client._get("/api/resource/Project", params={
         "or_filters": json.dumps([[f, "=", employee] for f in ASSIGNMENT_ROLES]),
-        "filters": json.dumps([["status", "in", ["Open", "Completed"]]]),
-        "fields": json.dumps(_LIST_FIELDS),
+        "filters": json.dumps([["status", "in", statuses]]),
+        "fields": json.dumps(PROJECT_LIST_FIELDS),
         "limit_page_length": 0,
     }).get("data", [])
     cutoff = (today - timedelta(days=RECENT_DAYS)).isoformat()
@@ -146,7 +159,7 @@ def my_weddings(request: Request, response: Response):
     client = ERPNextClient()
     today = date.today()
     projects = list_assigned_projects(client, employee, today)
-    venues = _venue_names(client, {p["sales_order"] for p in projects if p.get("sales_order")})
+    venues = venue_names(client, {p["sales_order"] for p in projects if p.get("sales_order")})
 
     items = []
     for p in projects:
@@ -196,7 +209,7 @@ def my_wedding_detail(project: str, request: Request, response: Response):
         for f, role in ASSIGNMENT_ROLES.items() if doc.get(f)
     ]
 
-    venue = _venue_names(client, {doc["sales_order"]} if doc.get("sales_order") else set()).get(doc.get("sales_order") or "")
+    venue = venue_names(client, {doc["sales_order"]} if doc.get("sales_order") else set()).get(doc.get("sales_order") or "")
     customer_name = None
     if doc.get("customer"):
         customer_name = client._get(f"/api/resource/Customer/{quote(doc['customer'], safe='')}").get("data", {}).get("customer_name")
