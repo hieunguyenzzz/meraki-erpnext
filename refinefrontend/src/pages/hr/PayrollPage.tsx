@@ -14,25 +14,31 @@ import { PayrollActions } from "./payroll/PayrollActions";
 import { PayrollCards } from "./payroll/PayrollCards";
 import { PayrollSummary } from "./payroll/PayrollSummary";
 import { PayrollTable } from "./payroll/PayrollTable";
-import { currentMonthStart, isMonthStart, lastDayOfMonth, monthLabel, monthParser, recentMonthStarts } from "./payroll/month";
+import { currentMonthStart, lastDayOfMonth, monthLabel, monthParser, recentMonthStarts } from "./payroll/month";
 import { commissionOf, slipName, type CommissionRow } from "./payroll/types";
 import { usePayrollActions } from "./payroll/usePayrollActions";
 import { usePayrollEntries } from "./payroll/usePayrollEntries";
 import { usePayrollSlips } from "./payroll/usePayrollSlips";
 
-type Confirm = "generate" | "submit" | null;
+/** Parks a sticky bar on top of the 84px bottom nav: <main> pads its bottom by 104px and sticky measures from the content edge (see AppShell). */
+const BOTTOM_NAV_STICKY = "-bottom-5";
+
+type ConfirmKind = "generate" | "submit";
+interface Confirm { kind: ConfirmKind; title: string; text: string; confirmLabel: string }
 
 export default function PayrollPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   // Month and search live in the URL so Back restores them; a bad ?month= falls back to the current month.
   const [urlMonth, setUrlMonth] = useQueryState("month", monthParser.withDefault(currentMonthStart()).withOptions({ clearOnDefault: true }));
   const [search, setSearch] = useQueryState("q", parseAsString.withDefault("").withOptions({ clearOnDefault: true }));
-  const [confirm, setConfirm] = useState<Confirm>(null);
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false); // closed separately so the text stays while the dialog fades out
+  const openConfirm = (c: Confirm) => { setConfirm(c); setConfirmOpen(true); };
 
   const { entries, loaded: entriesLoaded } = usePayrollEntries();
   const monthOptions = useMemo(() => {
     const all = new Set(recentMonthStarts());
-    for (const e of entries) if (isMonthStart(e.start_date)) all.add(e.start_date);
+    for (const e of entries) all.add(e.start_date);
     return [...all].sort((a, b) => b.localeCompare(a));
   }, [entries]);
 
@@ -74,6 +80,12 @@ export default function PayrollPage() {
 
   const commissionRows = useMemo(() => salarySlips.map(commissionOf).filter((r): r is CommissionRow => r !== null), [salarySlips]);
 
+  const label = monthLabel(month);
+  // The wording is fixed when the dialog opens, so it doesn't flip from Generate to Recalculate mid-run.
+  const generateCopy = (): Confirm => selectedPE
+    ? { kind: "generate", title: `Recalculate payroll for ${label}?`, text: "This re-runs the payroll calculation for the draft salary slips of this month.", confirmLabel: "Recalculate" }
+    : { kind: "generate", title: `Generate payroll for ${label}?`, text: `This creates the payroll entry and salary slips for ${activeCount} active employees.`, confirmLabel: "Generate" };
+
   const ready = entriesLoaded && !loading;
   const actionProps = {
     hasEntry: !!selectedPE,
@@ -83,22 +95,16 @@ export default function PayrollPage() {
     isRunning: act.isRunning,
     submitting: act.submitting,
     exporting: act.exporting,
-    onGenerate: () => setConfirm("generate"),
-    onSubmit: () => setConfirm("submit"),
+    bonusSaving: act.bonusSaving,
+    onGenerate: () => openConfirm(generateCopy()),
+    onSubmit: () => openConfirm({ kind: "submit", title: `Submit all salary slips for ${label}?`, text: "Submitted slips are locked: bonus and figures can no longer be changed.", confirmLabel: "Submit All" }),
     onExport: () => void act.exportPdf(),
   };
 
-  const label = monthLabel(month);
-  const confirmCopy = confirm === "submit"
-    ? { title: `Submit all salary slips for ${label}?`, text: "Submitted slips are locked: bonus and figures can no longer be changed.", confirmLabel: "Submit All", busy: act.submitting }
-    : selectedPE
-      ? { title: `Recalculate payroll for ${label}?`, text: "This re-runs the payroll calculation for the draft salary slips of this month.", confirmLabel: "Recalculate", busy: act.isRunning }
-      : { title: `Generate payroll for ${label}?`, text: `This creates the payroll entry and salary slips for ${activeCount} active employees.`, confirmLabel: "Generate", busy: act.isRunning };
-
   async function onConfirm() {
-    if (confirm === "submit") await act.submitAll();
+    if (confirm?.kind === "submit") await act.submitAll();
     else await act.generate();
-    setConfirm(null);
+    setConfirmOpen(false);
   }
 
   let body;
@@ -138,7 +144,7 @@ export default function PayrollPage() {
         <label className="flex items-center gap-2 text-sm text-muted-foreground max-md:w-full">
           <span>Month</span>
           <Select value={month} onValueChange={(v) => void setUrlMonth(v)}>
-            <SelectTrigger aria-label="Month" className="w-[160px] font-semibold text-foreground max-md:h-12 max-md:flex-1">
+            <SelectTrigger aria-label="Month" className="min-w-[160px] max-w-full font-semibold text-foreground max-md:h-12 max-md:flex-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -152,7 +158,7 @@ export default function PayrollPage() {
       {act.error && (
         <div role="alert" className="flex items-center justify-between rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
           <span>{act.error}</span>
-          <button type="button" aria-label="Dismiss" onClick={() => act.setError(null)} className="ml-4 flex h-8 w-8 items-center justify-center font-medium">&times;</button>
+          <button type="button" aria-label="Dismiss" onClick={() => act.setError(null)} className="ml-4 flex h-8 w-8 items-center justify-center font-medium max-md:h-12 max-md:w-12">&times;</button>
         </div>
       )}
       {loadError && slips.length > 0 && (
@@ -191,18 +197,21 @@ export default function PayrollPage() {
 
       {isDesktop && ready && <CommissionBreakdown rows={commissionRows} />}
 
-      {/* Phone action bar: <main> has 104px bottom padding and sticky measures from its content edge, so -20px parks it on top of the 84px bottom nav. */}
+      {/* Phone action bar, parked above the bottom nav (see BOTTOM_NAV_STICKY). */}
       {!isDesktop && entriesLoaded && (
-        <div className="sticky -bottom-5 z-20 -mx-4 flex gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur">
+        <div className={`sticky ${BOTTOM_NAV_STICKY} z-20 -mx-4 flex gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur`}>
           <PayrollActions {...actionProps} mobile />
         </div>
       )}
 
       <ConfirmActionDialog
-        open={confirm !== null}
-        {...confirmCopy}
+        open={confirmOpen}
+        title={confirm?.title ?? ""}
+        text={confirm?.text ?? ""}
+        confirmLabel={confirm?.confirmLabel ?? ""}
+        busy={act.isRunning || act.submitting}
         onConfirm={() => void onConfirm()}
-        onCancel={() => setConfirm(null)}
+        onCancel={() => setConfirmOpen(false)}
       />
     </div>
   );

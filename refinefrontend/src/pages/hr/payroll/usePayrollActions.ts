@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useInvalidate } from "@refinedev/core";
-import { extractErrorMessage } from "@/lib/errors";
+import { apiErrorMessage, extractErrorMessage } from "@/lib/errors";
 import type { PayrollEntry } from "./types";
 
 /**
@@ -14,12 +14,17 @@ export function usePayrollActions(opts: { month: string; monthEnd: string; selec
   const [submitting, setSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bonusSaves, setBonusSaves] = useState(0); // bonus saves in flight; runs wait for them
+  const bonusRef = useRef(0);
   const busy = useRef({ run: false, submit: false, pdf: false });
   const peName = selectedPE?.name;
 
-  const setBonus = useCallback(async (employee: string, amount: number) => {
-    if (!peName) return;
+  /** Resolves true when saved; false (with the error shown) when it failed. */
+  const setBonus = useCallback(async (employee: string, amount: number): Promise<boolean> => {
+    if (!peName) return false;
     setError(null);
+    bonusRef.current += 1;
+    setBonusSaves(bonusRef.current);
     try {
       const res = await fetch("/inquiry-api/payroll/bonus", {
         method: "POST",
@@ -28,17 +33,22 @@ export function usePayrollActions(opts: { month: string; monthEnd: string; selec
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Failed to set bonus: ${res.status}`);
+        throw new Error(apiErrorMessage(err, `Failed to set bonus: ${res.status}`));
       }
       refresh();
+      return true;
     } catch (err) {
       console.error("payroll_bonus_failed", { pe: peName, employee, err });
       setError(extractErrorMessage(err, "Failed to set bonus"));
+      return false;
+    } finally {
+      bonusRef.current -= 1;
+      setBonusSaves(bonusRef.current);
     }
   }, [peName, refresh]);
 
   async function generate() {
-    if (busy.current.run) return;
+    if (busy.current.run || bonusRef.current > 0) return;
     busy.current.run = true;
     setIsRunning(true);
     setError(null);
@@ -62,7 +72,7 @@ export function usePayrollActions(opts: { month: string; monthEnd: string; selec
   }
 
   async function submitAll() {
-    if (!peName || busy.current.submit) return;
+    if (!peName || busy.current.submit || bonusRef.current > 0) return;
     busy.current.submit = true;
     setSubmitting(true);
     setError(null);
@@ -74,7 +84,7 @@ export function usePayrollActions(opts: { month: string; monthEnd: string; selec
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to submit payroll");
+        throw new Error(apiErrorMessage(err, "Failed to submit payroll"));
       }
       const result = await resp.json();
       if (result.failed && result.failed.length > 0) setError(result.failed.join(" | "));
@@ -98,14 +108,15 @@ export function usePayrollActions(opts: { month: string; monthEnd: string; selec
       const res = await fetch(`/inquiry-api/payroll/slips/pdf?pe_name=${encodeURIComponent(peName)}`, { credentials: "include" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `PDF export failed: ${res.status}`);
+        throw new Error(apiErrorMessage(err, `PDF export failed: ${res.status}`));
       }
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
       a.href = url;
       a.download = `bang-luong-${month.slice(0, 7)}.pdf`;
       a.click();
-      URL.revokeObjectURL(url);
+      // Some mobile/PWA browsers start the download after the click returns; revoking at once cancels it.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       console.error("payroll_pdf_failed", { pe: peName, err });
       setError(extractErrorMessage(err, "Failed to export PDF"));
@@ -115,5 +126,5 @@ export function usePayrollActions(opts: { month: string; monthEnd: string; selec
     }
   }
 
-  return { isRunning, submitting, exporting, error, setError, setBonus, generate, submitAll, exportPdf };
+  return { bonusSaving: bonusSaves > 0, isRunning, submitting, exporting, error, setError, setBonus, generate, submitAll, exportPdf };
 }

@@ -10,6 +10,7 @@ export interface PayrollActionsProps {
   isRunning: boolean;
   submitting: boolean;
   exporting: boolean;
+  bonusSaving: boolean;
   onGenerate: () => void;
   onSubmit: () => void;
   onExport: () => void;
@@ -32,12 +33,12 @@ export function PayrollActions(p: PayrollActionsProps & { mobile?: boolean }) {
         {!p.mobile && <span className="ml-2">{p.exporting ? "Đang xuất..." : "Xuất PDF"}</span>}
       </Button>
       {p.canGenerate && (
-        <Button variant="outline" className={cn(size, p.mobile && "flex-1")} onClick={p.onGenerate} disabled={p.isRunning || p.submitting}>
+        <Button variant="outline" className={cn(size, p.mobile && "flex-1")} onClick={p.onGenerate} disabled={p.isRunning || p.submitting || p.bonusSaving}>
           {p.isRunning ? "Generating..." : p.hasEntry ? "Recalculate" : "Generate"}
         </Button>
       )}
       {p.canSubmit && (
-        <Button className={cn(size, p.mobile && "flex-1")} onClick={p.onSubmit} disabled={p.submitting || p.isRunning}>
+        <Button className={cn(size, p.mobile && "flex-1")} onClick={p.onSubmit} disabled={p.submitting || p.isRunning || p.bonusSaving}>
           {p.submitting ? "Submitting..." : "Submit All"}
         </Button>
       )}

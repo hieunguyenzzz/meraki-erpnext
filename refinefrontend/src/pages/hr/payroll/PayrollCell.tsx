@@ -12,7 +12,7 @@ export function PayrollCell({ colId, slip, weddingAllowance, onSetBonus, touch }
   colId: string;
   slip: SalarySlip;
   weddingAllowance: number;
-  onSetBonus: (employee: string, amount: number) => Promise<void>;
+  onSetBonus: (employee: string, amount: number) => Promise<boolean>;
   touch?: boolean;
 }) {
   const col = PAYROLL_COLUMNS.find((c) => c.id === colId);

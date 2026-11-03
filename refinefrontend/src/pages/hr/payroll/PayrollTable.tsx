@@ -10,7 +10,7 @@ type SortKey = "employee" | "status" | (typeof PAYROLL_COLUMNS)[number]["id"];
 interface Props {
   slips: SalarySlip[];
   weddingAllowanceMap: Record<string, number>;
-  onSetBonus: (employee: string, amount: number) => Promise<void>;
+  onSetBonus: (employee: string, amount: number) => Promise<boolean>;
 }
 
 /** Desktop table: wrapper scrolls both ways so the header and the Employee column stay in view. */
@@ -67,7 +67,7 @@ export function PayrollTable({ slips, weddingAllowanceMap, onSetBonus }: Props) 
         </thead>
         <tbody>
           {rows.map((s) => (
-            <tr key={s.name} className="group border-t hover:bg-secondary/60">
+            <tr key={s.name} className="group border-t hover:bg-secondary">
               <th scope="row" className="sticky left-0 z-10 bg-card px-4 py-3 text-left font-medium group-hover:bg-secondary">
                 <div className="flex flex-col gap-1">
                   <span className="whitespace-nowrap">{slipName(s)}</span>

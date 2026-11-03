@@ -9,7 +9,7 @@ import { commissionOf, slipName, type SalarySlip } from "./types";
 interface Props {
   slips: SalarySlip[];
   weddingAllowanceMap: Record<string, number>;
-  onSetBonus: (employee: string, amount: number) => Promise<void>;
+  onSetBonus: (employee: string, amount: number) => Promise<boolean>;
 }
 
 const SPLITS: [keyof NonNullable<ReturnType<typeof commissionOf>>, string][] = [
@@ -31,7 +31,7 @@ export function PayrollCards({ slips, weddingAllowanceMap, onSetBonus }: Props) 
       {slips.map((s) => {
         const expanded = open.has(s.name);
         const split = commissionOf(s);
-        const panelId = `slip-${s.name}`;
+        const panelId = `slip-${s.name.replace(/[^\w-]/g, "-")}`;
         return (
           <article key={s.name} className="rounded-card border bg-card">
             <button

@@ -8,7 +8,7 @@ interface BonusCellProps {
   editable: boolean;
   /** Phone layout: 48px tap target. */
   touch?: boolean;
-  onSave: (amount: number) => Promise<void>;
+  onSave: (amount: number) => Promise<boolean | void>;
 }
 
 /** Bonus amount; for draft slips click to edit (Enter/blur saves, Escape cancels). */
@@ -16,7 +16,11 @@ export function BonusCell({ amount, editable, touch, onSave }: BonusCellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  // After a save, keep showing the new value until the amount prop catches up (no flicker back to the old one).
+  const [pending, setPending] = useState<{ value: number; base: number } | null>(null);
   const finished = useRef(false);
+
+  const shown = pending && pending.base === amount ? pending.value : amount;
 
   if (!editable) return <div className="text-right">{formatVND(amount)}</div>;
 
@@ -38,11 +42,11 @@ export function BonusCell({ amount, editable, touch, onSave }: BonusCellProps) {
         onClick={(e) => {
           e.stopPropagation(); // don't toggle the row's detail expansion
           finished.current = false;
-          setDraft(amount > 0 ? String(Math.round(amount)) : "");
+          setDraft(shown > 0 ? String(Math.round(shown)) : "");
           setEditing(true);
         }}
       >
-        {formatVND(amount)}
+        {formatVND(shown)}
       </button>
     );
   }
@@ -52,10 +56,11 @@ export function BonusCell({ amount, editable, touch, onSave }: BonusCellProps) {
     finished.current = true;
     setEditing(false);
     const next = Number(draft || 0);
-    if (next === amount) return;
+    if (next === shown) return;
     setSaving(true);
     try {
-      await onSave(next);
+      const ok = await onSave(next);
+      setPending(ok === false ? null : { value: next, base: amount });
     } finally {
       setSaving(false);
     }

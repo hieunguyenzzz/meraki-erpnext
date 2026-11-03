@@ -6,18 +6,21 @@ export function currentMonthStart(): string {
   return `${todayVN().slice(0, 7)}-01`;
 }
 
-/** Month shown as "2026-10" (ISO order, no month names). */
+/** Month shown as "2026-10" (ISO order); an entry that does not start on the 1st also shows its exact start date. */
 export function monthLabel(startDate: string): string {
-  return startDate.slice(0, 7);
+  return startDate.endsWith("-01") ? startDate.slice(0, 7) : `${startDate.slice(0, 7)} (from ${startDate})`;
 }
 
-export function isMonthStart(v: string): boolean {
-  const m = /^(\d{4})-(\d{2})-01$/.exec(v);
-  return !!m && Number(m[2]) >= 1 && Number(m[2]) <= 12;
+/** A real calendar date, YYYY-MM-DD. */
+export function isIsoDate(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return false;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3];
 }
 
-/** `?month=` must be a real first-of-month date; anything else falls back to the current month. */
-export const monthParser = createParser<string>({ parse: (v) => (isMonthStart(v) ? v : null), serialize: (v) => v });
+/** `?month=` must be a real date; the page then only accepts it if it matches a payroll entry or a recent month. */
+export const monthParser = createParser<string>({ parse: (v) => (isIsoDate(v) ? v : null), serialize: (v) => v });
 
 export function lastDayOfMonth(startDate: string): string {
   const [y, m] = startDate.split("-").map(Number);
