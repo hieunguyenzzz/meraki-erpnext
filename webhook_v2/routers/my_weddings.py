@@ -17,6 +17,7 @@ import json
 import uuid
 from datetime import date, timedelta
 
+import requests
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 
@@ -64,16 +65,29 @@ def role_on_project(project: dict, employee: str) -> str | None:
     return None
 
 
+def _load_assigned_project(client: ERPNextClient, project: str, employee: str, user: str) -> tuple[dict, str]:
+    """Return (Project doc, caller's role on it). A missing project is a 403 exactly like an
+    unassigned one, so the response never reveals which weddings exist."""
+    doc: dict = {}
+    try:
+        doc = client._get(f"/api/resource/Project/{project}").get("data", {})
+    except requests.HTTPError as e:
+        if e.response is None or e.response.status_code not in (403, 404):
+            raise
+    role = role_on_project(doc, employee)
+    if not role:
+        log.warning("my_weddings_forbidden", user=user, employee=employee, project=project, found=bool(doc))
+        raise HTTPException(status_code=403, detail="You are not assigned to this wedding")
+    return doc, role
+
+
 def require_assigned_unless_privileged(request: Request, project: str, employee: str | None = None) -> None:
     """403 unless the caller sees all weddings anyway or is assigned to `project`."""
     bind_correlation_id(request)
     if has_roles(request, ALL_WEDDINGS_ROLES):
         return
     employee = employee or resolve_employee(request, None)
-    doc = ERPNextClient()._get(f"/api/resource/Project/{project}").get("data", {})
-    if not role_on_project(doc, employee):
-        log.warning("my_weddings_forbidden", user=get_current_user(request), employee=employee, project=project)
-        raise HTTPException(status_code=403, detail="You are not assigned to this wedding")
+    _load_assigned_project(ERPNextClient(), project, employee, get_current_user(request))
 
 
 def _venue_names(client: ERPNextClient, sales_order_ids: set[str]) -> dict[str, str]:
@@ -158,11 +172,7 @@ def my_wedding_detail(project: str, request: Request):
     employee = resolve_employee(request, None)
     client = ERPNextClient()
 
-    doc = client._get(f"/api/resource/Project/{project}").get("data", {})
-    my_role = role_on_project(doc, employee)
-    if not my_role:
-        log.warning("my_wedding_forbidden", user=user, employee=employee, project=project)
-        raise HTTPException(status_code=403, detail="You are not assigned to this wedding")
+    doc, my_role = _load_assigned_project(client, project, employee, user)
 
     team_ids = [doc.get(f) for f in ASSIGNMENT_ROLES if doc.get(f)]
     names = {e["name"]: e.get("first_name") or e.get("employee_name") or e["name"] for e in client._get(

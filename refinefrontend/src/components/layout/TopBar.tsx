@@ -42,7 +42,7 @@ function Breadcrumbs() {
   );
 }
 
-/** Mobile bell: a plain link to /notifications (employee-only users cannot reach it, so they keep the dropdown). */
+/** Mobile bell: a plain link to /notifications (every signed-in user can open it). */
 function MobileBellLink() {
   const { count } = useMyNotifications();
   return (
@@ -70,7 +70,7 @@ export function TopBar() {
   return (
     <header className="z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 pl-5 pr-3 backdrop-blur md:px-4 max-md:h-[68px] max-md:border-b-0">
       <div className="md:hidden">
-        <Wordmark to={selfOnly ? "/my-profile" : "/"} />
+        <Wordmark to="/" />
       </div>
       <div className="hidden md:block">{!isLoading && !selfOnly && <Breadcrumbs />}</div>
 
@@ -78,9 +78,7 @@ export function TopBar() {
         <Button variant="ghost" size="icon" onClick={() => setOpen(true)} aria-label="Search" className={BELL_CLASS}>
           <Search strokeWidth={1.75} />
         </Button>
-        {isLoading ? null : selfOnly ? (
-          <NotificationBell className={BELL_CLASS} />
-        ) : (
+        {isLoading ? null : (
           <>
             <div className="hidden md:block">
               <NotificationBell className={BELL_CLASS} />
