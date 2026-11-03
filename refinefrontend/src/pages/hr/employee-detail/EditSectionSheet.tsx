@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useInvalidate } from "@refinedev/core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,8 @@ function Field({ id, label, hint, children }: { id?: string; label: string; hint
 /** One edit sheet for all five Overview cards. Mounted only while a section is being edited. */
 export function EditSectionSheet({ employee, section, users, designations, canManageRoles, onClose }: Props) {
   const invalidate = useInvalidate();
-  const [values, setValues] = useState<EditValues>(() => initialEditValues(employee, section));
+  const initial = useMemo(() => initialEditValues(employee, section), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [values, setValues] = useState<EditValues>(initial);
   const set = (key: string, v: string | number) => setValues((prev) => ({ ...prev, [key]: v }));
   const text = (key: string) => (values[key] ?? "") as string | number;
 
@@ -55,6 +56,8 @@ export function EditSectionSheet({ employee, section, users, designations, canMa
   const [userRoles, setUserRoles] = useState<string[]>([]);
   // Roles are only written back once the current ones have loaded; otherwise an empty list would strip them all.
   const [rolesLoaded, setRolesLoaded] = useState(false);
+  const [loadedRoles, setLoadedRoles] = useState<string[]>([]);
+  const linkBusy = useRef(false);
   const [linkEmail, setLinkEmail] = useState(section === "contact" ? employee.user_id || "" : "");
   const [linking, setLinking] = useState(false);
   const [linkMessage, setLinkMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -63,16 +66,27 @@ export function EditSectionSheet({ employee, section, users, designations, canMa
   useEffect(() => {
     if (section !== "employment" || !employee.user_id) return;
     fetch(`/api/resource/User/${encodeURIComponent(employee.user_id)}`, { credentials: "include" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`User roles ${r.status}`);
+        return r.json();
+      })
       .then((data) => {
-        setUserRoles(((data?.data?.roles ?? []) as { role: string }[]).map((r) => r.role));
+        const current = ((data?.data?.roles ?? []) as { role: string }[]).map((r) => r.role);
+        setUserRoles(current);
+        setLoadedRoles(current);
         setRolesLoaded(true);
       })
       .catch((err) => {
         console.error("Could not load user roles for", employee.user_id, err);
-        setError("Could not load the current roles. Other changes can still be saved; roles will not be touched.");
+        setError("Couldn't load roles. Other changes can still be saved; roles will not be touched.");
       });
   }, [section, employee.user_id]);
+
+  const dirty =
+    JSON.stringify(values) !== JSON.stringify(initial) ||
+    (rolesLoaded && [...userRoles].sort().join("|") !== [...loadedRoles].sort().join("|"));
+  // A save in flight must not be dismissed: the user would not see whether it worked.
+  const close = () => { if (!busy.current) onClose(); };
 
   async function handleSave() {
     if (busy.current) return;
@@ -80,7 +94,7 @@ export function EditSectionSheet({ employee, section, users, designations, canMa
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/inquiry-api/employee/${employee.name}`, {
+      const res = await fetch(`/inquiry-api/employee/${encodeURIComponent(employee.name)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ values: toPayload(values) }),
@@ -91,7 +105,7 @@ export function EditSectionSheet({ employee, section, users, designations, canMa
       }
       // Roles are saved on the linked ERPNext user, only by System Manager / Administrator.
       if (section === "employment" && employee.user_id && canManageRoles && rolesLoaded) {
-        const rolesRes = await fetch(`/inquiry-api/employee/${employee.name}/set-roles`, {
+        const rolesRes = await fetch(`/inquiry-api/employee/${encodeURIComponent(employee.name)}/set-roles`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ roles: userRoles }),
@@ -113,11 +127,12 @@ export function EditSectionSheet({ employee, section, users, designations, canMa
   }
 
   async function handleLinkUser() {
-    if (!linkEmail.trim()) return;
+    if (!linkEmail.trim() || linkBusy.current) return;
+    linkBusy.current = true;
     setLinking(true);
     setLinkMessage(null);
     try {
-      const res = await fetch(`/inquiry-api/employee/${employee.name}/link-user`, {
+      const res = await fetch(`/inquiry-api/employee/${encodeURIComponent(employee.name)}/link-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: linkEmail.trim() }),
@@ -131,6 +146,7 @@ export function EditSectionSheet({ employee, section, users, designations, canMa
       console.error("Link user failed", employee.name, err);
       setLinkMessage({ type: "error", text: err instanceof Error && err.message ? err.message : "Failed to link user" });
     } finally {
+      linkBusy.current = false;
       setLinking(false);
     }
   }
@@ -144,12 +160,13 @@ export function EditSectionSheet({ employee, section, users, designations, canMa
   return (
     <StaffSheet
       open
-      onClose={onClose}
+      dirty={dirty}
+      onClose={close}
       title={TITLES[section]}
       subtitle={employee.employee_name}
       footer={
         <>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={close} disabled={saving}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
         </>
       }

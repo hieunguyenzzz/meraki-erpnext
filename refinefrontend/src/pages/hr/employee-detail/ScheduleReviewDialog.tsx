@@ -44,7 +44,7 @@ export function ScheduleReviewDialog({ employee, open, onOpenChange }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(`/inquiry-api/review/${employee.name}`, {
+      const res = await fetch(`/inquiry-api/review/${encodeURIComponent(employee.name)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,7 +71,7 @@ export function ScheduleReviewDialog({ employee, open, onOpenChange }: Props) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => { if (!submitting) onOpenChange(o); }}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Schedule Performance Review</DialogTitle>

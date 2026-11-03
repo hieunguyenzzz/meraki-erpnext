@@ -25,7 +25,7 @@ export function StatusDialog({ employee, open, onOpenChange }: { employee: Emplo
     const action = active ? "deactivate" : "activate";
     const body = action === "deactivate" ? JSON.stringify({ relieving_date: relievingDate }) : undefined;
     try {
-      const res = await fetch(`/inquiry-api/employee/${employee.name}/${action}`, {
+      const res = await fetch(`/inquiry-api/employee/${encodeURIComponent(employee.name)}/${action}`, {
         method: "POST",
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body,
@@ -46,7 +46,7 @@ export function StatusDialog({ employee, open, onOpenChange }: { employee: Emplo
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => { if (!loading) onOpenChange(o); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{active ? `Deactivate ${displayName(employee)}?` : `Reactivate ${displayName(employee)}?`}</DialogTitle>

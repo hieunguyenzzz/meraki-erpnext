@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useList } from "@refinedev/core";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,7 +26,7 @@ export function ReviewTab({ employee, onSchedule }: { employee: string; onSchedu
     meta: { fields: ["name", "review_date", "review_time", "notes", "participants", "google_event_id"] },
     queryOptions: { enabled: !!employee },
   });
-  const reviews = (result?.data ?? []) as unknown as ReviewRow[];
+  const reviews = useMemo(() => (result?.data ?? []) as unknown as ReviewRow[], [result]);
 
   return (
     <SectionCard title="Review history" action={<Button size="sm" onClick={onSchedule}>Schedule review</Button>}>

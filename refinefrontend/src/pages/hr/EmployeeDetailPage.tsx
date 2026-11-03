@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useList, useOne, usePermissions } from "@refinedev/core";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
@@ -8,7 +8,6 @@ import { DetailSkeleton } from "@/components/detail-skeleton";
 import { EmployeeReviewsTab } from "@/components/staff-review/EmployeeReviewsTab";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { FINANCE_ROLES, hasModuleAccess } from "@/lib/roles";
-import { cn } from "@/lib/utils";
 import type { Employee } from "@/lib/types";
 import { DeleteDialog } from "./employee-detail/DeleteDialog";
 import { EditSectionSheet } from "./employee-detail/EditSectionSheet";
@@ -53,7 +52,7 @@ export default function EmployeeDetailPage() {
     filters: [{ field: "enabled", operator: "eq", value: 1 }],
     meta: { fields: ["name", "full_name", "email"] },
   });
-  const users = (usersResult?.data ?? []) as unknown as UserOption[];
+  const users = useMemo(() => (usersResult?.data ?? []) as unknown as UserOption[], [usersResult]);
 
   const { result: designationsResult } = useList({
     resource: "Designation",
@@ -61,7 +60,7 @@ export default function EmployeeDetailPage() {
     sorters: [{ field: "name", order: "asc" }],
     meta: { fields: ["name"] },
   });
-  const designations = (designationsResult?.data ?? []) as unknown as { name: string }[];
+  const designations = useMemo(() => (designationsResult?.data ?? []) as unknown as { name: string }[], [designationsResult]);
 
   const leave = useLeaveDetail(name);
   const records = useEmployeeRecords(name, leave.refetch);
@@ -73,7 +72,10 @@ export default function EmployeeDetailPage() {
       return;
     }
     fetch(`/api/resource/User/${encodeURIComponent(employee.user_id)}`, { credentials: "include" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`User roles ${r.status}`);
+        return r.json();
+      })
       .then((data) => setDisplayUserRoles(((data?.data?.roles ?? []) as { role: string }[]).map((r) => r.role)))
       .catch((err) => {
         console.error("Could not load user roles for", employee.user_id, err);
@@ -104,7 +106,7 @@ export default function EmployeeDetailPage() {
       />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as (typeof TABS)[number])} className="space-y-4">
-        <TabsList className={cn(tabsListClass)}>
+        <TabsList className={tabsListClass}>
           <TabsTrigger value="overview" className={triggerClass}>Overview</TabsTrigger>
           <TabsTrigger value="records" className={triggerClass}>
             Leave &amp; WFH
@@ -119,7 +121,7 @@ export default function EmployeeDetailPage() {
             <PersonalCard employee={employee} onEdit={setEditSection} />
             <ContactCard employee={employee} onEdit={setEditSection} />
             <EmploymentCard employee={employee} users={users} displayUserRoles={displayUserRoles} onEdit={setEditSection} />
-            <LeaveBalanceCard balance={leave.balance} periods={leave.periods} loadError={leave.error} onEdit={setLeaveAlloc} />
+            <LeaveBalanceCard balance={leave.balance} periods={leave.periods} loadError={leave.error} loading={leave.loading} onEdit={setLeaveAlloc} />
             {isFinance && <CommissionCard employee={employee} onEdit={setEditSection} />}
             {isFinance && <AllowanceCard employee={employee} onEdit={setEditSection} />}
           </div>
@@ -128,6 +130,8 @@ export default function EmployeeDetailPage() {
         <TabsContent value="records" className="mt-4">
           <RecordsTab
             records={records.records}
+            loading={records.loading}
+            loadError={records.loadError}
             processingId={records.processingId}
             error={records.recordsError}
             onApprove={records.approve}
@@ -144,8 +148,8 @@ export default function EmployeeDetailPage() {
         </TabsContent>
       </Tabs>
 
-      <StatusDialog employee={employee} open={statusOpen} onOpenChange={setStatusOpen} />
-      <DeleteDialog employee={employee} open={deleteOpen} onOpenChange={setDeleteOpen} />
+      {statusOpen && <StatusDialog employee={employee} open onOpenChange={setStatusOpen} />}
+      {deleteOpen && <DeleteDialog employee={employee} open onOpenChange={setDeleteOpen} />}
       {scheduleOpen && <ScheduleReviewDialog employee={employee} open onOpenChange={setScheduleOpen} />}
       {leaveAlloc && (
         <LeaveBalanceSheet

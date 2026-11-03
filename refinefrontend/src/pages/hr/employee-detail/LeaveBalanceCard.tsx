@@ -1,5 +1,6 @@
 import { Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { SectionCard } from "@/components/wedding/SectionCard";
 import { getLeaveBalanceVariant } from "@/lib/review-status";
@@ -9,6 +10,7 @@ interface Props {
   balance: LeaveBalance;
   periods: LeavePeriod[];
   loadError: boolean;
+  loading: boolean;
   onEdit: (alloc: LeaveAllocation) => void;
 }
 
@@ -21,13 +23,19 @@ function Tile({ value, label }: { value: number; label: string }) {
   );
 }
 
-export function LeaveBalanceCard({ balance, periods, loadError, onEdit }: Props) {
+export function LeaveBalanceCard({ balance, periods, loadError, loading, onEdit }: Props) {
   const percent = balance.allocated > 0 ? (balance.remaining / balance.allocated) * 100 : 0;
   const tone = percent > 50 ? "bg-success" : percent >= 25 ? "bg-warning" : "bg-destructive";
 
   return (
     <SectionCard title="Leave balance">
-      {loadError ? (
+      {loading ? (
+        <div className="space-y-3" aria-busy>
+          <Skeleton className="h-5 w-1/2" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-2 w-full" />
+        </div>
+      ) : loadError ? (
         <p role="alert" className="text-sm text-danger-soft-foreground">Could not load the leave balance. Reload the page to try again.</p>
       ) : balance.allocated > 0 ? (
         <>

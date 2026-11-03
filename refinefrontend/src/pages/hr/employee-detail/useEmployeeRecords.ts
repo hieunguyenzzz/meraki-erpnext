@@ -27,7 +27,7 @@ export function useEmployeeRecords(employee: string | undefined, onLeaveChanged:
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const busy = useRef(false);
 
-  const { result: leaveResult } = useList({
+  const { result: leaveResult, query: leaveQuery } = useList({
     resource: "Leave Application",
     pagination: { mode: "off" },
     filters: [{ field: "employee", operator: "eq", value: employee }],
@@ -35,7 +35,7 @@ export function useEmployeeRecords(employee: string | undefined, onLeaveChanged:
     meta: { fields: ["name", "leave_type", "from_date", "to_date", "total_leave_days", "status", "docstatus", "description"] },
     queryOptions: { enabled: !!employee },
   });
-  const { result: wfhResult } = useList({
+  const { result: wfhResult, query: wfhQuery } = useList({
     resource: "Attendance Request",
     pagination: { mode: "off" },
     filters: [
@@ -46,8 +46,8 @@ export function useEmployeeRecords(employee: string | undefined, onLeaveChanged:
     meta: { fields: ["name", "from_date", "to_date", "explanation", "docstatus"] },
     queryOptions: { enabled: !!employee },
   });
-  const leaveHistory = (leaveResult?.data ?? []) as unknown as LeaveRow[];
-  const wfhRequests = (wfhResult?.data ?? []) as unknown as WfhRow[];
+  const leaveHistory = useMemo(() => (leaveResult?.data ?? []) as unknown as LeaveRow[], [leaveResult]);
+  const wfhRequests = useMemo(() => (wfhResult?.data ?? []) as unknown as WfhRow[], [wfhResult]);
 
   const records = useMemo<EmployeeRecord[]>(() => {
     const leaves = leaveHistory.map((a) => {
@@ -106,6 +106,8 @@ export function useEmployeeRecords(employee: string | undefined, onLeaveChanged:
   return {
     records,
     pendingCount,
+    loading: leaveQuery.isLoading || wfhQuery.isLoading,
+    loadError: leaveQuery.isError || wfhQuery.isError,
     processingId,
     recordsError,
     approve: (r: EmployeeRecord) => act(r.type, "approve", r.id),

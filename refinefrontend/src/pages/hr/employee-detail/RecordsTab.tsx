@@ -12,6 +12,8 @@ const FILTER_LABEL = { all: "All", leave: "Leave", wfh: "WFH" } as const;
 
 interface Props {
   records: EmployeeRecord[];
+  loading: boolean;
+  loadError: boolean;
   processingId: string | null;
   error: string | null;
   onApprove: (r: EmployeeRecord) => void;
@@ -32,7 +34,7 @@ function Actions({ rec, busy, onApprove, onReject }: { rec: EmployeeRecord; busy
   );
 }
 
-export function RecordsTab({ records, processingId, error, onApprove, onReject }: Props) {
+export function RecordsTab({ records, loading, loadError, processingId, error, onApprove, onReject }: Props) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const [filter, setFilter] = useQueryState("records", parseAsStringLiteral(FILTERS).withDefault("all").withOptions({ clearOnDefault: true }));
   const shown = filter === "all" ? records : records.filter((r) => r.type === filter);
@@ -47,7 +49,11 @@ export function RecordsTab({ records, processingId, error, onApprove, onReject }
           </Button>
         ))}
       </div>
-      {shown.length === 0 ? (
+      {loadError ? (
+        <p role="alert" className="text-sm text-danger-soft-foreground">Could not load leave and WFH records. Reload the page to try again.</p>
+      ) : loading ? (
+        <p className="py-8 text-center text-sm text-muted-foreground" aria-busy>Loading…</p>
+      ) : shown.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">No records found</p>
       ) : isDesktop ? (
         <Table>

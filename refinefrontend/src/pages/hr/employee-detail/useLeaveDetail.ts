@@ -59,5 +59,5 @@ export function useLeaveDetail(employee: string | undefined) {
     [periods],
   );
 
-  return { periods, balance, error, refetch };
+  return { periods, balance, error, loading: !detail && !error, refetch };
 }

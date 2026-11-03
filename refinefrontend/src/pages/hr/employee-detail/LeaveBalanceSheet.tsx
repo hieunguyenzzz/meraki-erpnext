@@ -20,6 +20,8 @@ export function LeaveBalanceSheet({ alloc, employeeName, onClose, onSaved }: Pro
   const [error, setError] = useState<string | null>(null);
   const busy = useRef(false);
 
+  const close = () => { if (!busy.current) onClose(); };
+
   async function save() {
     if (busy.current) return;
     busy.current = true;
@@ -45,12 +47,13 @@ export function LeaveBalanceSheet({ alloc, employeeName, onClose, onSaved }: Pro
   return (
     <StaffSheet
       open
-      onClose={onClose}
+      dirty={allocated !== alloc.allocated}
+      onClose={close}
       title="Edit Leave Balance"
       subtitle={employeeName}
       footer={
         <>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={close} disabled={saving}>Cancel</Button>
           <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
         </>
       }

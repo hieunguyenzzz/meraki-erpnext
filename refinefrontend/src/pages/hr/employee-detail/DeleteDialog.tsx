@@ -17,7 +17,7 @@ export function DeleteDialog({ employee, open, onOpenChange }: { employee: Emplo
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/inquiry-api/employee/${employee.name}/delete`, { method: "POST" });
+      const res = await fetch(`/inquiry-api/employee/${encodeURIComponent(employee.name)}/delete`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `API error ${res.status}`);
@@ -33,7 +33,7 @@ export function DeleteDialog({ employee, open, onOpenChange }: { employee: Emplo
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => { if (!loading) onOpenChange(o); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Delete {displayName(employee)}?</DialogTitle>
