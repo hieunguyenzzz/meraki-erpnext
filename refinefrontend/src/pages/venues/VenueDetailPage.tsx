@@ -97,11 +97,12 @@ export default function VenueDetailPage() {
   const { result: contactResult } = useList({
     resource: "Contact",
     pagination: { mode: "off" },
-    filters: [
-      { field: "link_doctype", operator: "eq", value: "Supplier" },
-      { field: "link_name", operator: "eq", value: name! },
-    ],
     meta: {
+      // Contact links to a Supplier through its Dynamic Link child table
+      rawFilters: [
+        ["Dynamic Link", "link_doctype", "=", "Supplier"],
+        ["Dynamic Link", "link_name", "=", name!],
+      ],
       fields: [
         "name",
         "first_name",
