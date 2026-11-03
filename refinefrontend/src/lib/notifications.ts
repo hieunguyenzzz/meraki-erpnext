@@ -1,0 +1,105 @@
+import { Calendar, Home, Receipt, MessageSquare, Users, Heart, User, Bell, type LucideIcon } from "lucide-react";
+import type { PwaNotification } from "@/hooks/useMyNotifications";
+
+export const DOC_ROUTES: Record<string, (name: string) => string> = {
+  "Job Applicant": (name) => `/hr/recruiting/${encodeURIComponent(name)}`,
+  "Lead": (name) => `/crm/leads/${encodeURIComponent(name)}`,
+  "Employee": (name) => `/hr/employees/${encodeURIComponent(name)}`,
+  "Project": (name) => `/projects/${encodeURIComponent(name)}`,
+  "Purchase Invoice": (name) => `/finance/expenses/${encodeURIComponent(name)}`,
+  "Attendance Request": () => "/hr/wfh",
+};
+
+type Tone = "warning" | "info" | "accent" | "muted";
+
+interface TypeMeta {
+  label: string;
+  icon: LucideIcon;
+  tone: Tone;
+}
+
+const TYPE_META: Record<string, TypeMeta> = {
+  "Leave Application": { label: "Leave", icon: Calendar, tone: "warning" },
+  "Attendance Request": { label: "WFH", icon: Home, tone: "info" },
+  "Purchase Invoice": { label: "Expenses", icon: Receipt, tone: "accent" },
+  "Lead": { label: "CRM", icon: MessageSquare, tone: "accent" },
+  "Job Applicant": { label: "Recruiting", icon: Users, tone: "muted" },
+  "Project": { label: "Projects", icon: Heart, tone: "accent" },
+  "Employee": { label: "Employees", icon: User, tone: "muted" },
+};
+
+export const TONE_CLASSES: Record<Tone, string> = {
+  warning: "bg-warning-soft text-warning-soft-foreground",
+  info: "bg-info-soft text-info-soft-foreground",
+  accent: "bg-accent text-accent-foreground",
+  muted: "bg-secondary text-muted-foreground",
+};
+
+export const metaForType = (type: string): TypeMeta =>
+  TYPE_META[type] ?? { label: type || "Notice", icon: Bell, tone: "muted" };
+
+export const labelForType = (type: string) => metaForType(type).label;
+
+export type ApprovalAction = "approve" | "reject";
+
+/** Leave/WFH approve/reject endpoints are HR-only; expense (Purchase Invoice) approvals are open to any recipient. */
+export function canDecide(notif: PwaNotification, isHr: boolean): boolean {
+  if (!notif.is_pending) return false;
+  const type = notif.reference_document_type;
+  if (type === "Leave Application" || type === "Attendance Request") return isHr;
+  return type === "Purchase Invoice";
+}
+
+export interface MessagePart {
+  text: string;
+  bold: boolean;
+}
+
+/** Amounts arrive as "85,000 ₫"; the house style is the ISO prefix ("VND 85,000"). */
+const withVndPrefix = (text: string) => text.replace(/([\d][\d,.]*)\s*₫/g, "VND $1");
+
+/**
+ * Split a notification's HTML message into text parts, keeping only <b>/<strong> emphasis.
+ * DOMParser builds an inert document (no script/img loading) and nothing is re-inserted as HTML.
+ */
+export function parseMessage(html: string): MessagePart[] {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const parts: MessagePart[] = [];
+  const walk = (node: Node, bold: boolean) => {
+    node.childNodes.forEach((child) => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const text = withVndPrefix(child.textContent ?? "");
+        if (text) parts.push({ text, bold });
+      } else if (child instanceof Element) {
+        const tag = child.tagName.toLowerCase();
+        walk(child, bold || tag === "b" || tag === "strong");
+      }
+    });
+  };
+  walk(doc.body, false);
+  return parts;
+}
+
+/** "YYYY-MM-DD" from an ERPNext timestamp ("2026-11-03 09:41:12.345"), as the server wrote it. */
+export const isoDay = (creation: string) => creation.slice(0, 10);
+/** 24h "HH:mm" from an ERPNext timestamp. */
+export const clockTime = (creation: string) => creation.slice(11, 16);
+
+const localIso = (d: Date) => d.toLocaleDateString("sv-SE");
+
+export function dayLabel(creation: string): string {
+  const day = isoDay(creation);
+  if (day === localIso(new Date())) return "Today";
+  if (day === localIso(new Date(Date.now() - 86_400_000))) return "Yesterday";
+  return day;
+}
+
+export function groupByDay(items: PwaNotification[]): { label: string; items: PwaNotification[] }[] {
+  const map = new Map<string, PwaNotification[]>();
+  for (const n of items) {
+    const label = dayLabel(n.creation);
+    if (!map.has(label)) map.set(label, []);
+    map.get(label)!.push(n);
+  }
+  return [...map].map(([label, list]) => ({ label, items: list }));
+}
