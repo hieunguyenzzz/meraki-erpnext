@@ -90,8 +90,8 @@ function PhonePipeline({ grouped, active, onChange, onOpenSheet }: {
         {PIPELINE_COLUMNS.map((col) => {
           const selected = col.key === active;
           return (
-            <button key={col.key} type="button" aria-pressed={selected} onClick={() => onChange(col.key)} className="flex h-12 shrink-0 items-center focus-visible:outline-none">
-              <span className={cn("flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold", selected ? "border-foreground bg-foreground text-background" : "border-input bg-card text-foreground")}>
+            <button key={col.key} type="button" aria-pressed={selected} onClick={() => onChange(col.key)} className="group flex h-12 shrink-0 items-center focus-visible:outline-none">
+              <span className={cn("flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background", selected ? "border-foreground bg-foreground text-background" : "border-input bg-card text-foreground")}>
                 {col.label}
                 <span className={cn("tabular-nums", selected ? "opacity-80" : "text-muted-foreground")}>· {grouped[col.key].length}</span>
               </span>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useInvalidate, useList } from "@refinedev/core";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { RotateCw } from "lucide-react";
@@ -101,8 +101,9 @@ export default function ApplicantsListPage() {
     [result, joMap],
   );
 
-  const rows = useMemo(() => {
-    const s = search.trim().toLowerCase();
+  const deferredSearch = useDeferredValue(search);
+  const filtered = useMemo(() => {
+    const s = deferredSearch.trim().toLowerCase();
     const c = city.trim().toLowerCase();
     return applicants
       .filter((a) => !stage || stageOf(a) === stage)
@@ -110,12 +111,14 @@ export default function ApplicantsListPage() {
       .filter((a) => !source || a.source === source)
       .filter((a) => !position || a.jobName === position)
       .filter((a) => !c || a.custom_city.toLowerCase().includes(c))
-      .filter((a) => !s || (a.applicant_name || a.name).toLowerCase().includes(s))
-      .sort((a, b) => compareRows(a, b, sort.key) * sort.dir);
-  }, [applicants, search, stage, rating, source, position, city, sort]);
+      .filter((a) => !s || (a.applicant_name || a.name).toLowerCase().includes(s));
+  }, [applicants, deferredSearch, stage, rating, source, position, city]);
 
-  // Reset paging when the filters or sort change
+  const rows = useMemo(() => [...filtered].sort((a, b) => compareRows(a, b, sort.key) * sort.dir), [filtered, sort]);
+
+  // Reset paging when the filters or sort change; a changed filter also drops the selection
   useEffect(() => setLimit(PAGE_SIZE), [search, stage, rating, source, position, city, sort]);
+  useEffect(() => { setSelected(new Set()); setSendError(""); }, [search, stage, rating, source, position, city]);
 
   const shown = useMemo(() => rows.slice(0, limit), [rows, limit]);
   // Only applicants still in the filtered list count, so a hidden row is never sent by accident
@@ -230,6 +233,8 @@ export default function ApplicantsListPage() {
       <RecruitingHeader />
       <ApplicantFilters values={filterValues} onChange={changeFilter} onClear={clearFilters} sources={sourceOptions} positions={positions} />
       {body}
+      {/* Keeps the last cards and "Show more" clear of the floating bar */}
+      {selectedIds.length > 0 && <div aria-hidden className="h-[140px] shrink-0" />}
       {selectedIds.length > 0 && (
         <SelectionBar count={selectedIds.length} sending={sending} error={sendError} onSend={() => void handleSendToScanner()} onClear={() => { setSelected(new Set()); setSendError(""); }} />
       )}

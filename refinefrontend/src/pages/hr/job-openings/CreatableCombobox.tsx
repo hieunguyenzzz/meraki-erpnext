@@ -16,10 +16,12 @@ interface Props {
   creating: boolean;
   onSelect: (name: string) => void;
   onCreate: (name: string) => Promise<boolean>;
+  /** When given, a "None" entry appears so an optional value can be cleared */
+  onClear?: () => void;
 }
 
 /** Pick an existing record or create it from what was typed (used for Designation and Branch). */
-export function CreatableCombobox({ label, required, value, placeholder, searchPlaceholder, emptyText, options, creating, onSelect, onCreate }: Props) {
+export function CreatableCombobox({ label, required, value, placeholder, searchPlaceholder, emptyText, options, creating, onSelect, onCreate, onClear }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -50,6 +52,12 @@ export function CreatableCombobox({ label, required, value, placeholder, searchP
             <CommandList>
               <CommandEmpty>{emptyText}</CommandEmpty>
               <CommandGroup>
+                {onClear && value && (
+                  <CommandItem value="__none__" onSelect={() => { onClear(); setOpen(false); }}>
+                    <span className="mr-2 inline-block h-4 w-4" />
+                    None
+                  </CommandItem>
+                )}
                 {options.map((o) => (
                   <CommandItem key={o} value={o} onSelect={() => { onSelect(o); setOpen(false); }}>
                     <Check className={cn("mr-2 h-4 w-4", value === o ? "opacity-100" : "opacity-0")} />

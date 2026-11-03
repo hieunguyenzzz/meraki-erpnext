@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useCreate, useInvalidate, useList, useUpdate } from "@refinedev/core";
 import { Briefcase } from "lucide-react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { extractErrorMessage } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -95,25 +96,31 @@ export function JobSheet({ open, job, onClose }: Props) {
     submittingRef.current = true;
     setSubmitting(true);
 
-    const fields = {
-      job_title: form.designation.trim(),
-      designation: form.designation.trim(),
-      ...(form.location.trim() && { location: form.location.trim() }),
-      ...(form.closes_on && { closes_on: form.closes_on }),
-      ...(form.description.trim() && { description: form.description.trim() }),
+    const base = { job_title: form.designation.trim(), designation: form.designation.trim() };
+    // Create omits empty optional fields; edit always sends them so they can be cleared
+    const optional = {
+      location: form.location.trim(),
+      closes_on: form.closes_on || null,
+      description: form.description.trim(),
     };
 
     try {
       if (job) {
-        await updateJob({ resource: "Job Opening", id: job.name, values: fields });
+        await updateJob({ resource: "Job Opening", id: job.name, values: { ...base, ...optional } });
       } else {
-        await createJob({ resource: "Job Opening", values: { ...fields, status: "Open" } });
+        await createJob({ resource: "Job Opening", values: {
+            ...base,
+            ...(optional.location && { location: optional.location }),
+            ...(optional.closes_on && { closes_on: optional.closes_on }),
+            ...(optional.description && { description: optional.description }),
+            status: "Open",
+          } });
       }
       invalidate({ resource: "Job Opening", invalidates: ["list"] });
       onClose();
     } catch (err: unknown) {
       console.error("Save job opening failed", err);
-      setFormError(err instanceof Error ? err.message : "Failed to save job opening.");
+      setFormError(extractErrorMessage(err, "Failed to save job opening."));
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -121,7 +128,7 @@ export function JobSheet({ open, job, onClose }: Props) {
   }
 
   return (
-    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o && !submittingRef.current) onClose(); }}>
       <SheetContent
         side={desktop ? "right" : "bottom"}
         className="flex max-h-[92dvh] flex-col p-0 md:max-h-none md:sm:max-w-lg"
@@ -157,6 +164,7 @@ export function JobSheet({ open, job, onClose }: Props) {
                 options={branches}
                 creating={creatingLocation}
                 onSelect={(l) => setForm((f) => ({ ...f, location: l }))}
+                onClear={() => setForm((f) => ({ ...f, location: "" }))}
                 onCreate={handleCreateLocation}
               />
             </div>

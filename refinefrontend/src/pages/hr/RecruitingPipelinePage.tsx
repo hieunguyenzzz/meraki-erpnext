@@ -6,6 +6,7 @@ import { RecruitingHeader } from "@/components/recruiting/RecruitingHeader";
 import { CVReviewSheet } from "@/components/recruiting/CVReviewSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
 import { buildRecruitingItems, enrichRecruitingItems } from "@/lib/recruiting-kanban";
 import { PipelineBoard, STAGE_VALUES } from "./recruiting-pipeline/PipelineBoard";
@@ -16,24 +17,28 @@ const PIPELINE_STAGES = ["Screening", "Interview", "Offer", "Hired", "Rejected"]
 const ALL_POSITIONS = "__all__"; // Radix Select cannot hold an empty value
 
 function BoardSkeleton() {
+  const desktop = useMediaQuery("(min-width: 768px)");
   return (
     <div aria-busy="true" aria-label="Loading applicants">
-      <div className="hidden gap-3 md:flex">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="w-[248px] shrink-0 space-y-2.5 rounded-card bg-secondary p-3">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
-          </div>
-        ))}
-      </div>
-      <div className="space-y-3 md:hidden">
-        <div className="flex gap-2 overflow-hidden">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-24 shrink-0 rounded-full" />)}
+      {desktop ? (
+        <div className="flex gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="w-[248px] shrink-0 space-y-2.5 rounded-card bg-secondary p-3">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ))}
         </div>
-        <Skeleton className="h-28 w-full rounded-card" />
-        <Skeleton className="h-28 w-full rounded-card" />
-      </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex gap-2 overflow-hidden">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-24 shrink-0 rounded-full" />)}
+          </div>
+          <Skeleton className="h-28 w-full rounded-card" />
+          <Skeleton className="h-28 w-full rounded-card" />
+        </div>
+      )}
     </div>
   );
 }
@@ -116,6 +121,12 @@ export default function RecruitingPipelinePage() {
           {jobOpenings.map((jo) => <SelectItem key={jo.name} value={jo.name}>{jo.job_title}</SelectItem>)}
         </SelectContent>
       </Select>
+
+      {(interviewsQuery.isError || offersQuery.isError) && !applicantsQuery.isError && (
+        <p role="status" className="px-1 text-sm text-muted-foreground">
+          Couldn't load {[interviewsQuery.isError && "interviews", offersQuery.isError && "offers"].filter(Boolean).join(" or ")}, so those badges are hidden.
+        </p>
+      )}
 
       {applicantsQuery.isError ? (
         <StatePanel
