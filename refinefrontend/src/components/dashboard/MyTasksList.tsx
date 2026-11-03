@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Skeleton } from "@/components/ui/skeleton";
+import { todayVN } from "@/lib/businessTime";
 import type { MyTask } from "@/hooks/useMyTasks";
 
 const SHOWN = 5;
@@ -7,7 +8,7 @@ const SHOWN = 5;
 /** Soonest-due open tasks (overdue first). Read-only; completing a task happens on the wedding. */
 export function MyTasksList({ tasks, isLoading }: { tasks: MyTask[]; isLoading: boolean }) {
   if (!isLoading && tasks.length === 0) return null;
-  const today = new Date().toLocaleDateString("sv-SE");
+  const today = todayVN();
   return (
     <section aria-label="My tasks" className="space-y-1">
       <div className="flex items-center justify-between px-1 pb-1.5">

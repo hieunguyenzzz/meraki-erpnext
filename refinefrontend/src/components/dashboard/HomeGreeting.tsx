@@ -1,3 +1,4 @@
+import { hourVN } from "@/lib/businessTime";
 import { formatWeekdayIso } from "@/lib/format";
 
 function greeting(hour: number): string {
@@ -12,7 +13,7 @@ export function HomeGreeting({ firstName }: { firstName: string }) {
     <div className="px-1">
       <div className="text-sm text-muted-foreground">{formatWeekdayIso(now)}</div>
       <h1 className="mt-0.5 text-2xl font-semibold leading-[30px]">
-        {greeting(now.getHours())}{firstName ? `, ${firstName}` : ""}
+        {greeting(hourVN(now))}{firstName ? `, ${firstName}` : ""}
       </h1>
     </div>
   );

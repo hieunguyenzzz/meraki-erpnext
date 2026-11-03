@@ -24,13 +24,12 @@ function MobileChart({ data }: { data: MonthRow[] }) {
   const s = SERIES.find((x) => x.key === key)!;
   return (
     <>
-      <div role="tablist" aria-label="Chart series" className="mb-3 grid grid-cols-4 gap-1 rounded-full bg-muted p-1">
+      <div role="group" aria-label="Chart series" className="mb-3 grid grid-cols-4 gap-1 rounded-full bg-muted p-1">
         {SERIES.map((x) => (
           <button
             key={x.key}
             type="button"
-            role="tab"
-            aria-selected={x.key === key}
+            aria-pressed={x.key === key}
             onClick={() => setKey(x.key)}
             className={cn(
               "min-h-9 rounded-full px-1 text-xs font-medium transition-colors",
@@ -41,6 +40,7 @@ function MobileChart({ data }: { data: MonthRow[] }) {
           </button>
         ))}
       </div>
+      <div aria-hidden>
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
           {grid}
@@ -61,6 +61,7 @@ function MobileChart({ data }: { data: MonthRow[] }) {
           <Bar dataKey={s.key} name={s.label} fill={s.color} radius={[4, 4, 0, 0]} maxBarSize={20} />
         </BarChart>
       </ResponsiveContainer>
+      </div>
       <p className="mt-2 text-xs text-muted-foreground">
         {s.money ? "Values in VND millions." : "Weddings per month."} Months 01 to 12; tap a bar for the exact figure.
       </p>
@@ -71,6 +72,7 @@ function MobileChart({ data }: { data: MonthRow[] }) {
 /** Desktop: Revenue and Expenses side by side on one money axis (weddings live in the table below). */
 function DesktopChart({ data }: { data: MonthRow[] }) {
   return (
+    <div aria-hidden>
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={2}>
         {grid}
@@ -81,6 +83,7 @@ function DesktopChart({ data }: { data: MonthRow[] }) {
         <Bar dataKey="expenses" name="Expenses" fill={chartColors.expenses} radius={[4, 4, 0, 0]} maxBarSize={22} />
       </BarChart>
     </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -103,6 +106,7 @@ export function MonthlyChart({ data }: { data: MonthRow[] }) {
       </CardHeader>
       <CardContent className="px-2 sm:px-6">
         {isDesktop ? <DesktopChart data={data} /> : <MobileChart data={data} />}
+        <p className="sr-only">The same figures are listed month by month in the Monthly table below.</p>
       </CardContent>
     </Card>
   );

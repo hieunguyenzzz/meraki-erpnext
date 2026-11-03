@@ -1,3 +1,5 @@
+import { BUSINESS_TZ, todayVN } from "@/lib/businessTime";
+
 export function displayName(person: { first_name?: string | null; last_name?: string | null; employee_name?: string | null }): string {
   const parts = [person.last_name, person.first_name].filter(Boolean);
   return parts.length > 0 ? parts.join(" ") : (person.employee_name || "");
@@ -36,14 +38,13 @@ export function formatVNDCompact(amount: number | undefined | null): string {
 
 /** Chart axis label in millions, e.g. "450 M" (no currency, the chart title carries it). */
 export function formatMillions(amount: number): string {
-  return `${GROUPED.format(amount / 1e6)} M`;
+  return `${GROUPED.format(Math.round(amount / 1e6) + 0)} M`; // + 0 turns -0 into 0
 }
 
-/** "Friday 2026-10-30" for the Home greeting (local date, ISO order). */
+/** "Friday 2026-10-30" for the Home greeting (business timezone, ISO order). */
 export function formatWeekdayIso(date: Date): string {
-  const weekday = date.toLocaleDateString("en-GB", { weekday: "long" });
-  const iso = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
-  return `${weekday} ${iso}`;
+  const weekday = date.toLocaleDateString("en-GB", { weekday: "long", timeZone: BUSINESS_TZ });
+  return `${weekday} ${todayVN(date)}`;
 }
 
 export function formatDate(date: string | undefined | null): string {

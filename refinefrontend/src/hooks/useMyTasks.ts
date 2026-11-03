@@ -9,6 +9,8 @@ export interface MyTask {
   exp_end_date: string | null;
 }
 
+const NONE: any[] = [];
+
 /** Open tasks assigned to, shared with, or created by the signed-in user. */
 export function useMyTasks(email: string | undefined, employeeId: string | null) {
   const { result, query } = useList({
@@ -18,7 +20,7 @@ export function useMyTasks(email: string | undefined, employeeId: string | null)
     sorters: [{ field: "exp_end_date", order: "asc" }],
     meta: { fields: ["name", "subject", "project", "exp_end_date", "_assign", "custom_shared_with", "owner"] },
   });
-  const all = result?.data ?? [];
+  const all = result?.data ?? NONE;
 
   const { result: projectsResult } = useList({
     resource: "Project",

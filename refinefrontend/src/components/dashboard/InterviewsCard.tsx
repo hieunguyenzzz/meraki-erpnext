@@ -16,7 +16,10 @@ export function InterviewsCard({ email }: { email: string | undefined }) {
     if (!email) { setLoading(false); return; }
     let cancelled = false;
     fetch(`/inquiry-api/dashboard/my-interviews?email=${encodeURIComponent(email)}`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`my-interviews returned ${res.status}`);
+        return res.json();
+      })
       .then((json) => { if (!cancelled) setUpcoming(json.data ?? []); })
       .catch((err: unknown) => console.error("InterviewsCard: my-interviews failed", err))
       .finally(() => { if (!cancelled) setLoading(false); });

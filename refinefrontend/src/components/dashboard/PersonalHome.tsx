@@ -18,7 +18,7 @@ export default function PersonalHome() {
   const { data: roles } = usePermissions<string[]>({});
   const email = identity?.email;
   const firstName = identity?.name?.split(" ")[0] ?? email?.split("@")[0] ?? "";
-  const { employeeId } = useMyEmployee();
+  const { employeeId, isLoading: profileLoading } = useMyEmployee();
 
   const hasCrm = hasModuleAccess(roles ?? [], CRM_ROLES);
   const hasHr = hasModuleAccess(roles ?? [], HR_ROLES);
@@ -28,7 +28,7 @@ export default function PersonalHome() {
   const upcoming = weddings.filter((w) => w.days_to_go != null && w.days_to_go >= 0);
 
   const { tasks, isLoading: tasksLoading } = useMyTasks(email, employeeId);
-  const { days: leaveDays, failed: leaveFailed } = useMyLeaveDays(hasPlanner ? employeeId : null);
+  const { display: leaveDisplay, failed: leaveFailed } = useMyLeaveDays(hasPlanner ? employeeId : null, profileLoading);
 
   const { result: leads, query: leadsQuery } = useList({
     resource: "Lead",
@@ -66,7 +66,7 @@ export default function PersonalHome() {
               <StatTile
                 label="Leave left"
                 to="/my-leaves"
-                value={leaveDays === null ? null : `${leaveDays} d`}
+                value={leaveDisplay}
                 error={leaveFailed}
               />
             )}

@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { totalAnnualLeaveDays } from "@/lib/leaveBalance";
 
-/** Annual Leave days the person can use today (GET /inquiry-api/leave/balance). days null = loading. */
-export function useMyLeaveDays(employeeId: string | null) {
+/**
+ * Annual Leave days the person can use today (GET /inquiry-api/leave/balance), as tile text:
+ * null while loading, "—" when there is no linked Employee, "N d" otherwise.
+ */
+export function useMyLeaveDays(employeeId: string | null, profileLoading = false) {
   const [days, setDays] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
+    setDays(null);
+    setFailed(false);
     if (!employeeId) return;
     let cancelled = false;
     fetch(`/inquiry-api/leave/balance?employee=${encodeURIComponent(employeeId)}`, { credentials: "include" })
@@ -20,5 +25,7 @@ export function useMyLeaveDays(employeeId: string | null) {
       });
     return () => { cancelled = true; };
   }, [employeeId]);
-  return { days, failed };
+
+  const display = !employeeId ? (profileLoading ? null : "—") : days === null ? null : `${days} d`;
+  return { display, failed };
 }

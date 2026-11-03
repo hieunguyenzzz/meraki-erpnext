@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import type { MyWedding } from "@/hooks/useMyWeddings";
+import { countdownLabel, type MyWedding } from "@/hooks/useMyWeddings";
 
 /** Horizontal strip of the next weddings after the hero one. */
 export function UpcomingWeddings({ weddings, basePath }: { weddings: MyWedding[]; basePath: string }) {
@@ -20,7 +20,7 @@ export function UpcomingWeddings({ weddings, basePath }: { weddings: MyWedding[]
             <b className="truncate text-[15px]">{w.project_name}</b>
             <span className="text-[13px] text-muted-foreground tabular-nums">{w.wedding_date}</span>
             <span className={`text-[13px] font-semibold ${w.days_to_go != null && w.days_to_go <= 45 ? "text-warning" : "text-muted-foreground"}`}>
-              {w.days_to_go} days
+              {countdownLabel(w.days_to_go)}
             </span>
           </Link>
         ))}

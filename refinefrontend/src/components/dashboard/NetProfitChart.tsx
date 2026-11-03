@@ -12,6 +12,7 @@ export function NetProfitChart({ data, year }: { data: MonthRow[]; year: number 
         <CardTitle className="text-base font-semibold">Net profit trend ({year})</CardTitle>
       </CardHeader>
       <CardContent>
+        <div aria-hidden>
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke={chartColors.grid} />
@@ -22,6 +23,7 @@ export function NetProfitChart({ data, year }: { data: MonthRow[]; year: number 
             <Area dataKey="net" name="Net profit" stroke={chartColors.net} strokeWidth={2} fill={chartColors.net} fillOpacity={0.15} />
           </AreaChart>
         </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );

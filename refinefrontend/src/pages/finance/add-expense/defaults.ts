@@ -1,6 +1,8 @@
 // Pure helpers for the Add Expense defaults: business-day date, default wedding, recent categories.
 
-const TZ = "Asia/Ho_Chi_Minh";
+import { todayVN } from "@/lib/businessTime";
+
+export { todayVN };
 const RECENTS_KEY = "meraki.expense.recentCategories";
 export const CHIP_COUNT = 4;
 
@@ -9,11 +11,6 @@ export interface ExpenseWedding {
   name: string;
   /** ISO date of the wedding, or null when unknown. */
   date: string | null;
-}
-
-/** Today's date (YYYY-MM-DD) in the business timezone, regardless of the device timezone. */
-export function todayVN(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 }
 
 /** The assigned wedding happening today, else the next upcoming one; null when none is current. */
