@@ -61,12 +61,3 @@ export function getProjectColumnKey(item: ProjectKanbanItem): ProjectColumnKey {
   }
   return "onboarding"; // default
 }
-
-export function formatDaysUntilWedding(weddingDate: string): { text: string; color: string } {
-  const days = Math.ceil((new Date(weddingDate).getTime() - Date.now()) / 86400000);
-  if (days < 0) return { text: "Past", color: "muted" };
-  if (days === 0) return { text: "Today!", color: "rose" };
-  if (days <= 7) return { text: `${days}d`, color: "rose" };
-  if (days <= 30) return { text: `${days}d`, color: "amber" };
-  return { text: `${days}d`, color: "cyan" };
-}

@@ -55,7 +55,7 @@ export function StaffFilterSelect({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "flex h-8 min-w-[180px] items-center justify-between gap-2 rounded-md border px-3 text-sm transition-colors",
+            "flex h-10 min-w-[180px] items-center max-md:h-12 max-md:text-base justify-between gap-2 rounded-md border px-3 text-sm transition-colors",
             "hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring",
             value && "border-primary/40 bg-primary/5"
           )}
@@ -80,7 +80,7 @@ export function StaffFilterSelect({
               {me && (
                 <CommandItem value={`Me ${me.name} ${me.id}`} onSelect={() => pick(me.id)}>
                   <Check className={cn("mr-2 h-4 w-4", value === me.id ? "opacity-100" : "opacity-0")} />
-                  <Star className="mr-1.5 h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                  <Star className="mr-1.5 h-3.5 w-3.5 fill-gilt text-gilt" />
                   Me · {me.name}
                 </CommandItem>
               )}
