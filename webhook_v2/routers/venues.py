@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
 from webhook_v2.auth import require_roles, PLANNER
+from webhook_v2.routers.my_weddings import _get_in
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/venues", tags=["venues"], dependencies=[Depends(require_roles(*PLANNER))])
@@ -72,13 +73,11 @@ def list_venues(city: str | None = None, _client: ERPNextClient | None = None) -
 
     cover_names = [v["custom_cover_photo"] for v in venues if v.get("custom_cover_photo")]
     cover_urls: dict[str, str] = {}
-    if cover_names:
-        files = client._get("/api/resource/File", params={
-            "filters": json.dumps([["name", "in", cover_names]]),
-            "fields": json.dumps(["name", "file_url"]),
-            "limit_page_length": 0,
-        }).get("data", [])
+    try:
+        files = _get_in(client, "File", cover_names, ["name", "file_url"]) if cover_names else []
         cover_urls = {f["name"]: f["file_url"] for f in files if f.get("file_url")}
+    except Exception:
+        log.exception("Venue cover lookup failed; listing without covers")
 
     for v, areas in zip(venues, results):
         v["areas"] = areas
@@ -240,7 +239,10 @@ def get_venue_contact(supplier_name: str, _client: ERPNextClient | None = None) 
 
 
 def _merge_phones(existing: list[dict], phone: str | None, alt_phone: str | None) -> list[dict]:
-    """Existing rows kept (so nothing the form never showed is dropped); primary/alt updated in place or added."""
+    """Existing rows kept (so nothing the form never showed is dropped); primary/alt updated in place or added.
+
+    alt_phone: None leaves the second phone alone, "" removes it, a value sets it.
+    """
     rows = [dict(r) for r in existing]
     primary, alt = _split_phones(rows)
     if phone:
@@ -249,11 +251,14 @@ def _merge_phones(existing: list[dict], phone: str | None, alt_phone: str | None
         else:
             primary = {"phone": phone, "is_primary_phone": 1, "is_primary_mobile_no": 1}
             rows.append(primary)
-    if alt_phone:
-        if alt:
-            alt["phone"] = alt_phone
-        else:
-            rows.append({"phone": alt_phone})
+    if alt_phone is None:
+        return rows  # untouched
+    if alt_phone == "":
+        return [r for r in rows if r is not alt]  # explicitly cleared
+    if alt:
+        alt["phone"] = alt_phone
+    else:
+        rows.append({"phone": alt_phone})
     return rows
 
 
@@ -285,9 +290,10 @@ def _upsert_contact(
     if contact_name:
         existing_doc = client._get(f"/api/resource/Contact/{quote(contact_name, safe='')}").get("data", {})
 
-    contact_doc: dict[str, Any] = {
-        "links": [{"link_doctype": "Supplier", "link_name": supplier_name}],
-    }
+    links = [dict(r) for r in existing_doc.get("links") or []]
+    if not any(r.get("link_doctype") == "Supplier" and r.get("link_name") == supplier_name for r in links):
+        links.append({"link_doctype": "Supplier", "link_name": supplier_name})
+    contact_doc: dict[str, Any] = {"links": links}
     # The form holds one combined name. Only rewrite first/last when it changed,
     # and then clear last_name so "First Last" is not stored as "First Last Last".
     current_name = _contact_view(existing_doc)["name"] if existing_doc else ""

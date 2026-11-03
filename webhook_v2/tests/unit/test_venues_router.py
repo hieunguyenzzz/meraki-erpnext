@@ -329,4 +329,58 @@ def test_listing_returns_cover_url_from_one_file_lookup():
     venues = {v["name"]: v for v in list_venues(_client=client)["venues"]}
     assert venues["A"]["cover_url"] == "/files/a.jpg"
     assert venues["B"]["cover_url"] is None
-    assert calls.count("/api/resource/File") == 1
+    assert calls.count("/api/resource/File") == 1  # one batch for <= 100 covers
+
+
+def test_upsert_keeps_other_links_and_adds_supplier_link():
+    from webhook_v2.routers.venues import ContactPayload, _upsert_contact
+
+    doc = _existing_contact()
+    doc["links"] = [{"name": "l1", "link_doctype": "Customer", "link_name": "C1"}]
+    client = _contact_client(doc)
+    _upsert_contact(client, "Venue", ContactPayload(name="Quan Test", phone="111"))
+    links = client._put.call_args[0][1]["links"]
+    assert {(l["link_doctype"], l["link_name"]) for l in links} == {("Customer", "C1"), ("Supplier", "Venue")}
+
+
+def test_upsert_empty_alt_phone_removes_only_the_alt_row():
+    from webhook_v2.routers.venues import ContactPayload, _upsert_contact
+
+    client = _contact_client(_existing_contact())
+    _upsert_contact(client, "Venue", ContactPayload(name="Quan Test", phone="111", alt_phone=""))
+    assert [p["phone"] for p in client._put.call_args[0][1]["phone_nos"]] == ["111"]
+
+
+def test_listing_survives_cover_lookup_failure_and_batches():
+    from webhook_v2.routers.venues import list_venues
+
+    def _fake_get(url, params=None):
+        if url == "/api/resource/Supplier":
+            return {"data": [{"name": f"V{i}", "custom_cover_photo": f"f{i}"} for i in range(120)]}
+        if url == "/api/resource/File":
+            raise RuntimeError("boom")
+        return {"data": {"custom_venue_wedding_areas": []}}
+
+    client = MagicMock()
+    client._get.side_effect = _fake_get
+    venues = list_venues(_client=client)["venues"]
+    assert len(venues) == 120 and venues[0]["cover_url"] is None
+
+
+def test_listing_batches_cover_lookup():
+    from webhook_v2.routers.venues import list_venues
+
+    file_calls = []
+
+    def _fake_get(url, params=None):
+        if url == "/api/resource/Supplier":
+            return {"data": [{"name": f"V{i}", "custom_cover_photo": f"f{i}"} for i in range(120)]}
+        if url == "/api/resource/File":
+            file_calls.append(params)
+            return {"data": []}
+        return {"data": {"custom_venue_wedding_areas": []}}
+
+    client = MagicMock()
+    client._get.side_effect = _fake_get
+    list_venues(_client=client)
+    assert len(file_calls) == 2  # VENUE_BATCH (100) + 20
