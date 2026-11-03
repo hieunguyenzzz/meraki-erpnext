@@ -65,3 +65,8 @@ export function enrichRecruitingItems(
     hasOffer: offerSet.has(item.id),
   }));
 }
+
+/** ERPNext stores the rating as a fraction (0-1); the UI shows whole stars (0-5). */
+export function ratingToStars(fraction: number | undefined | null): number {
+  return Math.round((fraction ?? 0) * 5);
+}
