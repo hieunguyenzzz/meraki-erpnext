@@ -34,9 +34,15 @@ export interface MyWeddingDetail extends Omit<MyWedding, "venue_name"> {
 
 const NONE: MyWedding[] = [];
 
+export class HttpError extends Error {
+  constructor(public status: number, url: string) {
+    super(`${url} returned ${status}`);
+  }
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { credentials: "include" });
-  if (!res.ok) throw new Error(`${url} returned ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, url);
   return res.json();
 }
 

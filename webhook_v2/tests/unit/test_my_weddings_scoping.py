@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 
 from webhook_v2.routers import my_weddings as mw
 
@@ -51,7 +51,7 @@ def test_detail_forbidden_when_not_assigned():
          patch.object(mw, "get_current_user", return_value="u@example.com"), \
          patch.object(mw, "resolve_employee", return_value="HR-EMP-9"):
         with pytest.raises(HTTPException) as exc:
-            mw.my_wedding_detail("PROJ-1", request)
+            mw.my_wedding_detail("PROJ-1", request, Response())
     assert exc.value.status_code == 403
 
 
@@ -65,7 +65,7 @@ def test_missing_project_is_403_not_500():
          patch.object(mw, "get_current_user", return_value="u@example.com"), \
          patch.object(mw, "resolve_employee", return_value="HR-EMP-1"):
         with pytest.raises(HTTPException) as exc:
-            mw.my_wedding_detail("NOPE", MagicMock())
+            mw.my_wedding_detail("NOPE", MagicMock(), Response())
     assert exc.value.status_code == 403
     assert exc.value.detail == "You are not assigned to this wedding"
 
@@ -131,7 +131,78 @@ def test_my_weddings_list_filter():
     with patch.object(mw, "ERPNextClient", return_value=client), \
          patch.object(mw, "get_current_user", return_value="u@example.com"), \
          patch.object(mw, "resolve_employee", return_value="HR-EMP-1"):
-        ids = [i["id"] for i in mw.my_weddings(request)["data"]]
+        ids = [i["id"] for i in mw.my_weddings(request, Response())["data"]]
 
     # Open always kept; Completed only within 30 days; unassigned and other statuses excluded.
     assert ids == ["OPEN-FUTURE", "DONE-RECENT", "OPEN-OLD"]
+
+
+def _route_aware_client(purchase_invoices, calls):
+    """Fake ERPNext that answers by URL and applies the list filters it is given."""
+    import json
+
+    project = {**PROJECT, "customer": "CUST-1", "sales_order": "SO-1", "expected_end_date": "2027-01-01",
+               "custom_lead_commission_pct": 10, "custom_total_budget": 9e9, "per_billed": 50}
+
+    def fake_get(url, params=None):
+        calls.append((url, params))
+        if url.startswith("/api/resource/Project/"):
+            return {"data": project}
+        if url == "/api/resource/Employee":
+            return {"data": [{"name": "HR-EMP-1", "first_name": "Lan"}, {"name": "HR-EMP-2", "first_name": "Mai"}]}
+        if url == "/api/resource/Sales Order":
+            return {"data": [{"name": "SO-1", "custom_venue": "V-1", "grand_total": 5e9}]}
+        if url == "/api/resource/Supplier":
+            return {"data": [{"name": "V-1", "supplier_name": "An Lam"}]}
+        if url.startswith("/api/resource/Customer/"):
+            return {"data": {"customer_name": "A & B"}}
+        if url == "/api/resource/Purchase Invoice":
+            filters = json.loads(params["filters"])
+            staff = next(v for f, _, v in filters if f == "custom_expense_staff")
+            return {"data": [r for r in purchase_invoices if r["custom_expense_staff"] == staff]}
+        raise AssertionError(f"unexpected ERPNext call {url}")
+
+    client = MagicMock()
+    client._get.side_effect = fake_get
+    return client
+
+
+PIS = [
+    {"name": "PI-1", "posting_date": "2026-11-01", "grand_total": 100, "docstatus": 0, "custom_rejected": 0,
+     "custom_expense_staff": "HR-EMP-2", "idx": 2, "item_name": "second line"},
+    {"name": "PI-1", "posting_date": "2026-11-01", "grand_total": 100, "docstatus": 0, "custom_rejected": 0,
+     "custom_expense_staff": "HR-EMP-2", "idx": 1, "item_name": "taxi"},
+    {"name": "PI-2", "posting_date": "2026-11-02", "grand_total": 999, "docstatus": 1, "custom_rejected": 0,
+     "custom_expense_staff": "HR-EMP-1", "idx": 1, "item_name": "someone else's"},
+]
+
+
+def test_assigned_detail_has_no_financial_keys_and_only_own_expenses():
+    calls = []
+    request = MagicMock()
+    request.headers = {}
+    with patch.object(mw, "ERPNextClient", return_value=_route_aware_client(PIS, calls)), \
+         patch.object(mw, "get_current_user", return_value="u@example.com"), \
+         patch.object(mw, "resolve_employee", return_value="HR-EMP-2"), \
+         patch.object(mw, "get_wedding_events", return_value={"events": []}):
+        data = mw.my_wedding_detail("PROJ-1", request, Response())["data"]
+
+    flat = repr(data).lower()
+    for banned in ("grand_total", "commission", "per_billed", "budget", "payment", "package_amount"):
+        assert banned not in flat
+    assert data["venue_name"] == "An Lam" and data["my_role"] == "assistant"
+    # Only the caller's invoice, one row per invoice, description from the lowest idx item.
+    assert data["my_expenses"] == [
+        {"name": "PI-1", "date": "2026-11-01", "amount": 100, "description": "taxi", "status": "Pending"}
+    ]
+    # One Purchase Invoice list call, no per-invoice GETs.
+    assert [u for u, _ in calls if u.startswith("/api/resource/Purchase Invoice")] == ["/api/resource/Purchase Invoice"]
+
+
+def test_my_expenses_filters_on_employee():
+    import json
+
+    calls = []
+    mw._my_expenses(_route_aware_client(PIS, calls), "PROJ-1", "HR-EMP-1")
+    filters = json.loads(calls[0][1]["filters"])
+    assert ["custom_expense_staff", "=", "HR-EMP-1"] in filters and ["project", "=", "PROJ-1"] in filters

@@ -18,17 +18,24 @@ export default function StaffHome() {
   const { data: identity } = useGetIdentity<{ email: string; name?: string }>();
   const firstName = identity?.name?.split(" ")[0] ?? identity?.email?.split("@")[0] ?? "";
   const { employeeId } = useMyEmployee();
-  const { weddings, isLoading } = useMyWeddings();
+  const { weddings, isLoading, isError } = useMyWeddings();
   const upcoming = weddings.filter((w) => w.days_to_go != null && w.days_to_go >= 0);
   const next = upcoming[0];
 
   const [leaveDays, setLeaveDays] = useState<number | null>(null);
+  const [leaveFailed, setLeaveFailed] = useState(false);
   useEffect(() => {
     if (!employeeId) return;
     fetch(`/inquiry-api/leave/balance?employee=${employeeId}`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (!r.ok) throw new Error(`leave/balance returned ${r.status}`);
+        return r.json();
+      })
       .then((json) => setLeaveDays(totalAnnualLeaveDays(json?.data)))
-      .catch((err: unknown) => console.error("StaffHome: leave balance failed", err));
+      .catch((err: unknown) => {
+        console.error("StaffHome: leave balance failed", err);
+        setLeaveFailed(true);
+      });
   }, [employeeId]);
 
   return (
@@ -44,6 +51,8 @@ export default function StaffHome() {
         <CardContent>
           {isLoading ? (
             <Skeleton className="h-20 w-full" />
+          ) : isError ? (
+            <p className="text-sm text-danger-soft-foreground">Could not load your weddings. Please try again.</p>
           ) : next ? (
             <div className="space-y-2">
               <p className="text-3xl font-bold">
@@ -76,7 +85,9 @@ export default function StaffHome() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {leaveDays === null ? (
+              {leaveFailed ? (
+                <p className="text-sm text-danger-soft-foreground">Could not load your balance.</p>
+              ) : leaveDays === null ? (
                 <Skeleton className="h-8 w-[80px]" />
               ) : (
                 <div className="flex items-baseline gap-2">

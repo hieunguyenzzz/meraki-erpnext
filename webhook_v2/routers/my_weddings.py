@@ -17,14 +17,15 @@ import json
 import uuid
 from datetime import date, timedelta
 
+from urllib.parse import quote
+
 import requests
-import structlog
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from webhook_v2.auth import (
     FINANCE, PLANNER, WEDDING_EXPENSE, get_current_user, has_roles, resolve_employee,
 )
-from webhook_v2.core.logging import get_logger
+from webhook_v2.core.logging import bind_context, get_logger
 from webhook_v2.routers.wedding_events import get_wedding_events
 from webhook_v2.services.erpnext import ERPNextClient
 
@@ -51,10 +52,12 @@ _LIST_FIELDS = [
 ]
 
 
-def bind_correlation_id(request: Request) -> None:
-    """Tag every log line of this request with one id (client's X-Request-ID if sent)."""
+def bind_correlation_id(request: Request, response: Response | None = None) -> None:
+    """Tag every log line of this request with one id (client's X-Request-ID if sent) and echo it back."""
     cid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
-    structlog.contextvars.bind_contextvars(correlation_id=cid)
+    bind_context(correlation_id=cid)
+    if response is not None:
+        response.headers["X-Request-ID"] = cid
 
 
 def role_on_project(project: dict, employee: str) -> str | None:
@@ -70,7 +73,7 @@ def _load_assigned_project(client: ERPNextClient, project: str, employee: str, u
     unassigned one, so the response never reveals which weddings exist."""
     doc: dict = {}
     try:
-        doc = client._get(f"/api/resource/Project/{project}").get("data", {})
+        doc = client._get(f"/api/resource/Project/{quote(project, safe='')}").get("data", {})
     except requests.HTTPError as e:
         if e.response is None or e.response.status_code not in (403, 404):
             raise
@@ -116,8 +119,8 @@ def _days_to_go(wedding_date: str | None, today: date) -> int | None:
 
 
 @router.get("/my/weddings")
-def my_weddings(request: Request):
-    bind_correlation_id(request)
+def my_weddings(request: Request, response: Response):
+    bind_correlation_id(request, response)
     user = get_current_user(request)
     try:
         employee = resolve_employee(request, None)
@@ -166,8 +169,8 @@ def my_weddings(request: Request):
 
 
 @router.get("/my/weddings/{project}")
-def my_wedding_detail(project: str, request: Request):
-    bind_correlation_id(request)
+def my_wedding_detail(project: str, request: Request, response: Response):
+    bind_correlation_id(request, response)
     user = get_current_user(request)
     employee = resolve_employee(request, None)
     client = ERPNextClient()
@@ -189,7 +192,7 @@ def my_wedding_detail(project: str, request: Request):
     venue = _venue_names(client, {doc["sales_order"]} if doc.get("sales_order") else set()).get(doc.get("sales_order") or "")
     customer_name = None
     if doc.get("customer"):
-        customer_name = client._get(f"/api/resource/Customer/{doc['customer']}").get("data", {}).get("customer_name")
+        customer_name = client._get(f"/api/resource/Customer/{quote(doc['customer'], safe='')}").get("data", {}).get("customer_name")
 
     events = get_wedding_events(from_date=None, to_date=None, employee=None, project=project)["events"]
     events = [
@@ -222,25 +225,33 @@ def my_wedding_detail(project: str, request: Request):
 
 
 def _my_expenses(client: ERPNextClient, project: str, employee: str) -> list[dict]:
-    """The caller's own expenses on this wedding (Draft = pending, Submitted = approved)."""
-    pis = client._get("/api/resource/Purchase Invoice", params={
+    """The caller's own expenses on this wedding (Draft = pending, Submitted = approved).
+
+    One list call joins the first line item's name (child rows can't be listed directly);
+    the join yields one row per item, so keep the lowest idx per invoice.
+    """
+    rows = client._get("/api/resource/Purchase Invoice", params={
         "filters": json.dumps([
             ["docstatus", "in", [0, 1]], ["project", "=", project], ["custom_expense_staff", "=", employee],
         ]),
-        "fields": json.dumps(["name", "posting_date", "grand_total", "docstatus", "custom_rejected"]),
+        "fields": json.dumps([
+            "name", "posting_date", "grand_total", "docstatus", "custom_rejected",
+            "`tabPurchase Invoice Item`.idx", "`tabPurchase Invoice Item`.item_name",
+        ]),
         "order_by": "posting_date desc",
-        "limit_page_length": 50,
+        "limit_page_length": 0,
     }).get("data", [])
-    expenses = []
-    for pi in pis:
-        # Child rows return 403 on direct list access; read them off the parent doc.
-        items = client._get(f"/api/resource/Purchase Invoice/{pi['name']}").get("data", {}).get("items", [])
-        status = "Approved" if pi["docstatus"] == 1 else "Rejected" if pi.get("custom_rejected") else "Pending"
-        expenses.append({
+    first: dict[str, dict] = {}
+    for row in rows:
+        if row["name"] not in first or (row.get("idx") or 999) < (first[row["name"]].get("idx") or 999):
+            first[row["name"]] = row
+    return [
+        {
             "name": pi["name"],
             "date": pi["posting_date"],
             "amount": pi["grand_total"],
-            "description": items[0].get("item_name", "") if items else "",
-            "status": status,
-        })
-    return expenses
+            "description": pi.get("item_name") or "",
+            "status": "Approved" if pi["docstatus"] == 1 else "Rejected" if pi.get("custom_rejected") else "Pending",
+        }
+        for pi in first.values()
+    ]

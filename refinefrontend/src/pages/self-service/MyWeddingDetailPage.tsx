@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate, formatVND } from "@/lib/format";
-import { countdownLabel, ROLE_LABEL, useMyWedding } from "@/hooks/useMyWeddings";
+import { countdownLabel, HttpError, ROLE_LABEL, useMyWedding } from "@/hooks/useMyWeddings";
 
 function Fact({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
@@ -26,7 +26,7 @@ export default function MyWeddingDetailPage() {
       <div className="space-y-3">
         <Link to="/my-weddings" className="inline-flex items-center gap-1 text-sm text-primary"><ArrowLeft className="h-4 w-4" /> My weddings</Link>
         <p className="text-sm text-muted-foreground">
-          {error?.message.includes("403") ? "You are not assigned to this wedding." : "Could not load this wedding."}
+          {error instanceof HttpError && error.status === 403 ? "You are not assigned to this wedding." : "Could not load this wedding."}
         </p>
       </div>
     );
