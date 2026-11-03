@@ -19,8 +19,11 @@ export function RequestWfhSheet({ employeeId, open, onOpenChange, onSuccess }: P
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const submitting = useRef(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function resetForm() {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    submitting.current = false;
     setForm(initialForm);
     setError(null);
     setSuccess(null);
@@ -43,6 +46,7 @@ export function RequestWfhSheet({ employeeId, open, onOpenChange, onSuccess }: P
       return;
     }
 
+    let succeeded = false;
     submitting.current = true;
     setIsSubmitting(true);
     setError(null);
@@ -66,7 +70,8 @@ export function RequestWfhSheet({ employeeId, open, onOpenChange, onSuccess }: P
       setSuccess("WFH request submitted successfully");
       onSuccess();
 
-      setTimeout(() => {
+      succeeded = true;
+      closeTimer.current = setTimeout(() => {
         onOpenChange(false);
         resetForm();
       }, 1500);
@@ -74,7 +79,8 @@ export function RequestWfhSheet({ employeeId, open, onOpenChange, onSuccess }: P
       console.error("WFH request failed", err);
       setError(err instanceof Error ? err.message : "Failed to submit WFH request");
     } finally {
-      submitting.current = false;
+      // After a success the lock stays on until the sheet closes, so a late tap cannot send a duplicate
+      if (!succeeded) submitting.current = false;
       setIsSubmitting(false);
     }
   }

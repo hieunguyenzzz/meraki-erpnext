@@ -1,5 +1,3 @@
-import { formatDate } from "@/lib/format";
-
 export interface SplitPreview {
   requested_days: number;
   total_weekdays: number;
@@ -12,7 +10,8 @@ export interface SplitPreview {
   lwp_from_date: string | null;
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? "s" : ""}`;
+/** "0.5 day", "1 day", "2 days": a part-day is still singular. */
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 || (n > 0 && n < 1) ? "" : "s"}`;
 
 interface Props {
   preview: SplitPreview;
@@ -40,7 +39,7 @@ export function LeaveSplitSummary({ preview, fromDate, toDate }: Props) {
         {preview.holidays_excluded.length > 0 && (
           <ul className="mt-1 list-inside list-disc text-xs opacity-80">
             {preview.holidays_excluded.map((h) => (
-              <li key={h.date}>{h.description} ({new Date(h.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })})</li>
+              <li key={h.date}>{h.description} ({h.date})</li>
             ))}
           </ul>
         )}
@@ -61,14 +60,14 @@ export function LeaveSplitSummary({ preview, fromDate, toDate }: Props) {
           <div className="rounded-xl bg-success-soft px-4 py-3 text-success-soft-foreground">
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide">Request 1 — Annual Leave (paid)</p>
             <p>
-              {formatDate(fromDate)} → {formatDate(preview.casual_to_date)}
+              {fromDate} → {preview.casual_to_date}
               {" · "}<strong>{plural(preview.casual_days, "day")}</strong>
             </p>
           </div>
           <div className="rounded-xl bg-warning-soft px-4 py-3 text-warning-soft-foreground">
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide">Request 2 — Leave Without Pay (unpaid)</p>
             <p>
-              {preview.lwp_from_date ? formatDate(preview.lwp_from_date) : "—"} → {formatDate(toDate)}
+              {preview.lwp_from_date ?? "—"} → {toDate}
               {" · "}<strong>{plural(preview.lwp_days, "day")}</strong>
             </p>
           </div>
@@ -82,7 +81,7 @@ export function LeaveSplitSummary({ preview, fromDate, toDate }: Props) {
         <div className="rounded-xl bg-warning-soft px-4 py-3 text-warning-soft-foreground">
           <p className="text-xs font-semibold uppercase tracking-wide">Leave Without Pay (unpaid)</p>
           <p>
-            {formatDate(fromDate)} → {formatDate(toDate)}
+            {fromDate} → {toDate}
             {" · "}<strong>{plural(preview.lwp_days, "day")}</strong>
           </p>
           <p className="mt-1 text-xs opacity-80">Your Annual Leave balance is exhausted. This leave will be fully unpaid.</p>

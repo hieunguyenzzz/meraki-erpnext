@@ -101,7 +101,7 @@ const STAFF_SIDEBAR: NavItem[] = [
 export const SELF_SERVICE_ITEMS: NavItem[] = [
   { label: "Me", path: "/my-profile", icon: User },
   { label: "Requests", path: "/my-leaves", icon: FileSignature },
-  { label: "My WFH", path: "/my-attendance", icon: House },
+  { label: "My WFH", path: "/my-leaves?tab=wfh", icon: House },
   { label: "Payslips", path: "/my-payroll", icon: Wallet },
 ];
 

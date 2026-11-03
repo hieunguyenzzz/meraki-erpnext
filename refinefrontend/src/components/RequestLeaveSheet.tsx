@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RequestSheetFrame } from "@/components/RequestSheetFrame";
 import { LeaveSplitSummary, type SplitPreview } from "@/components/LeaveSplitSummary";
-import { cn } from "@/lib/utils";
+import { RadioChipGroup } from "@/components/RadioChipGroup";
 
 interface RequestLeaveSheetProps {
   open: boolean;
@@ -35,6 +35,8 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
   const [success, setSuccess] = useState<string | null>(null);
   const [submitStep, setSubmitStep] = useState<string | null>(null);
   const submitting = useRef(false);
+  const [partial, setPartial] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch leave types
   const { result: leaveTypesResult, query: leaveTypesQuery } = useList<{ name: string }>({
@@ -88,6 +90,9 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
   }, [form.leave_type, form.from_date, form.to_date, employeeId]);
 
   function resetForm() {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    submitting.current = false;
+    setPartial(false);
     setForm(initialForm);
     setError(null);
     setSuccess(null);
@@ -131,6 +136,7 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
       return;
     }
 
+    let succeeded = false;
     submitting.current = true;
     setIsSubmitting(true);
     setError(null);
@@ -168,6 +174,10 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
           const message = err instanceof Error ? err.message : "Unknown error";
           setError(`Annual Leave was created, but the Leave Without Pay portion failed: ${message}. Please resubmit the remaining days manually.`);
           invalidate({ resource: "Leave Application", invalidates: ["list"] });
+          // Annual Leave already exists: block Submit so it cannot be sent twice; close and reopen to add the rest
+          succeeded = true;
+          setPartial(true);
+          onSuccess?.();
           return;
         }
 
@@ -184,9 +194,10 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
         setSuccess("Leave request submitted successfully.");
       }
 
+      succeeded = true;
       invalidate({ resource: "Leave Application", invalidates: ["list"] });
       onSuccess?.();
-      setTimeout(() => {
+      closeTimer.current = setTimeout(() => {
         onOpenChange(false);
         resetForm();
       }, 1500);
@@ -195,7 +206,8 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
       const message = err instanceof Error ? err.message : "Failed to submit leave request";
       setError(message);
     } finally {
-      submitting.current = false;
+      // After a success the lock stays on until the sheet closes, so a late tap cannot send a duplicate
+      if (!succeeded) submitting.current = false;
       setIsSubmitting(false);
       setSubmitStep(null);
     }
@@ -218,29 +230,21 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
       submitLabel={submitLabel}
       error={error}
       success={success}
+      submitDisabled={partial}
     >
       <div className="flex flex-col gap-2">
         <span id="leave-type-label" className="text-sm font-medium">Leave type *</span>
         {leaveTypesQuery.isLoading ? (
           <div className="flex gap-2"><Skeleton className="h-11 w-24 rounded-full" /><Skeleton className="h-11 w-24 rounded-full" /></div>
         ) : (
-          <div role="radiogroup" aria-labelledby="leave-type-label" className="flex flex-wrap gap-2">
-            {leaveTypes.map((lt) => (
-              <button
-                key={lt.name}
-                type="button"
-                role="radio"
-                aria-checked={form.leave_type === lt.name}
-                onClick={() => setForm((prev) => ({ ...prev, leave_type: lt.name }))}
-                className={cn(
-                  "h-11 rounded-full border px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  form.leave_type === lt.name ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground hover:bg-muted",
-                )}
-              >
-                {lt.name}
-              </button>
-            ))}
-          </div>
+          <RadioChipGroup
+            aria-labelledby="leave-type-label"
+            className="flex flex-wrap gap-2"
+            itemClassName="px-4"
+            options={leaveTypes.map((lt) => ({ value: lt.name, label: lt.name }))}
+            value={form.leave_type}
+            onChange={(v) => setForm((prev) => ({ ...prev, leave_type: v }))}
+          />
         )}
       </div>
 
@@ -291,23 +295,14 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
           Half day
         </label>
         {form.half_day && (
-          <div role="radiogroup" aria-label="Half day period" className="flex gap-2">
-            {(["AM", "PM"] as const).map((period) => (
-              <button
-                key={period}
-                type="button"
-                role="radio"
-                aria-checked={form.half_day_period === period}
-                onClick={() => setForm((prev) => ({ ...prev, half_day_period: period }))}
-                className={cn(
-                  "h-11 flex-1 rounded-full border text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  form.half_day_period === period ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground hover:bg-muted",
-                )}
-              >
-                {period === "AM" ? "AM (morning)" : "PM (afternoon)"}
-              </button>
-            ))}
-          </div>
+          <RadioChipGroup
+            aria-label="Half day period"
+            className="flex gap-2"
+            itemClassName="flex-1"
+            options={[{ value: "AM", label: "AM (morning)" }, { value: "PM", label: "PM (afternoon)" }]}
+            value={form.half_day_period}
+            onChange={(period) => setForm((prev) => ({ ...prev, half_day_period: period }))}
+          />
         )}
       </div>
 

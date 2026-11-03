@@ -11,6 +11,7 @@ const TAB_LABEL = { leave: "Leave", wfh: "Work from home" } as const;
 /** Requests: leave and work-from-home on one page (?tab=leave|wfh). */
 export default function MyLeavesPage() {
   const { employee, employeeId, isLoading } = useMyEmployee();
+  const [, setStatus] = useQueryState("status");
   const [tab, setTab] = useQueryState("tab", parseAsStringLiteral(TABS).withDefault("leave").withOptions({ clearOnDefault: true }));
 
   if (isLoading) {
@@ -39,7 +40,7 @@ export default function MyLeavesPage() {
             type="button"
             role="tab"
             aria-selected={tab === t}
-            onClick={() => setTab(t)}
+            onClick={() => { setTab(t); if (t !== "leave") setStatus(null); }}
             className={cn(
               "h-11 flex-1 rounded-full px-5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex-none",
               tab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",

@@ -44,7 +44,6 @@ function Breakdown({ b }: { b: LeaveBalance }) {
 }
 
 function BalanceCard({ b, desktop }: { b: LeaveBalance; desktop: boolean }) {
-  const year = yearVN();
   const sub = b.showOldPeriod ? `${b.oldBalance} carried over · ${b.newBalance} this year` : `${b.newBalance} this year`;
   return (
     <li className="rounded-card border bg-card p-4">
@@ -59,7 +58,7 @@ function BalanceCard({ b, desktop }: { b: LeaveBalance; desktop: boolean }) {
       ) : (
         <details className="group mt-1">
           <summary className="-mx-1 flex min-h-11 cursor-pointer list-none items-center px-1 text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
-            <span className="group-open:hidden">Show {year} breakdown</span>
+            <span className="group-open:hidden">Show breakdown</span>
             <span className="hidden group-open:inline">Hide breakdown</span>
           </summary>
           <Breakdown b={b} />

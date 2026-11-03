@@ -11,11 +11,13 @@ interface Props {
   submitLabel: string;
   error: string | null;
   success: string | null;
+  /** Extra reason to block Submit (e.g. half the request already went through). */
+  submitDisabled?: boolean;
   children: ReactNode;
 }
 
 /** Request form chrome: full-screen on phones (M-Requests), side sheet on desktop, submit pinned at the bottom. */
-export function RequestSheetFrame({ open, onOpenChange, title, onSubmit, isSubmitting, submitLabel, error, success, children }: Props) {
+export function RequestSheetFrame({ open, onOpenChange, title, onSubmit, isSubmitting, submitLabel, error, success, submitDisabled, children }: Props) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -41,7 +43,7 @@ export function RequestSheetFrame({ open, onOpenChange, title, onSubmit, isSubmi
             <Button type="button" variant="outline" className="max-md:hidden" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" className="max-md:h-[52px] max-md:text-base" disabled={isSubmitting}>
+            <Button type="submit" className="max-md:h-[52px] max-md:text-base" disabled={isSubmitting || !!success || submitDisabled}>
               {submitLabel}
             </Button>
           </SheetFooter>
