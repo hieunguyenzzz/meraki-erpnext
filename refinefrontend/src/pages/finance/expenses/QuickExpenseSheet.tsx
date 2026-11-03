@@ -31,12 +31,15 @@ export function QuickExpenseSheet({ open, onOpenChange, weddings, isDesktop, onC
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const busy = useRef(false);
+  const creatingRef = useRef(false);
+  const catAbort = useRef<AbortController | null>(null);
   const closeTimer = useRef<number | undefined>(undefined);
 
   // Wedding categories when linked to a wedding, otherwise all of them.
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
+    catAbort.current = controller;
     fetch(`/inquiry-api/expense/categories${form.wedding ? "?scope=wedding" : ""}`, { credentials: "include", signal: controller.signal })
       .then(async (r) => { if (!r.ok) throw await responseError(r, "Could not load categories"); return r.json() as Promise<ExpenseCategory[]>; })
       .then((data) => {
@@ -62,7 +65,11 @@ export function QuickExpenseSheet({ open, onOpenChange, weddings, isDesktop, onC
   }
 
   async function createCategory(name: string) {
+    if (creatingRef.current) return false;
+    creatingRef.current = true;
+    catAbort.current?.abort(); // a late category list must not overwrite the new one
     setCreating(true);
+    setError(null);
     try {
       const res = await fetch("/inquiry-api/expense/categories", {
         method: "POST",
@@ -75,10 +82,13 @@ export function QuickExpenseSheet({ open, onOpenChange, weddings, isDesktop, onC
       setCategories((prev) => [...prev, created]);
       setForm((prev) => ({ ...prev, category: created.name }));
       onCategoryCreated();
+      return true;
     } catch (err) {
       console.error("Create category failed", err);
       setError(err instanceof Error ? err.message : "Failed to create category");
+      return false;
     } finally {
+      creatingRef.current = false;
       setCreating(false);
     }
   }
@@ -113,7 +123,7 @@ export function QuickExpenseSheet({ open, onOpenChange, weddings, isDesktop, onC
   }
 
   return (
-    <Sheet open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
+    <Sheet open={open} onOpenChange={(o) => { if (o) onOpenChange(true); else if (!saving && !creating) close(); }}>
       <SheetContent side={isDesktop ? "right" : "bottom"} className="flex max-h-[92dvh] flex-col p-0 md:max-h-none md:sm:max-w-lg">
         <SheetHeader className="shrink-0 border-b px-6 py-4">
           <SheetTitle className="font-display text-2xl">Quick expense</SheetTitle>
@@ -148,7 +158,7 @@ export function QuickExpenseSheet({ open, onOpenChange, weddings, isDesktop, onC
             </div>
           </div>
           <SheetFooter className="shrink-0 gap-2 border-t px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button type="button" variant="outline" onClick={close}>Cancel</Button>
+            <Button type="button" variant="outline" disabled={saving || creating} onClick={close}>Cancel</Button>
             <Button type="submit" disabled={saving || !form.description.trim() || !form.amount || !form.category || !!success}>{saving ? "Creating..." : "Create expense"}</Button>
           </SheetFooter>
         </form>

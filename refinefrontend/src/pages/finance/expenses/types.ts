@@ -33,6 +33,10 @@ export function expenseStatus(e: Pick<Expense, "docstatus" | "custom_rejected" |
   return e.status === "Paid" ? "Paid" : "Approved";
 }
 
+/** Only drafts (pending or rejected) can be edited; approved and paid expenses are locked by the backend (409). */
+export const canEdit = (e: Pick<Expense, "docstatus">) => e.docstatus === 0;
+export const LOCKED_NOTE = "Approved expenses can't be edited. Reject or cancel it and add a new one.";
+
 export function statusVariant(s: ExpenseStatus) {
   if (s === "Paid") return "success" as const;
   if (s === "Rejected" || s === "Cancelled") return "destructive" as const;

@@ -89,7 +89,7 @@ export function SupplierInvoiceSheet({ open, onOpenChange, categories, isDesktop
   }
 
   return (
-    <Sheet open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
+    <Sheet open={open} onOpenChange={(o) => { if (o) onOpenChange(true); else if (!saving) close(); }}>
       <SheetContent side={isDesktop ? "right" : "bottom"} className="flex max-h-[92dvh] flex-col p-0 md:max-h-none md:sm:max-w-xl">
         <SheetHeader className="shrink-0 border-b px-6 py-4">
           <SheetTitle className="font-display text-2xl">Supplier invoice</SheetTitle>
@@ -136,7 +136,7 @@ export function SupplierInvoiceSheet({ open, onOpenChange, categories, isDesktop
             <p className="text-right text-sm font-semibold">Total: {formatVNDFull(total)}</p>
           </div>
           <SheetFooter className="shrink-0 gap-2 border-t px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button type="button" variant="outline" onClick={close}>Cancel</Button>
+            <Button type="button" variant="outline" disabled={saving} onClick={close}>Cancel</Button>
             <Button type="submit" disabled={saving || incomplete || !!success}>{saving ? "Creating..." : "Create invoice"}</Button>
           </SheetFooter>
         </form>

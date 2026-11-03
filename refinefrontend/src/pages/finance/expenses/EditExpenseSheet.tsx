@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { categoryLabel, expenseStatus, isoDay, responseError, type Expense, type ExpenseCategory, type RowInfo } from "./types";
+import { categoryLabel, isoDay, responseError, type Expense, type ExpenseCategory, type RowInfo } from "./types";
 
 interface Props {
   expense: Expense | null;
@@ -23,9 +23,13 @@ interface Props {
 export function EditExpenseSheet({ expense, info, categories, weddingName, isDesktop, onClose, onSaved }: Props) {
   const invalidate = useInvalidate();
   const initialDescription = info?.description ?? "";
-  const [amount, setAmount] = useState(expense ? String(Math.round(expense.grand_total)) : "");
-  const [date, setDate] = useState(expense ? isoDay(expense.posting_date) : "");
-  const [account, setAccount] = useState(expense?.against_expense_account ?? "");
+  // Keep exactly what ERPNext stores (no rounding here); the amount is only sent unchanged unless edited.
+  const initialAmount = expense ? String(expense.grand_total) : "";
+  const initialDate = expense ? isoDay(expense.posting_date) : "";
+  const initialAccount = expense?.against_expense_account ?? "";
+  const [amount, setAmount] = useState(initialAmount);
+  const [date, setDate] = useState(initialDate);
+  const [account, setAccount] = useState(initialAccount);
   const [description, setDescription] = useState(initialDescription);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +39,9 @@ export function EditExpenseSheet({ expense, info, categories, weddingName, isDes
   const { result: doc, query } = useOne({ resource: "Purchase Invoice", id: expense?.name ?? "", queryOptions: { enabled: !!expense } });
   const lineCount = (doc?.items ?? []).length;
   const multiLine = lineCount > 1;
-  const status = expense ? expenseStatus(expense) : null;
+
+  const dirty = amount !== initialAmount || date !== initialDate || account !== initialAccount
+    || (description.trim() !== "" && description.trim() !== initialDescription.trim());
 
   const options = categories.some((c) => c.name === account) || !account
     ? categories
@@ -43,7 +49,7 @@ export function EditExpenseSheet({ expense, info, categories, weddingName, isDes
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!expense || busy.current || !amount || multiLine || !doc) return;
+    if (!expense || busy.current || !amount || Number(amount) <= 0 || !dirty || multiLine || !doc) return;
     busy.current = true;
     setSaving(true);
     setError(null);
@@ -53,12 +59,13 @@ export function EditExpenseSheet({ expense, info, categories, weddingName, isDes
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // The backend requires an amount, so it is always sent (unchanged when not edited).
           amount: Number(amount),
-          // Only send a description the user changed: the prefill has the category prefix stripped,
-          // so echoing it back unchanged would rewrite the stored item name.
-          description: description.trim() && description !== initialDescription ? description.trim() : null,
-          date: date || null,
-          account: account || null,
+          // Only changed fields are sent; null keeps the stored value. The description prefill has the
+          // category prefix stripped, so echoing it back unchanged would rewrite the stored item name.
+          description: description.trim() && description.trim() !== initialDescription.trim() ? description.trim() : null,
+          date: date && date !== initialDate ? date : null,
+          account: account && account !== initialAccount ? account : null,
         }),
       });
       if (!res.ok) throw await responseError(res, "Failed to update expense");
@@ -75,7 +82,7 @@ export function EditExpenseSheet({ expense, info, categories, weddingName, isDes
   }
 
   return (
-    <Sheet open={!!expense} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Sheet open={!!expense} onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
       <SheetContent side={isDesktop ? "right" : "bottom"} className="flex max-h-[92dvh] flex-col p-0 md:max-h-none md:sm:max-w-md">
         <SheetHeader className="shrink-0 border-b px-6 py-4">
           <SheetTitle className="font-display text-2xl">Edit expense</SheetTitle>
@@ -96,14 +103,13 @@ export function EditExpenseSheet({ expense, info, categories, weddingName, isDes
                 This invoice has {lineCount} lines. Editing here would collapse it to one line, so it can't be changed from this screen.
               </div>
             )}
-            {status && status !== "Pending" && status !== "Rejected" && !multiLine && (
-              <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-                Saving an approved expense re-creates it under a new reference and clears its payment and attachments.
-              </p>
-            )}
             <div className="space-y-2">
               <Label htmlFor="edit-amount">Amount (VND) *</Label>
-              <MoneyInput id="edit-amount" required value={amount} onChange={setAmount} className="font-semibold tabular-nums" />
+              {Number.isInteger(Number(initialAmount)) ? (
+                <MoneyInput id="edit-amount" required value={amount} onChange={setAmount} className="font-semibold tabular-nums" />
+              ) : (
+                <Input id="edit-amount" required inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} className="font-semibold tabular-nums" />
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-date">Date</Label>
@@ -124,8 +130,8 @@ export function EditExpenseSheet({ expense, info, categories, weddingName, isDes
             </div>
           </div>
           <SheetFooter className="shrink-0 gap-2 border-t px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={saving || !amount || !doc || multiLine}>{saving ? "Saving..." : "Save changes"}</Button>
+            <Button type="button" variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={saving || !amount || Number(amount) <= 0 || !dirty || !doc || multiLine}>{saving ? "Saving..." : "Save changes"}</Button>
           </SheetFooter>
         </form>
       </SheetContent>

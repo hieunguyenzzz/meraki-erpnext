@@ -81,7 +81,7 @@ export function ReceiptsCard({ piName }: { piName: string }) {
                 <button type="button" onClick={() => setPreview(href(f))} aria-label={`Enlarge ${f.file_name}`}
                   className="group relative aspect-square overflow-hidden rounded-card border bg-muted">
                   <img src={href(f)} alt={f.file_name} loading="lazy" className="h-full w-full object-cover" />
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">Preview</span>
+                  <span className="absolute inset-0 flex items-center justify-center bg-foreground/60 text-sm font-semibold text-background opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">Preview</span>
                 </button>
               ) : (
                 <a href={href(f)} target="_blank" rel="noopener noreferrer"

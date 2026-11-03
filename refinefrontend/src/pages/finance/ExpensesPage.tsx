@@ -68,7 +68,7 @@ export default function ExpensesPage() {
 
   // Selection only ever covers rows currently listed, so a bulk action never touches hidden ones.
   const selectedNames = useMemo(() => rows.filter((r) => selection[r.name]).map((r) => r.name), [rows, selection]);
-  const bulk = useBulkActions(() => setSelection({}));
+  const bulk = useBulkActions((failed) => setSelection(Object.fromEntries(failed.map((n) => [n, true]))));
   const bulkBusy = bulk.action !== null;
 
   useEffect(() => { setShown(PAGE); }, [filters]);

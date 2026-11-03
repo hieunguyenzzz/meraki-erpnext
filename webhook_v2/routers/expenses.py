@@ -1003,11 +1003,7 @@ class EditExpenseRequest(BaseModel):
 
 @router.put("/expense/{pi_name}", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
 def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
-    """Edit an expense. Draft PIs are updated in-place; submitted PIs are deleted and recreated.
-
-    Non-FINANCE callers (plain PLANNER) may only edit Draft (pending) expenses —
-    an already-approved/submitted expense requires FINANCE.
-    """
+    """Edit a Draft (pending) expense in place. Submitted/paid expenses are refused with 409."""
     client = ERPNextClient()
 
     if req.amount <= 0:
@@ -1021,107 +1017,44 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
     first_item = old_items[0] if old_items else {}
     docstatus = pi.get("docstatus", 0)
 
-    if docstatus != 0 and not has_roles(request, FINANCE):
-        raise HTTPException(status_code=403, detail="Only Finance can edit an approved expense")
+    if docstatus != 0:
+        # Editing used to delete and re-create an approved PI, losing its receipts and paid state.
+        log.warning("expense_edit_blocked", pi=pi_name, docstatus=docstatus)
+        raise HTTPException(
+            status_code=409,
+            detail="Approved expenses can't be edited — reject or cancel it and add a new one",
+        )
 
     posting_date = req.date or pi.get("posting_date")
     description = req.description if req.description is not None else (first_item.get("item_name") or "Expense")
     expense_account = req.account or first_item.get("expense_account", DEFAULT_EXPENSE_ACCOUNT)
     amount = round(req.amount)
     staff = req.staff if req.staff is not None else pi.get("custom_expense_staff", "")
-    # None = keep the raw remarks untouched (it may be a migration audit link or legacy text)
-    remarks = req.note if req.note is not None else pi.get("remarks")
 
-    # Draft: update in-place (preserves creation date and document name)
-    if docstatus == 0:
-        update_values: dict = {
-            "posting_date": posting_date,
-            "set_posting_time": 1,
-            "custom_expense_staff": staff,
-            **({"remarks": req.note} if req.note is not None else {}),
-            "items": [{
-                "name": first_item.get("name"),
-                "item_code": "EXPENSE-ITEM",
-                "item_name": description,
-                "description": description,
-                "expense_account": expense_account,
-                "qty": 1,
-                "rate": amount,
-                "project": pi.get("project", ""),
-            }],
-        }
-        try:
-            client._put(f"/api/resource/Purchase Invoice/{pi_name}", update_values)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to update expense: {e}")
-        log.info("expense_edited_inplace", pi=pi_name, amount=amount, note_changed=req.note is not None)
-        return {"success": True, "name": pi_name}
-
-    # Submitted: delete and recreate (existing logic for approved expenses)
-    supplier = pi.get("supplier", "Company Expense")
-    project = pi.get("project", "")
-
-    pe_data = client._get("/api/resource/Payment Entry", params={
-        "filters": json.dumps([["Payment Entry Reference", "reference_name", "=", pi_name]]),
-        "fields": json.dumps(["name", "docstatus"]),
-        "limit_page_length": 100,
-    }).get("data", [])
-    for pe in pe_data:
-        if pe["docstatus"] == 1:
-            _cancel(client, "Payment Entry", pe["name"])
-        _delete_gl_entries(client, pe["name"])
-        _delete_payment_ledger_entries(client, pe["name"])
-        try:
-            client._delete(f"/api/resource/Payment Entry/{pe['name']}")
-        except Exception:
-            pass
-
-    _cancel(client, "Purchase Invoice", pi_name)
-    _delete_gl_entries(client, pi_name)
-    _delete_payment_ledger_entries(client, pi_name)
-    try:
-        client._delete(f"/api/resource/Purchase Invoice/{pi_name}")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to delete old expense: {e}")
-
-    pi_values = {
-        "supplier": supplier,
+    # Update in place (preserves creation date and document name). A None note keeps the raw
+    # remarks untouched (it may be a migration audit link or legacy text).
+    update_values: dict = {
         "posting_date": posting_date,
         "set_posting_time": 1,
-        "company": COMPANY,
-        "remarks": remarks,
+        "custom_expense_staff": staff,
+        **({"remarks": req.note} if req.note is not None else {}),
         "items": [{
+            "name": first_item.get("name"),
             "item_code": "EXPENSE-ITEM",
             "item_name": description,
             "description": description,
             "expense_account": expense_account,
             "qty": 1,
             "rate": amount,
+            "project": pi.get("project", ""),
         }],
     }
-    if project:
-        pi_values["project"] = project
-        pi_values["items"][0]["project"] = project
-    if staff:
-        pi_values["custom_expense_staff"] = staff
-
     try:
-        new_pi = client._post("/api/resource/Purchase Invoice", pi_values)
+        client._put(f"/api/resource/Purchase Invoice/{pi_name}", update_values)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to create expense: {e}")
-
-    new_name = new_pi.get("data", {}).get("name")
-    if not new_name:
-        raise HTTPException(status_code=500, detail="PI created but name not returned")
-
-    try:
-        full_pi = client._get(f"/api/resource/Purchase Invoice/{new_name}").get("data", {})
-        client._post("/api/method/frappe.client.submit", {"doc": full_pi})
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to submit expense: {e}")
-
-    log.info("expense_edited", old=pi_name, new=new_name, amount=amount, note_changed=req.note is not None)
-    return {"success": True, "name": new_name}
+        raise HTTPException(status_code=400, detail=f"Failed to update expense: {e}")
+    log.info("expense_edited_inplace", pi=pi_name, amount=amount, note_changed=req.note is not None)
+    return {"success": True, "name": pi_name}
 
 
 @router.delete("/expense/{pi_name}", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])

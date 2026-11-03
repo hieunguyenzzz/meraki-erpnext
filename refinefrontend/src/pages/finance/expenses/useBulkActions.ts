@@ -10,7 +10,7 @@ const ENDPOINT: Record<Action, string> = {
 };
 
 /** Bulk delete / mark paid through the backend, with a ref guard against double taps. */
-export function useBulkActions(onDone: () => void) {
+export function useBulkActions(onDone: (failed: string[]) => void) {
   const invalidate = useInvalidate();
   const [action, setAction] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,8 +33,9 @@ export function useBulkActions(onDone: () => void) {
       });
       if (!res.ok) throw await responseError(res, kind === "deleting" ? "Delete failed" : "Mark paid failed");
       const data = await res.json();
-      if (data.failed?.length) setError(`Some failed: ${data.failed.join(", ")}`);
-      onDone();
+      const failed: string[] = (data.failed ?? []).map((s: string) => s.split(": ")[0]);
+      if (failed.length) setError(`Some failed: ${data.failed.join(", ")}`);
+      onDone(failed);
       invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
     } catch (err) {
       console.error("Bulk expense action failed", kind, err);
