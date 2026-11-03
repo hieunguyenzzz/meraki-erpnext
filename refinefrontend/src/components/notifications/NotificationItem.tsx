@@ -8,6 +8,7 @@ import {
   DOC_ROUTES,
   TONE_CLASSES,
   clockTime,
+  compactMessage,
   detailFacts,
   type NotificationDetails,
   isoDay,
@@ -75,7 +76,7 @@ export function NotificationItem({
           </span>
           <span className="min-w-0 flex-1">
             <span className={cn("block break-words", compact ? "text-sm leading-snug" : "text-[15px] leading-[21px]", !unread && "text-foreground/80")}>
-              {parseMessage(notif.message).map((part, i) =>
+              {(compact ? compactMessage(notif, details) : parseMessage(notif.message)).map((part, i) =>
                 part.bold ? <b key={i} className="font-semibold">{part.text}</b> : <span key={i}>{part.text}</span>,
               )}
             </span>

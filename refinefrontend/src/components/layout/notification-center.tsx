@@ -30,8 +30,8 @@ export function NotificationBell({ className }: { className?: string }) {
 
   function handleOpen(notif: PwaNotification) {
     const routeFn = DOC_ROUTES[notif.reference_document_type];
-    if (!routeFn) return;
     markRead(notif);
+    if (!routeFn) return; // no record page (e.g. Leave): tapping just marks it read
     navigate(routeFn(notif.reference_document_name));
   }
 

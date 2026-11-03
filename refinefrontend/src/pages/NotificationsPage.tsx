@@ -131,8 +131,8 @@ export default function NotificationsPage() {
 
   function handleOpen(notif: PwaNotification) {
     const routeFn = DOC_ROUTES[notif.reference_document_type];
-    if (!routeFn) return;
     if (!notif.read) markRead(notif);
+    if (!routeFn) return; // e.g. Leave notices: tapping just marks them read
     navigate(routeFn(notif.reference_document_name));
   }
 

@@ -113,16 +113,16 @@ def notification_details(body: DetailsRequest, request: Request):
     if not body.names:
         return {"details": {}}
     client = ERPNextClient()
-    notifs = client._get("/api/resource/PWA Notification", params={
-        "filters": json.dumps([["name", "in", [str(n) for n in body.names]], ["to_user", "=", session_user]]),
-        "fields": json.dumps(["name", "reference_document_type", "reference_document_name"]),
-        "limit_page_length": 0,
-    }).get("data", [])
-
-    def refs(kind: str) -> list[str]:
-        return [n["reference_document_name"] for n in notifs if n.get("reference_document_type") == kind]
-
     try:
+        notifs = client._get("/api/resource/PWA Notification", params={
+            "filters": json.dumps([["name", "in", [str(n) for n in body.names]], ["to_user", "=", session_user]]),
+            "fields": json.dumps(["name", "reference_document_type", "reference_document_name"]),
+            "limit_page_length": 0,
+        }).get("data", [])
+
+        def refs(kind: str) -> list[str]:
+            return [n["reference_document_name"] for n in notifs if n.get("reference_document_type") == kind]
+
         leaves = _rows(client, "Leave Application", refs("Leave Application"),
                        ["employee_name", "leave_type", "from_date", "to_date", "total_leave_days", "half_day"])
         wfh = _rows(client, "Attendance Request", refs("Attendance Request"),

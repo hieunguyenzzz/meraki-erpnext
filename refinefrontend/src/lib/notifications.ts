@@ -119,3 +119,16 @@ export function detailFacts(d: NotificationDetails): string[] {
   if (d.half_day) facts.push("Half day");
   return facts;
 }
+
+const REF_ID = /\s*:?\s*HR-[A-Z]+-[\d-]+/g;
+
+/** Short actor + summary for the bell: built from details when known, else the message minus reference IDs. */
+export function compactMessage(notif: PwaNotification, details?: NotificationDetails): MessagePart[] {
+  if (details?.kind === "leave" && details.employee_name) {
+    return [{ text: details.employee_name, bold: true }, { text: " asked for leave", bold: false }];
+  }
+  if (details?.kind === "wfh" && details.employee_name) {
+    return [{ text: details.employee_name, bold: true }, { text: " wants to work from home", bold: false }];
+  }
+  return parseMessage(notif.message).map((p) => ({ ...p, text: p.text.replace(REF_ID, "") }));
+}
