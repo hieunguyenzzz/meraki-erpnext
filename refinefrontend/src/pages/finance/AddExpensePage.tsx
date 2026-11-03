@@ -10,7 +10,8 @@ import { ContextRow } from "./add-expense/ContextRow";
 import { ReceiptPicker } from "./add-expense/ReceiptPicker";
 import { SavedState, type SavedSummary } from "./add-expense/SavedState";
 import { fetchCategories, scanBill, submitExpense, type ExpenseCategory } from "./add-expense/api";
-import { loadRecents, pickDefaultWedding, rememberCategory, sanitiseAmount, todayVN } from "./add-expense/defaults";
+import { loadRecents, pickDefaultWedding, rememberCategory, sanitiseAmount } from "./add-expense/defaults";
+import { todayVN } from "@/lib/businessTime";
 import { useExpenseWeddings } from "./add-expense/useExpenseWeddings";
 
 type Errors = Partial<Record<"amount" | "category" | "proof", string>>;

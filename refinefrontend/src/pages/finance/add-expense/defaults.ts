@@ -1,8 +1,5 @@
 // Pure helpers for the Add Expense defaults: business-day date, default wedding, recent categories.
 
-import { todayVN } from "@/lib/businessTime";
-
-export { todayVN };
 const RECENTS_KEY = "meraki.expense.recentCategories";
 export const CHIP_COUNT = 4;
 

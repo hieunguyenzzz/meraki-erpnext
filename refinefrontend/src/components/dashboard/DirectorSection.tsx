@@ -23,9 +23,14 @@ export default function DirectorSection() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["financial-overview", selectedYear],
     queryFn: async () => {
-      const r = await fetch(`/inquiry-api/financial-overview?year=${selectedYear}`, { credentials: "include" });
-      if (!r.ok) throw new Error(`financial-overview returned ${r.status}`);
-      return r.json() as Promise<OverviewData>;
+      try {
+        const r = await fetch(`/inquiry-api/financial-overview?year=${selectedYear}`, { credentials: "include" });
+        if (!r.ok) throw new Error(`financial-overview returned ${r.status}`);
+        return (await r.json()) as OverviewData;
+      } catch (err) {
+        console.error("DirectorSection: financial overview failed", { year: selectedYear, err });
+        throw err;
+      }
     },
   });
   const isDesktop = useMediaQuery("(min-width: 768px)");
