@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -26,6 +27,8 @@ interface Props {
   placeholder: string;
   searchPlaceholder: string;
   emptyText: string;
+  /** What is being created, for the confirm prompt: "venue", "add-on". */
+  noun: string;
   onSelect: (option: ComboOption) => void;
   /** Creates a new option from the typed text; resolves false after surfacing a failure through `error`. */
   onCreate: (label: string) => Promise<boolean>;
@@ -42,6 +45,7 @@ export function CreatableCombobox({
   placeholder,
   searchPlaceholder,
   emptyText,
+  noun,
   onSelect,
   onCreate,
   error,
@@ -50,6 +54,7 @@ export function CreatableCombobox({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const creatingRef = useRef(false);
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? valueLabel ?? "";
@@ -65,6 +70,7 @@ export function CreatableCombobox({
         setOpen(false);
         setSearch("");
       }
+      setConfirming(false);
     } finally {
       creatingRef.current = false;
       setCreating(false);
@@ -73,7 +79,7 @@ export function CreatableCombobox({
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setConfirming(false); }}>
         <PopoverTrigger asChild>
           <button
             id={id}
@@ -91,6 +97,20 @@ export function CreatableCombobox({
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          {confirming ? (
+            <div role="alertdialog" aria-label={`Create ${noun}`} className="flex flex-col gap-3 p-3">
+              <p className="text-sm">Create {noun} "{typed}"?</p>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setConfirming(false)} disabled={creating}>
+                  Cancel
+                </Button>
+                <Button type="button" className="flex-1" autoFocus onClick={create} disabled={creating}>
+                  {creating && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Create
+                </Button>
+              </div>
+            </div>
+          ) : (
           <Command>
             <CommandInput
               placeholder={searchPlaceholder}
@@ -119,15 +139,16 @@ export function CreatableCombobox({
               </CommandGroup>
               {canCreate && (
                 <CommandGroup>
-                  {/* Pointer only: Enter must never create a Supplier/Item silently. */}
-                  <CommandItem value={`__create__${typed}`} onSelect={() => undefined} onClick={create} disabled={creating}>
-                    {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                  {/* Selecting (Enter or click) only asks for confirmation; nothing is created until Create is pressed. */}
+                  <CommandItem value={`__create__${typed}`} onSelect={() => setConfirming(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
                     Create "{typed}"
                   </CommandItem>
                 </CommandGroup>
               )}
             </CommandList>
           </Command>
+          )}
         </PopoverContent>
       </Popover>
       {error && <p className="text-xs text-destructive">{error}</p>}

@@ -60,6 +60,7 @@ export function AddOnsSection({ form, onChange, items, onItemsChanged }: Props) 
                 placeholder="Choose or create add-on..."
                 searchPlaceholder="Search add-ons..."
                 emptyText="No add-ons yet. Type to create."
+                noun="add-on"
                 onSelect={(o) => {
                   const item = items.find((it) => it.name === o.value);
                   patchRow(row.id, {

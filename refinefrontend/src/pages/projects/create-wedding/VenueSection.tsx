@@ -54,6 +54,7 @@ export function VenueSection({ form, onChange, venues }: Props) {
           placeholder="Search or create venue..."
           searchPlaceholder="Search venues..."
           emptyText="No venues found."
+          noun="venue"
           onSelect={(o) => onChange({ venue: o.value })}
           onCreate={createVenue}
           error={venueError}
