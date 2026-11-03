@@ -19,7 +19,7 @@ const SERIES: { key: SeriesKey; label: string; color: string; money: boolean }[]
 const grid = <CartesianGrid vertical={false} stroke={chartColors.grid} />;
 
 /** Phone: one series at a time, 01-12 month labels, one axis. */
-function MobileChart({ data }: { data: MonthRow[] }) {
+function MobileChart({ data, byYear }: { data: MonthRow[]; byYear: boolean }) {
   const [key, setKey] = useState<SeriesKey>("revenue");
   const s = SERIES.find((x) => x.key === key)!;
   return (
@@ -63,7 +63,7 @@ function MobileChart({ data }: { data: MonthRow[] }) {
       </ResponsiveContainer>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        {s.money ? "Values in VND millions." : "Weddings per month."} Months 01 to 12; tap a bar for the exact figure.
+        {s.money ? "Values in VND millions." : byYear ? "Weddings per year." : "Weddings per month."} {byYear ? "Two-digit years" : "Months 01 to 12"}; tap a bar for the exact figure.
       </p>
     </>
   );
@@ -87,12 +87,12 @@ function DesktopChart({ data }: { data: MonthRow[] }) {
   );
 }
 
-export function MonthlyChart({ data }: { data: MonthRow[] }) {
+export function MonthlyChart({ data, byYear = false }: { data: MonthRow[]; byYear?: boolean }) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-base font-semibold">{isDesktop ? "Monthly revenue and expenses" : "By month"}</CardTitle>
+        <CardTitle className="text-base font-semibold">{byYear ? "By year" : isDesktop ? "Monthly revenue and expenses" : "By month"}</CardTitle>
         {isDesktop && (
           <div className="flex gap-4 text-[13px] text-foreground">
             {SERIES.slice(0, 2).map((x) => (
@@ -105,7 +105,7 @@ export function MonthlyChart({ data }: { data: MonthRow[] }) {
         )}
       </CardHeader>
       <CardContent className="px-2 sm:px-6">
-        {isDesktop ? <DesktopChart data={data} /> : <MobileChart data={data} />}
+        {isDesktop ? <DesktopChart data={data} /> : <MobileChart data={data} byYear={byYear} />}
         <p className="sr-only">The same figures are listed month by month in the Monthly table below.</p>
       </CardContent>
     </Card>

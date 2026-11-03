@@ -5,11 +5,11 @@ import { formatMillions, formatVNDFull } from "@/lib/format";
 import type { MonthRow } from "@/components/dashboard/financialOverview";
 
 /** Desktop only; on phones net profit is the "Net" segment of the By month chart. */
-export function NetProfitChart({ data, year }: { data: MonthRow[]; year: number }) {
+export function NetProfitChart({ data, year }: { data: MonthRow[]; year: number | "all" }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">Net profit trend ({year})</CardTitle>
+        <CardTitle className="text-base font-semibold">Net profit trend ({year === "all" ? "all years" : year})</CardTitle>
       </CardHeader>
       <CardContent>
         <div aria-hidden>

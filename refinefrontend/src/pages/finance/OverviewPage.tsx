@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router";
-import { parseAsInteger, useQueryState } from "nuqs";
+import { parseAsString, useQueryState } from "nuqs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiTile } from "@/components/dashboard/KpiTile";
@@ -18,16 +18,21 @@ const EMPTY_TOTALS: OverviewTotals = {
   active_pipeline: 0, active_weddings_count: 0,
 };
 
-/** Only plausible four-digit years are accepted from the URL; anything else falls back to this year. */
-const yearParser = parseAsInteger.withOptions({ history: "replace" });
-const isPlausibleYear = (y: number | null): y is number => y !== null && y >= 2000 && y <= 2100;
+/** The URL holds a four-digit year or "all"; anything else falls back to this year. */
+const yearParser = parseAsString.withOptions({ history: "replace" });
+function parseYear(raw: string | null): number | "all" | null {
+  if (raw === "all") return "all";
+  if (raw !== null && /^\d{4}$/.test(raw) && Number(raw) >= 2000 && Number(raw) <= 2100) return Number(raw);
+  return null;
+}
 
 /** Revenue overview: one year of headline figures, charts and the full monthly table. */
 export default function OverviewPage() {
   const currentYear = yearVN();
   const [yearParam, setYearParam] = useQueryState("year", yearParser);
-  const selectedYear = isPlausibleYear(yearParam) ? yearParam : currentYear;
-  const { data, isLoading, isError } = useFinancialOverview(selectedYear);
+  const selectedYear = parseYear(yearParam) ?? currentYear;
+  const isAll = selectedYear === "all";
+  const { data, isLoading, isError } = useFinancialOverview(selectedYear, "RevenueOverviewPage");
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   // Remember the year list so the picker still works after a year fails to load.
@@ -37,12 +42,14 @@ export default function OverviewPage() {
 
   // A year the backend does not know about (hand-typed URL) goes back to the default.
   useEffect(() => {
-    if (data && yearParam !== null && !data.available_years.includes(yearParam)) setYearParam(null);
+    if (!data || yearParam === null) return;
+    const y = parseYear(yearParam);
+    if (y !== "all" && (y === null || !data.available_years.includes(y))) setYearParam(null);
   }, [data, yearParam, setYearParam]);
 
   const months = data?.months ?? [];
   const totals = data?.totals ?? EMPTY_TOTALS;
-  const kpiLabel = selectedYear === currentYear ? "YTD" : String(selectedYear);
+  const kpiLabel = isAll ? "all time" : selectedYear === currentYear ? "YTD" : String(selectedYear);
   const invoices = totals.outstanding_invoices_count;
 
   return (
@@ -51,11 +58,12 @@ export default function OverviewPage() {
         <h1 className="font-display text-3xl font-semibold leading-tight md:text-4xl">Revenue overview</h1>
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           Year
-          <Select value={String(selectedYear)} onValueChange={(v) => setYearParam(parseInt(v) === currentYear ? null : parseInt(v))}>
+          <Select value={String(selectedYear)} onValueChange={(v) => setYearParam(v === String(currentYear) ? null : v)}>
             <SelectTrigger className="h-12 w-36 font-semibold text-foreground md:h-10">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">All years</SelectItem>
               {availableYears.map((y) => (
                 <SelectItem key={y} value={String(y)}>
                   {y}{y === currentYear ? " (now)" : ""}
@@ -68,7 +76,7 @@ export default function OverviewPage() {
 
       {isError && (
         <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">
-          Could not load the figures for {selectedYear}. Please try again.
+          Could not load the figures for {isAll ? "all years" : selectedYear}. Please try again.
         </p>
       )}
 
@@ -81,7 +89,7 @@ export default function OverviewPage() {
             <KpiTile label={`Collected ${kpiLabel}`} amount={totals.collected} loading={isLoading} />
           </section>
 
-          {isLoading ? <Skeleton className="h-[320px] w-full rounded-card" /> : <MonthlyChart data={months} />}
+          {isLoading ? <Skeleton className="h-[320px] w-full rounded-card" /> : <MonthlyChart data={months} byYear={isAll} />}
 
           {isDesktop && (isLoading ? <Skeleton className="h-[300px] w-full rounded-card" /> : <NetProfitChart data={months} year={selectedYear} />)}
 
@@ -100,11 +108,7 @@ export default function OverviewPage() {
             )}
           </section>
 
-          {isLoading ? <Skeleton className="h-[300px] w-full rounded-card" /> : months.length === 0 ? (
-            <p className="rounded-card border bg-card px-4 py-6 text-center text-sm text-muted-foreground">No figures recorded for {selectedYear}.</p>
-          ) : (
-            <RevenueTable data={months} totals={totals} year={selectedYear} />
-          )}
+          {isLoading ? <Skeleton className="h-[300px] w-full rounded-card" /> : <RevenueTable data={months} totals={totals} year={selectedYear} />}
         </>
       )}
     </div>

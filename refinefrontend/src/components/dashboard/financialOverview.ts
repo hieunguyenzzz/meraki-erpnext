@@ -19,7 +19,7 @@ export interface OverviewTotals {
 }
 
 export interface OverviewData {
-  year: number;
+  year: number | "all";
   available_years: number[];
   months: MonthRow[];
   totals: OverviewTotals;

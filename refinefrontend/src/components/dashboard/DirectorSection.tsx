@@ -19,7 +19,7 @@ const EMPTY_TOTALS = {
 export default function DirectorSection() {
   const currentYear = yearVN();
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-  const { data, isLoading, isError } = useFinancialOverview(selectedYear);
+  const { data, isLoading, isError } = useFinancialOverview(selectedYear, "DirectorSection");
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   // Remember the year list so the picker still works after a year fails to load.

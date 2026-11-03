@@ -32,11 +32,13 @@ export const tooltipStyles: {
 
 /** "2026-03" -> "Mar" */
 export function monthShort(ym: string): string {
+  if (ym.length === 4) return ym; // all-years view: the label is the year
   const m = Number(ym.slice(5, 7));
   return new Date(2000, m - 1, 1).toLocaleDateString("en-GB", { month: "short" });
 }
 
 /** "2026-03" -> "03" (unambiguous, never collides on a phone) */
 export function monthNumber(ym: string): string {
+  if (ym.length === 4) return ym.slice(2); // "2025" -> "25"
   return ym.slice(5, 7);
 }
