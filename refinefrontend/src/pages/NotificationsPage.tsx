@@ -5,6 +5,7 @@ import { HR_ROLES, hasModuleAccess } from "@/lib/roles";
 import { AlertCircle, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PwaNotification } from "@/hooks/useMyNotifications";
+import { useNotificationDetails } from "@/hooks/useNotificationDetails";
 import { useNotificationActions } from "@/hooks/useNotificationActions";
 import { DOC_ROUTES, canDecide, groupByDay, labelForType } from "@/lib/notifications";
 import { NotificationFilters, type TypeCount } from "@/components/notifications/NotificationFilters";
@@ -135,6 +136,8 @@ export default function NotificationsPage() {
     navigate(routeFn(notif.reference_document_name));
   }
 
+  const details = useNotificationDetails(allNotifications);
+
   const showSkeleton = allNotifications.length === 0 && query.isFetching;
   const showError = allNotifications.length === 0 && query.isError && !query.isFetching;
 
@@ -194,6 +197,7 @@ export default function NotificationsPage() {
                     actionable={canDecide(notif, canApprove)}
                     outcome={outcomes[notif.name]}
                     error={errors[notif.name]}
+                    details={details[notif.name]}
                     processing={processingId === notif.name}
                     onOpen={handleOpen}
                     onDismiss={markRead}

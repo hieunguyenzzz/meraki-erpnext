@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { PwaNotification } from "@/hooks/useMyNotifications";
 import type { Outcome } from "@/hooks/useNotificationActions";
@@ -7,6 +8,8 @@ import {
   DOC_ROUTES,
   TONE_CLASSES,
   clockTime,
+  detailFacts,
+  type NotificationDetails,
   isoDay,
   metaForType,
   parseMessage,
@@ -22,6 +25,7 @@ interface Props {
   actionable: boolean;
   outcome?: Outcome;
   error?: string;
+  details?: NotificationDetails;
   processing: boolean;
   onOpen: (notif: PwaNotification) => void;
   onDismiss: (notif: PwaNotification) => void;
@@ -34,6 +38,7 @@ export function NotificationItem({
   actionable,
   outcome,
   error,
+  details,
   processing,
   onOpen,
   onDismiss,
@@ -74,6 +79,15 @@ export function NotificationItem({
                 part.bold ? <b key={i} className="font-semibold">{part.text}</b> : <span key={i}>{part.text}</span>,
               )}
             </span>
+            {details && (
+              <span className="mt-1.5 flex flex-wrap gap-1.5">
+                {detailFacts(details).map((fact) => (
+                  <Badge key={fact} variant="secondary" className="font-medium">
+                    {fact}
+                  </Badge>
+                ))}
+              </span>
+            )}
             <span className="mt-0.5 block text-xs text-muted-foreground">
               {meta.label} · {when}
             </span>

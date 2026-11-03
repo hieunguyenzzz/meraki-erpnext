@@ -103,3 +103,19 @@ export function groupByDay(items: PwaNotification[]): { label: string; items: Pw
   }
   return [...map].map(([label, list]) => ({ label, items: list }));
 }
+
+export type NotificationDetails =
+  | { kind: "leave"; employee_name?: string; leave_type?: string; from_date?: string; to_date?: string; days?: number | null; half_day?: boolean }
+  | { kind: "wfh"; employee_name?: string; from_date?: string; to_date?: string; days?: number | null; half_day?: boolean }
+  | { kind: "expense"; submitter: string };
+
+/** Short facts an approver needs on the card, e.g. ["Annual Leave", "2026-12-21 → 2026-12-22", "2 days", "Half day"]. */
+export function detailFacts(d: NotificationDetails): string[] {
+  if (d.kind === "expense") return [`Submitted by ${d.submitter}`];
+  const facts: string[] = [];
+  if (d.kind === "leave" && d.leave_type) facts.push(d.leave_type);
+  if (d.from_date) facts.push(d.to_date && d.to_date !== d.from_date ? `${d.from_date} → ${d.to_date}` : d.from_date);
+  if (d.days != null) facts.push(`${d.days} ${d.days === 1 ? "day" : "days"}`);
+  if (d.half_day) facts.push("Half day");
+  return facts;
+}

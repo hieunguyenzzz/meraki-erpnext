@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useMyNotifications, type PwaNotification } from "@/hooks/useMyNotifications";
+import { useNotificationDetails } from "@/hooks/useNotificationDetails";
 import { useNotificationActions } from "@/hooks/useNotificationActions";
 import { DOC_ROUTES, canDecide } from "@/lib/notifications";
 import { NotificationItem } from "@/components/notifications/NotificationItem";
@@ -22,6 +23,7 @@ export function NotificationBell({ className }: { className?: string }) {
     // Leave the "Approved" / "Rejected" result visible for a moment before the row drops out of the unread list
     onChanged: () => void setTimeout(refetch, 1500),
   });
+  const details = useNotificationDetails(notifications);
   // Approve/reject endpoints are HR-only; other approvers still see and open the notification.
   const { data: roles } = usePermissions<string[]>({});
   const isHr = hasModuleAccess(roles ?? [], HR_ROLES);
@@ -71,6 +73,7 @@ export function NotificationBell({ className }: { className?: string }) {
                   actionable={actionable}
                   outcome={outcomes[notif.name]}
                   error={errors[notif.name]}
+                  details={details[notif.name]}
                   processing={processingId === notif.name}
                   onOpen={handleOpen}
                   onDismiss={markRead}
