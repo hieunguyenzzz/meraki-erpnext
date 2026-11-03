@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { CalendarDays, ChevronDown, Heart } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,6 @@ const pill = "inline-flex h-11 items-center gap-2 rounded-full border border-inp
 /** Wedding and date, shown as two small pills so the defaults stay out of the way. */
 export function ContextRow({ weddings, project, onProject, date, today, onDate }: Props) {
   const [open, setOpen] = useState(false);
-  const dateRef = useRef<HTMLInputElement>(null);
   const selected = weddings.find((w) => w.id === project);
   const label = selected ? selected.name : "Office expense";
   const sub = selected?.date === today ? "today" : null;
@@ -35,20 +34,18 @@ export function ContextRow({ weddings, project, onProject, date, today, onDate }
         <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
       </button>
 
-      <div className="relative shrink-0">
-        <button type="button" className={pill} onClick={() => dateRef.current?.showPicker?.()} aria-label={`Date: ${date}. Change`}>
-          <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden />
-          {date === today ? "Today" : date}
-        </button>
+      {/* A real date input sits transparently over the pill, so the tap works everywhere; showPicker is an enhancement. */}
+      <div className={cn(pill, "relative shrink-0")}>
+        <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden />
+        {date === today ? "Today" : date}
         <input
-          ref={dateRef}
           type="date"
           value={date}
           max={today}
-          aria-label="Expense date"
+          aria-label={`Expense date: ${date}`}
           onChange={(e) => e.target.value && onDate(e.target.value)}
-          className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
-          tabIndex={-1}
+          onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* picker already open or unsupported */ } }}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         />
       </div>
 

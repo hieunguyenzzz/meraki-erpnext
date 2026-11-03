@@ -89,7 +89,12 @@ export default function AddExpensePage() {
     if (!receipt && !description.trim()) found.proof = "Add a bill photo or say what it was for";
     setErrors(found);
     if (Object.keys(found).length) {
-      if (found.amount) amountRef.current?.focus();
+      // Bring the first invalid field into view (the save bar covers the page bottom)
+      const target = found.amount ? amountRef.current
+        : found.category ? document.querySelector<HTMLElement>("#expense-category [role=radio]")
+        : document.getElementById("expense-description");
+      target?.scrollIntoView({ block: "center" });
+      target?.focus({ preventScroll: true });
       return;
     }
 
@@ -105,7 +110,7 @@ export default function AddExpensePage() {
       });
       rememberCategory(category);
       setRecents(loadRecents());
-      setSaved({ amount, category: categoryLabel(category), wedding: weddingLabel, date, hasReceipt: !!receipt, reference: res.name });
+      setSaved({ amount, category: categoryLabel(category), wedding: weddingLabel, date, hasReceipt: !!receipt, receiptFailed: res.receipt_attached === false, reference: res.name });
     } catch (err: unknown) {
       // Keep everything the user entered so they can retry
       setFormError(err instanceof Error ? err.message : "Could not save the expense");
@@ -121,7 +126,7 @@ export default function AddExpensePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md md:mt-4 md:rounded-card md:border md:bg-card md:p-6 md:shadow-sm">
+    <div className="mx-auto w-full max-w-md max-md:pb-28 md:mt-4 md:rounded-card md:border md:bg-card md:p-6 md:shadow-sm">
       {saved ? (
         <SavedState saved={saved} onAddAnother={addAnother} onDone={() => navigate("/")} />
       ) : (
@@ -162,6 +167,7 @@ export default function AddExpensePage() {
 
           <div>
             <Input
+              id="expense-description"
               aria-label="What was it for"
               aria-invalid={!!errors.proof}
               value={description}

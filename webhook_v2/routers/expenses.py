@@ -25,7 +25,7 @@ from webhook_v2.services.classifier_client import RemoteClassifierClient
 from webhook_v2.services.receipt_image import to_browser_image
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries
-from webhook_v2.routers.my_weddings import require_assigned_unless_privileged
+from webhook_v2.routers.my_weddings import require_assigned_unless_privileged, bind_correlation_id
 from webhook_v2.auth import require_roles, has_roles, resolve_employee, PLANNER, FINANCE, WEDDING_MANAGER, DIRECTOR
 
 log = get_logger(__name__)
@@ -794,6 +794,7 @@ async def create_wedding_expense_with_receipt(
     """
     from fastapi import Form as _  # noqa — already imported above
 
+    bind_correlation_id(request)
     if len(note.strip()) > 1000:
         raise HTTPException(status_code=400, detail="Note must be 1000 characters or fewer")
     req = WeddingExpenseRequest(
@@ -808,8 +809,10 @@ async def create_wedding_expense_with_receipt(
     # Reuse existing logic (shared core — not the gated route handler)
     result = _create_wedding_expense_core(req)
 
-    # Attach receipt if provided
+    # Attach receipt if provided. The expense is already saved, so an upload failure
+    # must not fail the request; it is reported as receipt_attached=false instead.
     if receipt and receipt.size and result.get("name"):
+        result["receipt_attached"] = True
         try:
             file_data = await receipt.read()
             client = ERPNextClient()
@@ -826,6 +829,7 @@ async def create_wedding_expense_with_receipt(
             )
             log.info("receipt_attached", pi=result["name"])
         except Exception as e:
+            result["receipt_attached"] = False
             log.warning("receipt_attach_failed", pi=result["name"], error=str(e))
 
     return result

@@ -25,7 +25,7 @@ export function CategoryChips({ categories, recents, value, onChange, error }: P
 
   return (
     <div>
-      <div role="radiogroup" aria-label="Category" className="flex flex-wrap gap-2">
+      <div id="expense-category" role="radiogroup" aria-label="Category" className="flex flex-wrap gap-2">
         {shown.map((n) => (
           <button
             key={n}

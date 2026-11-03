@@ -44,7 +44,7 @@ export interface ExpenseInput {
 }
 
 /** One request creates the draft Purchase Invoice and attaches the receipt. */
-export async function submitExpense(v: ExpenseInput): Promise<{ name: string }> {
+export async function submitExpense(v: ExpenseInput): Promise<{ name: string; receipt_attached?: boolean }> {
   const fd = new FormData();
   fd.append("project", v.project);
   fd.append("date", v.date);

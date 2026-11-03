@@ -8,6 +8,7 @@ export interface SavedSummary {
   wedding: string;
   date: string;
   hasReceipt: boolean;
+  receiptFailed: boolean;
   reference: string;
 }
 
@@ -31,8 +32,15 @@ export function SavedState({ saved, onAddAnother, onDone }: Props) {
         <span className="whitespace-nowrap">· {saved.date}</span>
       </p>
       <p className="-mt-2 text-[15px] text-muted-foreground">
-        {saved.hasReceipt ? "Bill photo attached" : "No bill photo"} · waiting for approval
+        {saved.receiptFailed
+          ? "waiting for approval"
+          : `${saved.hasReceipt ? "Bill photo attached" : "No bill photo"} · waiting for approval`}
       </p>
+      {saved.receiptFailed && (
+        <p role="alert" className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
+          Saved, but the photo didn't upload. Add it from the expense later.
+        </p>
+      )}
       <div className="mt-6 flex w-full flex-col gap-3">
         <Button size="lg" className="h-14 text-base" onClick={onAddAnother}>Add another</Button>
         <Button size="lg" variant="outline" className="h-14 text-base" onClick={onDone}>Done</Button>
