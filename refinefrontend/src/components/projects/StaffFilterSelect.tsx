@@ -22,6 +22,7 @@ interface StaffFilterSelectProps {
   onChange: (staffId: string) => void;
   myEmployeeId?: string;
   allLabel?: string;          // label for the "no filter" option; defaults to "All weddings"
+  className?: string;
 }
 
 /** Filter-bar combobox: pick a staff member to show only their weddings. Read-only view filter. */
@@ -31,6 +32,7 @@ export function StaffFilterSelect({
   onChange,
   myEmployeeId,
   allLabel = "All weddings",
+  className,
 }: StaffFilterSelectProps) {
   const [open, setOpen] = useState(false);
 
@@ -57,7 +59,8 @@ export function StaffFilterSelect({
           className={cn(
             "flex h-10 min-w-[180px] items-center max-md:h-12 max-md:text-base justify-between gap-2 rounded-md border px-3 text-sm transition-colors",
             "hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring",
-            value && "border-primary/40 bg-primary/5"
+            value && "border-primary/40 bg-primary/5",
+            className
           )}
         >
           <span className="flex items-center gap-1.5 truncate">

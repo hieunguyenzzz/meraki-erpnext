@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { parseAsString, useQueryStates } from "nuqs";
 import { CalendarX, RotateCw } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -13,13 +14,35 @@ import { pastRange, shiftRange, upcomingRange, type DateRange } from "./events/r
 import { useWeddingEvents } from "./events/useWeddingEvents";
 
 export default function EventsPage() {
-  const [range, setRange] = useState<DateRange>(() => upcomingRange());
-  const [query, setQuery] = useState("");
-  const [eventType, setEventType] = useState("");
-  const [weddingType, setWeddingType] = useState("");
-  const [staffFilter, setStaffFilter] = useState("");
+  // Window and filters live in the URL so Back from a wedding returns to the same view.
+  const defaults = useMemo(() => upcomingRange(), []);
+  const [params, setParams] = useQueryStates(
+    {
+      from: parseAsString.withDefault(defaults.from),
+      to: parseAsString.withDefault(defaults.to),
+      q: parseAsString.withDefault(""),
+      type: parseAsString.withDefault(""),
+      wtype: parseAsString.withDefault(""),
+      staff: parseAsString.withDefault(""),
+    },
+    { clearOnDefault: true }
+  );
+  const { q: query, type: eventType, wtype: weddingType, staff: staffFilter } = params;
+  // A reversed range (typed or from the URL) is swapped rather than sent to the backend.
+  const range = useMemo<DateRange>(
+    () => (params.from > params.to ? { from: params.to, to: params.from } : { from: params.from, to: params.to }),
+    [params.from, params.to]
+  );
+  const setRange = (r: DateRange | ((prev: DateRange) => DateRange)) => {
+    const next = typeof r === "function" ? r(range) : r;
+    return setParams({ from: next.from, to: next.to });
+  };
+  const setQuery = (v: string) => setParams({ q: v });
+  const setEventType = (v: string) => setParams({ type: v });
+  const setWeddingType = (v: string) => setParams({ wtype: v });
+  const setStaffFilter = (v: string) => setParams({ staff: v });
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const { employeeId } = useMyEmployee();
+  const { employee, employeeId } = useMyEmployee();
   const { events, staffCounts, isLoading, error, reload } = useWeddingEvents(range.from, range.to);
 
   const mode = useMemo(() => {
@@ -41,10 +64,14 @@ export default function EventsPage() {
     return () => clearTimeout(t);
   }, [isLoading]);
 
-  const staffOptions: StaffOption[] = useMemo(
-    () => staffCounts.map((s) => ({ id: s.employee, name: s.employee_name })),
-    [staffCounts]
-  );
+  const staffOptions: StaffOption[] = useMemo(() => {
+    const options = staffCounts.map((s) => ({ id: s.employee, name: s.employee_name }));
+    // "Only my events" must show my name even when I'm on no event in this window.
+    if (employeeId && !options.some((o) => o.id === employeeId)) {
+      options.push({ id: employeeId, name: employee?.employee_name || employeeId });
+    }
+    return options;
+  }, [staffCounts, employeeId, employee]);
 
   const eventTypes = useMemo(() => {
     const present = new Set(events.map((e) => e.event_type));

@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getInitials } from "@/lib/initials";
 import { formatTimeRange, type EventStaffRow, type WeddingEvent } from "@/lib/weddingEvents";
 import { cn } from "@/lib/utils";
@@ -41,34 +43,45 @@ export function staffTitle(s: EventStaffRow) {
   return `${staffName(s)}${s.role ? ` · ${s.role}` : ""}${call}`;
 }
 
-/** Overlapping initials, three at most then "+N"; names stay in the tooltip and screen-reader text. */
+function AvatarChip({ label, className, children }: { label: string; className: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          // Touch has no hover: a tap toggles the tooltip.
+          onClick={(e) => {
+            e.preventDefault();
+            setOpen((o) => !o);
+          }}
+          className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 border-card text-[10px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", className)}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Overlapping initials, three at most then "+N"; each opens a tooltip with name, role and call time (hover, focus or tap). */
 export function StaffAvatars({ staff, max = 3 }: { staff: EventStaffRow[]; max?: number }) {
   if (staff.length === 0) return <span className="text-muted-foreground">{"—"}</span>;
   const shown = staff.slice(0, max);
-  const extra = staff.length - shown.length;
+  const rest = staff.slice(max);
   return (
     <span className="flex items-center">
       {shown.map((s, i) => (
-        <span
-          key={`${s.employee}-${i}`}
-          title={staffTitle(s)}
-          className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-full border-2 border-card text-[10px] font-bold",
-            TONES[i % TONES.length],
-            i > 0 && "-ml-1.5"
-          )}
-        >
-          <span aria-hidden>{getInitials(staffName(s))}</span>
-          <span className="sr-only">{staffTitle(s)}</span>
-        </span>
+        <AvatarChip key={`${s.employee}-${i}`} label={staffTitle(s)} className={cn(TONES[i % TONES.length], i > 0 && "-ml-1.5")}>
+          {getInitials(staffName(s))}
+        </AvatarChip>
       ))}
-      {extra > 0 && (
-        <span
-          title={staff.slice(max).map(staffName).join(", ")}
-          className="-ml-1.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-secondary text-[10px] font-bold"
-        >
-          +{extra}
-        </span>
+      {rest.length > 0 && (
+        <AvatarChip label={rest.map(staffTitle).join("; ")} className="-ml-1.5 bg-secondary">
+          +{rest.length}
+        </AvatarChip>
       )}
     </span>
   );

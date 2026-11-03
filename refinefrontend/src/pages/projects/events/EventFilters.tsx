@@ -138,7 +138,7 @@ export function EventFilters(p: Props) {
             </Select>
           )}
           {p.staffOptions.length > 0 && (
-            <StaffFilterSelect staff={p.staffOptions} value={p.staff} onChange={p.onStaff} myEmployeeId={p.myEmployeeId} allLabel="All staff" />
+            <StaffFilterSelect staff={p.staffOptions} value={p.staff} onChange={p.onStaff} myEmployeeId={p.myEmployeeId} allLabel="All staff" className="rounded-full" />
           )}
         </div>
       </div>

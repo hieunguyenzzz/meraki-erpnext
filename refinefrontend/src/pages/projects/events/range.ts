@@ -6,8 +6,8 @@ export interface DateRange {
   to: string;
 }
 
-/** Default window: today and the next 90 days (business timezone). */
-export const UPCOMING_DAYS = 90;
+/** Both windows span 90 days, so Previous from Upcoming lands exactly on Past. */
+export const WINDOW_DAYS = 90;
 
 export function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -16,11 +16,11 @@ export function addDays(iso: string, days: number): string {
 }
 
 export function upcomingRange(today: string = todayVN()): DateRange {
-  return { from: today, to: addDays(today, UPCOMING_DAYS) };
+  return { from: today, to: addDays(today, WINDOW_DAYS - 1) };
 }
 
 export function pastRange(today: string = todayVN()): DateRange {
-  return { from: addDays(today, -UPCOMING_DAYS), to: addDays(today, -1) };
+  return { from: addDays(today, -WINDOW_DAYS), to: addDays(today, -1) };
 }
 
 /** Move the window by its own length, forwards (+1) or backwards (-1). */
@@ -33,6 +33,7 @@ export function shiftRange(r: DateRange, direction: 1 | -1): DateRange {
 export function dayLabel(iso: string): { main: string; date?: string } {
   const diff = daysUntilVN(iso);
   if (diff === 0) return { main: "Today", date: formatIsoWeekday(iso) };
+  if (diff === -1) return { main: "Yesterday", date: formatIsoWeekday(iso) };
   if (diff === 1) return { main: "Tomorrow", date: formatIsoWeekday(iso) };
   return { main: formatIsoWeekday(iso) };
 }

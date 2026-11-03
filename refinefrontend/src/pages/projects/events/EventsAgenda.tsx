@@ -12,8 +12,8 @@ export function EventsAgenda({ groups }: { groups: DayGroup[] }) {
       {groups.map((g) => {
         const label = dayLabel(g.date);
         return (
-          <section key={g.date} aria-label={`${label.main} ${label.date ?? ""}`}>
-            <h2 className="sticky top-0 z-10 -mx-4 mb-2 bg-background px-4 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <section key={g.date} aria-labelledby={`day-${g.date}`}>
+            <h2 id={`day-${g.date}`} className="sticky top-0 z-10 -mx-4 mb-2 bg-background px-4 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               {label.main}
               {label.date && <span className="ml-2 font-medium normal-case tracking-normal">{label.date}</span>}
             </h2>

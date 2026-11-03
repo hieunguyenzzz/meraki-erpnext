@@ -37,10 +37,10 @@ export function EventsTable({ groups }: { groups: DayGroup[] }) {
               return (
                 <Fragment key={g.date}>
                   <TableRow className="hover:bg-secondary/60">
-                    <TableCell colSpan={6} className="bg-secondary/60 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    <TableHead colSpan={6} scope="colgroup" className="h-auto bg-secondary/60 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                       {label.main}
                       {label.date && <span className="ml-2 font-medium normal-case tracking-normal">{label.date}</span>}
-                    </TableCell>
+                    </TableHead>
                   </TableRow>
                   {g.events.map((e) => (
                     <TableRow key={e.name}>
