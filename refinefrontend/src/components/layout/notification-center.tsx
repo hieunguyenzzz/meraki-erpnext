@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useCustomMutation, useInvalidate, usePermissions } from "@refinedev/core";
+import { HR_ROLES, hasModuleAccess } from "@/lib/roles";
 import { Bell, Check, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +29,9 @@ export function NotificationBell({ className }: { className?: string }) {
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const { notifications, count, refetch } = useMyNotifications();
+  // Approve/reject endpoints are HR-only; other approvers still see and open the notification.
+  const { data: roles } = usePermissions<string[]>({});
+  const canApprove = hasModuleAccess(roles ?? [], HR_ROLES);
 
   async function handleAction(notif: PwaNotification, action: "read" | "approve" | "reject") {
     setProcessingId(notif.name);
@@ -96,7 +100,7 @@ export function NotificationBell({ className }: { className?: string }) {
               const isWfh = notif.reference_document_type === "Attendance Request";
               // Only show Approve/Reject on still-pending requests (the approver's copy),
               // never on outcome notices like "Your leave has been Approved".
-              const isActionable = notif.is_pending && (isLeave || isWfh);
+              const isActionable = canApprove && notif.is_pending && (isLeave || isWfh);
               const isProcessing = processingId === notif.name;
 
               const routeFn = DOC_ROUTES[notif.reference_document_type];

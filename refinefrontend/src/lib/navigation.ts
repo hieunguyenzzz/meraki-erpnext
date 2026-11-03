@@ -175,7 +175,7 @@ export interface BottomBarConfig {
 }
 
 const HOME: BarTab = { label: "Home", path: "/", icon: Home, prefixes: ["/"] };
-const CRM: BarTab = { label: "CRM", path: "/crm", icon: Heart, prefixes: ["/crm"] };
+const CRM: BarTab = { label: "CRM", path: "/crm", icon: MessageSquare, prefixes: ["/crm"] };
 const EVENTS: BarTab = { label: "Events", path: "/projects/events", icon: CalendarDays, prefixes: ["/projects/events"] };
 const WEDDINGS: BarTab = { label: "Weddings", path: "/projects", icon: Heart, prefixes: ["/projects", "/venues", "/vendors"] };
 const PEOPLE: BarTab = { label: "People", path: "/hr/staff-overview", icon: Users, prefixes: ["/hr"] };

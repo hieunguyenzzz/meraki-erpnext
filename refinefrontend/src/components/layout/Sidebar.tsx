@@ -58,7 +58,7 @@ function UserFooter({ roles }: { roles: string[] }) {
     .join("");
 
   return (
-    <div className="mt-3 flex items-center gap-2.5 border-t px-3 pt-3.5">
+    <div className="mt-3 flex shrink-0 items-center gap-2.5 border-t px-3 pt-3.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning-soft text-[13px] font-bold text-warning-soft-foreground">
         {initials}
       </span>
@@ -94,12 +94,12 @@ export function Sidebar() {
   const active = getActiveItem(pathname, groups.flatMap((g) => g.items));
 
   return (
-    <aside className="hidden h-screen w-[248px] shrink-0 flex-col overflow-y-auto border-r bg-sidebar px-3.5 py-5 text-sidebar-foreground md:flex">
-      <Wordmark to={isEmployeeSelfServiceOnly(roles) ? "/my-profile" : "/"} className="mb-3.5 px-3 pt-1" />
+    <aside className="hidden h-screen w-[248px] shrink-0 flex-col border-r bg-sidebar px-3.5 py-5 text-sidebar-foreground md:flex">
+      <Wordmark large to={isEmployeeSelfServiceOnly(roles) ? "/my-profile" : "/"} className="mb-3.5 shrink-0 px-3 pt-1" />
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mb-1.5 flex h-10 items-center gap-2 rounded-[10px] border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-muted"
+        className="mb-1.5 flex h-10 shrink-0 items-center gap-2 rounded-[10px] border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-muted"
       >
         <Search className="h-4 w-4" strokeWidth={1.75} aria-hidden />
         <span className="flex-1 text-left">Jump to…</span>
@@ -108,7 +108,7 @@ export function Sidebar() {
         </kbd>
       </button>
 
-      <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5">
+      <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {groups.map((g) => (
           <div key={g.title ?? "top"} className="flex flex-col gap-0.5">
             {g.title && (

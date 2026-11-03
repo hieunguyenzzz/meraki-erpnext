@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
-import { useCustom, useCustomMutation } from "@refinedev/core";
+import { useCustom, useCustomMutation, usePermissions } from "@refinedev/core";
+import { HR_ROLES, hasModuleAccess } from "@/lib/roles";
 import { Bell, Trash2, CheckCheck, Inbox, Check, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -116,6 +117,9 @@ function groupByDate(notifications: PwaNotification[]): GroupedNotifications[] {
 }
 
 export default function NotificationsPage() {
+  // Approve/reject endpoints are HR-only; other approvers still see and open the notification.
+  const { data: roles } = usePermissions<string[]>({});
+  const canApprove = hasModuleAccess(roles ?? [], HR_ROLES);
   const navigate = useNavigate();
   const { mutateAsync: customMutation } = useCustomMutation();
   const [page, setPage] = useState(1);
@@ -336,7 +340,7 @@ export default function NotificationsPage() {
                   const isClickable = !!routeFn;
                   const isProcessing = processingId === notif.name;
 
-                  const isActionable = notif.is_pending;
+                  const isActionable = notif.is_pending && canApprove;
 
                   return (
                     <div
