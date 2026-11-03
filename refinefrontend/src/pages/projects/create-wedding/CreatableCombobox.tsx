@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -50,12 +50,15 @@ export function CreatableCombobox({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? valueLabel ?? "";
   const typed = search.trim();
   const canCreate = typed.length > 1 && !options.some((o) => o.label.toLowerCase() === typed.toLowerCase());
 
   async function create() {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
     setCreating(true);
     try {
       if (await onCreate(typed)) {
@@ -63,6 +66,7 @@ export function CreatableCombobox({
         setSearch("");
       }
     } finally {
+      creatingRef.current = false;
       setCreating(false);
     }
   }
@@ -102,7 +106,7 @@ export function CreatableCombobox({
                 {options.map((o) => (
                   <CommandItem
                     key={o.value}
-                    value={o.label}
+                    value={`${o.label}__${o.value}`}
                     onSelect={() => {
                       onSelect(o);
                       setOpen(false);
@@ -115,7 +119,8 @@ export function CreatableCombobox({
               </CommandGroup>
               {canCreate && (
                 <CommandGroup>
-                  <CommandItem value={`__create__${typed}`} onSelect={create} disabled={creating}>
+                  {/* Pointer only: Enter must never create a Supplier/Item silently. */}
+                  <CommandItem value={`__create__${typed}`} onSelect={() => undefined} onClick={create} disabled={creating}>
                     {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                     Create "{typed}"
                   </CommandItem>

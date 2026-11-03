@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useList, useInvalidate } from "@refinedev/core";
 import { useNavigate } from "react-router";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { CoupleSection } from "./CoupleSection";
 import { WeddingSection } from "./WeddingSection";
@@ -25,13 +25,14 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
   const [form, setForm] = useState<FormData>(initialFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [duplicateCustomer, setDuplicateCustomer] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   const { result: venuesResult } = useList({
     resource: "Supplier",
     pagination: { mode: "off" },
     filters: [{ field: "supplier_group", operator: "eq", value: "Wedding Venues" }],
     meta: { fields: ["name", "supplier_name"] },
+    queryOptions: { enabled: open },
   });
   const venues = (venuesResult?.data ?? []) as { name: string; supplier_name: string }[];
 
@@ -40,6 +41,7 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
     pagination: { mode: "off" },
     filters: [{ field: "status", operator: "eq", value: "Active" }],
     meta: { fields: ["name", "employee_name", "first_name", "last_name"] },
+    queryOptions: { enabled: open },
   });
   const employees = (employeesResult?.data ?? []) as EmployeeOption[];
 
@@ -47,6 +49,7 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
     resource: "Customer",
     pagination: { mode: "off" },
     meta: { fields: ["name", "customer_name", "email_id"] },
+    queryOptions: { enabled: open },
   });
   const customers = useMemo(
     () => (customersResult?.data ?? []) as { name: string; customer_name: string; email_id?: string }[],
@@ -67,29 +70,23 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
     }
   }, []);
   useEffect(() => {
-    fetchAddonItems();
-  }, [fetchAddonItems]);
+    if (open) fetchAddonItems();
+  }, [open, fetchAddonItems]);
 
   useEffect(() => {
     if (!open) {
       setForm(initialFormData);
       setError(null);
-      setDuplicateCustomer(null);
     }
   }, [open]);
 
   const update = (updates: Partial<FormData>) => setForm((prev) => ({ ...prev, ...updates }));
 
-  // Duplicate check runs when the email field loses focus.
-  const checkDuplicateEmail = () => {
+  const duplicateCustomer = useMemo(() => {
     const email = form.email.toLowerCase().trim();
-    if (email.length < 3) {
-      setDuplicateCustomer(null);
-      return;
-    }
-    const match = customers.find((c) => c.email_id?.toLowerCase().trim() === email);
-    setDuplicateCustomer(match?.customer_name ?? null);
-  };
+    if (email.length < 3) return null;
+    return customers.find((c) => c.email_id?.toLowerCase().trim() === email)?.customer_name ?? null;
+  }, [form.email, customers]);
 
   const commissionBase = useMemo(() => {
     const addOnSum = form.addOns
@@ -107,6 +104,8 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
   const canCreate = missing.length === 0 && !duplicateCustomer && !isSubmitting;
 
   const handleCreate = async () => {
+    if (submittingRef.current || duplicateCustomer) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
     try {
@@ -152,18 +151,21 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
       console.error("Create wedding failed", err);
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={(next) => !isSubmitting && onOpenChange(next)}>
       <SheetContent
         side="right"
+        aria-describedby="create-wedding-desc"
         className="flex w-full max-w-none flex-col gap-0 p-0 max-sm:rounded-l-none sm:max-w-xl"
       >
         <SheetHeader className="shrink-0 border-b px-5 py-4 pr-16 sm:px-6">
           <SheetTitle className="font-display text-[28px] font-semibold leading-8 tracking-normal">New wedding</SheetTitle>
+          <SheetDescription id="create-wedding-desc" className="sr-only">Enter the couple, date, venue, price and planning team.</SheetDescription>
         </SheetHeader>
 
         <div className="flex min-h-0 flex-1 flex-col">
@@ -174,7 +176,7 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
                 {error}
               </div>
             )}
-            <CoupleSection form={form} onChange={update} duplicateCustomer={duplicateCustomer} onEmailBlur={checkDuplicateEmail} />
+            <CoupleSection form={form} onChange={update} duplicateCustomer={duplicateCustomer} />
             <WeddingSection form={form} onChange={update} />
             <VenueSection form={form} onChange={update} venues={venues} />
             <PriceSection form={form} onChange={update} commissionBase={commissionBase} />

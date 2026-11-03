@@ -9,10 +9,9 @@ interface Props {
   onChange: (updates: Partial<FormData>) => void;
   /** Name of the existing customer that already uses the typed email, if any. */
   duplicateCustomer: string | null;
-  onEmailBlur: () => void;
 }
 
-export function CoupleSection({ form, onChange, duplicateCustomer, onEmailBlur }: Props) {
+export function CoupleSection({ form, onChange, duplicateCustomer }: Props) {
   return (
     <FormSection title="Couple">
       <Field label="Couple name" htmlFor="couple-name" required>
@@ -31,7 +30,6 @@ export function CoupleSection({ form, onChange, duplicateCustomer, onEmailBlur }
           placeholder="email@example.com"
           value={form.email}
           onChange={(e) => onChange({ email: e.target.value })}
-          onBlur={onEmailBlur}
           aria-invalid={!!duplicateCustomer}
         />
       </Field>

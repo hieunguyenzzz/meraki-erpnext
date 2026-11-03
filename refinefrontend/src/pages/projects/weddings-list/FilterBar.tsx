@@ -56,7 +56,7 @@ export function FilterBar(p: Props) {
               <SelectItem value="Destination">Destination</SelectItem>
             </SelectContent>
           </Select>
-          {p.years.length > 0 && (
+          {(
             <Select value={p.year} onValueChange={(v) => p.onYear(v)}>
               <SelectTrigger aria-label="Year" className="w-auto shrink-0 gap-2 rounded-full">
                 <SelectValue />
@@ -76,7 +76,7 @@ export function FilterBar(p: Props) {
       </div>
 
       {p.showStages && (
-        <div role="tablist" aria-label="Stage" className="scrollbar-hide -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
+        <div role="group" aria-label="Stage" className="scrollbar-hide -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
           <Chip active={p.stage === ""} onClick={() => p.onStage("")}>All · {p.total}</Chip>
           {PROJECT_COLUMNS.map((c) => (
             <Chip key={c.key} active={p.stage === c.key} onClick={() => p.onStage(c.key)}>
@@ -93,8 +93,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={active}
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
         "h-10 shrink-0 whitespace-nowrap rounded-full border px-3.5 text-sm font-semibold tabular-nums transition-colors",

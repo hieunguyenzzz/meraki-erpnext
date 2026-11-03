@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQueryState } from "nuqs";
 import { yearVN } from "@/lib/businessTime";
 import { PROJECT_COLUMNS, getProjectColumnKey, type ProjectColumnKey, type ProjectKanbanItem } from "@/lib/projectKanban";
@@ -13,20 +13,24 @@ const STAFF_FIELDS = [
 
 /** Search, stage, type, year and staff filters over the already-loaded weddings (all client-side). */
 export function useWeddingFilters(items: ProjectKanbanItem[]) {
-  const [query, setQuery] = useState("");
-  const [stage, setStage] = useState<ProjectColumnKey | "">("");
-  const [type, setType] = useState("");
+  const [query, setQuery] = useQueryState("q", { defaultValue: "", clearOnDefault: true });
+  const [stageParam, setStageParam] = useQueryState("stage", { defaultValue: "", clearOnDefault: true });
+  const stage = (PROJECT_COLUMNS.some((c) => c.key === stageParam) ? stageParam : "") as ProjectColumnKey | "";
+  const setStage = (v: ProjectColumnKey | "") => setStageParam(v);
+  const [type, setType] = useQueryState("type", { defaultValue: "", clearOnDefault: true });
   const [year, setYear] = useQueryState("year", { defaultValue: String(yearVN()), clearOnDefault: true });
   const [staff, setStaff] = useQueryState("staff", { defaultValue: "", clearOnDefault: true });
 
   const availableYears = useMemo(() => {
-    const years = new Set<string>();
+    // Always offer the current year and the selected one, even when no wedding falls in them.
+    const years = new Set<string>([String(yearVN())]);
+    if (year !== ALL_YEARS) years.add(year);
     for (const item of items) {
       const y = item.expected_end_date?.slice(0, 4);
       if (y) years.add(y);
     }
     return [...years].sort().reverse();
-  }, [items]);
+  }, [items, year]);
 
   // Everything except the stage filter: the board shows all stages, the chips count against this.
   const unstaged = useMemo(() => {

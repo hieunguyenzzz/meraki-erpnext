@@ -22,6 +22,7 @@ export function WeddingsTable({ data, columns }: { data: ProjectKanbanItem[]; co
   const table = useReactTable({
     data,
     columns,
+    getRowId: (r) => r.id,
     state: { sorting },
     onSortingChange: setSorting,
     initialState: { pagination: { pageSize: 30 } },
@@ -41,6 +42,9 @@ export function WeddingsTable({ data, columns }: { data: ProjectKanbanItem[]; co
                 {hg.headers.map((h) => (
                   <TableHead
                     key={h.id}
+                    aria-sort={
+                      h.column.getIsSorted() === "asc" ? "ascending" : h.column.getIsSorted() === "desc" ? "descending" : undefined
+                    }
                     className={cn(
                       "sticky top-0 z-20 h-11 whitespace-nowrap bg-secondary px-4 text-[13px]",
                       h.column.id === STICKY_COL && "left-0 z-30"

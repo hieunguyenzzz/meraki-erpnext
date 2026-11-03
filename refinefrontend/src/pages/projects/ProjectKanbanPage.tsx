@@ -111,13 +111,12 @@ export default function ProjectKanbanPage() {
       <header className="flex items-center gap-3">
         <h1 className="flex-1 text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Weddings</h1>
         {isDesktop && (
-          <div role="tablist" aria-label="View" className="flex rounded-full bg-secondary p-[3px]">
+          <div role="group" aria-label="View" className="flex rounded-full bg-secondary p-[3px]">
             {([["kanban", "Board", LayoutGrid], ["list", "List", LayoutList]] as const).map(([mode, label, Icon]) => (
               <button
                 key={mode}
                 type="button"
-                role="tab"
-                aria-selected={viewMode === mode}
+                aria-pressed={viewMode === mode}
                 onClick={() => changeView(mode)}
                 className={cn(
                   "flex h-[34px] items-center gap-1.5 rounded-full px-3.5 text-sm transition-colors",
