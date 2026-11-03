@@ -25,6 +25,12 @@ function weddingDate(lead: ChatLead): string | null {
 export function ChatThread({ lead, onBack }: Props) {
   const { data: comms = [], isLoading, isError, refetch } = useLeadConversation(lead.name);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Move focus into the thread when it opens, so keyboard and screen-reader users land on it.
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true });
+  }, []);
 
   useEffect(() => {
     const el = scrollerRef.current; // scroll this pane only, never the page behind it
@@ -46,7 +52,7 @@ export function ChatThread({ lead, onBack }: Props) {
           <AvatarFallback className={`text-sm font-bold ${avatarTone(lead.lead_name)}`}>{getInitials(lead.lead_name)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-bold">{lead.lead_name}</h2>
+          <h2 ref={headingRef} tabIndex={-1} className="truncate text-base font-bold outline-none">{lead.lead_name}</h2>
           <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground md:text-[13px]">
             <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{lead.status}</Badge>
             {date && <span className="truncate">Wedding {date}</span>}

@@ -19,12 +19,11 @@ export function MessageBubble({ comm, leadName }: { comm: Communication; leadNam
   const [expanded, setExpanded] = useState(false);
   const Icon = MEDIUM_ICONS[comm.communication_medium] ?? MoreHorizontal;
 
-  const { main, quoted } = useMemo(
-    () => splitQuoted(comm.content ?? ""),
-    [comm.content],
-  );
+  const { main, quoted, long } = useMemo(() => {
+    const parts = splitQuoted(comm.content ?? "");
+    return { ...parts, long: stripHtml(parts.main).length > LONG_MESSAGE };
+  }, [comm.content]);
 
-  const long = stripHtml(main).length > LONG_MESSAGE;
 
   return (
     <div className={cn("flex max-w-[85%] flex-col gap-1 md:max-w-[70%]", sent ? "self-end items-end" : "self-start items-start")}>

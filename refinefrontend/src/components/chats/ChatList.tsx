@@ -5,8 +5,8 @@ import { getInitials } from "@/lib/initials";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { avatarTone, listStamp, stripHtml } from "./chatFormat";
-import { commStamp, type ChatSummary } from "./useChatData";
+import { avatarTone, listStamp } from "./chatFormat";
+import type { ChatSummary } from "./useChatData";
 import { ChatListSkeleton, ErrorPanel, StatePanel } from "./ChatStates";
 
 interface Props {
@@ -16,6 +16,11 @@ interface Props {
   isError: boolean;
   onRetry: () => void;
   onSelect: (name: string) => void;
+}
+
+/** Puts keyboard focus back on a list row, e.g. after closing its thread. */
+export function focusChatRow(name: string) {
+  document.querySelector<HTMLElement>(`[data-chat-row="${CSS.escape(name)}"]`)?.focus();
 }
 
 export function ChatList({ chats, selected, isLoading, isError, onRetry, onSelect }: Props) {
@@ -63,11 +68,11 @@ export function ChatList({ chats, selected, isLoading, isError, onRetry, onSelec
           <ul className="space-y-0.5">
             {filtered.map((lead) => {
               const active = selected === lead.name;
-              const preview = stripHtml(lead.lastComm.content).slice(0, 80);
               return (
                 <li key={lead.name}>
                   <button
                     type="button"
+                    data-chat-row={lead.name}
                     onClick={() => onSelect(lead.name)}
                     aria-current={active ? "true" : undefined}
                     className={cn(
@@ -84,16 +89,16 @@ export function ChatList({ chats, selected, isLoading, isError, onRetry, onSelec
                       <span className="flex items-baseline justify-between gap-2">
                         <b className="truncate text-sm">{lead.lead_name}</b>
                         <span className="shrink-0 text-[11px] text-muted-foreground">
-                          {listStamp(commStamp(lead.lastComm))}
+                          {listStamp(lead.last_at)}
                         </span>
                       </span>
                       <span className="block truncate text-[13px] text-muted-foreground">
-                        {lead.lastComm.sent_or_received === "Sent" && "You: "}
-                        {preview}
+                        {lead.last_direction === "Sent" && "You: "}
+                        {lead.last_preview}
                       </span>
                       <span className="mt-1 flex items-center gap-2">
                         <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{lead.status}</Badge>
-                        <span className="text-[10px] text-muted-foreground">{lead.commCount} messages</span>
+                        <span className="text-[10px] text-muted-foreground">{lead.message_count} {lead.message_count === 1 ? "message" : "messages"}</span>
                       </span>
                     </span>
                   </button>

@@ -117,10 +117,10 @@ function findQuoteStart(body: HTMLElement): Marker | null {
  * quoted history. Each piece is sanitised after the split. A body that is only quote stays whole.
  */
 export function splitQuoted(rawHtml: string): { main: string; quoted: string } {
-  const whole = { main: sanitizeEmail(rawHtml), quoted: "" };
+  const whole = () => ({ main: sanitizeEmail(rawHtml), quoted: "" });
   const body = new DOMParser().parseFromString(rawHtml, "text/html").body;
   const marker = findQuoteStart(body);
-  if (!marker) return whole;
+  if (!marker) return whole();
 
   // Everything below is built from the parser's inert document. Raw email nodes must never be
   // attached to the live page: <img onerror> would fire before DOMPurify runs.
@@ -132,6 +132,6 @@ export function splitQuoted(rawHtml: string): { main: string; quoted: string } {
   const tail = doc.createElement("div");
   tail.appendChild(range.extractContents());
 
-  if (!(body.textContent || "").trim()) return whole;
+  if (!(body.textContent || "").trim()) return whole();
   return { main: sanitizeEmail(body.innerHTML), quoted: sanitizeEmail(tail.innerHTML) };
 }

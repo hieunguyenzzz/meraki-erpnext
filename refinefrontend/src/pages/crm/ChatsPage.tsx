@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, useSearchParams } from "react-router";
-import { ChatList } from "@/components/chats/ChatList";
+import { ChatList, focusChatRow } from "@/components/chats/ChatList";
 import { ChatThread } from "@/components/chats/ChatThread";
 import { ChatUnavailable, NoChatSelected } from "@/components/chats/ChatStates";
 import { useChatSummaries } from "@/components/chats/useChatData";
@@ -18,6 +18,7 @@ export default function ChatsPage() {
   // Mark entries opened from the list, so Back can pop them instead of stacking a new list entry.
   const select = (name: string) => setParams({ lead: name }, { state: { fromList: true } });
   const back = () => {
+    if (selected) requestAnimationFrame(() => focusChatRow(selected)); // hand focus back to the row
     if ((location.state as { fromList?: boolean } | null)?.fromList) navigate(-1);
     else setParams({}, { replace: true });
   };
