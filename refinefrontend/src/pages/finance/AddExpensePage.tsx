@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Loader2, NotebookPen, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ type Errors = Partial<Record<"amount" | "category" | "proof", string>>;
 
 export default function AddExpensePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedWedding = searchParams.get("project");
   const { weddings, assigned, loading, employeeId } = useExpenseWeddings();
   const today = todayVN();
 
@@ -41,11 +43,13 @@ export default function AddExpensePage() {
   const amountRef = useRef<HTMLInputElement>(null);
   const weddingTouched = useRef(false);
 
-  // Default wedding: assigned and happening today, else the next upcoming one (until the user picks).
+  // Default wedding: the one named in ?project= (from a wedding page) if the user may log against it,
+  // else assigned and happening today, else the next upcoming one (until the user picks).
   useEffect(() => {
     if (loading || weddingTouched.current) return;
-    setProject(pickDefaultWedding(assigned, today) ?? "");
-  }, [loading, assigned, today]);
+    const requested = requestedWedding && weddings.some((w) => w.id === requestedWedding) ? requestedWedding : null;
+    setProject(requested ?? pickDefaultWedding(assigned, today) ?? "");
+  }, [loading, assigned, weddings, today, requestedWedding]);
 
   // A wedding expense only offers wedding categories; an office expense offers all of them.
   useEffect(() => {

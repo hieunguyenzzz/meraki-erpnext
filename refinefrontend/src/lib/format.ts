@@ -66,3 +66,11 @@ export function formatDateTime(date: string | undefined | null): string {
     minute: "2-digit",
   });
 }
+
+/** "Sat 2026-11-14" for a YYYY-MM-DD date (calendar date, no timezone shift). */
+export function formatIsoWeekday(date: string | undefined | null): string {
+  if (!date) return "-";
+  const iso = date.slice(0, 10);
+  const weekday = new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
+  return `${weekday} ${iso}`;
+}
