@@ -119,6 +119,18 @@ def _days_to_go(wedding_date: str | None, today: date) -> int | None:
     return (date.fromisoformat(wedding_date) - today).days if wedding_date else None
 
 
+def list_assigned_projects(client: ERPNextClient, employee: str, today: date) -> list[dict]:
+    """Projects `employee` is assigned to: Open, plus Completed within the last RECENT_DAYS days."""
+    projects = client._get("/api/resource/Project", params={
+        "or_filters": json.dumps([[f, "=", employee] for f in ASSIGNMENT_ROLES]),
+        "filters": json.dumps([["status", "in", ["Open", "Completed"]]]),
+        "fields": json.dumps(_LIST_FIELDS),
+        "limit_page_length": 0,
+    }).get("data", [])
+    cutoff = (today - timedelta(days=RECENT_DAYS)).isoformat()
+    return [p for p in projects if p["status"] == "Open" or (p.get("expected_end_date") or "") >= cutoff]
+
+
 @router.get("/my/weddings")
 def my_weddings(request: Request, response: Response):
     bind_correlation_id(request, response)
@@ -132,19 +144,8 @@ def my_weddings(request: Request, response: Response):
         return {"data": []}
 
     client = ERPNextClient()
-    projects = client._get("/api/resource/Project", params={
-        "or_filters": json.dumps([[f, "=", employee] for f in ASSIGNMENT_ROLES]),
-        "filters": json.dumps([["status", "in", ["Open", "Completed"]]]),
-        "fields": json.dumps(_LIST_FIELDS),
-        "limit_page_length": 0,
-    }).get("data", [])
-
     today = date.today()
-    cutoff = (today - timedelta(days=RECENT_DAYS)).isoformat()
-    projects = [
-        p for p in projects
-        if p["status"] == "Open" or (p.get("expected_end_date") or "") >= cutoff
-    ]
+    projects = list_assigned_projects(client, employee, today)
     venues = _venue_names(client, {p["sales_order"] for p in projects if p.get("sales_order")})
 
     items = []

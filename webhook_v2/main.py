@@ -46,6 +46,7 @@ from webhook_v2.routers.notifications import router as notifications_router
 from webhook_v2.routers.me import router as me_router
 from webhook_v2.routers.chats import router as chats_router
 from webhook_v2.routers.my_weddings import router as my_weddings_router
+from webhook_v2.routers.expense_weddings import router as expense_weddings_router
 
 log = get_logger(__name__)
 
@@ -135,6 +136,7 @@ app.include_router(notifications_router)
 app.include_router(me_router)
 app.include_router(chats_router)
 app.include_router(my_weddings_router)
+app.include_router(expense_weddings_router)
 
 
 # Request/Response Models

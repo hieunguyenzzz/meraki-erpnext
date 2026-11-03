@@ -20,7 +20,7 @@ export default function AddExpensePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedWedding = searchParams.get("project");
-  const { weddings, assigned, loading, employeeId } = useExpenseWeddings();
+  const { weddings, assigned, loading, employeeId, error: weddingsError } = useExpenseWeddings();
   const assignedIds = useMemo(() => new Set(assigned.map((w) => w.id)), [assigned]);
   const today = todayVN();
 
@@ -197,8 +197,8 @@ export default function AddExpensePage() {
 
           {/* Thumb-reach save: pinned above the bottom bar on phones, inline on desktop */}
           <div className="sticky bottom-[calc(84px+env(safe-area-inset-bottom,0px))] z-10 -mx-4 bg-background/95 px-4 pb-2 pt-3 backdrop-blur md:static md:mx-0 md:bg-transparent md:p-0">
-            {(formError ?? categoriesError) && (
-              <div role="alert" className="mb-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{formError ?? categoriesError}</div>
+            {(formError ?? categoriesError ?? weddingsError?.message) && (
+              <div role="alert" className="mb-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{formError ?? categoriesError ?? weddingsError?.message}</div>
             )}
             <Button type="submit" size="lg" className="h-14 w-full text-base" disabled={saving}>
               {saving ? <><Loader2 className="h-5 w-5 animate-spin" />Saving...</> : "Save expense"}
