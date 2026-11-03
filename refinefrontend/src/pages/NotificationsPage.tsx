@@ -117,7 +117,7 @@ function groupByDate(notifications: PwaNotification[]): GroupedNotifications[] {
 }
 
 export default function NotificationsPage() {
-  // Approve/reject endpoints are HR-only; other approvers still see and open the notification.
+  // Leave/WFH approve/reject endpoints are HR-only; other approvers still see and open the notification.
   const { data: roles } = usePermissions<string[]>({});
   const canApprove = hasModuleAccess(roles ?? [], HR_ROLES);
   const navigate = useNavigate();
@@ -340,7 +340,9 @@ export default function NotificationsPage() {
                   const isClickable = !!routeFn;
                   const isProcessing = processingId === notif.name;
 
-                  const isActionable = notif.is_pending && canApprove;
+                  // Leave/WFH endpoints are HR-only; expense (Purchase Invoice) approvals use handle_notification_action.
+                  const isHrOnly = notif.reference_document_type === "Leave Application" || notif.reference_document_type === "Attendance Request";
+                  const isActionable = notif.is_pending && (!isHrOnly || canApprove);
 
                   return (
                     <div
