@@ -1,13 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCustomMutation, useInvalidate } from "@refinedev/core";
+import { useQueryClient } from "@tanstack/react-query";
 import type { PwaNotification } from "@/hooks/useMyNotifications";
 import type { ApprovalAction } from "@/lib/notifications";
 
 export type Outcome = "approved" | "rejected";
 
 interface Options {
-  /** Called after any successful change so the caller can reload its list/counts. */
-  onChanged: () => void;
   /** Called when a notification was marked read, so a local copy of the list can follow. */
   onRead?: (name: string) => void;
 }
@@ -16,10 +15,35 @@ interface Options {
  * Read / approve / reject for PWA notifications, shared by the page and the bell.
  * Approve/reject is optimistic: `outcomes` flips immediately and is rolled back (with `errors`) on failure.
  */
-export function useNotificationActions({ onChanged, onRead }: Options) {
+export function useNotificationActions({ onRead }: Options = {}) {
   const { mutateAsync: customMutation } = useCustomMutation();
   const invalidate = useInvalidate();
-  const [processingId, setProcessingId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const setProcessing = (name: string, on: boolean) =>
+    setProcessingIds((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(name);
+      else next.delete(name);
+      return next;
+    });
+
+  /** Reload the page's list and the bell together so a change in one shows in the other. */
+  const refreshNotifications = (delayMs = 0) => {
+    const run = () =>
+      queryClient.invalidateQueries({
+        predicate: (q) => {
+          const key = JSON.stringify(q.queryKey);
+          return key.includes("get_all_notifications") || key.includes("get_my_notifications");
+        },
+      });
+    clearTimeout(timer.current);
+    if (delayMs > 0) timer.current = setTimeout(run, delayMs);
+    else run();
+  };
   const [outcomes, setOutcomes] = useState<Record<string, Outcome>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -36,25 +60,25 @@ export function useNotificationActions({ onChanged, onRead }: Options) {
 
   /** Mark one notification read. Returns whether it worked. */
   async function markRead(notif: PwaNotification): Promise<boolean> {
-    setProcessingId(notif.name);
+    setProcessing(notif.name, true);
     setError(notif.name, null);
     try {
       await post(readUrl(notif.name));
       onRead?.(notif.name);
-      onChanged();
+      refreshNotifications();
       return true;
     } catch (err) {
       console.error("notification_read_failed", { name: notif.name, err });
       setError(notif.name, "Could not mark as read. Try again.");
       return false;
     } finally {
-      setProcessingId(null);
+      setProcessing(notif.name, false);
     }
   }
 
   async function decide(notif: PwaNotification, action: ApprovalAction): Promise<void> {
     const outcome: Outcome = action === "approve" ? "approved" : "rejected";
-    setProcessingId(notif.name);
+    setProcessing(notif.name, true);
     setError(notif.name, null);
     setOutcomes((prev) => ({ ...prev, [notif.name]: outcome }));
     try {
@@ -80,7 +104,8 @@ export function useNotificationActions({ onChanged, onRead }: Options) {
       } catch (err) {
         console.error("notification_read_after_decision_failed", { name: notif.name, err });
       }
-      onChanged();
+      // Leave the "Approved" / "Rejected" result visible for a moment before the row drops out of the bell
+      refreshNotifications(1500);
     } catch (err) {
       console.error("notification_decision_failed", { name: notif.name, action, err });
       setOutcomes((prev) => {
@@ -90,9 +115,9 @@ export function useNotificationActions({ onChanged, onRead }: Options) {
       });
       setError(notif.name, `Could not ${action} this request. Nothing was changed, try again.`);
     } finally {
-      setProcessingId(null);
+      setProcessing(notif.name, false);
     }
   }
 
-  return { processingId, outcomes, errors, markRead, decide };
+  return { processingIds, outcomes, errors, markRead, decide };
 }

@@ -86,7 +86,8 @@ export default function NotificationsPage() {
   useEffect(() => {
     // While a new type/page is loading, `result` may still hold the previous query's data
     if (query.isFetching || fetchedNotifs.length === 0) return;
-    const key = fetchedNotifs.map((n) => n.name).join(",");
+    // Include read/pending so a refetch after a decision is merged, not skipped
+    const key = fetchedNotifs.map((n) => `${n.name}:${n.read}:${n.is_pending}`).join(",");
     if (key === lastMergedKey.current) return;
     lastMergedKey.current = key;
 
@@ -94,9 +95,9 @@ export default function NotificationsPage() {
       setAllNotifications(fetchedNotifs);
     } else {
       setAllNotifications((prev) => {
-        const existingNames = new Set(prev.map((n) => n.name));
-        const unique = fetchedNotifs.filter((n) => !existingNames.has(n.name));
-        return [...prev, ...unique];
+        const fresh = new Map(fetchedNotifs.map((n) => [n.name, n]));
+        const known = new Set(prev.map((n) => n.name));
+        return [...prev.map((n) => fresh.get(n.name) ?? n), ...fetchedNotifs.filter((n) => !known.has(n.name))];
       });
     }
   }, [fetchedNotifs, page, query.isFetching]);
@@ -124,8 +125,7 @@ export default function NotificationsPage() {
     }
   }
 
-  const { processingId, outcomes, errors, markRead, decide } = useNotificationActions({
-    onChanged: () => query.refetch(),
+  const { processingIds, outcomes, errors, markRead, decide } = useNotificationActions({
     onRead: (name) => setAllNotifications((prev) => prev.map((n) => (n.name === name ? { ...n, read: 1 } : n))),
   });
 
@@ -198,7 +198,7 @@ export default function NotificationsPage() {
                     outcome={outcomes[notif.name]}
                     error={errors[notif.name]}
                     details={details[notif.name]}
-                    processing={processingId === notif.name}
+                    processing={processingIds.has(notif.name)}
                     onOpen={handleOpen}
                     onDismiss={markRead}
                     onDecide={decide}

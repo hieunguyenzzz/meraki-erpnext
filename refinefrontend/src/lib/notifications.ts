@@ -1,4 +1,5 @@
 import { Calendar, Home, Receipt, MessageSquare, Users, Heart, User, Bell, type LucideIcon } from "lucide-react";
+import { todayVN } from "@/lib/businessTime";
 import type { PwaNotification } from "@/hooks/useMyNotifications";
 
 export const DOC_ROUTES: Record<string, (name: string) => string> = {
@@ -85,12 +86,11 @@ export const isoDay = (creation: string) => creation.slice(0, 10);
 /** 24h "HH:mm" from an ERPNext timestamp. */
 export const clockTime = (creation: string) => creation.slice(11, 16);
 
-const localIso = (d: Date) => d.toLocaleDateString("sv-SE");
-
 export function dayLabel(creation: string): string {
   const day = isoDay(creation);
-  if (day === localIso(new Date())) return "Today";
-  if (day === localIso(new Date(Date.now() - 86_400_000))) return "Yesterday";
+  // Server timestamps are Vietnam time, so compare against Vietnam dates, not the device clock
+  if (day === todayVN()) return "Today";
+  if (day === todayVN(new Date(Date.now() - 86_400_000))) return "Yesterday";
   return day;
 }
 
@@ -106,7 +106,7 @@ export function groupByDay(items: PwaNotification[]): { label: string; items: Pw
 
 export type NotificationDetails =
   | { kind: "leave"; employee_name?: string; leave_type?: string; from_date?: string; to_date?: string; days?: number | null; half_day?: boolean }
-  | { kind: "wfh"; employee_name?: string; from_date?: string; to_date?: string; days?: number | null; half_day?: boolean }
+  | { kind: "wfh"; employee_name?: string; from_date?: string; to_date?: string; half_day?: boolean }
   | { kind: "expense"; submitter: string };
 
 /** Short facts an approver needs on the card, e.g. ["Annual Leave", "2026-12-21 → 2026-12-22", "2 days", "Half day"]. */
@@ -115,7 +115,7 @@ export function detailFacts(d: NotificationDetails): string[] {
   const facts: string[] = [];
   if (d.kind === "leave" && d.leave_type) facts.push(d.leave_type);
   if (d.from_date) facts.push(d.to_date && d.to_date !== d.from_date ? `${d.from_date} → ${d.to_date}` : d.from_date);
-  if (d.days != null) facts.push(`${d.days} ${d.days === 1 ? "day" : "days"}`);
+  if (d.kind === "leave" && d.days != null) facts.push(`${d.days} ${d.days === 1 ? "day" : "days"}`);
   if (d.half_day) facts.push("Half day");
   return facts;
 }

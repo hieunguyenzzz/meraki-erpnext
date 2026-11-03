@@ -18,11 +18,8 @@ import { cn } from "@/lib/utils";
 
 export function NotificationBell({ className }: { className?: string }) {
   const navigate = useNavigate();
-  const { notifications, count, refetch } = useMyNotifications();
-  const { processingId, outcomes, errors, markRead, decide } = useNotificationActions({
-    // Leave the "Approved" / "Rejected" result visible for a moment before the row drops out of the unread list
-    onChanged: () => void setTimeout(refetch, 1500),
-  });
+  const { notifications, count } = useMyNotifications();
+  const { processingIds, outcomes, errors, markRead, decide } = useNotificationActions();
   const details = useNotificationDetails(notifications);
   // Approve/reject endpoints are HR-only; other approvers still see and open the notification.
   const { data: roles } = usePermissions<string[]>({});
@@ -74,7 +71,7 @@ export function NotificationBell({ className }: { className?: string }) {
                   outcome={outcomes[notif.name]}
                   error={errors[notif.name]}
                   details={details[notif.name]}
-                  processing={processingId === notif.name}
+                  processing={processingIds.has(notif.name)}
                   onOpen={handleOpen}
                   onDismiss={markRead}
                   onDecide={decide}

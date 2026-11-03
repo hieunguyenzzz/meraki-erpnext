@@ -1,8 +1,6 @@
 """PWA Notification management endpoints."""
 
 import json
-from datetime import date
-
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Request
 from webhook_v2.services.erpnext import ERPNextClient
@@ -70,12 +68,6 @@ def _rows(client: ERPNextClient, doctype: str, names: list[str], fields: list[st
     return {r["name"]: r for r in rows}
 
 
-def _inclusive_days(from_date: str | None, to_date: str | None) -> int | None:
-    if not from_date or not to_date:
-        return None
-    return (date.fromisoformat(to_date) - date.fromisoformat(from_date)).days + 1
-
-
 def build_details(notifs: list[dict], leaves: dict, wfh: dict, invoices: dict, employees: dict) -> dict[str, dict]:
     """Per-notification facts an approver needs, keyed by notification name. Pure, so it is unit-testable."""
     out: dict[str, dict] = {}
@@ -92,8 +84,7 @@ def build_details(notifs: list[dict], leaves: dict, wfh: dict, invoices: dict, e
             r = wfh[ref]
             out[str(n["name"])] = {
                 "kind": "wfh", "employee_name": r.get("employee_name"),
-                "from_date": r.get("from_date"), "to_date": r.get("to_date"),
-                "days": _inclusive_days(r.get("from_date"), r.get("to_date")), "half_day": bool(r.get("half_day")),
+                "from_date": r.get("from_date"), "to_date": r.get("to_date"), "half_day": bool(r.get("half_day")),
             }
         elif kind == "Purchase Invoice" and ref in invoices:
             staff = invoices[ref].get("custom_expense_staff")

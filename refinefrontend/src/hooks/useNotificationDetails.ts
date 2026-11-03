@@ -1,4 +1,5 @@
 import { useCustom } from "@refinedev/core";
+import { keepPreviousData } from "@tanstack/react-query";
 import type { PwaNotification } from "@/hooks/useMyNotifications";
 import type { NotificationDetails } from "@/lib/notifications";
 
@@ -18,7 +19,7 @@ export function useNotificationDetails(notifications: PwaNotification[]) {
     url: "/inquiry-api/notification/details",
     method: "post",
     config: { payload: { names } },
-    queryOptions: { enabled: names.length > 0, staleTime: 30_000 },
+    queryOptions: { enabled: names.length > 0, staleTime: 30_000, placeholderData: keepPreviousData },
   });
   // Details are a nice-to-have: if the call fails the cards simply show the message text.
   return (result?.data as DetailsResponse | undefined)?.details ?? {};
