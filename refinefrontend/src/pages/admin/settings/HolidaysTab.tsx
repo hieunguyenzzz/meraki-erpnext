@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createParser, useQueryState } from "nuqs";
 import { AlertCircle, ChevronLeft, ChevronRight, Info, Loader2, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,18 @@ interface Holiday {
   month: number;
 }
 
+const yearParser = createParser<number>({
+  parse: (v) => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 2000 && n <= 2100 ? n : null;
+  },
+  serialize: (n) => String(n),
+});
+
 export function HolidaysTab() {
-  const [year, setYear] = useState(yearVN());
+  const [yearParam, setYear] = useQueryState("year", yearParser.withOptions({ clearOnDefault: false }));
+  const year = yearParam ?? yearVN();
+  const [listExists, setListExists] = useState(true);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -46,7 +57,10 @@ export function HolidaysTab() {
       const res = await fetch(`/inquiry-api/settings/holidays?year=${y}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      if (id === requestId.current) setHolidays(json.data ?? []);
+      if (id === requestId.current) {
+        setHolidays(json.data ?? []);
+        setListExists(json.exists !== false);
+      }
     } catch (err) {
       console.error("load holidays failed", err);
       if (id === requestId.current) setLoadError(true);
@@ -123,17 +137,19 @@ export function HolidaysTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1" role="group" aria-label="Year">
-          <Button variant="ghost" size="icon" aria-label="Previous year" onClick={() => setYear((y) => y - 1)}>
+          <Button variant="ghost" size="icon" aria-label="Previous year" onClick={() => setYear(year - 1)}>
             <ChevronLeft />
           </Button>
           <span className="w-14 text-center text-base font-semibold" aria-live="polite">{year}</span>
-          <Button variant="ghost" size="icon" aria-label="Next year" onClick={() => setYear((y) => y + 1)}>
+          <Button variant="ghost" size="icon" aria-label="Next year" onClick={() => setYear(year + 1)}>
             <ChevronRight />
           </Button>
         </div>
-        <Button onClick={openAdd}>
-          <Plus /> Add holiday
-        </Button>
+        {listExists && (
+          <Button onClick={openAdd}>
+            <Plus /> Add holiday
+          </Button>
+        )}
       </div>
 
       <div className="flex items-start gap-2.5 rounded-2xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
@@ -151,6 +167,12 @@ export function HolidaysTab() {
           title="Could not load holidays"
           text="Check your connection and try again."
           action={{ label: "Try again", onClick: () => fetchHolidays(year) }}
+        />
+      ) : !listExists ? (
+        <StatePanel
+          kind="empty"
+          title={`No holiday list for ${year} yet`}
+          text={`Create "Vietnam ${year}" in ERPNext first, then holidays can be added here.`}
         />
       ) : byMonth.length === 0 ? (
         <StatePanel

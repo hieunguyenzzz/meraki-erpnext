@@ -1,15 +1,33 @@
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import date
 from pydantic import BaseModel
+import requests
 
+from webhook_v2.core.logging import get_logger
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.auth import require_roles, DIRECTOR
 
 router = APIRouter()
+log = get_logger(__name__)
 
 
 def _list_name(year: int) -> str:
     return f"Vietnam {year}"
+
+
+def _load_list(client: ERPNextClient, year: int) -> dict:
+    """Fetch the year's Holiday List; a missing list is a 404 with an instruction, not a 500."""
+    list_name = _list_name(year)
+    try:
+        return client._get(f"/api/resource/Holiday List/{list_name}").get("data") or {}
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            log.warning("holiday_list_missing", list_name=list_name, year=year)
+            raise HTTPException(
+                status_code=404,
+                detail=f"No holiday list for {year} yet — create '{list_name}' in ERPNext first",
+            )
+        raise
 
 
 class HolidayCreate(BaseModel):
@@ -57,7 +75,7 @@ def add_holiday(body: HolidayCreate):
         raise HTTPException(status_code=400, detail="Cannot add a weekend as a holiday")
 
     list_name = _list_name(d.year)
-    data = client._get(f"/api/resource/Holiday List/{list_name}").get("data") or {}
+    data = _load_list(client, d.year)
     holidays = list(data.get("holidays") or [])
 
     existing = {(h.get("holiday_date") or "")[:10] for h in holidays}
@@ -88,7 +106,7 @@ def delete_holiday(holiday_date: str):
     d = date.fromisoformat(holiday_date)
     list_name = _list_name(d.year)
 
-    data = client._get(f"/api/resource/Holiday List/{list_name}").get("data") or {}
+    data = _load_list(client, d.year)
     holidays = list(data.get("holidays") or [])
 
     updated = [h for h in holidays if (h.get("holiday_date") or "")[:10] != holiday_date]

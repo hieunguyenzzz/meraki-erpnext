@@ -49,6 +49,7 @@ export function NotificationsTab() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draft, setDraft] = useState<TemplateDraft>({ subject: "", message: "" });
   const [pendingName, setPendingName] = useState<string | null>(null); // switch blocked by unsaved edits
+  const [confirmClose, setConfirmClose] = useState(false); // phone sheet closed with unsaved edits
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
@@ -166,7 +167,7 @@ export function NotificationsTab() {
       ) : (
         <>
           {list}
-          <Sheet open={sheetOpen && selected !== null} onOpenChange={(o) => { if (!o) setSheetOpen(false); }}>
+          <Sheet open={sheetOpen && selected !== null} onOpenChange={(o) => { if (o) return; if (dirty) setConfirmClose(true); else setSheetOpen(false); }}>
             <SheetContent side="bottom" className="flex max-h-[92vh] flex-col gap-0 overflow-y-auto p-0">
               <SheetHeader className="border-b px-5 py-4 pr-16">
                 <SheetTitle className="text-base">Edit template</SheetTitle>
@@ -178,6 +179,22 @@ export function NotificationsTab() {
       )}
 
       <ReminderToggles />
+
+      <ConfirmModal
+        open={confirmClose}
+        onOpenChange={(o) => { if (!o) setConfirmClose(false); }}
+        title="Discard unsaved changes?"
+        body={`Your edits to ${selected?.name ?? "this template"} have not been saved.`}
+        confirmLabel="Discard"
+        destructive
+        busy={false}
+        error={null}
+        onConfirm={() => {
+          if (selected) setDraft({ subject: savedSubject, message: savedMessage });
+          setConfirmClose(false);
+          setSheetOpen(false);
+        }}
+      />
 
       <ConfirmModal
         open={pendingName !== null}

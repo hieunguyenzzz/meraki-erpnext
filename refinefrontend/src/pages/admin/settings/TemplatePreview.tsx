@@ -17,6 +17,7 @@ export function TemplatePreview({ html }: { html: string }) {
       title="Email preview"
       sandbox=""
       srcDoc={srcDoc}
+      // bg-white on purpose: emails are authored for a white canvas, so keep it white in dark mode too.
       className="h-72 w-full rounded-input border border-input bg-white"
     />
   );

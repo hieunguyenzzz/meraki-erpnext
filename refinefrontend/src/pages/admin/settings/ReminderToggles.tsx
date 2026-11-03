@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useOne, useUpdate } from "@refinedev/core";
 import { AlertCircle, Banknote, Cake, CalendarDays, FileCheck, Loader2, Mail, Trophy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatePanel } from "@/components/StatePanel";
 import { Switch } from "./Switch";
 
 type IconType = React.FC<{ className?: string }>;
@@ -52,12 +53,12 @@ function Row({
 /** Automatic reminder switches stored in HR Settings / Payroll Settings (same fields as before). */
 export function ReminderToggles() {
   const { mutateAsync: updateRecord } = useUpdate();
-  const { result: hr } = useOne<HRSettings>({
+  const { result: hr, query: hrQuery } = useOne<HRSettings>({
     resource: "HR Settings",
     id: "HR Settings",
     meta: { fields: HR_FIELDS.map((f) => f.field) },
   });
-  const { result: payroll } = useOne<PayrollSettings>({
+  const { result: payroll, query: payrollQuery } = useOne<PayrollSettings>({
     resource: "Payroll Settings",
     id: "Payroll Settings",
     meta: { fields: ["email_salary_slip_to_employee"] },
@@ -106,7 +107,14 @@ export function ReminderToggles() {
           <AlertCircle className="h-4 w-4 shrink-0" /> {error}
         </div>
       )}
-      {!loaded ? (
+      {hrQuery.isError || payrollQuery.isError ? (
+        <StatePanel
+          kind="error"
+          title="Could not load the reminder switches"
+          text="Check your connection and try again."
+          action={{ label: "Try again", onClick: () => { hrQuery.refetch(); payrollQuery.refetch(); } }}
+        />
+      ) : !loaded ? (
         <Skeleton className="h-64 rounded-2xl" />
       ) : (
         <ul className="divide-y overflow-hidden rounded-2xl border bg-card">
