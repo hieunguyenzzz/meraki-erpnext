@@ -7,7 +7,7 @@ import { PipelineBoard } from "@/components/crm/pipeline/PipelineBoard";
 import { PipelineFilters, WAITING_VALUES, SORT_VALUES } from "@/components/crm/pipeline/PipelineFilters";
 import { CreateLeadSheet } from "@/components/crm/pipeline/CreateLeadSheet";
 import { ErrorPanel } from "@/components/chats/ChatStates";
-import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, getColumnForItem, COLUMNS } from "@/lib/kanban";
+import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, getColumnForItem, awaitingOf, COLUMNS } from "@/lib/kanban";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
@@ -34,7 +34,7 @@ export default function KanbanPage() {
     pagination: { mode: "off" },
     meta: {
       fields: ["name", "lead_name", "status", "email_id", "phone", "creation", "city",
-        "source", "custom_wedding_date", "custom_wedding_date_raw", "custom_budget_raw", "custom_estimated_budget"],
+        "source", "custom_wedding_date", "custom_wedding_date_raw", "custom_budget_raw"],
     },
   });
 
@@ -46,12 +46,6 @@ export default function KanbanPage() {
     },
   });
 
-  const ninetyDaysAgo = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 90);
-    return d.toISOString().slice(0, 10);
-  }, []);
-
   const { result: commsResult, query: commsQuery } = useList({
     resource: "Communication",
     pagination: { mode: "off" },
@@ -59,7 +53,6 @@ export default function KanbanPage() {
     filters: [
       { field: "reference_doctype", operator: "in", value: ["Lead", "Opportunity"] },
       { field: "communication_type", operator: "eq", value: "Communication" },
-      { field: "communication_date", operator: "gte", value: ninetyDaysAgo },
     ],
     meta: {
       fields: ["name", "reference_doctype", "reference_name", "sent_or_received", "communication_date", "creation"],
@@ -143,10 +136,8 @@ export default function KanbanPage() {
 
     // Filter by waiting status
     if (waitingFilter !== "all") {
-      filtered = filtered.filter((item) => {
-        if (!item.lastActivity) return false;
-        return item.lastActivity.waitingFor === waitingFilter;
-      });
+      // Same rule as the card badge, so the filter never disagrees with what the cards say.
+      filtered = filtered.filter((item) => awaitingOf(item) === waitingFilter);
     }
 
     // Filter by location

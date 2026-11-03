@@ -17,7 +17,7 @@ export interface KanbanItem {
   meetingDate?: string; // ISO datetime of scheduled meeting (from ERPNext Event)
   source?: string;      // Lead.source
   weddingDate?: string; // ISO date, or the couple's own text when no date was parsed
-  budget?: string;      // "VND 400 M" for a numeric budget, otherwise the raw text the couple wrote
+  budget?: string;      // "VND 400 M" for a plain VND figure, otherwise "Budget: " + the couple's own text
 }
 
 export interface ColumnDef {
@@ -116,10 +116,20 @@ function leadWeddingDate(l: any): string | undefined {
   return l.custom_wedding_date?.slice(0, 10) || l.custom_wedding_date_raw || undefined;
 }
 
-/** Budget for a card: compact VND when there is a number, else the raw text the couple wrote. */
-function leadBudget(l: any): string | undefined {
-  if (l.custom_estimated_budget) return formatVNDCompact(l.custom_estimated_budget);
-  return l.custom_budget_raw || undefined;
+/**
+ * Budget for a card, from what the couple typed (custom_budget_raw). Only a plain VND figure of
+ * 1,000,000 or more ("400.000.000", "550,000,000 VND") is shown as compact VND; anything else
+ * ("600", "$20,000 AUD", "500-800tr", free text) is shown as written, never with an assumed unit.
+ * custom_estimated_budget is not used: it is a digit-stripped copy of the raw text ("500 tr" -> 500).
+ */
+export function leadBudget(l: any): string | undefined {
+  const raw = typeof l.custom_budget_raw === "string" ? l.custom_budget_raw.trim() : "";
+  if (!raw) return undefined;
+  if (/^\d[\d.,\s]*(vnd|vnđ|đ)?$/i.test(raw)) {
+    const amount = Number(raw.replace(/\D/g, ""));
+    if (amount >= 1_000_000) return formatVNDCompact(amount);
+  }
+  return `Budget: ${raw}`;
 }
 
 export function buildKanbanItems(
@@ -178,6 +188,16 @@ export function formatAge(timestamp: string): string {
   if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
   return `${days}d`;
+}
+
+/**
+ * Who a lead is waiting on, or null where the board shows no badge (Won, Lost). A lead with no
+ * communication yet is waiting on us. The card badge and the Awaiting filter both read this.
+ */
+export function awaitingOf(item: KanbanItem): "client" | "staff" | null {
+  const stage = getColumnForItem(item);
+  if (stage === "won" || stage === "lost") return null;
+  return item.lastActivity?.waitingFor ?? "staff";
 }
 
 /** Get hours elapsed since a timestamp */
