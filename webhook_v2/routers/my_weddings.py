@@ -230,14 +230,31 @@ def my_wedding_detail(project: str, request: Request, response: Response):
     return {"data": result}
 
 
+def load_project_visible_to_caller(client: ERPNextClient, request: Request, project: str) -> dict:
+    """The Project doc if the caller may see it (privileged roles: any wedding; others: assigned only).
+    A missing wedding is a 404 for privileged callers and a 403 for everyone else."""
+    if has_roles(request, ALL_WEDDINGS_ROLES):
+        try:
+            doc = client._get(f"/api/resource/Project/{quote(project, safe='')}").get("data", {})
+        except requests.HTTPError as e:
+            if e.response is None or e.response.status_code not in (403, 404):
+                raise
+            doc = {}
+        if not doc:
+            raise HTTPException(status_code=404, detail="Wedding not found")
+        return doc
+    employee = resolve_employee(request, None)
+    doc, _role = _load_assigned_project(client, project, employee, get_current_user(request))
+    return doc
+
+
 @router.get("/wedding/{project}/team-contacts")
 def wedding_team_contacts(project: str, request: Request, response: Response):
     """Employee id -> mobile number for the people on one wedding. Same visibility as the wedding itself:
     planners/finance see any wedding, everyone else only the ones they are assigned to."""
     bind_correlation_id(request, response)
-    require_assigned_unless_privileged(request, project)
     client = ERPNextClient()
-    doc = client._get(f"/api/resource/Project/{quote(project, safe='')}").get("data", {})
+    doc = load_project_visible_to_caller(client, request, project)
     team_ids = [doc.get(f) for f in ASSIGNMENT_ROLES if doc.get(f)]
     rows = client._get("/api/resource/Employee", params={
         "filters": json.dumps([["name", "in", team_ids]]),

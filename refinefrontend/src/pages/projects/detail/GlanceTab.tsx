@@ -2,8 +2,9 @@ import { Link } from "react-router";
 import { MapPin, Navigation, Phone, Plus } from "lucide-react";
 import { EventsTimeline, pickGlanceEvents, type TimelineEvent } from "@/components/wedding/EventsTimeline";
 import { TeamList } from "@/components/wedding/TeamAvatars";
-import { formatVNDCompact, formatVNDFull } from "@/lib/format";
+import { formatCompactAmount, formatVNDCompact, formatVNDFull } from "@/lib/format";
 import type { WeddingEvent } from "@/lib/weddingEvents";
+import { telHref } from "@/lib/phone";
 import { teamMembersOf } from "./teamMembers";
 import type { WeddingData } from "./useWeddingData";
 import type { useWeddingExpenses } from "./useWeddingExpenses";
@@ -46,8 +47,8 @@ export function GlanceTab({ w, events, expenses, onOpenTab }: Props) {
           <b className="block truncate text-[15px]">{venueName || "Venue not set"}</b>
           <div className="text-[13px] text-muted-foreground">{[project?.custom_service_type, project?.custom_wedding_type].filter(Boolean).join(" · ")}</div>
         </div>
-        {mobile && (
-          <a href={`tel:${mobile}`} aria-label="Call the couple" className={roundBtn}>
+        {telHref(mobile) && (
+          <a href={telHref(mobile)!} aria-label="Call the couple" className={roundBtn}>
             <Phone className="h-5 w-5" />
           </a>
         )}
@@ -82,7 +83,7 @@ export function GlanceTab({ w, events, expenses, onOpenTab }: Props) {
           <h2 className={heading}>Expenses</h2>
           <div className="text-lg font-bold tabular-nums" title={formatVNDFull(expenses.approvedTotal)}>
             {formatVNDCompact(expenses.approvedTotal)}
-            {budget > 0 && <span className="ml-1 text-xs font-medium text-muted-foreground">/ {formatVNDCompact(budget).replace("VND ", "")}</span>}
+            {budget > 0 && <span className="ml-1 text-xs font-medium text-muted-foreground">/ {formatCompactAmount(budget)}</span>}
           </div>
           {budget > 0 && (
             <div className="h-1.5 rounded-full bg-muted">

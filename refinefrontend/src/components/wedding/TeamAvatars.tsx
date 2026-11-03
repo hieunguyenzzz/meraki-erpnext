@@ -1,4 +1,5 @@
 import { getInitials } from "@/lib/initials";
+import { telHref } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import { Phone } from "lucide-react";
 
@@ -30,8 +31,8 @@ export function TeamList({ members }: { members: TeamMember[] }) {
             <b className="font-semibold">{m.name}</b>
             {m.role && <span className="text-muted-foreground"> · {m.role}</span>}
           </span>
-          {m.phone && (
-            <a href={`tel:${m.phone}`} aria-label={`Call ${m.name}`} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
+          {telHref(m.phone) && (
+            <a href={telHref(m.phone)!} aria-label={`Call ${m.name}`} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
               <Phone className="h-4 w-4" />
             </a>
           )}

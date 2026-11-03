@@ -26,6 +26,19 @@ export function useWeddingData(name: string) {
   const isWeddingManager = hasModuleAccess(roles ?? [], WEDDING_MANAGER_ROLES);
   const { employeeId: myEmployeeId } = useMyEmployee();
 
+  // Sections that failed to load, so the page can say totals may be incomplete instead of looking empty.
+  const [loadErrors, setLoadErrors] = useState<Record<string, string>>({});
+  const reportLoad = useCallback((key: string, failed: string | null) => {
+    setLoadErrors((prev) => {
+      if (failed === null) {
+        if (!(key in prev)) return prev;
+        const { [key]: _gone, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [key]: failed };
+    });
+  }, []);
+
   const { result: project, query: projectQuery } = useOne({ resource: "Project", id: name, meta: { fields: PROJECT_FIELDS } });
 
   const { result: salesOrder } = useOne({
@@ -49,12 +62,16 @@ export function useWeddingData(name: string) {
   const fetchSOItems = useCallback(async (soName: string) => {
     try {
       const res = await fetch(`/api/resource/Sales Order/${encodeURIComponent(soName)}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`Sales Order ${soName} returned ${res.status}`);
       const data = await res.json();
       setSOItems(data.data?.items ?? []);
-    } catch {
+      reportLoad("items", null);
+    } catch (err) {
+      console.error("[wedding] sales order items load failed", soName, err);
       setSOItems([]);
+      reportLoad("items", "package and add-on lines");
     }
-  }, []);
+  }, [reportLoad]);
   useEffect(() => {
     if (project?.sales_order) fetchSOItems(project.sales_order);
   }, [project?.sales_order, fetchSOItems]);
@@ -69,12 +86,16 @@ export function useWeddingData(name: string) {
         `/api/resource/Sales Invoice?filters=${encodeURIComponent(filters)}&fields=${encodeURIComponent(fields)}&limit=100`,
         { credentials: "include" }
       );
+      if (!res.ok) throw new Error(`Sales Invoice list returned ${res.status}`);
       const data = await res.json();
       setInvoices(data.data ?? []);
-    } catch {
+      reportLoad("invoices", null);
+    } catch (err) {
+      console.error("[wedding] invoices load failed", projectName, err);
       setInvoices([]);
+      reportLoad("invoices", "payments");
     }
-  }, []);
+  }, [reportLoad]);
   useEffect(() => {
     if (name) fetchInvoices(name);
   }, [name, fetchInvoices]);
@@ -94,11 +115,14 @@ export function useWeddingData(name: string) {
   useEffect(() => {
     let cancelled = false;
     fetch("/inquiry-api/employees/directory", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : { data: [] }))
-      .then((json) => { if (!cancelled) setEmployeeDirectory(json.data ?? []); })
-      .catch(() => {});
+      .then((r) => { if (!r.ok) throw new Error(`employee directory returned ${r.status}`); return r.json(); })
+      .then((json) => { if (!cancelled) { setEmployeeDirectory(json.data ?? []); reportLoad("directory", null); } })
+      .catch((err) => {
+        console.error("[wedding] employee directory load failed", err);
+        if (!cancelled) reportLoad("directory", "staff names");
+      });
     return () => { cancelled = true; };
-  }, []);
+  }, [reportLoad]);
   const employees: Employee[] = useMemo(
     () => employeeDirectory.map((e: any) => ({ id: e.name, name: displayName(e), userId: e.user_id })),
     [employeeDirectory]
@@ -107,6 +131,8 @@ export function useWeddingData(name: string) {
     (id: string | null | undefined) => (id ? employees.find((e) => e.id === id)?.name || id : null),
     [employees]
   );
+
+  const teamKey = [project?.custom_lead_planner, project?.custom_support_planner, project?.custom_assistant_1, project?.custom_assistant_2, project?.custom_assistant_3, project?.custom_assistant_4, project?.custom_assistant_5].filter(Boolean).join(",");
 
   // Teammates' mobile numbers (backend only returns them to people who can see this wedding).
   const [teamPhones, setTeamPhones] = useState<Record<string, string>>({});
@@ -117,7 +143,8 @@ export function useWeddingData(name: string) {
       .then((json) => { if (!cancelled) setTeamPhones(json.data ?? {}); })
       .catch((err) => console.error("[wedding] team contacts load failed", name, err));
     return () => { cancelled = true; };
-  }, [name]);
+    // teamKey changes when someone is added to / removed from the team, so new teammates get call buttons without a reload
+  }, [name, teamKey]);
 
   const { result: venuesResult } = useList({
     resource: "Supplier",
@@ -142,15 +169,19 @@ export function useWeddingData(name: string) {
   const fetchAddonItems = useCallback(async () => {
     try {
       const res = await fetch("/inquiry-api/wedding/addon-items", { credentials: "include" });
+      if (!res.ok) throw new Error(`addon-items returned ${res.status}`);
       const json = await res.json();
       const items = json.data ?? [];
       setAvailableAddOns(items);
+      reportLoad("addons", null);
       return items as AddOnCatalogItem[];
-    } catch {
+    } catch (err) {
+      console.error("[wedding] add-on catalogue load failed", err);
       setAvailableAddOns([]);
+      reportLoad("addons", "the add-on list");
       return [] as AddOnCatalogItem[];
     }
-  }, []);
+  }, [reportLoad]);
   useEffect(() => { fetchAddonItems(); }, [fetchAddonItems]);
 
   const addOnItems = useMemo(() => {
@@ -185,7 +216,7 @@ export function useWeddingData(name: string) {
   return {
     name, project, projectQuery, salesOrder, customer, soItems, fetchSOItems, invoices, fetchInvoices,
     tasks, employees, getEmployeeName, teamPhones, venues, allSuppliers, availableAddOns, fetchAddonItems, addOnItems,
-    teamIds, isFinance, isWeddingManager, showExpensesTab,
+    teamIds, isFinance, isWeddingManager, showExpensesTab, loadErrors: Object.values(loadErrors),
     weddingDate, venueName, totalValue, customerName,
     totalInvoiced, totalOutstanding, totalPaid, paidPct, refreshProject,
   };

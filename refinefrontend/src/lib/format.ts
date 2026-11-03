@@ -7,28 +7,40 @@ export function displayName(person: { first_name?: string | null; last_name?: st
 
 // One money style app-wide: ISO prefix, dot thousands, no currency symbol ("VND 3.000.000").
 const GROUPED = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
+const NO_VALUE = "—";
 
-/** Exact amount, e.g. "VND 3.592.937.098". */
+const isAmount = (n: number | undefined | null): n is number => typeof n === "number" && Number.isFinite(n);
+
+/** Exact amount, e.g. "VND 3.592.937.098"; "—" when there is no number. */
 export function formatVNDFull(amount: number | undefined | null): string {
-  const n = amount ?? 0;
-  return `${n < 0 ? "-" : ""}VND ${GROUPED.format(Math.abs(n))}`;
+  if (!isAmount(amount)) return NO_VALUE;
+  const rounded = Math.round(amount); // round first so -0.4 reads "VND 0", not "-VND 0"
+  return `${rounded < 0 ? "-" : ""}VND ${GROUPED.format(Math.abs(rounded))}`;
 }
 
 /** Same as formatVNDFull; kept as the everyday name for table cells and labels. */
 export const formatVND = formatVNDFull;
 
 /**
- * Short amount for tiles: >= 1 B -> "VND 3.49 B" (2 decimals), >= 1 M -> "VND 482 M" / "VND 1.380 M" (none),
- * below that the exact amount. Pair with formatVNDFull in a title/tap-to-reveal.
+ * Short amount without the currency prefix: >= 1 B -> "3,49 B" (2 decimals, comma), >= 1 M -> "482 M" / "1.380 M"
+ * (none), below that the exact figure. Use where the column or title already says VND.
  */
+export function formatCompactAmount(amount: number | undefined | null): string {
+  if (!isAmount(amount)) return NO_VALUE;
+  const abs = Math.abs(amount);
+  // Choose the unit after rounding, so 999.500.000 reads "1,00 B" rather than "1.000 M".
+  let body: string;
+  if (abs >= 999_500_000) body = `${(abs / 1e9).toFixed(2).replace(".", ",")} B`;
+  else if (abs >= 1e6) body = `${GROUPED.format(abs / 1e6)} M`;
+  else return formatVNDFull(amount).replace(/^(-?)VND /, "$1");
+  return `${amount < 0 ? "-" : ""}${body}`;
+}
+
+/** Short amount for tiles, e.g. "VND 482 M" or "VND 3,49 B". Pair with formatVNDFull in a title/tap-to-reveal. */
 export function formatVNDCompact(amount: number | undefined | null): string {
-  const n = amount ?? 0;
-  const abs = Math.abs(n);
-  const sign = n < 0 ? "-" : "";
-  // Choose the unit after rounding, so 999,500,000 reads "1.00 B" rather than "1.000 M".
-  if (abs >= 999_500_000) return `${sign}VND ${(abs / 1e9).toFixed(2)} B`;
-  if (abs >= 1e6) return `${sign}VND ${GROUPED.format(abs / 1e6)} M`;
-  return formatVNDFull(n);
+  if (!isAmount(amount)) return NO_VALUE;
+  const short = formatCompactAmount(amount);
+  return short.startsWith("-") ? `-VND ${short.slice(1)}` : `VND ${short}`;
 }
 
 /** Chart axis label in millions, e.g. "1.450 M" (no currency, the chart title carries it). */

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { SectionCard } from "@/components/wedding/SectionCard";
-import { formatVNDCompact, formatVNDFull } from "@/lib/format";
+import { formatCompactAmount, formatVNDCompact, formatVNDFull } from "@/lib/format";
 import type { WeddingData } from "./useWeddingData";
 import type { useWeddingExpenses } from "./useWeddingExpenses";
 
@@ -41,7 +41,7 @@ export function ExpensesCard({ w, data, onOpenAll }: { w: WeddingData; data: Ret
               <div className="h-2 flex-1 rounded-full bg-muted">
                 <div className="h-2 rounded-full bg-gilt" style={{ width: `${rows.max ? Math.round((amount / rows.max) * 100) : 0}%` }} />
               </div>
-              <span className="w-20 text-right tabular-nums" title={formatVNDFull(amount)}>{formatVNDCompact(amount).replace("VND ", "")}</span>
+              <span className="w-20 text-right tabular-nums" title={formatVNDFull(amount)}>{formatCompactAmount(amount)}</span>
             </li>
           ))}
         </ul>

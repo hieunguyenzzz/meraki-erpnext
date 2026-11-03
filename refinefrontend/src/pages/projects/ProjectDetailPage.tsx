@@ -10,6 +10,7 @@ import { WeddingHero } from "@/components/wedding/WeddingHero";
 import { daysUntilVN } from "@/lib/businessTime";
 import { DeleteWeddingSheet } from "./detail/DeleteWeddingSheet";
 import { stageBadgeVariant, statusVariant } from "./detail/constants";
+import { InlineError } from "./detail/InlineError";
 import { WeddingActions } from "./detail/WeddingActions";
 import { WeddingTabs } from "./detail/WeddingTabs";
 import { useWeddingData } from "./detail/useWeddingData";
@@ -81,6 +82,9 @@ export default function ProjectDetailPage() {
         }
         actions={<WeddingActions name={name} canAddExpense={w.showExpensesTab} onDelete={() => setDeleteOpen(true)} />}
       />
+      {w.loadErrors.length > 0 && (
+        <InlineError message={`Could not load ${w.loadErrors.join(", ")}. Figures on this page may be incomplete; try reloading.`} />
+      )}
       <WeddingTabs w={w} events={events} expenses={expenses} />
       <DeleteWeddingSheet name={name} open={deleteOpen} onOpenChange={setDeleteOpen} />
     </div>

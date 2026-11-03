@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
+import { AddOnsEditor } from "./AddOnsEditor";
 import { Popover as ShadcnPopover, PopoverContent as ShadcnPopoverContent, PopoverTrigger as ShadcnPopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -37,9 +38,7 @@ export function DetailsEditSheet({ w, open, onOpenChange }: Props) {
     serviceType: "" as string,
     weddingType: "" as string,
   });
-  const [editAddonSearch, setEditAddonSearch] = useState<string[]>([]);
-  const [editAddonDropdownOpen, setEditAddonDropdownOpen] = useState<boolean[]>([]);
-  const [isCreatingAddon, setIsCreatingAddon] = useState(false);
+  const [populateCount, setPopulateCount] = useState(0);
 
   // Each time the panel opens: refresh the add-on catalogue, then fill the form from the current record.
   useEffect(() => {
@@ -73,52 +72,9 @@ export function DetailsEditSheet({ w, open, onOpenChange }: Props) {
       serviceType: project?.custom_service_type || "",
       weddingType: project?.custom_wedding_type || "",
     }));
-    setEditAddonSearch(currentAddOns.map((a) => a.itemName));
-    setEditAddonDropdownOpen(currentAddOns.map(() => false));
+    setPopulateCount((c) => c + 1);
     const v = venues.find((v) => v.name === salesOrder?.custom_venue);
     setEditVenueDisplayName(v?.supplier_name || salesOrder?.custom_venue || "");
-  }
-
-  async function handleCreateEditAddon(rowIndex: number, addonName: string, includeInCommission: boolean) {
-    if (!addonName.trim()) return;
-    setIsCreatingAddon(true);
-    try {
-      const resp = await fetch("/inquiry-api/wedding/addon-item", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ item_name: addonName.trim() }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        const detail = err.detail;
-        const msg = Array.isArray(detail)
-          ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
-          : detail || "Failed to create add-on";
-        throw new Error(msg);
-      }
-      const item = await resp.json();
-      const itemCode = item.name ?? addonName;
-      const itemName = item.item_name ?? addonName;
-      setEditForm((prev) => ({
-        ...prev,
-        addOns: prev.addOns.map((a, i) =>
-          i === rowIndex ? { ...a, itemCode, itemName, includeInCommission } : a
-        ),
-      }));
-      const newSearch = [...editAddonSearch];
-      newSearch[rowIndex] = itemName;
-      setEditAddonSearch(newSearch);
-      const newOpen = [...editAddonDropdownOpen];
-      newOpen[rowIndex] = false;
-      setEditAddonDropdownOpen(newOpen);
-      // Refresh addon list so the new item appears in future dropdowns
-      fetchAddonItems();
-    } catch (err: any) {
-      setEditError(err?.message || "Failed to create add-on");
-    } finally {
-      setIsCreatingAddon(false);
-    }
   }
 
   async function handleSaveDetails(e: React.FormEvent) {
@@ -342,146 +298,7 @@ export function DetailsEditSheet({ w, open, onOpenChange }: Props) {
             </div>
           </div>
   
-          {/* Add-ons */}
-          <div className="space-y-2">
-            <Label>Add-ons</Label>
-            {editForm.addOns.map((addon, i) => (
-              <div key={i} className="flex gap-2 items-start">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    placeholder="Add-on name..."
-                    value={editAddonSearch[i] ?? addon.itemName}
-                    onChange={(e) => {
-                      const newSearch = [...editAddonSearch];
-                      newSearch[i] = e.target.value;
-                      setEditAddonSearch(newSearch);
-                      const updated = editForm.addOns.map((a, j) =>
-                        j === i ? { ...a, itemCode: "", itemName: e.target.value } : a
-                      );
-                      setEditForm({ ...editForm, addOns: updated });
-                    }}
-                    onFocus={() => {
-                      const newOpen = [...editAddonDropdownOpen];
-                      newOpen[i] = true;
-                      setEditAddonDropdownOpen(newOpen);
-                    }}
-                    onBlur={() => {
-                      setTimeout(() => {
-                        const newOpen = [...editAddonDropdownOpen];
-                        newOpen[i] = false;
-                        setEditAddonDropdownOpen(newOpen);
-                      }, 200);
-                    }}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                  {editAddonDropdownOpen[i] && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                      {availableAddOns
-                        .filter((item) => !editAddonSearch[i] || item.item_name.toLowerCase().includes((editAddonSearch[i] ?? "").toLowerCase()))
-                        .map((item) => (
-                          <div
-                            key={item.name}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              const newSearch = [...editAddonSearch];
-                              newSearch[i] = item.item_name;
-                              setEditAddonSearch(newSearch);
-                              const updated = editForm.addOns.map((a, j) =>
-                                j === i ? {
-                                  ...a,
-                                  itemCode: item.name,
-                                  itemName: item.item_name,
-                                  includeInCommission: !!(item as any).custom_include_in_commission,
-                                } : a
-                              );
-                              setEditForm({ ...editForm, addOns: updated });
-                              const newOpen = [...editAddonDropdownOpen];
-                              newOpen[i] = false;
-                              setEditAddonDropdownOpen(newOpen);
-                            }}
-                            className="px-3 py-2 text-sm cursor-pointer hover:bg-muted flex items-center gap-2"
-                          >
-                            {item.name === addon.itemCode && <Check className="h-3 w-3" />}
-                            {item.item_name}
-                          </div>
-                        ))}
-                      {(editAddonSearch[i] ?? "").length > 0 &&
-                        !availableAddOns.some((item) => item.item_name.toLowerCase() === (editAddonSearch[i] ?? "").toLowerCase()) && (
-                        <div
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            handleCreateEditAddon(i, editAddonSearch[i] ?? "", addon.includeInCommission);
-                          }}
-                          className="px-3 py-2 text-sm cursor-pointer hover:bg-muted flex items-center gap-2 text-[#C4A962]"
-                        >
-                          {isCreatingAddon ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Plus className="h-3 w-3" />
-                          )}
-                          Create "{editAddonSearch[i]}"
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <input
-                  type="number"
-                  placeholder="Rate (VND)"
-                  value={addon.rate || ""}
-                  onChange={(e) => {
-                    const updated = editForm.addOns.map((a, j) =>
-                      j === i ? { ...a, rate: parseFloat(e.target.value) || 0 } : a
-                    );
-                    setEditForm({ ...editForm, addOns: updated });
-                  }}
-                  className="w-28 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-                {isFinance && (
-                <label className="flex items-center gap-1.5 py-2 text-sm text-muted-foreground whitespace-nowrap cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={addon.includeInCommission}
-                    onChange={(e) => {
-                      const updated = editForm.addOns.map((a, j) =>
-                        j === i ? { ...a, includeInCommission: e.target.checked } : a
-                      );
-                      setEditForm({ ...editForm, addOns: updated });
-                    }}
-                    className="accent-[#C4A962]"
-                  />
-                  Commission
-                </label>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0"
-                  onClick={() => {
-                    setEditForm({ ...editForm, addOns: editForm.addOns.filter((_, j) => j !== i) });
-                    setEditAddonSearch((prev) => prev.filter((_, j) => j !== i));
-                    setEditAddonDropdownOpen((prev) => prev.filter((_, j) => j !== i));
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                setEditForm({ ...editForm, addOns: [...editForm.addOns, { itemCode: "", itemName: "", qty: 1, rate: 0, includeInCommission: false }] });
-                setEditAddonSearch((prev) => [...prev, ""]);
-                setEditAddonDropdownOpen((prev) => [...prev, false]);
-              }}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors pt-1"
-            >
-              <Plus className="h-4 w-4" />
-              Add item
-            </button>
-          </div>
+          <AddOnsEditor key={populateCount} addOns={editForm.addOns} onChange={(addOns) => setEditForm((prev) => ({ ...prev, addOns }))} availableAddOns={availableAddOns} isFinance={isFinance} refreshCatalogue={fetchAddonItems} onError={setEditError} />
         </div>
         <SheetFooter className="px-6 py-4 border-t shrink-0">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmittingEdit}>
