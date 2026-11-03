@@ -97,7 +97,7 @@ function findQuoteStart(body: HTMLElement): Marker | null {
   }
 
   // "On <date>, <name> wrote:" line.
-  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  const walker = body.ownerDocument.createTreeWalker(body, NodeFilter.SHOW_TEXT);
   for (let t = walker.nextNode(); t; t = walker.nextNode()) {
     const m = ON_WROTE.exec(t.textContent ?? "");
     if (m) {
@@ -122,11 +122,14 @@ export function splitQuoted(rawHtml: string): { main: string; quoted: string } {
   const marker = findQuoteStart(body);
   if (!marker) return whole;
 
-  const range = document.createRange();
+  // Everything below is built from the parser's inert document. Raw email nodes must never be
+  // attached to the live page: <img onerror> would fire before DOMPurify runs.
+  const doc = body.ownerDocument;
+  const range = doc.createRange();
   if (marker.offset !== undefined) range.setStart(marker.node, marker.offset);
   else range.setStartBefore(marker.node);
   range.setEndAfter(body.lastChild ?? body);
-  const tail = document.createElement("div");
+  const tail = doc.createElement("div");
   tail.appendChild(range.extractContents());
 
   if (!(body.textContent || "").trim()) return whole;
