@@ -10,7 +10,7 @@ import {
   DIRECTOR_ROLES, SETTINGS_ROLES, hasModuleAccess, isEmployeeSelfServiceOnly,
 } from "@/lib/roles";
 
-export type BadgeKey = "notifications" | "leaves";
+export type BadgeKey = "notifications" | "leaves" | "wfh";
 
 export interface NavItem {
   label: string;
@@ -62,7 +62,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Staff", path: "/hr/staff-overview", icon: Users, roles: HR_ROLES, also: ["/hr/employees"] },
       { label: "Recruiting", path: "/hr/recruiting/pipeline", icon: Filter, roles: HR_ROLES, also: ["/hr/recruiting"] },
       { label: "Leaves", path: "/hr/leaves", icon: ClipboardCheck, roles: HR_ROLES, badge: "leaves" },
-      { label: "Work from home", path: "/hr/wfh", icon: House, roles: HR_ROLES },
+      { label: "Work from home", path: "/hr/wfh", icon: House, roles: HR_ROLES, badge: "wfh" },
       { label: "Payroll", path: "/hr/payroll", icon: Banknote, roles: HR_ROLES },
       { label: "Reviews", path: "/hr/staff-reviews", icon: Star, roles: HR_ROLES },
     ],

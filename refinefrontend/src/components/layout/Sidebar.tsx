@@ -5,6 +5,7 @@ import { useSearch } from "@/context/search-context";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { useMyNotifications } from "@/hooks/useMyNotifications";
 import { usePendingLeaveCount } from "@/hooks/usePendingLeaveCount";
+import { usePendingWfhCount } from "@/hooks/usePendingWfhCount";
 import {
   PRIMARY_ROLE_LABEL, getActiveItem, getPrimaryRole, getVisibleNavGroups,
   type BadgeKey, type NavItem,
@@ -20,6 +21,7 @@ const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigat
 const BADGE_TONE: Record<BadgeKey, string> = {
   notifications: "bg-primary-fill text-primary-fill-foreground",
   leaves: "bg-primary-fill text-primary-fill-foreground",
+  wfh: "bg-primary-fill text-primary-fill-foreground",
 };
 
 function SidebarLink({ item, active, badge }: { item: NavItem; active: boolean; badge: number }) {
@@ -84,8 +86,12 @@ export function Sidebar() {
   const roles = data ?? [];
   const { setOpen } = useSearch();
   const { count } = useMyNotifications();
-  const pendingLeaves = usePendingLeaveCount(roles.some((r) => HR_ROLES.includes(r)));
-  const badges: Record<BadgeKey, number> = { notifications: count, leaves: pendingLeaves };
+  const isHr = roles.some((r) => HR_ROLES.includes(r));
+  const badges: Record<BadgeKey, number> = {
+    notifications: count,
+    leaves: usePendingLeaveCount(isHr),
+    wfh: usePendingWfhCount(isHr),
+  };
 
   // Render an empty column until roles are known so employee-only users never flash the staff nav.
   if (isLoading) {
