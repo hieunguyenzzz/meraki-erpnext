@@ -11,17 +11,17 @@ const buttonVariants = cva(
         default: "bg-primary-fill text-primary-fill-foreground hover:bg-primary-fill/90",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         success: "bg-success text-success-foreground hover:bg-success/90",
-        outline: "border border-input bg-transparent text-foreground hover:bg-muted",
+        outline: "border border-input bg-card text-foreground hover:bg-muted",
         secondary: "bg-accent text-accent-foreground hover:bg-accent/70",
         ghost: "hover:bg-muted hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
         // 48px tap target on phones (redesign spec), compact 40px on desktop
-        default: "h-12 px-5 py-2 md:h-10 md:px-4",
+        default: "h-10 px-4 py-2 max-md:h-12 max-md:px-5",
         sm: "h-9 px-3 text-xs",
-        lg: "h-12 px-8 text-base md:h-11 md:text-sm",
-        icon: "h-12 w-12 md:h-10 md:w-10",
+        lg: "h-11 px-8 max-md:h-12 max-md:text-base",
+        icon: "h-10 w-10 max-md:h-12 max-md:w-12",
       },
     },
     defaultVariants: {
