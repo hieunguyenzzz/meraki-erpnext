@@ -11,6 +11,7 @@ user's DocPerms never apply here — scoping is done in this module:
 
 GET /my/weddings            — assigned weddings: Open, plus Completed within the last 30 days
 GET /my/weddings/{project}  — read-only detail for one assigned wedding (403 otherwise)
+GET /wedding/{project}/team-contacts — teammates' mobile numbers, for whoever can see the wedding
 """
 
 import json
@@ -178,14 +179,19 @@ def my_wedding_detail(project: str, request: Request, response: Response):
     doc, my_role = _load_assigned_project(client, project, employee, user)
 
     team_ids = [doc.get(f) for f in ASSIGNMENT_ROLES if doc.get(f)]
-    names = {e["name"]: e.get("first_name") or e.get("employee_name") or e["name"] for e in client._get(
+    members = {e["name"]: e for e in client._get(
         "/api/resource/Employee", params={
             "filters": json.dumps([["name", "in", team_ids]]),
-            "fields": json.dumps(["name", "employee_name", "first_name"]),
+            "fields": json.dumps(["name", "employee_name", "first_name", "cell_number"]),
             "limit_page_length": 0,
         }).get("data", [])} if team_ids else {}
     team = [
-        {"employee": doc[f], "name": names.get(doc[f], doc[f]), "role": role}
+        {
+            "employee": doc[f],
+            "name": members.get(doc[f], {}).get("first_name") or members.get(doc[f], {}).get("employee_name") or doc[f],
+            "role": role,
+            "phone": members.get(doc[f], {}).get("cell_number") or None,
+        }
         for f, role in ASSIGNMENT_ROLES.items() if doc.get(f)
     ]
 
@@ -222,6 +228,24 @@ def my_wedding_detail(project: str, request: Request, response: Response):
     }
     log.info("my_wedding_read", user=user, employee=employee, project=project, events=len(events))
     return {"data": result}
+
+
+@router.get("/wedding/{project}/team-contacts")
+def wedding_team_contacts(project: str, request: Request, response: Response):
+    """Employee id -> mobile number for the people on one wedding. Same visibility as the wedding itself:
+    planners/finance see any wedding, everyone else only the ones they are assigned to."""
+    bind_correlation_id(request, response)
+    require_assigned_unless_privileged(request, project)
+    client = ERPNextClient()
+    doc = client._get(f"/api/resource/Project/{quote(project, safe='')}").get("data", {})
+    team_ids = [doc.get(f) for f in ASSIGNMENT_ROLES if doc.get(f)]
+    rows = client._get("/api/resource/Employee", params={
+        "filters": json.dumps([["name", "in", team_ids]]),
+        "fields": json.dumps(["name", "cell_number"]),
+        "limit_page_length": 0,
+    }).get("data", []) if team_ids else []
+    log.info("wedding_team_contacts_read", user=get_current_user(request), project=project, count=len(rows))
+    return {"data": {r["name"]: r["cell_number"] for r in rows if r.get("cell_number")}}
 
 
 def _my_expenses(client: ERPNextClient, project: str, employee: str) -> list[dict]:

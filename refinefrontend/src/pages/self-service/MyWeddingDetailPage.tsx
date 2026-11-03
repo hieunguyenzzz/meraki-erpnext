@@ -78,7 +78,7 @@ export default function MyWeddingDetailPage() {
         </SectionCard>
 
         <SectionCard title="Team">
-          <TeamList members={w.team.map((t) => ({ id: t.employee, name: t.name, role: ROLE_LABEL[t.role] ?? t.role }))} />
+          <TeamList members={w.team.map((t) => ({ id: t.employee, name: t.name, role: ROLE_LABEL[t.role] ?? t.role, phone: t.phone }))} />
         </SectionCard>
 
         <SectionCard

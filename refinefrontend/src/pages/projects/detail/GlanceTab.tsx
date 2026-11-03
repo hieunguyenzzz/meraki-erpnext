@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { MapPin, Navigation, Phone, Plus } from "lucide-react";
 import { EventsTimeline, pickGlanceEvents, type TimelineEvent } from "@/components/wedding/EventsTimeline";
-import { TeamStack } from "@/components/wedding/TeamAvatars";
+import { TeamList } from "@/components/wedding/TeamAvatars";
 import { formatVNDCompact, formatVNDFull } from "@/lib/format";
 import type { WeddingEvent } from "@/lib/weddingEvents";
 import { teamMembersOf } from "./teamMembers";
@@ -69,30 +69,32 @@ export function GlanceTab({ w, events, expenses, onOpenTab }: Props) {
         {picked ? <EventsTimeline events={picked.items} /> : <p className="text-sm text-muted-foreground">No upcoming events.</p>}
       </section>
 
-      <div className="grid grid-cols-2 gap-3">
-        <button type="button" onClick={() => onOpenTab("details")} className={`${card} flex flex-col items-start gap-2.5 text-left`}>
+      <section className={`${card} flex flex-col gap-3`}>
+        <div className="flex items-center justify-between">
           <h2 className={heading}>Team</h2>
-          {members.length > 0 ? <TeamStack members={members} /> : <span className="text-sm text-muted-foreground">Not assigned</span>}
-        </button>
-        {showExpensesTab && (
-          <section className={`${card} flex flex-col gap-2`}>
-            <h2 className={heading}>Expenses</h2>
-            <div className="text-lg font-bold tabular-nums" title={formatVNDFull(expenses.approvedTotal)}>
-              {formatVNDCompact(expenses.approvedTotal)}
-              {budget > 0 && <span className="ml-1 text-xs font-medium text-muted-foreground">/ {formatVNDCompact(budget).replace("VND ", "")}</span>}
+          <button type="button" onClick={() => onOpenTab("details")} className="text-sm font-semibold text-primary">Details</button>
+        </div>
+        {members.length > 0 ? <TeamList members={members} /> : <span className="text-sm text-muted-foreground">Not assigned</span>}
+      </section>
+
+      {showExpensesTab && (
+        <section className={`${card} flex flex-col gap-2`}>
+          <h2 className={heading}>Expenses</h2>
+          <div className="text-lg font-bold tabular-nums" title={formatVNDFull(expenses.approvedTotal)}>
+            {formatVNDCompact(expenses.approvedTotal)}
+            {budget > 0 && <span className="ml-1 text-xs font-medium text-muted-foreground">/ {formatVNDCompact(budget).replace("VND ", "")}</span>}
+          </div>
+          {budget > 0 && (
+            <div className="h-1.5 rounded-full bg-muted">
+              <div className="h-1.5 rounded-full bg-warning" style={{ width: `${Math.min(100, Math.round((expenses.approvedTotal / budget) * 100))}%` }} />
             </div>
-            {budget > 0 && (
-              <div className="h-1.5 rounded-full bg-muted">
-                <div className="h-1.5 rounded-full bg-warning" style={{ width: `${Math.min(100, Math.round((expenses.approvedTotal / budget) * 100))}%` }} />
-              </div>
-            )}
-            <Link to={`/finance/expenses/new?project=${encodeURIComponent(name)}`} className="mt-1 inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-primary-fill text-sm font-semibold text-primary-fill-foreground">
-              <Plus className="h-4 w-4" />
-              Add expense
-            </Link>
-          </section>
-        )}
-      </div>
+          )}
+          <Link to={`/finance/expenses/new?project=${encodeURIComponent(name)}`} className="mt-1 inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-primary-fill text-sm font-semibold text-primary-fill-foreground">
+            <Plus className="h-4 w-4" />
+            Add expense
+          </Link>
+        </section>
+      )}
 
       {isFinance && totalValue > 0 && (
         <button type="button" onClick={() => onOpenTab("details")} className={`${card} flex flex-col gap-2 text-left`}>

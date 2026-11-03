@@ -108,6 +108,17 @@ export function useWeddingData(name: string) {
     [employees]
   );
 
+  // Teammates' mobile numbers (backend only returns them to people who can see this wedding).
+  const [teamPhones, setTeamPhones] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/inquiry-api/wedding/${encodeURIComponent(name)}/team-contacts`, { credentials: "include" })
+      .then((r) => { if (!r.ok) throw new Error(`team-contacts ${r.status}`); return r.json(); })
+      .then((json) => { if (!cancelled) setTeamPhones(json.data ?? {}); })
+      .catch((err) => console.error("[wedding] team contacts load failed", name, err));
+    return () => { cancelled = true; };
+  }, [name]);
+
   const { result: venuesResult } = useList({
     resource: "Supplier",
     pagination: { mode: "off" as const },
@@ -173,7 +184,7 @@ export function useWeddingData(name: string) {
 
   return {
     name, project, projectQuery, salesOrder, customer, soItems, fetchSOItems, invoices, fetchInvoices,
-    tasks, employees, getEmployeeName, venues, allSuppliers, availableAddOns, fetchAddonItems, addOnItems,
+    tasks, employees, getEmployeeName, teamPhones, venues, allSuppliers, availableAddOns, fetchAddonItems, addOnItems,
     teamIds, isFinance, isWeddingManager, showExpensesTab,
     weddingDate, venueName, totalValue, customerName,
     totalInvoiced, totalOutstanding, totalPaid, paidPct, refreshProject,

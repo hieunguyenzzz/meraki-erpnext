@@ -17,7 +17,7 @@ export interface MyWeddingDetail extends Omit<MyWedding, "venue_name"> {
   guest_count: number | null;
   package: string | null;
   wedding_type: string | null;
-  team: { employee: string; name: string; role: string }[];
+  team: { employee: string; name: string; role: string; phone: string | null }[];
   events: {
     name: string;
     event_type: string;

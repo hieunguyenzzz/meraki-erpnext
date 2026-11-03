@@ -19,22 +19,6 @@ function Avatar({ name, index, className }: { name: string; index: number; class
   );
 }
 
-/** Overlapping initials, capped at `max` with a "+N" chip. */
-export function TeamStack({ members, max = 4 }: { members: TeamMember[]; max?: number }) {
-  const shown = members.slice(0, max);
-  const extra = members.length - shown.length;
-  return (
-    <div className="flex pl-2" aria-label={`${members.length} team members`}>
-      {shown.map((m, i) => (
-        <Avatar key={m.id} name={m.name} index={i} className="-ml-2 h-9 w-9 border-2 border-card" />
-      ))}
-      {extra > 0 && (
-        <span className="-ml-2 flex h-9 w-9 items-center justify-center rounded-full border-2 border-card bg-secondary text-xs font-bold">+{extra}</span>
-      )}
-    </div>
-  );
-}
-
 /** One row per member: initials, name, role; tap-to-call when a phone number is known. */
 export function TeamList({ members }: { members: TeamMember[] }) {
   return (

@@ -206,3 +206,22 @@ def test_my_expenses_filters_on_employee():
     mw._my_expenses(_route_aware_client(PIS, calls), "PROJ-1", "HR-EMP-1")
     filters = json.loads(calls[0][1]["filters"])
     assert ["custom_expense_staff", "=", "HR-EMP-1"] in filters and ["project", "=", "PROJ-1"] in filters
+
+
+def test_team_contacts_returns_only_numbers_that_exist():
+    client = MagicMock()
+    client._get.side_effect = [
+        {"data": PROJECT},
+        {"data": [{"name": "HR-EMP-1", "cell_number": "0901"}, {"name": "HR-EMP-2", "cell_number": None}]},
+    ]
+    with patch.object(mw, "require_assigned_unless_privileged"), \
+         patch.object(mw, "ERPNextClient", return_value=client), \
+         patch.object(mw, "get_current_user", return_value="u@example.com"):
+        out = mw.wedding_team_contacts("PROJ-1", MagicMock(), Response())
+    assert out == {"data": {"HR-EMP-1": "0901"}}
+
+
+def test_team_contacts_forbidden_for_unassigned_staff():
+    with pytest.raises(HTTPException) as exc:
+        _check("HR-EMP-9", privileged=False)
+    assert exc.value.status_code == 403
