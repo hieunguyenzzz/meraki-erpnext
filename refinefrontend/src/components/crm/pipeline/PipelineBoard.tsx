@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { COLUMNS, getColumnForItem, type ColumnKey, type KanbanItem } from "@/lib/kanban";
 import { PipelineCard } from "./PipelineCard";
@@ -16,7 +17,7 @@ function EmptyStage({ label }: { label: string }) {
 /** Desktop: six columns side by side, scrolling sideways when the window is narrow. */
 function DesktopBoard({ grouped }: { grouped: Record<ColumnKey, KanbanItem[]> }) {
   return (
-    <div className="hidden overflow-x-auto pb-2 md:block">
+    <div className="overflow-x-auto pb-2">
       <div className="flex w-max gap-3">
         {COLUMNS.map((col) => (
           <section key={col.key} aria-label={`${col.label}, ${grouped[col.key].length} leads`} className="flex w-[248px] shrink-0 flex-col gap-2.5 rounded-card bg-secondary p-3">
@@ -35,22 +36,21 @@ function DesktopBoard({ grouped }: { grouped: Record<ColumnKey, KanbanItem[]> })
 }
 
 /** Phones: pick one stage, read its leads as a list. No drag on a touch screen. */
-function PhonePipeline({ grouped }: { grouped: Record<ColumnKey, KanbanItem[]> }) {
-  const [active, setActive] = useState<ColumnKey>("new");
+function PhonePipeline({ grouped, active, onChange: setActive }: {
+  grouped: Record<ColumnKey, KanbanItem[]>; active: ColumnKey; onChange: (stage: ColumnKey) => void;
+}) {
   const current = COLUMNS.find((c) => c.key === active) ?? COLUMNS[0];
 
   return (
-    <div className="md:hidden">
-      <div role="tablist" aria-label="Pipeline stage" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+    <div>
+      <div role="group" aria-label="Pipeline stage" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {COLUMNS.map((col) => {
           const selected = col.key === active;
           return (
             <button
               key={col.key}
-              role="tab"
-              id={`stage-tab-${col.key}`}
-              aria-selected={selected}
-              aria-controls="stage-panel"
+              type="button"
+              aria-pressed={selected}
               onClick={() => setActive(col.key)}
               className="flex h-12 shrink-0 items-center focus-visible:outline-none"
             >
@@ -67,7 +67,7 @@ function PhonePipeline({ grouped }: { grouped: Record<ColumnKey, KanbanItem[]> }
           );
         })}
       </div>
-      <div id="stage-panel" role="tabpanel" aria-labelledby={`stage-tab-${active}`} className="mt-3 flex flex-col gap-2.5">
+      <div className="mt-3 flex flex-col gap-2.5">
         {grouped[active].map((item) => <PipelineCard key={item.id} item={item} />)}
         {grouped[active].length === 0 && <EmptyStage label={current.label} />}
       </div>
@@ -75,12 +75,8 @@ function PhonePipeline({ grouped }: { grouped: Record<ColumnKey, KanbanItem[]> }
   );
 }
 
-export function PipelineBoard({ items }: { items: KanbanItem[] }) {
+export function PipelineBoard({ items, stage, onStageChange }: { items: KanbanItem[]; stage: ColumnKey; onStageChange: (stage: ColumnKey) => void }) {
   const grouped = useMemo(() => groupByStage(items), [items]);
-  return (
-    <>
-      <DesktopBoard grouped={grouped} />
-      <PhonePipeline grouped={grouped} />
-    </>
-  );
+  const desktop = useMediaQuery("(min-width: 768px)");
+  return desktop ? <DesktopBoard grouped={grouped} /> : <PhonePipeline grouped={grouped} active={stage} onChange={onStageChange} />;
 }

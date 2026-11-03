@@ -68,7 +68,7 @@ export default function LeadDetailPage() {
   });
 
   // Fetch Events linked to this Lead using direct API call
-  const { data: scheduledMeetings = [] } = useQuery({
+  const { data: scheduledMeetings = [], isError: meetingsError } = useQuery({
     queryKey: ["lead-meetings", name],
     queryFn: async () => {
       if (!name) return [];
@@ -86,7 +86,10 @@ export default function LeadDetailPage() {
         credentials: "include",
         headers: { "X-Frappe-Site-Name": "erp.merakiwp.com" },
       });
-      if (!res.ok) return [];
+      if (!res.ok) {
+        console.error(`LeadDetailPage: meetings request failed (${res.status})`);
+        throw new Error(`Meetings failed (${res.status})`);
+      }
       const data = await res.json();
       return (data.message ?? []) as Meeting[];
     },
@@ -129,12 +132,12 @@ export default function LeadDetailPage() {
       <DateConflictAlert date={weddingDate ?? ""} leads={conflictingLeads} orders={conflictingSalesOrders} />
 
       {/* Phones: cards, then the thread, then Meta. Desktop: cards in a left column, thread on the right. */}
-      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start lg:gap-6">
+      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-6">
         <div className="space-y-4 lg:col-start-1 lg:row-start-1">
           <ContactCard lead={lead} fullName={fullName} sources={leadSources} onSaved={handleFieldSaved} />
           <WeddingCard lead={lead} />
           <SubmissionCard notes={submissionNotes} />
-          <MeetingsCard meetings={scheduledMeetings} />
+          <MeetingsCard meetings={scheduledMeetings} error={meetingsError} />
         </div>
 
         <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">

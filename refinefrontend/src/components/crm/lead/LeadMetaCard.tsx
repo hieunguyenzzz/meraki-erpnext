@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { InfoCard } from "./InfoCard";
 
@@ -41,7 +41,7 @@ export function LeadMetaCard({ created, id, status, onDelete }: {
             <SheetTitle>Delete lead</SheetTitle>
           </SheetHeader>
           <div className="space-y-3 px-6 py-4">
-            <p className="text-sm text-muted-foreground">Are you sure you want to delete this lead? This action cannot be undone.</p>
+            <SheetDescription>Are you sure you want to delete this lead? This action cannot be undone.</SheetDescription>
             {error && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">{error}</p>}
           </div>
           <SheetFooter className="shrink-0 gap-2 border-t px-6 py-4">

@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useList } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
+import { useQueryState } from "nuqs";
 import { Plus } from "lucide-react";
 import { PipelineBoard } from "@/components/crm/pipeline/PipelineBoard";
 import { PipelineFilters, type WaitingFilter, type SortOrder } from "@/components/crm/pipeline/PipelineFilters";
 import { CreateLeadSheet } from "@/components/crm/pipeline/CreateLeadSheet";
 import { ErrorPanel } from "@/components/chats/ChatStates";
-import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, getColumnForItem } from "@/lib/kanban";
+import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, getColumnForItem, COLUMNS, type ColumnKey } from "@/lib/kanban";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
@@ -17,9 +18,16 @@ export default function KanbanPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   // Filter state
-  const [waitingFilter, setWaitingFilter] = useState<WaitingFilter>("all");
-  const [locationFilter, setLocationFilter] = useState<string | null>(null);
-  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  // Kept in the URL so Back from a lead returns to the same stage and filters.
+  const [waitingParam, setWaitingFilter] = useQueryState("awaiting", { defaultValue: "all", clearOnDefault: true });
+  const [locationParam, setLocationParam] = useQueryState("location", { defaultValue: "", clearOnDefault: true });
+  const [sortParam, setSortOrder] = useQueryState("sort", { defaultValue: "newest", clearOnDefault: true });
+  const [stageParam, setStage] = useQueryState("stage", { defaultValue: "new", clearOnDefault: true });
+  const waitingFilter = waitingParam as WaitingFilter;
+  const sortOrder = sortParam as SortOrder;
+  const locationFilter = locationParam || null;
+  const setLocationFilter = (loc: string | null) => setLocationParam(loc ?? "");
+  const stage = (COLUMNS.some((c) => c.key === stageParam) ? stageParam : "new") as ColumnKey;
 
   // Fetch Leads with city field for location filter
   const { result: leadsResult, query: leadsQuery } = useList({
@@ -61,7 +69,7 @@ export default function KanbanPage() {
 
   // Fetch Events with Lead participants using direct API call
   // frappe.client.get_list supports child table filters and fields
-  const { data: eventsWithParticipants } = useQuery({
+  const { data: eventsWithParticipants, isError: meetingsError } = useQuery({
     queryKey: ["events-with-lead-participants"],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -78,7 +86,10 @@ export default function KanbanPage() {
         credentials: "include",
         headers: { "X-Frappe-Site-Name": "erp.merakiwp.com" },
       });
-      if (!res.ok) return [];
+      if (!res.ok) {
+        console.error(`KanbanPage: meetings request failed (${res.status})`);
+        throw new Error(`Meetings failed (${res.status})`);
+      }
       const data = await res.json();
       return data.message ?? [];
     },
@@ -211,7 +222,10 @@ export default function KanbanPage() {
           </div>
         </div>
       ) : (
-        <PipelineBoard items={items} />
+        <>
+          {meetingsError && <p role="status" className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">Couldn't load meetings, so meeting times are missing from the cards.</p>}
+          <PipelineBoard items={items} stage={stage} onStageChange={setStage} />
+        </>
       )}
     </div>
   );

@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useCreate, useInvalidate, useList } from "@refinedev/core";
+import { useCreate, useList } from "@refinedev/core";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const EMPTY = { lead_name: "", email_id: "", phone: "", source: "" };
@@ -12,7 +12,6 @@ const EMPTY = { lead_name: "", email_id: "", phone: "", source: "" };
 /** New-lead form: couple name, email, phone, source. Creates the Lead and opens it. */
 export function CreateLeadSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate();
-  const invalidate = useInvalidate();
   const { mutateAsync: createLead } = useCreate();
   const [form, setForm] = useState(EMPTY);
   const [submitting, setSubmitting] = useState(false);
@@ -25,7 +24,12 @@ export function CreateLeadSheet({ open, onOpenChange }: { open: boolean; onOpenC
   });
   const sources = (sourcesResult?.data ?? []).map((s) => String(s.name));
 
-  const set = (key: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: e.target.value });
+  const set = (key: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  function changeOpen(next: boolean) {
+    if (!next) setError(null);
+    onOpenChange(next);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,7 +49,6 @@ export function CreateLeadSheet({ open, onOpenChange }: { open: boolean; onOpenC
       });
       onOpenChange(false);
       setForm(EMPTY);
-      invalidate({ resource: "Lead", invalidates: ["list"] });
       if (result?.data?.name) navigate(`/crm/leads/${result.data.name}`);
     } catch (err) {
       console.error("CreateLeadSheet: creating the lead failed", err);
@@ -56,11 +59,11 @@ export function CreateLeadSheet({ open, onOpenChange }: { open: boolean; onOpenC
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={changeOpen}>
       <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-md">
         <SheetHeader className="shrink-0 border-b px-6 py-4">
           <SheetTitle className="font-display text-2xl">New lead</SheetTitle>
-          <p className="text-sm text-muted-foreground">Add a couple to the pipeline.</p>
+          <SheetDescription>Add a couple to the pipeline.</SheetDescription>
         </SheetHeader>
         <form onSubmit={submit} className="flex flex-1 flex-col overflow-hidden">
           <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
@@ -78,7 +81,7 @@ export function CreateLeadSheet({ open, onOpenChange }: { open: boolean; onOpenC
             </div>
             <div className="space-y-2">
               <Label htmlFor="source">Source</Label>
-              <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v })}>
+              <Select value={form.source} onValueChange={(v) => setForm((f) => ({ ...f, source: v }))}>
                 <SelectTrigger id="source"><SelectValue placeholder="Select source" /></SelectTrigger>
                 <SelectContent>
                   {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -88,7 +91,7 @@ export function CreateLeadSheet({ open, onOpenChange }: { open: boolean; onOpenC
             {error && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">{error}</p>}
           </div>
           <SheetFooter className="shrink-0 gap-2 border-t px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => changeOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={submitting || !form.lead_name.trim()}>{submitting ? "Creating..." : "Create lead"}</Button>
           </SheetFooter>
         </form>

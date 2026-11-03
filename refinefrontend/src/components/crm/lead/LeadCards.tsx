@@ -65,7 +65,14 @@ export function SubmissionCard({ notes }: { notes: string[] }) {
 
 export interface Meeting { name: string; subject: string; starts_on: string }
 
-export function MeetingsCard({ meetings }: { meetings: Meeting[] }) {
+export function MeetingsCard({ meetings, error }: { meetings: Meeting[]; error?: boolean }) {
+  if (error) {
+    return (
+      <InfoCard title="Meetings" icon={<CalendarDays className="h-3.5 w-3.5" aria-hidden />}>
+        <p role="status" className="text-sm text-warning-soft-foreground">Couldn't load meetings.</p>
+      </InfoCard>
+    );
+  }
   if (meetings.length === 0) return null;
   return (
     <InfoCard title="Meetings" icon={<CalendarDays className="h-3.5 w-3.5" aria-hidden />}>

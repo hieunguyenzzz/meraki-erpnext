@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { ArrowDown, ArrowUp, SlidersHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export type WaitingFilter = "all" | "client" | "staff";
@@ -26,7 +27,7 @@ const WAITING_OPTIONS: { value: WaitingFilter; label: string }[] = [
   { value: "staff", label: "Our action" },
 ];
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function Chip({ active, onClick, children }: { active?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -61,7 +62,7 @@ function Controls({ waitingFilter, onWaitingFilterChange, locationFilter, onLoca
           {locations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
         </SelectContent>
       </Select>
-      <Chip active={false} onClick={() => onSortOrderChange(sortOrder === "newest" ? "oldest" : "newest")}>
+      <Chip onClick={() => onSortOrderChange(sortOrder === "newest" ? "oldest" : "newest")}>
         <SortIcon className="h-3.5 w-3.5" aria-hidden />
         {sortOrder === "newest" ? "Recent first" : "Oldest first"}
       </Chip>
@@ -72,26 +73,31 @@ function Controls({ waitingFilter, onWaitingFilterChange, locationFilter, onLoca
 /** Awaiting / location / sort: inline on desktop, behind one button and a bottom sheet on phones. */
 export function PipelineFilters(props: Props) {
   const [open, setOpen] = useState(false);
+  const desktop = useMediaQuery("(min-width: 768px)");
   const active = (props.waitingFilter !== "all" ? 1 : 0) + (props.locationFilter ? 1 : 0);
   const clear = () => { props.onWaitingFilterChange("all"); props.onLocationFilterChange(null); };
 
-  return (
-    <>
-      <div className="hidden flex-wrap items-center gap-3 md:flex">
+  if (desktop) {
+    return (
+      <div className="flex flex-wrap items-center gap-3">
         <Controls {...props} />
         {active > 0 && (
           <Button variant="ghost" size="sm" onClick={clear}><X aria-hidden />Clear filters</Button>
         )}
       </div>
+    );
+  }
 
-      <div className="md:hidden">
+  return (
+    <>
+      <div>
         <Button variant="outline" className="w-full justify-between" onClick={() => setOpen(true)}>
           <span className="flex items-center gap-2"><SlidersHorizontal aria-hidden />Filters and sort</span>
           {active > 0 && <span className="rounded-full bg-primary-fill px-2 text-xs text-primary-fill-foreground">{active}</span>}
         </Button>
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetContent side="bottom" className="flex flex-col gap-4 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-            <SheetHeader><SheetTitle>Filters and sort</SheetTitle></SheetHeader>
+            <SheetHeader><SheetTitle>Filters and sort</SheetTitle><SheetDescription className="sr-only">Narrow the pipeline by who is waiting, location and order.</SheetDescription></SheetHeader>
             <Controls {...props} />
             <div className="flex gap-2">
               {active > 0 && <Button variant="outline" className="flex-1" onClick={clear}>Clear filters</Button>}
