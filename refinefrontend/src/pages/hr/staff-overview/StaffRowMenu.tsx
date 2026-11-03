@@ -8,12 +8,13 @@ import type { StaffRow } from "./types";
 interface Props {
   row: StaffRow;
   canManageRoles: boolean;
+  canReview: boolean;
   onReview: (row: StaffRow) => void;
   onRoles: (row: StaffRow) => void;
 }
 
 /** Desktop row actions: profile, review, and (admins only) assign roles. */
-export function StaffRowMenu({ row, canManageRoles, onReview, onRoles }: Props) {
+export function StaffRowMenu({ row, canManageRoles, canReview, onReview, onRoles }: Props) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -25,7 +26,7 @@ export function StaffRowMenu({ row, canManageRoles, onReview, onRoles }: Props) 
         <DropdownMenuItem asChild>
           <Link to={`/hr/employees/${row.name}`}>View profile</Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onReview(row)}>Review</DropdownMenuItem>
+        {canReview && <DropdownMenuItem onSelect={() => onReview(row)}>Review</DropdownMenuItem>}
         {canManageRoles && <DropdownMenuItem onSelect={() => onRoles(row)}>Assign roles</DropdownMenuItem>}
       </DropdownMenuContent>
     </DropdownMenu>

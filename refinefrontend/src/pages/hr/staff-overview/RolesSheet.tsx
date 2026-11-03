@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { displayName } from "@/lib/format";
+import { apiErrorMessage, extractErrorMessage } from "@/lib/errors";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { StaffSheet } from "./StaffSheet";
 import type { StaffRow } from "./types";
@@ -20,6 +21,7 @@ export function RolesSheet({ employee, onClose, onSaved }: Props) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(employee.staff_roles));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitting = useRef(false);
 
   const dirty = [...selected].sort().join(",") !== [...employee.staff_roles].sort().join(",");
 
@@ -33,6 +35,8 @@ export function RolesSheet({ employee, onClose, onSaved }: Props) {
   }
 
   async function handleSave() {
+    if (submitting.current) return;
+    submitting.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -43,15 +47,15 @@ export function RolesSheet({ employee, onClose, onSaved }: Props) {
         body: JSON.stringify({ roles }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `API error ${res.status}`);
+        throw new Error(apiErrorMessage(await res.json().catch(() => ({})), `API error ${res.status}`));
       }
       onSaved(employee.name, roles);
       onClose();
     } catch (err) {
       console.error("Saving roles failed", err);
-      setError(err instanceof Error ? err.message : "Failed to save roles");
+      setError(extractErrorMessage(err, "Failed to save roles"));
     } finally {
+      submitting.current = false;
       setSaving(false);
     }
   }

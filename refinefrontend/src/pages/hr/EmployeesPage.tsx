@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import { useList } from "@refinedev/core";
-import { useQueryState } from "nuqs";
+import { useQueryState, parseAsString, parseAsStringLiteral } from "nuqs";
 import { ArrowDown, ArrowUp, RotateCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { displayName } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { StaffAvatar } from "@/components/staff/StaffAvatar";
 import { StaffFilterBar } from "@/components/staff/StaffFilterBar";
 import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
@@ -24,7 +24,7 @@ interface Employee {
   custom_is_probation?: number;
 }
 
-const STATUSES = ["Active", "Inactive", "Suspended", "Left"];
+const STATUSES = ["Active", "Inactive", "Suspended", "Left"] as const;
 
 function timeSinceReview(d?: string): string {
   if (!d) return "Never";
@@ -35,7 +35,8 @@ function timeSinceReview(d?: string): string {
   return mo > 0 ? `${mo}mo ${dd}d ago` : `${dd}d ago`;
 }
 
-type SortKey = "employee_name" | "designation" | "department" | "status" | "custom_last_review_date";
+const SORT_KEYS = ["employee_name", "designation", "department", "status", "custom_last_review_date"] as const;
+type SortKey = (typeof SORT_KEYS)[number];
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "employee_name", label: "Name" },
@@ -50,10 +51,14 @@ function sortValue(e: Employee, key: SortKey): string {
 }
 
 export default function EmployeesPage() {
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const [search, setSearch] = useQueryState("q", { defaultValue: "" });
-  const [status, setStatus] = useQueryState("status", { defaultValue: "" });
-  const [department, setDepartment] = useQueryState("dept", { defaultValue: "" });
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "employee_name", dir: 1 });
+  const [statusParam, setStatusParam] = useQueryState("status", parseAsStringLiteral(STATUSES));
+  const [deptParam, setDeptParam] = useQueryState("dept", parseAsString);
+  const [sortParam, setSortParam] = useQueryState("sort", parseAsStringLiteral(SORT_KEYS).withDefault("employee_name").withOptions({ clearOnDefault: true }));
+  const [dirParam, setDirParam] = useQueryState("dir", parseAsStringLiteral(["asc", "desc"] as const).withDefault("asc").withOptions({ clearOnDefault: true }));
+  const status = statusParam ?? "";
+  const sort = useMemo(() => ({ key: sortParam, dir: (dirParam === "desc" ? -1 : 1) as 1 | -1 }), [sortParam, dirParam]);
 
   const { result, query } = useList({
     resource: "Employee",
@@ -61,7 +66,9 @@ export default function EmployeesPage() {
     sorters: [{ field: "employee_name", order: "asc" }],
     meta: { fields: ["name", "employee_name", "first_name", "last_name", "designation", "department", "status", "custom_last_review_date", "custom_is_probation"] },
   });
-  if (query.isError) console.error("Employees list failed", query.error);
+  useEffect(() => {
+    if (query.isError) console.error("Employees list failed", query.error);
+  }, [query.isError, query.error]);
 
   const employees = useMemo(() => (result?.data ?? []) as Employee[], [result]);
 
@@ -69,6 +76,9 @@ export default function EmployeesPage() {
     () => [...new Set(employees.map((e) => e.department).filter(Boolean))].sort().map((d) => ({ label: d, value: d })),
     [employees],
   );
+
+  // A dept in the URL that matches no loaded department is ignored
+  const department = deptParam && departments.some((d) => d.value === deptParam) ? deptParam : "";
 
   const rows = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -81,7 +91,11 @@ export default function EmployeesPage() {
   const isFiltered = !!search || !!status || !!department;
 
   function toggleSort(key: SortKey) {
-    setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
+    if (sort.key === key) void setDirParam(sort.dir === 1 ? "desc" : "asc");
+    else {
+      void setSortParam(key);
+      void setDirParam("asc");
+    }
   }
 
   let body;
@@ -111,8 +125,8 @@ export default function EmployeesPage() {
           {rows.length} employee{rows.length === 1 ? "" : "s"}
         </span>
 
-        {/* Phones: cards */}
-        <ul className="flex flex-col gap-2.5 md:hidden">
+        {!isDesktop ? (
+        <ul className="flex flex-col gap-2.5">
           {rows.map((e) => (
             <li key={e.name}>
               <Link
@@ -134,9 +148,8 @@ export default function EmployeesPage() {
             </li>
           ))}
         </ul>
-
-        {/* Desktop: table */}
-        <div className="overflow-hidden rounded-2xl border bg-card max-md:hidden">
+        ) : (
+        <div className="overflow-hidden rounded-2xl border bg-card">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[780px] border-collapse text-sm">
               <thead className="bg-muted/60">
@@ -169,13 +182,14 @@ export default function EmployeesPage() {
                     <td className="whitespace-nowrap px-4 py-3">{e.designation || "-"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{e.department || "-"}</td>
                     <td className="whitespace-nowrap px-4 py-3"><EmployeeStatusBadge status={e.status} /></td>
-                    <td className={cn("whitespace-nowrap px-4 py-3 text-muted-foreground")}>{timeSinceReview(e.custom_last_review_date)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{timeSinceReview(e.custom_last_review_date)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+        )}
       </>
     );
   }
@@ -192,8 +206,8 @@ export default function EmployeesPage() {
         onSearch={setSearch}
         placeholder="Search employees"
         filters={[
-          { key: "status", label: "Status", allLabel: "All statuses", value: status, onChange: setStatus, options: STATUSES.map((s) => ({ label: s, value: s })) },
-          { key: "dept", label: "Department", allLabel: "All departments", value: department, onChange: setDepartment, options: departments },
+          { key: "status", label: "Status", allLabel: "All statuses", value: status, onChange: (v: string) => void setStatusParam((STATUSES as readonly string[]).includes(v) ? (v as (typeof STATUSES)[number]) : null), options: [...STATUSES].map((s) => ({ label: s, value: s })) },
+          { key: "dept", label: "Department", allLabel: "All departments", value: department, onChange: (v: string) => void setDeptParam(v || null), options: departments },
         ]}
       />
 

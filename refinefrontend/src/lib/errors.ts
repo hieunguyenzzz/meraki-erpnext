@@ -21,3 +21,13 @@ export function extractErrorMessage(err: unknown, fallback: string): string {
   }
   return fallback;
 }
+
+/** Message from a failed webhook_v2 response body: FastAPI `detail` as a string or a 422 array of `{msg}`. */
+export function apiErrorMessage(body: unknown, fallback: string): string {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail.map((d: { msg?: string }) => d?.msg || JSON.stringify(d)).join(", ");
+  }
+  return fallback;
+}

@@ -12,6 +12,11 @@ export function useStaffOverview() {
   const [rolesMap, setRolesMap] = useState<Record<string, string[]>>({});
   const [orderedIds, setOrderedIds] = useState<string[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveSeq = useRef(0);
+  const pendingSave = useRef(false);
+  const orderRef = useRef<string[]>([]);
+  const savedOrder = useRef<string[]>([]);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   const refetch = useCallback(() => setFetchVersion((v) => v + 1), []);
 
@@ -35,7 +40,10 @@ export function useStaffOverview() {
   useEffect(() => {
     if (!overviewData?.data?.length) return;
     fetch("/inquiry-api/employees/roles-map", { credentials: "include" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Roles map failed: ${r.status}`);
+        return r.json();
+      })
       .then((data) => setRolesMap(data ?? {}))
       .catch((err) => {
         console.error("Roles map failed", err);
@@ -65,9 +73,9 @@ export function useStaffOverview() {
     }));
   }, [overviewData, rolesMap]);
 
-  // Initialise order from custom_display_order when data loads
+  // Initialise order from custom_display_order when data loads (not while a reorder save is in flight)
   useEffect(() => {
-    if (staffData.length === 0) return;
+    if (staffData.length === 0 || pendingSave.current) return;
     const sorted = [...staffData].sort((a, b) => {
       const oa = a.custom_display_order || 0;
       const ob = b.custom_display_order || 0;
@@ -76,7 +84,10 @@ export function useStaffOverview() {
       if (ob === 0) return -1;
       return oa - ob;
     });
-    setOrderedIds(sorted.map((e) => e.name));
+    const ids = sorted.map((e) => e.name);
+    orderRef.current = ids;
+    savedOrder.current = ids;
+    setOrderedIds(ids);
   }, [staffData]);
 
   const orderedStaff = useMemo(() => {
@@ -85,17 +96,31 @@ export function useStaffOverview() {
   }, [orderedIds, staffData]);
 
   function saveOrderDebounced(ids: string[]) {
+    const seq = ++saveSeq.current;
+    pendingSave.current = true;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      let failure: string | null = null;
       try {
         const res = await fetch("/inquiry-api/employee-order", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ items: ids.map((id, index) => ({ employee: id, order: index + 1 })) }),
         });
-        if (!res.ok) console.error("Saving staff order failed", res.status);
+        if (!res.ok) failure = `Saving staff order failed (${res.status})`;
       } catch (err) {
         console.error("Saving staff order failed", err);
+        failure = "Saving staff order failed";
+      }
+      if (seq !== saveSeq.current) return; // a newer reorder owns the result
+      pendingSave.current = false;
+      if (failure) {
+        console.error(failure);
+        orderRef.current = savedOrder.current;
+        setOrderedIds(savedOrder.current);
+        setOrderError("Couldn't save the new order. The previous order was restored.");
+      } else {
+        savedOrder.current = ids;
       }
     }, 400);
   }
@@ -103,11 +128,12 @@ export function useStaffOverview() {
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    setOrderedIds((ids) => {
-      const next = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string));
-      saveOrderDebounced(next);
-      return next;
-    });
+    const ids = orderRef.current;
+    const next = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string));
+    orderRef.current = next;
+    setOrderedIds(next);
+    setOrderError(null);
+    saveOrderDebounced(next);
   }
 
   return {
@@ -116,6 +142,7 @@ export function useStaffOverview() {
     orderedStaff,
     isLoading,
     isError,
+    orderError,
     refetch,
     setRolesMap,
     handleDragEnd,

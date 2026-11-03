@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { displayName } from "@/lib/format";
+import { todayVN } from "@/lib/businessTime";
+import { apiErrorMessage, extractErrorMessage } from "@/lib/errors";
 import { StaffSheet } from "./StaffSheet";
 import type { StaffRow } from "./types";
 
@@ -15,15 +17,17 @@ interface Props {
 
 /** Records the last review date and notes (PATCH /employee/{id}). Mount with a key per employee. */
 export function ReviewSheet({ employee, onClose, onSaved }: Props) {
-  const initialDate = employee.custom_last_review_date || new Date().toISOString().split("T")[0];
+  const initialDate = employee.custom_last_review_date || todayVN();
   const initialNotes = employee.custom_review_notes || "";
   const [reviewDate, setReviewDate] = useState(initialDate);
   const [reviewNotes, setReviewNotes] = useState(initialNotes);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitting = useRef(false);
 
   async function handleSave() {
-    if (!reviewDate) return;
+    if (!reviewDate || submitting.current) return;
+    submitting.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -33,15 +37,15 @@ export function ReviewSheet({ employee, onClose, onSaved }: Props) {
         body: JSON.stringify({ values: { custom_last_review_date: reviewDate, custom_review_notes: reviewNotes } }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `API error ${res.status}`);
+        throw new Error(apiErrorMessage(await res.json().catch(() => ({})), `API error ${res.status}`));
       }
       onSaved();
       onClose();
     } catch (err) {
       console.error("Saving review failed", err);
-      setError(err instanceof Error ? err.message : "Failed to save review");
+      setError(extractErrorMessage(err, "Failed to save review"));
     } finally {
+      submitting.current = false;
       setSaving(false);
     }
   }

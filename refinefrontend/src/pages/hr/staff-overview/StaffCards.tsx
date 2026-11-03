@@ -13,7 +13,7 @@ interface Props {
 /** Phone staff list: one card per person (name, title, status); actions open a sheet. */
 export function StaffCards({ rows, onActions }: Props) {
   return (
-    <ul className="flex flex-col gap-2.5 md:hidden">
+    <ul className="flex flex-col gap-2.5">
       {rows.map((r) => {
         const name = displayName(r);
         return (

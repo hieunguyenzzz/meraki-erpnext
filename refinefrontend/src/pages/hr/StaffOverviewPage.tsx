@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { usePermissions } from "@refinedev/core";
-import { useQueryState } from "nuqs";
+import { useQueryState, parseAsString, parseAsStringLiteral } from "nuqs";
 import { RotateCw, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { displayName } from "@/lib/format";
-import { ASSIGNABLE_ROLES } from "@/lib/roles";
+import { ASSIGNABLE_ROLES, HR_ROLES, hasModuleAccess } from "@/lib/roles";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { StaffFilterBar } from "@/components/staff/StaffFilterBar";
 import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
 import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
@@ -18,11 +19,20 @@ import { InviteSheet } from "./staff-overview/InviteSheet";
 import { useStaffOverview } from "./staff-overview/useStaffOverview";
 import type { StaffRow } from "./staff-overview/types";
 
+const VIEWS = ["probation"] as const;
+const ROLE_VALUES = ASSIGNABLE_ROLES.map((r) => r.role);
+
 export default function StaffOverviewPage() {
-  const [view, setView] = useQueryState("view", { defaultValue: "" });
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const [viewParam, setViewParam] = useQueryState("view", parseAsStringLiteral(VIEWS));
   const [search, setSearch] = useQueryState("q", { defaultValue: "" });
-  const [role, setRole] = useQueryState("role", { defaultValue: "" });
-  const [department, setDepartment] = useQueryState("dept", { defaultValue: "" });
+  const [roleParam, setRoleParam] = useQueryState("role", parseAsStringLiteral(ROLE_VALUES));
+  const [deptParam, setDeptParam] = useQueryState("dept", parseAsString);
+  const view = viewParam ?? "";
+  const role = roleParam ?? "";
+  const setView = (v: string) => void setViewParam(v === "probation" ? "probation" : null);
+  const setRole = (v: string) => void setRoleParam((ROLE_VALUES as readonly string[]).includes(v) ? (v as (typeof ROLE_VALUES)[number]) : null);
+  const setDepartment = (v: string) => void setDeptParam(v || null);
 
   const [reviewing, setReviewing] = useState<StaffRow | null>(null);
   const [assigning, setAssigning] = useState<StaffRow | null>(null);
@@ -32,13 +42,18 @@ export default function StaffOverviewPage() {
   const { data: userRoles } = usePermissions<string[]>({});
   const canManageRoles = (userRoles ?? []).some((r) => r === "System Manager" || r === "Administrator");
 
-  const { summary, total, orderedStaff, isLoading, isError, refetch, setRolesMap, handleDragEnd } = useStaffOverview();
+  const canReview = hasModuleAccess(userRoles ?? [], HR_ROLES);
+
+  const { summary, total, orderedStaff, isLoading, isError, orderError, refetch, setRolesMap, handleDragEnd } = useStaffOverview();
 
   const probationCount = useMemo(() => orderedStaff.filter((r) => r.is_probation).length, [orderedStaff]);
   const departments = useMemo(
     () => [...new Set(orderedStaff.map((r) => r.department).filter((d) => d && d !== "-"))].sort().map((d) => ({ label: d, value: d })),
     [orderedStaff],
   );
+
+  // A dept in the URL that matches no loaded department is ignored
+  const department = deptParam && departments.some((d) => d.value === deptParam) ? deptParam : "";
 
   const rows = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -87,8 +102,12 @@ export default function StaffOverviewPage() {
         <span className="px-1 text-[13px] text-muted-foreground md:text-sm">
           {rows.length} staff
         </span>
-        <StaffCards rows={rows} onActions={setActionsFor} />
-        <StaffTable rows={rows} canManageRoles={canManageRoles} onReview={openReview} onRoles={openRoles} onDragEnd={handleDragEnd} />
+        {orderError && <p role="alert" className="px-1 text-sm text-destructive">{orderError}</p>}
+        {isDesktop ? (
+          <StaffTable rows={rows} canManageRoles={canManageRoles} canReview={canReview} dragEnabled={!isFiltered} onReview={openReview} onRoles={openRoles} onDragEnd={handleDragEnd} />
+        ) : (
+          <StaffCards rows={rows} onActions={setActionsFor} />
+        )}
       </>
     );
   }
@@ -118,7 +137,7 @@ export default function StaffOverviewPage() {
 
       {body}
 
-      <StaffActionsSheet row={actionsFor} canManageRoles={canManageRoles} onClose={() => setActionsFor(null)} onReview={openReview} onRoles={openRoles} />
+      {!isDesktop && <StaffActionsSheet row={actionsFor} canManageRoles={canManageRoles} canReview={canReview} onClose={() => setActionsFor(null)} onReview={openReview} onRoles={openRoles} />}
       {reviewing && <ReviewSheet key={reviewing.name} employee={reviewing} onClose={() => setReviewing(null)} onSaved={refetch} />}
       {assigning && (
         <RolesSheet

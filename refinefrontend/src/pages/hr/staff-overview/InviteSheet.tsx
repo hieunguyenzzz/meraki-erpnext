@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CheckCircle, Copy, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { extractErrorMessage } from "@/lib/errors";
+import { apiErrorMessage, extractErrorMessage } from "@/lib/errors";
+import { todayVN } from "@/lib/businessTime";
 import { StaffSheet } from "./StaffSheet";
 
 interface Props {
@@ -12,20 +13,23 @@ interface Props {
   onInvited: () => void;
 }
 
-const today = () => new Date().toISOString().split("T")[0];
+const blankForm = () => ({ email: "", fullName: "", gender: "Female", dateOfBirth: "2000-01-01", dateOfJoining: todayVN() });
 
 /** Creates an employee + user account (POST /staff/invite) and shows the one-time password. */
 export function InviteSheet({ onClose, onInvited }: Props) {
-  const [form, setForm] = useState({ email: "", fullName: "", gender: "Female", dateOfBirth: "2000-01-01", dateOfJoining: today() });
+  const [initial] = useState(blankForm);
+  const [form, setForm] = useState(initial);
+  const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ password: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const dirty = !success && (form.email.trim() !== "" || form.fullName.trim() !== "");
+  const dirty = !success && (Object.keys(initial) as (keyof typeof initial)[]).some((k) => form[k].trim() !== initial[k]);
 
   async function handleInvite() {
-    if (!form.email.trim() || !form.fullName.trim()) return;
+    if (!form.email.trim() || !form.fullName.trim() || submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -41,12 +45,7 @@ export function InviteSheet({ onClose, onInvited }: Props) {
         }),
       });
       if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        const detail = errData.detail;
-        const msg = Array.isArray(detail)
-          ? detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join(", ")
-          : detail || `Failed to invite staff (${resp.status})`;
-        throw new Error(msg);
+        throw new Error(apiErrorMessage(await resp.json().catch(() => ({})), `Failed to invite staff (${resp.status})`));
       }
       const result = await resp.json();
       onInvited();
@@ -55,6 +54,7 @@ export function InviteSheet({ onClose, onInvited }: Props) {
       console.error("Invite staff failed", err);
       setError(extractErrorMessage(err, "Failed to invite staff member"));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
