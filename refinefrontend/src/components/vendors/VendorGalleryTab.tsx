@@ -19,6 +19,7 @@ interface Props {
 
 export function VendorGalleryTab({ vendorName, images, loading }: Props) {
   const invalidate = useInvalidate();
+  const uploadingRef = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -30,7 +31,6 @@ export function VendorGalleryTab({ vendorName, images, loading }: Props) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") setIndex((i) => (i - 1 + images.length) % images.length);
       if (e.key === "ArrowRight") setIndex((i) => (i + 1) % images.length);
-      if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -38,7 +38,8 @@ export function VendorGalleryTab({ vendorName, images, loading }: Props) {
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || uploadingRef.current) return;
+    uploadingRef.current = true;
     setUploading(true);
     setUploadError(null);
     try {
@@ -48,6 +49,7 @@ export function VendorGalleryTab({ vendorName, images, loading }: Props) {
       console.error("Vendor photo upload failed", err);
       setUploadError("Upload failed. Please try again.");
     } finally {
+      uploadingRef.current = false;
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -121,7 +123,7 @@ export function VendorGalleryTab({ vendorName, images, loading }: Props) {
                 <button
                   type="button"
                   aria-label="Previous photo"
-                  className="absolute left-3 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
+                  className="absolute left-3 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                   onClick={() => setIndex((i) => (i - 1 + images.length) % images.length)}
                 >
                   <ChevronLeft className="h-6 w-6" />
@@ -129,7 +131,7 @@ export function VendorGalleryTab({ vendorName, images, loading }: Props) {
                 <button
                   type="button"
                   aria-label="Next photo"
-                  className="absolute right-3 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
+                  className="absolute right-3 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                   onClick={() => setIndex((i) => (i + 1) % images.length)}
                 >
                   <ChevronRight className="h-6 w-6" />

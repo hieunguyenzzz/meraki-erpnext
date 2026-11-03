@@ -19,8 +19,7 @@ export function VendorsFilterBar({ search, onSearch, category, onCategory, categ
       <button
         key={key}
         type="button"
-        role="tab"
-        aria-selected={active}
+        aria-pressed={active}
         onClick={() => onCategory(key)}
         className={cn(
           "h-10 shrink-0 whitespace-nowrap rounded-full border px-3.5 text-sm font-semibold tabular-nums transition-colors",
@@ -46,7 +45,7 @@ export function VendorsFilterBar({ search, onSearch, category, onCategory, categ
           className="rounded-full pl-11 max-md:pl-11"
         />
       </label>
-      <div role="tablist" aria-label="Category" className="scrollbar-hide -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
+      <div role="group" aria-label="Category" className="scrollbar-hide -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
         {chip("", "All", total)}
         {categories.map((c) => chip(c.name, c.name, c.count))}
       </div>

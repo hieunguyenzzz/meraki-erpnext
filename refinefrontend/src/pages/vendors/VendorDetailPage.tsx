@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useOne, useList, useUpdate, useDelete, useInvalidate } from "@refinedev/core";
+import { useQueryState, parseAsStringLiteral } from "nuqs";
 import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,12 +26,17 @@ interface VendorDoc {
   website?: string;
 }
 
+const TABS = ["gallery", "weddings", "notes"] as const;
+
 export default function VendorDetailPage() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const invalidate = useInvalidate();
 
-  const [tab, setTab] = useState("gallery");
+  const [tab, setTab] = useQueryState("tab", parseAsStringLiteral(TABS).withDefault("gallery").withOptions({ clearOnDefault: true }));
+  const updatingRef = useRef(false);
+  const deletingRef = useRef(false);
+  const [initialForm, setInitialForm] = useState<VendorFormValue>(EMPTY_VENDOR_FORM);
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<VendorFormValue>(EMPTY_VENDOR_FORM);
   const [editError, setEditError] = useState<string | null>(null);
@@ -90,7 +96,7 @@ export default function VendorDetailPage() {
   function openEdit() {
     if (!vendor) return;
     const v = vendor as VendorDoc;
-    setForm({
+    const next: VendorFormValue = {
       name: v.supplier_name ?? "",
       category: v.custom_vendor_category ?? "",
       contact: v.custom_contact_person ?? "",
@@ -98,7 +104,9 @@ export default function VendorDetailPage() {
       email: v.custom_contact_email ?? "",
       website: v.website ?? "",
       notes: v.custom_notes ?? "",
-    });
+    };
+    setForm(next);
+    setInitialForm(next);
     setEditError(null);
     setEditOpen(true);
   }
@@ -108,6 +116,8 @@ export default function VendorDetailPage() {
       setEditError("Vendor name is required.");
       return;
     }
+    if (updatingRef.current) return;
+    updatingRef.current = true;
     setEditError(null);
     setUpdating(true);
     updateVendor(
@@ -116,24 +126,27 @@ export default function VendorDetailPage() {
         id: name!,
         values: {
           supplier_name: form.name.trim(),
-          custom_vendor_category: form.category || undefined,
-          custom_contact_person: form.contact || undefined,
-          custom_contact_phone: form.phone || undefined,
-          custom_contact_email: form.email || undefined,
-          website: form.website || undefined,
-          custom_notes: form.notes || undefined,
+          // "" (not undefined) so a cleared field is actually blanked.
+          custom_vendor_category: form.category,
+          custom_contact_person: form.contact,
+          custom_contact_phone: form.phone,
+          custom_contact_email: form.email,
+          website: form.website,
+          custom_notes: form.notes,
         },
         successNotification: false,
         errorNotification: false,
       },
       {
         onSuccess: () => {
+          updatingRef.current = false;
           setUpdating(false);
           setEditOpen(false);
           invalidate({ resource: "Supplier", invalidates: ["detail"] });
         },
         onError: (err: { message?: string }) => {
           console.error("Update vendor failed", err);
+          updatingRef.current = false;
           setUpdating(false);
           setEditError(err?.message ?? "Failed to update vendor.");
         },
@@ -142,6 +155,8 @@ export default function VendorDetailPage() {
   }
 
   function handleDelete() {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
     setDeleteError(null);
     setDeleting(true);
     deleteVendor(
@@ -150,6 +165,7 @@ export default function VendorDetailPage() {
         onSuccess: () => navigate("/vendors"),
         onError: (err: { message?: string }) => {
           console.error("Delete vendor failed", err);
+          deletingRef.current = false;
           setDeleting(false);
           setDeleteError(err?.message ?? "Failed to delete vendor.");
         },
@@ -202,7 +218,7 @@ export default function VendorDetailPage() {
           />
         </div>
 
-        <Tabs value={tab} onValueChange={setTab} className="min-w-0">
+        <Tabs value={tab} onValueChange={(t) => void setTab(t as (typeof TABS)[number])} className="min-w-0">
           <TabsList className="scrollbar-hide flex w-full max-w-full justify-start gap-2 overflow-x-auto md:gap-5">
             <TabsTrigger value="gallery">Gallery {images.length > 0 && `(${images.length})`}</TabsTrigger>
             <TabsTrigger value="weddings">Weddings {weddings.length > 0 && `(${weddings.length})`}</TabsTrigger>
@@ -226,6 +242,7 @@ export default function VendorDetailPage() {
         title="Edit Vendor"
         idPrefix="edit"
         value={form}
+        initial={initialForm}
         onChange={setForm}
         error={editError}
         busy={updating}

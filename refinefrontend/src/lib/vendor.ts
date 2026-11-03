@@ -45,7 +45,7 @@ export interface VendorRow {
 
 /** Website as an absolute URL ("studio.com" -> "https://studio.com"). */
 export function websiteHref(site: string): string {
-  return site.startsWith("http") ? site : `https://${site}`;
+  return /^https?:\/\//i.test(site) ? site : `https://${site}`;
 }
 
 export function initials(name: string): string {

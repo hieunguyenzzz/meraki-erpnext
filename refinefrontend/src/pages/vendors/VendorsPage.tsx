@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useList, useCreate } from "@refinedev/core";
 import { useQueryState } from "nuqs";
@@ -9,6 +9,7 @@ import { VendorFormSheet } from "@/components/vendors/VendorFormSheet";
 import { EMPTY_VENDOR_FORM, type VendorFormValue, type VendorRow } from "@/lib/vendor";
 import { VendorCard, VendorCardsSkeleton } from "./vendors-list/VendorCard";
 import { VendorsFilterBar } from "./vendors-list/VendorsFilterBar";
+import { useVendorCovers } from "./vendors-list/useVendorCovers";
 
 export default function VendorsPage() {
   const navigate = useNavigate();
@@ -38,27 +39,8 @@ export default function VendorsPage() {
   });
   const vendors = useMemo(() => (vendorsResult?.data ?? []) as VendorRow[], [vendorsResult]);
 
-  // Batch fetch cover images
   const vendorNames = useMemo(() => vendors.map((v) => v.name), [vendors]);
-  const { result: filesResult } = useList({
-    resource: "File",
-    pagination: { mode: "off" },
-    filters: [
-      { field: "attached_to_doctype", operator: "eq", value: "Supplier" },
-      { field: "attached_to_name", operator: "in", value: vendorNames },
-    ],
-    meta: { fields: ["name", "file_url", "attached_to_name"] },
-    queryOptions: { enabled: vendorNames.length > 0 },
-  });
-  const coverImages = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const f of filesResult?.data ?? []) {
-      if (!map[f.attached_to_name] && /\.(jpg|jpeg|png|webp)$/i.test(f.file_url)) {
-        map[f.attached_to_name] = f.file_url;
-      }
-    }
-    return map;
-  }, [filesResult]);
+  const coverImages = useVendorCovers(vendorNames);
 
   const categories = useMemo(() => {
     const counts = new Map<string, number>();
@@ -68,16 +50,20 @@ export default function VendorsPage() {
     return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, count]) => ({ name, count }));
   }, [vendors]);
 
+  // A ?category that isn't one of the loaded categories (junk, or an old link) means "All".
+  const activeCategory = categories.some((c) => c.name === categoryFilter) ? categoryFilter : "";
+
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
     return vendors.filter(
       (v) =>
         v.supplier_name.toLowerCase().includes(s) &&
-        (!categoryFilter || v.custom_vendor_category === categoryFilter)
+        (!activeCategory || v.custom_vendor_category === activeCategory)
     );
-  }, [vendors, search, categoryFilter]);
+  }, [vendors, search, activeCategory]);
 
   const { mutate: createVendor } = useCreate();
+  const submitting = useRef(false);
 
   function openAdd() {
     setForm(EMPTY_VENDOR_FORM);
@@ -90,6 +76,8 @@ export default function VendorsPage() {
       setCreateError("Vendor name is required.");
       return;
     }
+    if (submitting.current) return;
+    submitting.current = true;
     setCreateError(null);
     setCreating(true);
     createVendor(
@@ -112,6 +100,7 @@ export default function VendorsPage() {
       },
       {
         onSuccess: (data) => {
+          submitting.current = false;
           setCreating(false);
           setSheetOpen(false);
           setForm(EMPTY_VENDOR_FORM);
@@ -119,6 +108,7 @@ export default function VendorsPage() {
         },
         onError: (err: { message?: string }) => {
           console.error("Create vendor failed", err);
+          submitting.current = false;
           setCreating(false);
           setCreateError(err?.message ?? "Failed to create vendor.");
         },
@@ -127,7 +117,7 @@ export default function VendorsPage() {
   }
 
   if (vendorsQuery.isError) console.error("Vendors list failed", vendorsQuery.error);
-  const isFiltered = !!search || !!categoryFilter;
+  const isFiltered = !!search || !!activeCategory;
 
   let body;
   if (vendorsQuery.isError) {
@@ -179,7 +169,7 @@ export default function VendorsPage() {
       <VendorsFilterBar
         search={search}
         onSearch={setSearch}
-        category={categoryFilter}
+        category={activeCategory}
         onCategory={setCategoryFilter}
         categories={categories}
         total={vendors.length}
@@ -193,6 +183,7 @@ export default function VendorsPage() {
         title="Add Vendor"
         idPrefix="add"
         value={form}
+        initial={EMPTY_VENDOR_FORM}
         onChange={setForm}
         error={createError}
         busy={creating}
