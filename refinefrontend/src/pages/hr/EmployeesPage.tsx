@@ -126,69 +126,69 @@ export default function EmployeesPage() {
         </span>
 
         {!isDesktop ? (
-        <ul className="flex flex-col gap-2.5">
-          {rows.map((e) => (
-            <li key={e.name}>
-              <Link
-                to={`/hr/employees/${e.name}`}
-                className="flex min-h-[72px] items-center gap-3 rounded-2xl border bg-card p-3 text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <StaffAvatar name={displayName(e)} id={e.name} className="h-10 w-10 text-sm" />
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <b className="truncate text-base">{displayName(e)}</b>
-                  <span className="truncate text-[13px] text-muted-foreground">
-                    {[e.designation, e.department].filter(Boolean).join(" · ") || "-"}
-                  </span>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <EmployeeStatusBadge status={e.status} />
-                  {!!e.custom_is_probation && <Badge variant="warning">Probation</Badge>}
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+          <ul className="flex flex-col gap-2.5">
+            {rows.map((e) => (
+              <li key={e.name}>
+                <Link
+                  to={`/hr/employees/${e.name}`}
+                  className="flex min-h-[72px] items-center gap-3 rounded-2xl border bg-card p-3 text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <StaffAvatar name={displayName(e)} id={e.name} className="h-10 w-10 text-sm" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <b className="truncate text-base">{displayName(e)}</b>
+                    <span className="truncate text-[13px] text-muted-foreground">
+                      {[e.designation, e.department].filter(Boolean).join(" · ") || "-"}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <EmployeeStatusBadge status={e.status} />
+                    {!!e.custom_is_probation && <Badge variant="warning">Probation</Badge>}
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
         ) : (
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[780px] border-collapse text-sm">
-              <thead className="bg-muted/60">
-                <tr>
-                  {COLUMNS.map((c) => (
-                    <th
-                      key={c.key}
-                      scope="col"
-                      aria-sort={sort.key === c.key ? (sort.dir === 1 ? "ascending" : "descending") : "none"}
-                      className="whitespace-nowrap px-4 py-3 text-left text-[13px] font-semibold text-muted-foreground"
-                    >
-                      <button type="button" onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        {c.label}
-                        {sort.key === c.key && (sort.dir === 1 ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)}
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((e) => (
-                  <tr key={e.name} className="border-t">
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <Link to={`/hr/employees/${e.name}`} className="flex items-center gap-2.5 font-semibold text-foreground hover:underline">
-                        <StaffAvatar name={displayName(e)} id={e.name} />
-                        {displayName(e)}
-                        {!!e.custom_is_probation && <Badge variant="warning">Probation</Badge>}
-                      </Link>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">{e.designation || "-"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{e.department || "-"}</td>
-                    <td className="whitespace-nowrap px-4 py-3"><EmployeeStatusBadge status={e.status} /></td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{timeSinceReview(e.custom_last_review_date)}</td>
+          <div className="overflow-hidden rounded-2xl border bg-card">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[780px] border-collapse text-sm">
+                <thead className="bg-muted/60">
+                  <tr>
+                    {COLUMNS.map((c) => (
+                      <th
+                        key={c.key}
+                        scope="col"
+                        aria-sort={sort.key === c.key ? (sort.dir === 1 ? "ascending" : "descending") : "none"}
+                        className="whitespace-nowrap px-4 py-3 text-left text-[13px] font-semibold text-muted-foreground"
+                      >
+                        <button type="button" onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                          {c.label}
+                          {sort.key === c.key && (sort.dir === 1 ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)}
+                        </button>
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((e) => (
+                    <tr key={e.name} className="border-t">
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <Link to={`/hr/employees/${e.name}`} className="flex items-center gap-2.5 font-semibold text-foreground hover:underline">
+                          <StaffAvatar name={displayName(e)} id={e.name} />
+                          {displayName(e)}
+                          {!!e.custom_is_probation && <Badge variant="warning">Probation</Badge>}
+                        </Link>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">{e.designation || "-"}</td>
+                      <td className="whitespace-nowrap px-4 py-3">{e.department || "-"}</td>
+                      <td className="whitespace-nowrap px-4 py-3"><EmployeeStatusBadge status={e.status} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{timeSinceReview(e.custom_last_review_date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         )}
       </>
     );

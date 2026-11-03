@@ -69,7 +69,7 @@ export default function StaffOverviewPage() {
   const isFiltered = !!view || !!search || !!role || !!department;
 
   function openReview(row: StaffRow) {
-    setReviewing(row);
+    if (canReview) setReviewing(row);
   }
   function openRoles(row: StaffRow) {
     if (canManageRoles) setAssigning(row);

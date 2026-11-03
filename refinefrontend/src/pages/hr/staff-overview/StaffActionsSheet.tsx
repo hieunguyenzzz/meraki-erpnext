@@ -19,7 +19,7 @@ const item = "flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-base 
 export function StaffActionsSheet({ row, canManageRoles, canReview, onClose, onReview, onRoles }: Props) {
   return (
     <Sheet open={row !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="bottom" className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))] ">
+      <SheetContent side="bottom" className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <SheetHeader className="pb-2 pr-12">
           <SheetTitle>{row ? displayName(row) : ""}</SheetTitle>
         </SheetHeader>

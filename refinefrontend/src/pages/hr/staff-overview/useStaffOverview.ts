@@ -122,6 +122,8 @@ export function useStaffOverview() {
       } else {
         savedOrder.current = ids;
       }
+      // Reload so people invited during the save appear and the order comes from the server
+      refetch();
     }, 400);
   }
 
