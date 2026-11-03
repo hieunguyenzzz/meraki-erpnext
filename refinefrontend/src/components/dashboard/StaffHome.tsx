@@ -23,8 +23,8 @@ export default function StaffHome() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 pb-6 md:space-y-6 md:pb-0">
       <HomeGreeting firstName={firstName} />
-      <NextWeddingCard wedding={upcoming[0]} isLoading={isLoading} isError={isError} />
-      <UpcomingWeddings weddings={upcoming.slice(1, 6)} />
+      <NextWeddingCard wedding={upcoming[0]} isLoading={isLoading} isError={isError} basePath="/my-weddings" />
+      <UpcomingWeddings weddings={upcoming.slice(1, 6)} basePath="/my-weddings" />
       <section aria-label="Quick stats" className="grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-2.5">
         <StatTile label="Leave left" to="/my-leaves" value={leaveDays === null ? null : `${leaveDays} d`} error={leaveFailed} />
         <MyPayrollCard />

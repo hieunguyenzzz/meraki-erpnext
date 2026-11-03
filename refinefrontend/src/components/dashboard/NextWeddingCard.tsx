@@ -7,13 +7,15 @@ interface Props {
   wedding: MyWedding | undefined;
   isLoading: boolean;
   isError: boolean;
+  /** Where a wedding opens: "/projects" (planners) or "/my-weddings" (employee-only staff). */
+  basePath: string;
 }
 
 /**
  * Hero card for the soonest upcoming wedding. There is no per-wedding checklist data
  * source yet, so unlike the design there is no progress bar.
  */
-export function NextWeddingCard({ wedding: w, isLoading, isError }: Props) {
+export function NextWeddingCard({ wedding: w, isLoading, isError, basePath }: Props) {
   if (isLoading) return <Skeleton className="h-[120px] w-full rounded-[20px]" />;
   if (isError) {
     return (
@@ -31,7 +33,7 @@ export function NextWeddingCard({ wedding: w, isLoading, isError }: Props) {
   const meta = [w.wedding_date, w.venue_name].filter(Boolean).join(" · ");
   return (
     <Link
-      to={`/my-weddings/${w.id}`}
+      to={`${basePath}/${w.id}`}
       className="flex items-start justify-between gap-3 rounded-[20px] border bg-card p-4 transition-colors hover:bg-accent/50 sm:p-[18px]"
     >
       <div className="flex min-w-0 flex-col gap-0.5">

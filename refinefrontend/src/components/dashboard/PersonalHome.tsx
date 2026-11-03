@@ -53,8 +53,8 @@ export default function PersonalHome() {
         <div className="min-w-0 space-y-5 md:space-y-6">
           {hasPlanner && (
             <>
-              <NextWeddingCard wedding={upcoming[0]} isLoading={weddingsLoading} isError={weddingsError} />
-              <UpcomingWeddings weddings={upcoming.slice(1, 6)} />
+              <NextWeddingCard wedding={upcoming[0]} isLoading={weddingsLoading} isError={weddingsError} basePath="/projects" />
+              <UpcomingWeddings weddings={upcoming.slice(1, 6)} basePath="/projects" />
             </>
           )}
           <InterviewsCard email={hasHr ? email : undefined} />

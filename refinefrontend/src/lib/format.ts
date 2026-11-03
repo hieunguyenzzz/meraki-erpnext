@@ -28,7 +28,8 @@ export function formatVNDCompact(amount: number | undefined | null): string {
   const n = amount ?? 0;
   const abs = Math.abs(n);
   const sign = n < 0 ? "-" : "";
-  if (abs >= 1e9) return `${sign}VND ${(abs / 1e9).toFixed(2)} B`;
+  // Choose the unit after rounding, so 999,500,000 reads "1.00 B" rather than "1,000 M".
+  if (abs >= 999_500_000) return `${sign}VND ${(abs / 1e9).toFixed(2)} B`;
   if (abs >= 1e6) return `${sign}VND ${GROUPED.format(abs / 1e6)} M`;
   return formatVNDFull(n);
 }
