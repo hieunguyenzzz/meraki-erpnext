@@ -1,33 +1,32 @@
 import { useMemo, useState } from "react";
 import { useList } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
-import { useQueryState } from "nuqs";
+import { useQueryState, parseAsStringLiteral } from "nuqs";
 import { Plus } from "lucide-react";
 import { PipelineBoard } from "@/components/crm/pipeline/PipelineBoard";
-import { PipelineFilters, type WaitingFilter, type SortOrder } from "@/components/crm/pipeline/PipelineFilters";
+import { PipelineFilters, WAITING_VALUES, SORT_VALUES } from "@/components/crm/pipeline/PipelineFilters";
 import { CreateLeadSheet } from "@/components/crm/pipeline/CreateLeadSheet";
 import { ErrorPanel } from "@/components/chats/ChatStates";
-import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, getColumnForItem, COLUMNS, type ColumnKey } from "@/lib/kanban";
+import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, getColumnForItem, COLUMNS } from "@/lib/kanban";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
 // Simplified Lead-only CRM: All stages use Lead doctype (no Opportunity conversion)
 // Drag and drop disabled - leads are moved via webhook API only
 
+const STAGE_VALUES = COLUMNS.map((c) => c.key);
+
 export default function KanbanPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   // Filter state
   // Kept in the URL so Back from a lead returns to the same stage and filters.
-  const [waitingParam, setWaitingFilter] = useQueryState("awaiting", { defaultValue: "all", clearOnDefault: true });
+  const [waitingFilter, setWaitingFilter] = useQueryState("awaiting", parseAsStringLiteral(WAITING_VALUES).withDefault("all").withOptions({ clearOnDefault: true }));
   const [locationParam, setLocationParam] = useQueryState("location", { defaultValue: "", clearOnDefault: true });
-  const [sortParam, setSortOrder] = useQueryState("sort", { defaultValue: "newest", clearOnDefault: true });
-  const [stageParam, setStage] = useQueryState("stage", { defaultValue: "new", clearOnDefault: true });
-  const waitingFilter = waitingParam as WaitingFilter;
-  const sortOrder = sortParam as SortOrder;
+  const [sortOrder, setSortOrder] = useQueryState("sort", parseAsStringLiteral(SORT_VALUES).withDefault("newest").withOptions({ clearOnDefault: true }));
+  const [stage, setStage] = useQueryState("stage", parseAsStringLiteral(STAGE_VALUES).withDefault("new").withOptions({ clearOnDefault: true }));
   const locationFilter = locationParam || null;
   const setLocationFilter = (loc: string | null) => setLocationParam(loc ?? "");
-  const stage = (COLUMNS.some((c) => c.key === stageParam) ? stageParam : "new") as ColumnKey;
 
   // Fetch Leads with city field for location filter
   const { result: leadsResult, query: leadsQuery } = useList({

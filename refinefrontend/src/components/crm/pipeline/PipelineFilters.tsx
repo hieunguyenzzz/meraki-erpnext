@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export type WaitingFilter = "all" | "client" | "staff";
-export type SortOrder = "newest" | "oldest";
+export const WAITING_VALUES = ["all", "client", "staff"] as const;
+export const SORT_VALUES = ["newest", "oldest"] as const;
+export type WaitingFilter = (typeof WAITING_VALUES)[number];
+export type SortOrder = (typeof SORT_VALUES)[number];
 
 interface Props {
   waitingFilter: WaitingFilter;
