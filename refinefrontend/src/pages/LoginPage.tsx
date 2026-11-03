@@ -5,6 +5,7 @@ import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { AuthAlert } from "@/components/auth/AuthAlert";
@@ -14,12 +15,13 @@ import { PasswordField } from "@/components/auth/PasswordField";
 type View = "login" | "forgot" | "forgot-success";
 
 const linkBtn =
-  "inline-flex h-11 items-center justify-center text-[15px] font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md";
+  "inline-flex h-11 max-md:h-12 items-center justify-center text-[15px] font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md";
 const primaryBtn = "h-12 w-full text-base md:h-[54px]";
 
 export default function LoginPage() {
   const { data: authData, isLoading } = useIsAuthenticated();
   const { mutate: login } = useLogin();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -147,7 +149,7 @@ export default function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
+              autoFocus={isDesktop}
               aria-invalid={!!error}
               aria-describedby={error ? "login-error" : undefined}
             />
@@ -165,7 +167,7 @@ export default function LoginPage() {
             labelAside={
               <button
                 type="button"
-                className="-my-2 inline-flex h-11 items-center text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                className="-my-2 inline-flex h-11 items-center max-md:h-12 text-sm font-semibold text-primary underline-offset-4 hover:underline"
                 onClick={() => {
                   setView("forgot");
                   setResetEmail(username.includes("@") ? username : "");
@@ -201,7 +203,7 @@ export default function LoginPage() {
               value={resetEmail}
               onChange={(e) => setResetEmail(e.target.value)}
               required
-              autoFocus
+              autoFocus={isDesktop}
               placeholder="you@example.com"
               aria-invalid={!!resetError}
               aria-describedby={resetError ? "reset-error" : undefined}

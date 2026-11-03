@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { AuthAlert } from "@/components/auth/AuthAlert";
 import { AuthIcon } from "@/components/auth/AuthIcon";
@@ -10,12 +11,13 @@ import { updatePasswordErrorMessage } from "@/components/auth/updatePasswordErro
 
 const primaryBtn = "h-12 w-full text-base md:h-[54px]";
 const linkBtn =
-  "inline-flex h-11 items-center justify-center rounded-md text-[15px] font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-11 max-md:h-12 items-center justify-center rounded-md text-[15px] font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export default function UpdatePasswordPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const key = searchParams.get("key") ?? "";
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -48,7 +50,7 @@ export default function UpdatePasswordPage() {
     if (submittingRef.current) return;
     if (!newPassword) { setError("Please enter a new password"); return; }
     if (newPassword !== confirmPassword) { setError("Passwords do not match"); return; }
-    if (newPassword.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (newPassword.length < 8) { setError("Password must be at least 8 characters"); return; }
 
     submittingRef.current = true;
     setSubmitting(true);
@@ -112,7 +114,7 @@ export default function UpdatePasswordPage() {
           autoComplete="new-password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
-          autoFocus
+          autoFocus={isDesktop}
           aria-invalid={!!error}
           aria-describedby={describedBy}
         />

@@ -16,6 +16,14 @@ export const authProvider: AuthProvider = {
       return { success: true, redirectTo: "/" };
     }
 
+    if (res.status === 429) {
+      console.error("[login] rate limited (429)");
+      return {
+        success: false,
+        error: { name: "LoginError", message: "Too many attempts, try again in a few minutes." },
+      };
+    }
+
     return {
       success: false,
       error: { name: "LoginError", message: "Invalid username or password" },
