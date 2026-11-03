@@ -11,11 +11,12 @@ GET  /wfh/pending-count     — number of pending WFH requests (HR)
 
 import re
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, BackgroundTasks
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.google_calendar import add_wfh_event
 from webhook_v2.core.logging import get_logger
+from webhook_v2.routers.my_weddings import bind_correlation_id
 from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
 from webhook_v2.auth import require_roles, resolve_employee, HR
 
@@ -180,14 +181,17 @@ def list_all_wfh_requests():
 
 
 @router.get("/wfh/pending-count", dependencies=[Depends(require_roles(*HR))])
-def wfh_pending_count():
+def wfh_pending_count(request: Request, response: Response):
     """Number of WFH requests still waiting for a decision (sidebar badge)."""
+    bind_correlation_id(request, response)
     client = ERPNextClient()
     rows = client._get("/api/resource/Attendance Request", params={
         "filters": '[["reason","=","Work From Home"],["docstatus","=",0]]',
         "fields": '["count(name) as count"]',
     }).get("data", [])
-    return {"count": int(rows[0]["count"]) if rows else 0}
+    count = int(rows[0]["count"]) if rows else 0
+    log.info("wfh_pending_count", count=count)
+    return {"count": count}
 
 
 @router.get("/wfh/list")
