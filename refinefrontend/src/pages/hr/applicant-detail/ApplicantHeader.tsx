@@ -9,16 +9,16 @@ import { stageBadgeVariant, type Applicant } from "./types";
 interface Props {
   applicant: Applicant;
   stars: number;
+  positionTitle: string;
   isDesktop: boolean;
   onDelete: () => void;
   onMore: () => void;
 }
 
-export function ApplicantHeader({ applicant, stars, isDesktop, onDelete, onMore }: Props) {
+export function ApplicantHeader({ applicant, stars, positionTitle, isDesktop, onDelete, onMore }: Props) {
   const name = applicant.applicant_name || applicant.name;
   const stage = applicant.custom_recruiting_stage || "Applied";
-  const sub = [applicant.job_title, `applied ${isoDate(applicant.creation)}`].filter(Boolean).join(" · ");
-
+  
   return (
     <header className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -35,7 +35,15 @@ export function ApplicantHeader({ applicant, stars, isDesktop, onDelete, onMore 
         <StaffAvatar name={name} id={applicant.name} className="h-14 w-14 text-lg md:h-16 md:w-16 md:text-xl" />
         <div className="flex min-w-0 flex-1 basis-60 flex-col gap-1.5">
           <h1 className="break-words font-display text-[28px] font-semibold leading-8 md:text-[36px] md:leading-10">{name}</h1>
-          <p className="text-sm text-muted-foreground">{sub}</p>
+          <p className="text-sm text-muted-foreground">
+            {positionTitle && (
+              <>
+                <Link to="/hr/recruiting/jobs" className="text-primary hover:underline">{positionTitle}</Link>
+                {" · "}
+              </>
+            )}
+            <span className="whitespace-nowrap">applied {isoDate(applicant.creation)}</span>
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={stageBadgeVariant(stage)}>{stage}</Badge>
             <span className="text-sm text-muted-foreground" aria-label={`Rating ${stars} of 5`}>

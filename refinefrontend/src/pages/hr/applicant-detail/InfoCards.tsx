@@ -3,7 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatVNDFull } from "@/lib/format";
+import { Link } from "react-router";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
+
+/** Read-only row that is hidden when it has no value. */
+function Field({ label, value }: { label: string; value: string }) {
+  return value ? <ReadOnlyField label={label} value={value} /> : null;
+}
 import FileAttachments from "@/components/FileAttachments";
 import { isoDate } from "../employee-detail/dates";
 import { RatingStars } from "./RatingStars";
@@ -15,7 +21,7 @@ export function ContactCard({ applicant }: { applicant: Applicant }) {
       <CardHeader><CardTitle>Contact</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <ReadOnlyField label="Email" value={applicant.email_id ?? ""} />
-        <ReadOnlyField label="Phone" value={applicant.phone_number ?? ""} />
+        <Field label="Phone" value={applicant.phone_number ?? ""} />
       </CardContent>
     </Card>
   );
@@ -27,22 +33,30 @@ interface AppProps {
   onRate: (stars: number) => void;
   ratingBusy: boolean;
   ratingError: string | null;
+  positionTitle: string;
 }
 
-export function ApplicationCard({ applicant, stars, onRate, ratingBusy, ratingError }: AppProps) {
+export function ApplicationCard({ applicant, stars, onRate, ratingBusy, ratingError, positionTitle }: AppProps) {
   return (
     <Card>
       <CardHeader><CardTitle>Application</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <ReadOnlyField label="Position" value={applicant.job_title ?? ""} />
-        <ReadOnlyField label="Source" value={applicant.source ?? ""} />
+        {positionTitle && (
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="shrink-0 text-sm text-muted-foreground">Position</span>
+            <Link to="/hr/recruiting/jobs" className="min-w-0 break-words text-right text-sm font-medium text-primary hover:underline">
+              {positionTitle}
+            </Link>
+          </div>
+        )}
+        <Field label="Source" value={applicant.source ?? ""} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm text-muted-foreground">Rating</span>
           <RatingStars stars={stars} onChange={onRate} disabled={ratingBusy} />
         </div>
         {ratingError && <p role="alert" className="text-sm text-danger-soft-foreground">{ratingError}</p>}
         <ReadOnlyField label="Applied" value={isoDate(applicant.creation)} />
-        <ReadOnlyField label="ERPNext Status" value={applicant.status ?? ""} />
+        <Field label="ERPNext Status" value={applicant.status ?? ""} />
         <ApplicationAnswers applicant={applicant} />
       </CardContent>
     </Card>
@@ -58,7 +72,7 @@ function ApplicationAnswers({ applicant: a }: { applicant: Applicant }) {
   if (!hasAny) return null;
   return (
     <div className="space-y-3 border-t border-border pt-3">
-      <ReadOnlyField label="City" value={a.custom_city ?? ""} />
+      <Field label="City" value={a.custom_city ?? ""} />
       {a.custom_linkedin_url && (
         <div className="flex items-baseline justify-between gap-4">
           <span className="shrink-0 text-sm text-muted-foreground">LinkedIn</span>
@@ -72,8 +86,8 @@ function ApplicationAnswers({ applicant: a }: { applicant: Applicant }) {
           </a>
         </div>
       )}
-      <ReadOnlyField label="Salary expectation" value={a.lower_range ? formatVNDFull(a.lower_range) : ""} />
-      <ReadOnlyField label="Education" value={education} />
+      <Field label="Salary expectation" value={a.lower_range ? formatVNDFull(a.lower_range) : ""} />
+      <Field label="Education" value={education} />
       {a.custom_work_experience && (
         <div className="space-y-1">
           <span className="text-sm text-muted-foreground">Work experience</span>

@@ -45,6 +45,18 @@ export default function ApplicantDetailPage() {
   });
   const applicant = result as unknown as Applicant | undefined;
 
+  // job_title is the Job Opening link name; resolve it to the readable title
+  const { result: opening, query: openingQuery } = useOne({
+    resource: "Job Opening",
+    id: applicant?.job_title ?? "",
+    queryOptions: { enabled: !!applicant?.job_title },
+    meta: { fields: ["name", "job_title"] },
+  });
+  // Hidden while loading so the raw id never flashes; falls back to the id if the lookup fails
+  const positionTitle = applicant?.job_title && !openingQuery.isLoading
+    ? ((opening as unknown as { job_title?: string } | undefined)?.job_title || applicant.job_title)
+    : "";
+
   const { result: interviewsResult, query: interviewsQuery } = useList({
     resource: "Interview",
     pagination: { mode: "off" },
@@ -90,7 +102,7 @@ export default function ApplicantDetailPage() {
   }
   if (!applicant) return <DetailSkeleton />;
 
-  const application = <ApplicationCard applicant={applicant} stars={stars} onRate={handleRating} ratingBusy={ratingBusy} ratingError={ratingError} />;
+  const application = <ApplicationCard applicant={applicant} stars={stars} onRate={handleRating} ratingBusy={ratingBusy} ratingError={ratingError} positionTitle={positionTitle} />;
   const documents = <DocumentCards applicant={applicant} name={id} />;
 
   return (
@@ -98,6 +110,7 @@ export default function ApplicantDetailPage() {
       <ApplicantHeader
         applicant={applicant}
         stars={stars}
+        positionTitle={positionTitle}
         isDesktop={isDesktop}
         onDelete={() => setDeleteOpen(true)}
         onMore={() => setMoreOpen(true)}
