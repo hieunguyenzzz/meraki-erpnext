@@ -144,6 +144,7 @@ export function ChoiceGroup({ name, legend, options, value, onChange, required, 
                 value={opt}
                 checked={checked}
                 onChange={() => onChange(opt)}
+                aria-invalid={error ? true : undefined}
                 className={cn("accent-primary", layout === "chips" ? "sr-only" : "h-5 w-5 shrink-0")}
               />
               {opt}

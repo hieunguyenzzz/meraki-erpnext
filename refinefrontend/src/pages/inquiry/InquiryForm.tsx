@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 import { Button } from "@/components/ui/button";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -20,7 +21,8 @@ function describeError(err: unknown): string {
 
 export function InquiryForm() {
   const [form, setForm] = useState<InquiryFormData>(INITIAL_FORM);
-  const [step, setStep] = useState(0);
+  const [params, setParams] = useSearchParams();
+  const [announce, setAnnounce] = useState("");
   const [shown, setShown] = useState<Partial<Record<FieldName, true>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -29,6 +31,30 @@ export function InquiryForm() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const { executeRecaptcha } = useGoogleReCaptcha();
   const isDesktop = useMediaQuery("(min-width: 768px)");
+
+  // The step lives in the URL (?step=1..4) so the phone back gesture returns to the previous step.
+  // Junk values fall back to 1, and nobody can jump past a step with an unanswered required question.
+  const requested = (() => {
+    const n = Number(params.get("step"));
+    return Number.isInteger(n) && n >= 1 && n <= STEPS.length ? n - 1 : 0;
+  })();
+  const firstIncomplete = STEPS.findIndex((s) => s.fields.some((f) => isMissing(form, f)));
+  const step = Math.min(requested, firstIncomplete === -1 ? LAST : firstIncomplete);
+  const setStep = useCallback(
+    (i: number) => setParams({ step: String(i + 1) }),
+    [setParams]
+  );
+
+  const dirty = !submitted && Object.values(form).some((v) => v.trim() !== "");
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   const errors = useMemo(() => {
     const out: Partial<Record<FieldName, string>> = {};
@@ -45,6 +71,7 @@ export function InquiryForm() {
       firstRender.current = false;
       return;
     }
+    setAnnounce("");
     window.scrollTo(0, 0);
     headingRef.current?.focus();
   }, [step]);
@@ -63,6 +90,8 @@ export function InquiryForm() {
         for (const f of missing) next[f] = true;
         return next;
       });
+      setAnnounce("");
+      setTimeout(() => setAnnounce("Please fill the highlighted fields"), 50);
       requestAnimationFrame(() => {
         const el = document.getElementById(missing[0]);
         (el?.tagName === "FIELDSET" ? el.querySelector("input") : el)?.focus();
@@ -73,10 +102,10 @@ export function InquiryForm() {
   );
 
   const goNext = useCallback(() => {
-    if (validateStep(step)) setStep((s) => Math.min(s + 1, LAST));
-  }, [step, validateStep]);
+    if (validateStep(step)) setStep(Math.min(step + 1, LAST));
+  }, [step, validateStep, setStep]);
 
-  const goBack = useCallback(() => setStep((s) => Math.max(s - 1, 0)), []);
+  const goBack = useCallback(() => setStep(Math.max(step - 1, 0)), [step, setStep]);
 
   const submit = useCallback(async () => {
     if (submittingRef.current) return;
@@ -108,7 +137,7 @@ export function InquiryForm() {
       submittingRef.current = false;
       setSubmitting(false);
     }
-  }, [executeRecaptcha, form, validateStep]);
+  }, [executeRecaptcha, form, validateStep, setStep]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -175,6 +204,8 @@ export function InquiryForm() {
             </p>
 
             <StepFields step={step} form={form} errors={errors} onChange={onChange} />
+
+            <p role="status" aria-live="polite" className="sr-only">{announce}</p>
 
             {error && (
               <p role="alert" className="rounded-input border border-destructive/30 bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
