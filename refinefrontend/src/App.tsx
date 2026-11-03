@@ -7,8 +7,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { dataProvider } from "@/providers/dataProvider";
 import { authProvider } from "@/providers/authProvider";
 import { accessControlProvider } from "@/providers/accessControlProvider";
-import { Layout } from "@/components/Layout";
-import { SelfServiceLayout } from "@/components/SelfServiceLayout";
+import { AppShell } from "@/components/layout/AppShell";
+import { MoreMenu } from "@/components/layout/MoreMenu";
 import { ThemeProvider } from "@/context/theme-context";
 import { isEmployeeSelfServiceOnly } from "@/lib/roles";
 import { isProfileIncomplete } from "@/lib/profile";
@@ -140,12 +140,12 @@ export default function App() {
             <Route path="/inquiry" element={<InquiryPage />} />
             <Route path="/apply" element={<JobApplyPage />} />
 
-            {/* Admin: full app with sidebar */}
+            {/* Admin routes: one adaptive shell (sidebar on desktop, bottom bar on mobile) */}
             <Route
               element={
                 <Authenticated key="main" fallback={<Navigate to="/login" />}>
                   <AdminGuard>
-                    <Layout />
+                    <AppShell />
                   </AdminGuard>
                 </Authenticated>
               }
@@ -207,11 +207,11 @@ export default function App() {
               <Route path="/admin/settings" element={<SettingsPage />} />
             </Route>
 
-            {/* Self-service routes (no sidebar) - for all authenticated users */}
+            {/* Self-service routes - same shell, open to all authenticated users */}
             <Route
               element={
                 <Authenticated key="self-service" fallback={<Navigate to="/login" />}>
-                  <SelfServiceLayout />
+                  <AppShell />
                 </Authenticated>
               }
             >
@@ -219,6 +219,7 @@ export default function App() {
               <Route path="/my-leaves" element={<MyLeavesPage />} />
               <Route path="/my-attendance" element={<MyAttendancePage />} />
               <Route path="/my-payroll" element={<MyPayrollPage />} />
+              <Route path="/more" element={<MoreMenu />} />
             </Route>
 
             {/* Catch-all: redirect unknown routes */}

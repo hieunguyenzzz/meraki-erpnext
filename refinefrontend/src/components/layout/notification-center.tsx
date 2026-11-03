@@ -1,11 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import {
-  usePermissions,
-  useCustom,
-  useCustomMutation,
-  useInvalidate,
-} from "@refinedev/core";
+import { useCustomMutation, useInvalidate } from "@refinedev/core";
 import { Bell, Check, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,28 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { HR_ROLES, hasModuleAccess } from "@/lib/roles";
+import { useMyNotifications, type PwaNotification } from "@/hooks/useMyNotifications";
+import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
-
-interface PwaNotification {
-  name: string;
-  from_user: string;
-  message: string;
-  read: number;
-  reference_document_type: string;
-  reference_document_name: string;
-  creation: string;
-  is_pending: boolean;
-}
-
-export function NotificationCenter() {
-  const { data: roles } = usePermissions<string[]>({});
-  const userRoles = roles ?? [];
-
-  if (!hasModuleAccess(userRoles, HR_ROLES)) return null;
-
-  return <NotificationBell />;
-}
 
 const DOC_ROUTES: Record<string, (name: string) => string> = {
   "Job Applicant": (name) => `/hr/recruiting/${encodeURIComponent(name)}`,
@@ -45,21 +21,13 @@ const DOC_ROUTES: Record<string, (name: string) => string> = {
   "Project": (name) => `/projects/${encodeURIComponent(name)}`,
 };
 
-function NotificationBell() {
+export function NotificationBell({ className }: { className?: string }) {
   const navigate = useNavigate();
   const invalidate = useInvalidate();
   const { mutateAsync: customMutation } = useCustomMutation();
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const { query, result: notifResult } = useCustom({
-    url: "/api/method/get_my_notifications",
-    method: "get",
-    queryOptions: { refetchInterval: 30_000 },
-  });
-
-  const notifications: PwaNotification[] = (notifResult?.data as any)?.message?.notifications ?? [];
-  const count: number = (notifResult?.data as any)?.message?.total ?? 0;
-  const refetch = query.refetch;
+  const { notifications, count, refetch } = useMyNotifications();
 
   async function handleAction(notif: PwaNotification, action: "read" | "approve" | "reject") {
     setProcessingId(notif.name);
@@ -104,10 +72,10 @@ function NotificationBell() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-8 w-8">
-          <Bell className="h-4 w-4" />
+        <Button variant="ghost" size="icon" className={cn("relative", className)}>
+          <Bell className="h-5 w-5" />
           {count > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+            <span className="absolute top-0 right-0 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-primary-fill px-1 text-[11px] font-bold text-primary-fill-foreground">
               {count}
             </span>
           )}

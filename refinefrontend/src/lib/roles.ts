@@ -27,6 +27,7 @@ export const WEDDING_MANAGER_ROLES = ["System Manager", "Sales Manager"];
 export const WEDDING_EXPENSE_ROLES = ["Wedding Expense Manager"];
 export const REPORT_ROLES = ["System Manager", "HR Manager", "HR User"];
 export const DIRECTOR_ROLES = ["System Manager"];
+export const SETTINGS_ROLES = ["System Manager", "Administrator"];
 
 export type DashboardOption = "personal" | "director";
 
@@ -97,7 +98,7 @@ export const MODULES: ModuleConfig[] = [
   {
     label: "Settings",
     path: "/admin",
-    roles: ["System Manager", "Administrator"],
+    roles: SETTINGS_ROLES,
     children: [
       { label: "Settings", path: "/admin/settings", icon: Settings },
     ],

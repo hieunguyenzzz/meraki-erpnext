@@ -126,14 +126,6 @@
   }
 }
 
-/* Sidebar visibility helpers - controlled by sidebar collapsed state */
-[data-sidebar-collapsed="true"] .sidebar-expanded-only {
-  display: none;
-}
-[data-sidebar-collapsed="false"] .sidebar-collapsed-only {
-  display: none;
-}
-
 /* Hide scrollbar utility */
 .scrollbar-hide {
   -ms-overflow-style: none;
