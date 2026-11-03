@@ -572,38 +572,73 @@ def list_payments():
         "limit_page_length": 0,
     }).get("data", [])
 
-    result = []
-    for pe in pes:
-        description = ""
-        category = ""
-        linked_invoice = ""
+    expense_pes = [pe["name"] for pe in pes
+                   if pe.get("payment_type") == "Pay" and pe.get("party") == "Company Expense"]
+    details = _payment_expense_details(client, expense_pes)
 
-        if pe.get("payment_type") == "Pay" and pe.get("party") == "Company Expense":
-            try:
-                pe_doc = client._get(f"/api/resource/Payment Entry/{pe['name']}").get("data", {})
-                pi_name = next(
-                    (ref["reference_name"] for ref in pe_doc.get("references", [])
-                     if ref.get("reference_doctype") == "Purchase Invoice"),
-                    None,
-                )
-                if pi_name:
-                    pi_doc = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
-                    first_item = (pi_doc.get("items") or [{}])[0]
-                    description = first_item.get("item_name", "")
-                    raw_account = first_item.get("expense_account", "")
-                    category = raw_account.replace(" - MWP", "")
-                    linked_invoice = pi_name
-            except Exception as e:
-                log.warning("payments_enrich_failed", pe=pe["name"], error=str(e))
-
-        result.append({
+    return [
+        {
             **pe,
-            "description": description,
-            "category": category,
-            "linked_invoice": linked_invoice,
-        })
+            "description": details.get(pe["name"], {}).get("description", ""),
+            "category": details.get(pe["name"], {}).get("category", ""),
+            "linked_invoice": details.get(pe["name"], {}).get("linked_invoice", ""),
+        }
+        for pe in pes
+    ]
 
-    return result
+
+_LOOKUP_BATCH = 100
+
+
+def _get_children(client, child_doctype: str, parent_doctype: str, filters: list, fields: list[str]) -> list[dict]:
+    return client._get(f"/api/resource/{child_doctype}", params={
+        "parent": parent_doctype,
+        "filters": json.dumps(filters),
+        "fields": json.dumps(fields),
+        "limit_page_length": 0,
+    }).get("data", [])
+
+
+def _payment_expense_details(client, pe_names: list[str]) -> dict[str, dict]:
+    """pe name -> {description, category, linked_invoice} from the linked Purchase Invoice.
+
+    Two batched child-table queries per _LOOKUP_BATCH payments (instead of two GETs per payment).
+    A failing batch is logged and leaves its payments blank; the rest of the list still loads.
+    """
+    out: dict[str, dict] = {}
+    for i in range(0, len(pe_names), _LOOKUP_BATCH):
+        batch = pe_names[i:i + _LOOKUP_BATCH]
+        try:
+            refs = _get_children(
+                client, "Payment Entry Reference", "Payment Entry",
+                [["parent", "in", batch], ["reference_doctype", "=", "Purchase Invoice"]],
+                ["parent", "reference_name", "idx"],
+            )
+            pi_by_pe: dict[str, str] = {}
+            for ref in sorted(refs, key=lambda r: r.get("idx") or 0):
+                pi_by_pe.setdefault(ref["parent"], ref["reference_name"])
+            if not pi_by_pe:
+                continue
+
+            items = _get_children(
+                client, "Purchase Invoice Item", "Purchase Invoice",
+                [["parent", "in", sorted(set(pi_by_pe.values()))]],
+                ["parent", "item_name", "expense_account", "idx"],
+            )
+            first_item: dict[str, dict] = {}
+            for item in sorted(items, key=lambda r: r.get("idx") or 0):
+                first_item.setdefault(item["parent"], item)
+
+            for pe_name, pi_name in pi_by_pe.items():
+                item = first_item.get(pi_name, {})
+                out[pe_name] = {
+                    "description": item.get("item_name", ""),
+                    "category": (item.get("expense_account") or "").replace(" - MWP", ""),
+                    "linked_invoice": pi_name,
+                }
+        except Exception as e:
+            log.warning("payments_enrich_failed", payments=len(batch), first=batch[0], error=str(e))
+    return out
 
 
 @router.get("/expenses")
