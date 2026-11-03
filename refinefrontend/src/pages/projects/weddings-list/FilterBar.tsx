@@ -56,19 +56,17 @@ export function FilterBar(p: Props) {
               <SelectItem value="Destination">Destination</SelectItem>
             </SelectContent>
           </Select>
-          {(
-            <Select value={p.year} onValueChange={(v) => p.onYear(v)}>
-              <SelectTrigger aria-label="Year" className="w-auto shrink-0 gap-2 rounded-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_YEARS}>All years</SelectItem>
-                {p.years.map((y) => (
-                  <SelectItem key={y} value={y}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <Select value={p.year} onValueChange={(v) => p.onYear(v)}>
+            <SelectTrigger aria-label="Year" className="w-auto shrink-0 gap-2 rounded-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_YEARS}>All years</SelectItem>
+              {p.years.map((y) => (
+                <SelectItem key={y} value={y}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {p.staffOptions.length > 0 && (
             <StaffFilterSelect staff={p.staffOptions} value={p.staff} onChange={p.onStaff} myEmployeeId={p.myEmployeeId} />
           )}

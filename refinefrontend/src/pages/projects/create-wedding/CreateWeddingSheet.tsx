@@ -45,7 +45,7 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
   });
   const employees = (employeesResult?.data ?? []) as EmployeeOption[];
 
-  const { result: customersResult } = useList({
+  const { result: customersResult, query: customersQuery } = useList({
     resource: "Customer",
     pagination: { mode: "off" },
     meta: { fields: ["name", "customer_name", "email_id"] },
@@ -101,10 +101,12 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
     !form.weddingType && "wedding type",
     !form.leadPlanner && "lead planner",
   ].filter(Boolean) as string[];
-  const canCreate = missing.length === 0 && !duplicateCustomer && !isSubmitting;
+  // The duplicate-email check needs the full customer list; never let it pass on an empty one.
+  const contactsReady = customersQuery.isSuccess;
+  const canCreate = missing.length === 0 && contactsReady && !duplicateCustomer && !isSubmitting;
 
   const handleCreate = async () => {
-    if (submittingRef.current || duplicateCustomer) return;
+    if (submittingRef.current || duplicateCustomer || !contactsReady) return;
     submittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
@@ -185,6 +187,11 @@ export function CreateWeddingSheet({ open, onOpenChange }: Props) {
           </div>
 
           <SheetFooter className="shrink-0 flex-col gap-2 border-t bg-card px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:flex-row sm:items-center sm:space-x-0 sm:px-6">
+            {missing.length === 0 && !contactsReady && (
+              <p role="status" className="text-xs text-muted-foreground sm:mr-auto">
+                {customersQuery.isError ? "Couldn't load contacts, so a wedding can't be created yet." : "Checking contacts…"}
+              </p>
+            )}
             {missing.length > 0 && (
               <p className="text-xs text-muted-foreground sm:mr-auto">Still needed: {missing.join(", ")}</p>
             )}

@@ -111,43 +111,43 @@ export function CreatableCombobox({
               </div>
             </div>
           ) : (
-          <Command>
-            <CommandInput
-              placeholder={searchPlaceholder}
-              value={search}
-              onValueChange={(v) => {
-                setSearch(v);
-                onSearchChange?.();
-              }}
-            />
-            <CommandList>
-              <CommandEmpty>{emptyText}</CommandEmpty>
-              <CommandGroup>
-                {options.map((o) => (
-                  <CommandItem
-                    key={o.value}
-                    value={`${o.label}__${o.value}`}
-                    onSelect={() => {
-                      onSelect(o);
-                      setOpen(false);
-                    }}
-                  >
-                    <Check className={cn("mr-2 h-4 w-4", value === o.value ? "opacity-100" : "opacity-0")} />
-                    {o.label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-              {canCreate && (
+            <Command>
+              <CommandInput
+                placeholder={searchPlaceholder}
+                value={search}
+                onValueChange={(v) => {
+                  setSearch(v);
+                  onSearchChange?.();
+                }}
+              />
+              <CommandList>
+                <CommandEmpty>{emptyText}</CommandEmpty>
                 <CommandGroup>
-                  {/* Selecting (Enter or click) only asks for confirmation; nothing is created until Create is pressed. */}
-                  <CommandItem value={`__create__${typed}`} onSelect={() => setConfirming(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create "{typed}"
-                  </CommandItem>
+                  {options.map((o) => (
+                    <CommandItem
+                      key={o.value}
+                      value={`${o.label}__${o.value}`}
+                      onSelect={() => {
+                        onSelect(o);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4", value === o.value ? "opacity-100" : "opacity-0")} />
+                      {o.label}
+                    </CommandItem>
+                  ))}
                 </CommandGroup>
-              )}
-            </CommandList>
-          </Command>
+                {canCreate && (
+                  <CommandGroup>
+                    {/* Selecting (Enter or click) only asks for confirmation; nothing is created until Create is pressed. */}
+                    <CommandItem value={`__create__${typed}`} onSelect={() => setConfirming(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create "{typed}"
+                    </CommandItem>
+                  </CommandGroup>
+                )}
+              </CommandList>
+            </Command>
           )}
         </PopoverContent>
       </Popover>
