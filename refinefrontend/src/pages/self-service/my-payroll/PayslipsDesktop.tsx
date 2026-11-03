@@ -32,7 +32,7 @@ export function PayslipsDesktop({ slips, commissionComponents }: Props) {
               >
                 <span className="flex min-w-0 flex-1 flex-col">
                   <b className="text-base tabular-nums">{monthIso(slip)}</b>
-                  <span className="text-xs text-muted-foreground">Paid {slip.posting_date}</span>
+                  <span className="text-xs text-muted-foreground">Posted {slip.posting_date}</span>
                 </span>
                 <span className="font-bold tabular-nums">{formatVNDFull(slip.net_pay)}</span>
               </button>
@@ -44,7 +44,7 @@ export function PayslipsDesktop({ slips, commissionComponents }: Props) {
         <header className="mb-5">
           <h2 className="text-2xl font-semibold tabular-nums">{monthIso(selected)}</h2>
           <p className="text-sm text-muted-foreground">
-            {selected.start_date} – {selected.end_date} · Paid {selected.posting_date}
+            {selected.start_date} – {selected.end_date} · Posted {selected.posting_date}
           </p>
         </header>
         <PayslipBreakdownView slip={selected} commissionComponents={commissionComponents} />

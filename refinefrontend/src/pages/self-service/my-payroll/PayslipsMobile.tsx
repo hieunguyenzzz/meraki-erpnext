@@ -23,6 +23,7 @@ export function PayslipsMobile({ slips, commissionComponents }: Props) {
             <button
               type="button"
               aria-expanded={open}
+              aria-controls={`payslip-${slip.name}`}
               onClick={() => setOpenName(open ? null : slip.name)}
               className="flex min-h-[68px] w-full items-center gap-3 px-4 text-left"
             >
@@ -36,7 +37,7 @@ export function PayslipsMobile({ slips, commissionComponents }: Props) {
               <ChevronDown className={cn("h-5 w-5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
             </button>
             {open && (
-              <div className="border-t px-4 pb-4 pt-3">
+              <div id={`payslip-${slip.name}`} role="region" aria-label={`Payslip ${monthIso(slip)}`} className="border-t px-4 pb-4 pt-3">
                 <PayslipBreakdownView slip={slip} commissionComponents={commissionComponents} />
               </div>
             )}
