@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiTile } from "@/components/dashboard/KpiTile";
@@ -8,7 +7,7 @@ import { MonthlyTable } from "@/components/dashboard/MonthlyTable";
 import { NetProfitChart } from "@/components/dashboard/NetProfitChart";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { yearVN } from "@/lib/businessTime";
-import type { OverviewData } from "@/components/dashboard/financialOverview";
+import { useFinancialOverview } from "@/components/dashboard/useFinancialOverview";
 
 const EMPTY_TOTALS = {
   revenue: 0, expenses: 0, net: 0, collected: 0,
@@ -20,19 +19,7 @@ const EMPTY_TOTALS = {
 export default function DirectorSection() {
   const currentYear = yearVN();
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["financial-overview", selectedYear],
-    queryFn: async () => {
-      try {
-        const r = await fetch(`/inquiry-api/financial-overview?year=${selectedYear}`, { credentials: "include" });
-        if (!r.ok) throw new Error(`financial-overview returned ${r.status}`);
-        return (await r.json()) as OverviewData;
-      } catch (err) {
-        console.error("DirectorSection: financial overview failed", { year: selectedYear, err });
-        throw err;
-      }
-    },
-  });
+  const { data, isLoading, isError } = useFinancialOverview(selectedYear);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   // Remember the year list so the picker still works after a year fails to load.
