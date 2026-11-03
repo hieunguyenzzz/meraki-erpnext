@@ -4,12 +4,13 @@ import { LogOut, Search } from "lucide-react";
 import { useSearch } from "@/context/search-context";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { useMyNotifications } from "@/hooks/useMyNotifications";
+import { usePendingLeaveCount } from "@/hooks/usePendingLeaveCount";
 import {
   PRIMARY_ROLE_LABEL, getActiveItem, getPrimaryRole, getVisibleNavGroups,
   type BadgeKey, type NavItem,
 } from "@/lib/navigation";
 import { getInitials } from "@/lib/initials";
-import { isEmployeeSelfServiceOnly } from "@/lib/roles";
+import { HR_ROLES, isEmployeeSelfServiceOnly } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { Wordmark } from "@/components/layout/Wordmark";
@@ -18,6 +19,7 @@ const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigat
 
 const BADGE_TONE: Record<BadgeKey, string> = {
   notifications: "bg-primary-fill text-primary-fill-foreground",
+  leaves: "bg-primary-fill text-primary-fill-foreground",
 };
 
 function SidebarLink({ item, active, badge }: { item: NavItem; active: boolean; badge: number }) {
@@ -82,7 +84,8 @@ export function Sidebar() {
   const roles = data ?? [];
   const { setOpen } = useSearch();
   const { count } = useMyNotifications();
-  const badges: Record<BadgeKey, number> = { notifications: count };
+  const pendingLeaves = usePendingLeaveCount(roles.some((r) => HR_ROLES.includes(r)));
+  const badges: Record<BadgeKey, number> = { notifications: count, leaves: pendingLeaves };
 
   // Render an empty column until roles are known so employee-only users never flash the staff nav.
   if (isLoading) {
