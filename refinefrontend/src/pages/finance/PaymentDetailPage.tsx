@@ -1,126 +1,99 @@
 import { useParams, Link } from "react-router";
 import { useOne } from "@refinedev/core";
-import { formatVND, formatDate } from "@/lib/format";
+import { ChevronRight, RotateCw } from "lucide-react";
+import { formatVNDFull } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { StatePanel } from "@/components/StatePanel";
 import FileAttachments from "@/components/FileAttachments";
 import { DetailSkeleton } from "@/components/detail-skeleton";
+import { isoDate } from "./invoices/types";
+import { docstatusLabel, docstatusVariant, typeVariant } from "./payments/types";
 
-function statusVariant(docstatus: number) {
-  if (docstatus === 1) return "success" as const;
-  if (docstatus === 2) return "destructive" as const;
-  return "secondary" as const;
+interface Reference { reference_doctype: string; reference_name: string; allocated_amount: number }
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="text-sm tabular-nums">{children}</dd>
+    </div>
+  );
 }
 
-function statusLabel(docstatus: number) {
-  if (docstatus === 1) return "Submitted";
-  if (docstatus === 2) return "Cancelled";
-  return "Draft";
+/** Sales Invoices and Purchase Invoices have pages; anything else is shown as plain text. */
+function refHref(r: Reference) {
+  const n = encodeURIComponent(r.reference_name);
+  if (r.reference_doctype === "Sales Invoice") return `/finance/invoices/${n}`;
+  if (r.reference_doctype === "Purchase Invoice") return `/finance/expenses/${n}`;
+  return null;
+}
+
+function RefRow({ r }: { r: Reference }) {
+  const to = refHref(r);
+  const inner = (
+    <>
+      <span className="min-w-0">
+        <b className="block break-all font-medium">{r.reference_name}</b>
+        <span className="text-muted-foreground">{r.reference_doctype}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-2 font-semibold">
+        {formatVNDFull(r.allocated_amount)}
+        {to && <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />}
+      </span>
+    </>
+  );
+  const cls = "flex min-h-12 items-center justify-between gap-3 rounded-md bg-muted px-3 py-2.5 text-sm tabular-nums";
+  return to ? <Link to={to} className={`${cls} hover:bg-accent active:bg-accent`}>{inner}</Link> : <div className={cls}>{inner}</div>;
 }
 
 export default function PaymentDetailPage() {
   const { name } = useParams<{ name: string }>();
 
-  const { result: payment } = useOne({ resource: "Payment Entry", id: name! });
+  const { result: payment, query } = useOne({ resource: "Payment Entry", id: name! });
 
-  if (!payment) {
-    return <DetailSkeleton />;
+  if (query.isError) {
+    console.error("Payment failed to load", name, query.error);
+    return (
+      <StatePanel
+        kind="error"
+        title="Couldn't load this payment"
+        text="It may not exist, or the server didn't answer."
+        action={{ label: "Try again", onClick: () => void query.refetch(), icon: <RotateCw className="h-4 w-4" /> }}
+      />
+    );
   }
+  if (!payment) return <DetailSkeleton />;
 
-  const refs = payment.references ?? [];
+  const refs = (payment.references ?? []) as Reference[];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">{payment.name}</h1>
-        <Badge variant={payment.payment_type === "Receive" ? "success" : "warning"}>
-          {payment.payment_type}
-        </Badge>
-        <Badge variant={statusVariant(payment.docstatus)}>
-          {statusLabel(payment.docstatus)}
-        </Badge>
-      </div>
+    <div className="flex flex-col gap-4 pb-6">
+      <header className="flex flex-col gap-4 rounded-card border bg-card p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">{payment.name}</h1>
+          <Badge variant={typeVariant(payment.payment_type)}>{payment.payment_type}</Badge>
+          <Badge variant={docstatusVariant(payment.docstatus)}>{docstatusLabel(payment.docstatus)}</Badge>
+        </div>
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Amount</div>
+          <div className="text-3xl font-semibold tabular-nums">{formatVNDFull(payment.paid_amount)}</div>
+        </div>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t pt-4 md:grid-cols-4">
+          <Fact label="Party">{payment.party_name || payment.party || "—"}</Fact>
+          <Fact label="Date">{isoDate(payment.posting_date)}</Fact>
+          <Fact label="Mode">{payment.mode_of_payment || "-"}</Fact>
+          {payment.reference_no && <Fact label="Reference #">{payment.reference_no}</Fact>}
+        </dl>
+      </header>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Party</span>
-              <span>{payment.party_name || payment.party}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Date</span>
-              <span>{formatDate(payment.posting_date)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Amount</span>
-              <span className="font-bold">{formatVND(payment.paid_amount)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Mode</span>
-              <span>{payment.mode_of_payment || "-"}</span>
-            </div>
-            {payment.reference_no && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Reference #</span>
-                <span>{payment.reference_no}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {refs.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Linked Invoices</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead className="text-right">Allocated</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {refs.map((ref: any, i: number) => (
-                    <TableRow key={i}>
-                      <TableCell>{ref.reference_doctype}</TableCell>
-                      <TableCell>
-                        {ref.reference_doctype === "Sales Invoice" ? (
-                          <Link
-                            to={`/finance/invoices/${ref.reference_name}`}
-                            className="text-primary hover:underline"
-                          >
-                            {ref.reference_name}
-                          </Link>
-                        ) : ref.reference_doctype === "Purchase Invoice" ? (
-                          <Link
-                            to={`/finance/expenses/${ref.reference_name}`}
-                            className="text-primary hover:underline"
-                          >
-                            {ref.reference_name}
-                          </Link>
-                        ) : (
-                          ref.reference_name
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatVND(ref.allocated_amount)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      {refs.length > 0 && (
+        <section aria-label="Linked invoices" className="rounded-card border bg-card p-5">
+          <h2 className="mb-3 text-lg font-semibold">Linked invoices</h2>
+          <ul className="flex flex-col gap-2">
+            {refs.map((r, i) => <li key={`${r.reference_name}-${i}`}><RefRow r={r} /></li>)}
+          </ul>
+        </section>
+      )}
 
       <FileAttachments doctype="Payment Entry" docname={name!} />
     </div>
