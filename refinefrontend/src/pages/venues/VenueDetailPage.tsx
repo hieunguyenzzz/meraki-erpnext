@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router";
-import { useOne, useList, useDelete, useInvalidate } from "@refinedev/core";
+import { useOne, useList, useDelete } from "@refinedev/core";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -28,7 +29,7 @@ import type { VenueSupplier, VenueWeddingArea } from "@/lib/types";
 export default function VenueDetailPage() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const invalidate = useInvalidate();
+  const queryClient = useQueryClient();
 
   const [tab, setTab] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
@@ -93,52 +94,23 @@ export default function VenueDetailPage() {
     [photosResult?.data]
   );
 
-  // ── Fetch linked Contact ─────────────────────────────────────────────────
-  const { result: contactResult } = useList({
-    resource: "Contact",
-    pagination: { mode: "off" },
-    meta: {
-      // Contact links to a Supplier through its Dynamic Link child table
-      rawFilters: [
-        ["Dynamic Link", "link_doctype", "=", "Supplier"],
-        ["Dynamic Link", "link_name", "=", name!],
-      ],
-      fields: [
-        "name",
-        "first_name",
-        "last_name",
-        "designation",
-        "email_id",
-        "phone",
-        "mobile_no",
-      ],
+  // ── Fetch linked Contact (backend merges the Contact and its phone rows) ──
+  const { data: contactData } = useQuery({
+    queryKey: ["venue-contact", name],
+    enabled: !!name,
+    queryFn: async () => {
+      const res = await fetch(`/inquiry-api/venues/${encodeURIComponent(name!)}/contact`, { credentials: "include" });
+      if (!res.ok) throw new Error(`Venue contact failed: ${res.status}`);
+      return res.json() as Promise<{ contact: Record<"name" | "title" | "email" | "phone" | "alt_phone", string> | null }>;
     },
-    queryOptions: { enabled: !!name },
   });
-  interface ContactDoc {
-    first_name?: string;
-    last_name?: string;
-    designation?: string;
-    email_id?: string;
-    phone?: string;
-    mobile_no?: string;
-  }
-  const contactDoc: ContactDoc | null = (contactResult?.data?.[0] as ContactDoc) ?? null;
-
-  const contact: ContactView | null = contactDoc
+  const contact: ContactView | null = contactData?.contact
     ? {
-        name: [contactDoc.first_name, contactDoc.last_name]
-          .filter(Boolean)
-          .join(" ") || undefined,
-        title: contactDoc.designation || undefined,
-        email: contactDoc.email_id || undefined,
-        phone: contactDoc.phone || contactDoc.mobile_no || undefined,
-        alt_phone:
-          contactDoc.phone &&
-          contactDoc.mobile_no &&
-          contactDoc.phone !== contactDoc.mobile_no
-            ? contactDoc.mobile_no
-            : undefined,
+        name: contactData.contact.name || undefined,
+        title: contactData.contact.title || undefined,
+        email: contactData.contact.email || undefined,
+        phone: contactData.contact.phone || undefined,
+        alt_phone: contactData.contact.alt_phone || undefined,
       }
     : null;
 
@@ -290,7 +262,7 @@ export default function VenueDetailPage() {
             onSaved={() => {
               setEditOpen(false);
               void venueQuery.refetch();
-              invalidate({ resource: "Contact", invalidates: ["list"] });
+              void queryClient.invalidateQueries({ queryKey: ["venue-contact", name] });
             }}
             onCancel={() => setEditOpen(false)}
           />

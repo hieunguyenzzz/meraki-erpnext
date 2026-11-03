@@ -208,7 +208,9 @@ def test_update_venue_url_encodes_existing_contact_name():
     )
     fake_client = MagicMock()
     fake_client._put.return_value = {"data": {}}
-    fake_client._get.return_value = {"data": [{"name": "Nguyễn Văn A-An Lâm"}]}
+    fake_client._get.side_effect = lambda url, params=None: (
+        {"data": [{"name": "Nguyễn Văn A-An Lâm"}]} if url == "/api/resource/Contact" else {"data": {}}
+    )
 
     update_venue("An Lâm Retreat", payload, _client=fake_client)
 
@@ -250,3 +252,57 @@ def test_create_venue_with_contact_upserts_contact():
     assert contact_data["first_name"] == "Jane"
     assert any(link["link_doctype"] == "Supplier" and link["link_name"] == "Test Venue"
                for link in contact_data["links"])
+
+
+def _contact_client(doc):
+    c = MagicMock()
+
+    def _get(url, params=None):
+        if url == "/api/resource/Contact":
+            return {"data": [{"name": doc["name"]}]}
+        return {"data": doc}
+
+    c._get.side_effect = _get
+    return c
+
+
+def _existing_contact():
+    return {
+        "name": "Quan Test-Venue",
+        "first_name": "Quan",
+        "last_name": "Test",
+        "email_ids": [{"name": "e1", "email_id": "q@x.com", "is_primary": 1}],
+        "phone_nos": [
+            {"name": "p1", "phone": "111", "is_primary_phone": 1, "is_primary_mobile_no": 1},
+            {"name": "p2", "phone": "222"},
+        ],
+    }
+
+
+def test_get_contact_returns_primary_and_alt_phone():
+    from webhook_v2.routers.venues import get_venue_contact
+
+    view = get_venue_contact("Venue", _client=_contact_client(_existing_contact()))["contact"]
+    assert view["name"] == "Quan Test"
+    assert view["phone"] == "111" and view["alt_phone"] == "222"
+    assert view["email"] == "q@x.com"
+
+
+def test_upsert_keeps_alt_phone_when_form_sends_none_and_does_not_double_last_name():
+    from webhook_v2.routers.venues import ContactPayload, _upsert_contact
+
+    client = _contact_client(_existing_contact())
+    _upsert_contact(client, "Venue", ContactPayload(name="Quan Test", phone="111", email="q@x.com"))
+    body = client._put.call_args[0][1]
+    assert "first_name" not in body and "last_name" not in body
+    assert [p["phone"] for p in body["phone_nos"]] == ["111", "222"]
+
+
+def test_upsert_changed_name_clears_last_name_and_updates_phones_in_place():
+    from webhook_v2.routers.venues import ContactPayload, _upsert_contact
+
+    client = _contact_client(_existing_contact())
+    _upsert_contact(client, "Venue", ContactPayload(name="Mai Lan", phone="333", alt_phone="444"))
+    body = client._put.call_args[0][1]
+    assert body["first_name"] == "Mai Lan" and body["last_name"] == ""
+    assert [(p["name"], p["phone"]) for p in body["phone_nos"]] == [("p1", "333"), ("p2", "444")]

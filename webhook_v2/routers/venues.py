@@ -86,6 +86,16 @@ def get_listing(city: str | None = None) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router.get("/{name}/contact")
+def get_contact(name: str) -> dict[str, Any]:
+    """The Contact linked to a venue (names, title, email, primary and second phone)."""
+    try:
+        return get_venue_contact(name)
+    except Exception as exc:
+        log.exception("Failed to load venue contact", extra={"venue": name})
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ---------------------------------------------------------------------------
 # Pydantic models for create / update
 # ---------------------------------------------------------------------------
@@ -164,18 +174,8 @@ def _build_supplier_doc(payload: VenuePayload) -> dict[str, Any]:
     return doc
 
 
-def _upsert_contact(
-    client: ERPNextClient,
-    supplier_name: str,
-    contact: ContactPayload | None,
-) -> None:
-    if not contact:
-        return
-    display_name = (contact.full_name or contact.name or "").strip()
-    if not (display_name or contact.email or contact.phone):
-        return
-
-    # Find existing Contact linked to this Supplier
+def _find_contact_name(client: ERPNextClient, supplier_name: str) -> str | None:
+    """Name of the Contact linked to this Supplier through its Dynamic Link child table."""
     existing = client._get(
         "/api/resource/Contact",
         params={
@@ -187,28 +187,115 @@ def _upsert_contact(
             "limit_page_length": 1,
         },
     )
+    rows = (existing or {}).get("data", [])
+    return rows[0]["name"] if rows else None
+
+
+def _split_phones(phone_rows: list[dict]) -> tuple[dict | None, dict | None]:
+    """(primary row, first other row) of a Contact's phone_nos."""
+    primary = next(
+        (r for r in phone_rows if r.get("is_primary_phone") or r.get("is_primary_mobile_no")),
+        phone_rows[0] if phone_rows else None,
+    )
+    alt = next((r for r in phone_rows if r is not primary), None)
+    return primary, alt
+
+
+def _contact_view(doc: dict[str, Any]) -> dict[str, Any]:
+    emails = doc.get("email_ids") or []
+    primary_email = next((r for r in emails if r.get("is_primary")), emails[0] if emails else None)
+    primary, alt = _split_phones(doc.get("phone_nos") or [])
+    first = (doc.get("first_name") or "").strip()
+    last = (doc.get("last_name") or "").strip()
+    return {
+        "first_name": first,
+        "last_name": last,
+        "name": " ".join(p for p in (first, last) if p),
+        "title": doc.get("designation") or "",
+        "email": (primary_email or {}).get("email_id") or doc.get("email_id") or "",
+        "phone": (primary or {}).get("phone") or doc.get("phone") or "",
+        "alt_phone": (alt or {}).get("phone") or "",
+        "mobile": doc.get("mobile_no") or "",
+    }
+
+
+def get_venue_contact(supplier_name: str, _client: ERPNextClient | None = None) -> dict[str, Any]:
+    client = _client or ERPNextClient()
+    contact_name = _find_contact_name(client, supplier_name)
+    if not contact_name:
+        return {"contact": None}
+    doc = client._get(f"/api/resource/Contact/{quote(contact_name, safe='')}").get("data", {})
+    return {"contact": _contact_view(doc)}
+
+
+def _merge_phones(existing: list[dict], phone: str | None, alt_phone: str | None) -> list[dict]:
+    """Existing rows kept (so nothing the form never showed is dropped); primary/alt updated in place or added."""
+    rows = [dict(r) for r in existing]
+    primary, alt = _split_phones(rows)
+    if phone:
+        if primary:
+            primary["phone"] = phone
+        else:
+            primary = {"phone": phone, "is_primary_phone": 1, "is_primary_mobile_no": 1}
+            rows.append(primary)
+    if alt_phone:
+        if alt:
+            alt["phone"] = alt_phone
+        else:
+            rows.append({"phone": alt_phone})
+    return rows
+
+
+def _merge_emails(existing: list[dict], email: str | None) -> list[dict]:
+    rows = [dict(r) for r in existing]
+    if not email:
+        return rows
+    primary = next((r for r in rows if r.get("is_primary")), rows[0] if rows else None)
+    if primary:
+        primary["email_id"] = email
+    else:
+        rows.append({"email_id": email, "is_primary": 1})
+    return rows
+
+
+def _upsert_contact(
+    client: ERPNextClient,
+    supplier_name: str,
+    contact: ContactPayload | None,
+) -> None:
+    if not contact:
+        return
+    display_name = (contact.full_name or contact.name or "").strip()
+    if not (display_name or contact.email or contact.phone):
+        return
+
+    contact_name = _find_contact_name(client, supplier_name)
+    existing_doc: dict[str, Any] = {}
+    if contact_name:
+        existing_doc = client._get(f"/api/resource/Contact/{quote(contact_name, safe='')}").get("data", {})
+
     contact_doc: dict[str, Any] = {
-        "first_name": display_name or supplier_name,
         "links": [{"link_doctype": "Supplier", "link_name": supplier_name}],
     }
+    # The form holds one combined name. Only rewrite first/last when it changed,
+    # and then clear last_name so "First Last" is not stored as "First Last Last".
+    current_name = _contact_view(existing_doc)["name"] if existing_doc else ""
+    if display_name and display_name != current_name:
+        contact_doc["first_name"] = display_name
+        contact_doc["last_name"] = ""
+    elif not existing_doc:
+        contact_doc["first_name"] = display_name or supplier_name
     if contact.title:
         contact_doc["designation"] = contact.title
-    if contact.email:
-        contact_doc["email_ids"] = [{"email_id": contact.email, "is_primary": 1}]
-    phones = []
-    if contact.phone:
-        phones.append({"phone": contact.phone, "is_primary_phone": 1, "is_primary_mobile_no": 1})
-    if contact.alt_phone:
-        phones.append({"phone": contact.alt_phone})
+    emails = _merge_emails(existing_doc.get("email_ids") or [], contact.email)
+    if emails:
+        contact_doc["email_ids"] = emails
+    phones = _merge_phones(existing_doc.get("phone_nos") or [], contact.phone, contact.alt_phone)
     if phones:
         contact_doc["phone_nos"] = phones
 
-    existing_rows = (existing or {}).get("data", [])
-    if existing_rows:
-        client._put(
-            f"/api/resource/Contact/{quote(existing_rows[0]['name'], safe='')}",
-            contact_doc,
-        )
+    if contact_name:
+        client._put(f"/api/resource/Contact/{quote(contact_name, safe='')}", contact_doc)
     else:
         client._post("/api/resource/Contact", contact_doc)
 
