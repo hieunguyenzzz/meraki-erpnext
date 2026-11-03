@@ -1,165 +1,119 @@
-import { useState, useEffect } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { RotateCw, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDate } from "@/lib/format";
-
-interface WfhRequest {
-  name: string;
-  employee: string;
-  employee_name: string;
-  from_date: string;
-  to_date: string;
-  explanation: string;
-  docstatus: number;
-}
-
-function statusLabel(docstatus: number): string {
-  switch (docstatus) {
-    case 0: return "Pending";
-    case 1: return "Approved";
-    case 2: return "Cancelled";
-    default: return "Unknown";
-  }
-}
-
-function statusVariant(docstatus: number) {
-  switch (docstatus) {
-    case 0: return "secondary" as const;
-    case 1: return "success" as const;
-    case 2: return "destructive" as const;
-    default: return "secondary" as const;
-  }
-}
-
-function calcDays(from_date: string, to_date: string): number {
-  const f = new Date(from_date + "T00:00:00");
-  const t = new Date(to_date + "T00:00:00");
-  return Math.round((t.getTime() - f.getTime()) / 86400000) + 1;
-}
+import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
+import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { WFH_TABS } from "./wfh/types";
+import { useWfhRequests } from "./wfh/useWfhRequests";
+import { WfhCard, WfhTableRow } from "./wfh/WfhRows";
 
 export default function WfhPage() {
-  const [requests, setRequests] = useState<WfhRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"pending" | "all">("pending");
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const { requests, loading, loadError, retry, outcomes, errors, processing, decide } = useWfhRequests();
 
-  async function fetchRequests() {
-    try {
-      const res = await fetch("/inquiry-api/wfh/list-all");
-      if (!res.ok) throw new Error("Failed to fetch");
-      const json = await res.json();
-      setRequests(json.data ?? []);
-    } catch {
-      setError("Failed to load WFH requests");
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Tab and search live in the URL so Back restores them; junk values fall back to the defaults.
+  const [tab, setTab] = useQueryState("tab", parseAsStringLiteral(WFH_TABS).withDefault("pending").withOptions({ clearOnDefault: true }));
+  const [search, setSearch] = useQueryState("q", { defaultValue: "", clearOnDefault: true });
 
-  useEffect(() => { fetchRequests(); }, []);
+  const pendingCount = useMemo(() => requests.filter((r) => r.docstatus === 0).length, [requests]);
 
-  async function handleAction(name: string, action: "approve" | "reject") {
-    setProcessingId(name);
-    setError(null);
-    try {
-      const res = await fetch(`/inquiry-api/wfh/${encodeURIComponent(name)}/${action}`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-      await fetchRequests();
-    } catch {
-      setError(`Failed to ${action} ${name}`);
-    } finally {
-      setProcessingId(null);
-    }
-  }
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return requests
+      .filter((r) => tab === "all" || r.docstatus === 0)
+      .filter((r) => !q || (r.employee_name || r.employee).toLowerCase().includes(q));
+  }, [requests, tab, search]);
 
-  const filtered = filter === "pending"
-    ? requests.filter((r) => r.docstatus === 0)
-    : requests;
+  const rowProps = (name: string) => ({
+    outcome: outcomes[name],
+    processing: processing.has(name),
+    error: errors[name],
+    onDecide: (n: string, a: "approve" | "reject") => void decide(n, a),
+  });
 
-  const pendingCount = requests.filter((r) => r.docstatus === 0).length;
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">WFH Requests</h1>
-        <p className="text-muted-foreground">Manage work from home requests</p>
-      </div>
-
-      {error && (
-        <div className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-4 font-medium hover:text-red-900">&times;</button>
-        </div>
-      )}
-
-      <Tabs value={filter} onValueChange={(v) => setFilter(v as "pending" | "all")}>
-        <TabsList>
-          <TabsTrigger value="pending">
-            Pending{pendingCount > 0 && ` (${pendingCount})`}
-          </TabsTrigger>
-          <TabsTrigger value="all">All</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {loading ? (
-        <p className="text-muted-foreground text-sm">Loading...</p>
-      ) : filtered.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No WFH requests found</p>
-      ) : (
-        <div className="rounded-md border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-4 py-3 text-left font-medium">Employee</th>
-                <th className="px-4 py-3 text-left font-medium">From</th>
-                <th className="px-4 py-3 text-left font-medium">To</th>
-                <th className="px-4 py-3 text-right font-medium">Days</th>
-                <th className="px-4 py-3 text-left font-medium">Notes</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
+  let body;
+  if (loadError) {
+    body = (
+      <StatePanel
+        kind="error"
+        title="Couldn't load WFH requests"
+        text="The server didn't answer. Your data is safe."
+        action={{ label: "Try again", onClick: retry, icon: <RotateCw className="h-4 w-4" /> }}
+      />
+    );
+  } else if (loading) {
+    body = <StaffSkeleton />;
+  } else if (rows.length === 0) {
+    const filtered = search.trim() !== "";
+    body = (
+      <StatePanel
+        kind="empty"
+        title={filtered ? "No requests match" : tab === "pending" ? "Nothing waiting for you" : "No WFH requests yet"}
+        text={filtered ? "Try a different name." : tab === "pending" ? "New requests also arrive in Notifications." : "Requests appear here once staff apply."}
+      />
+    );
+  } else if (isDesktop) {
+    body = (
+      <section className="overflow-hidden rounded-card border bg-card">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse text-sm">
+            <thead className="bg-muted text-[13px] text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Employee</th>
+                <th className="px-4 py-3 text-left font-semibold">Dates</th>
+                <th className="px-4 py-3 text-right font-semibold">Days</th>
+                <th className="px-4 py-3 text-left font-semibold">Reason</th>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 py-3 text-left font-semibold"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((req) => (
-                <tr key={req.name} className="border-b">
-                  <td className="px-4 py-3 font-medium">{req.employee_name}</td>
-                  <td className="px-4 py-3">{formatDate(req.from_date)}</td>
-                  <td className="px-4 py-3">{formatDate(req.to_date)}</td>
-                  <td className="px-4 py-3 text-right">{calcDays(req.from_date, req.to_date)}</td>
-                  <td className="px-4 py-3 max-w-[200px] truncate text-muted-foreground">{req.explanation || "\u2014"}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant={statusVariant(req.docstatus)}>{statusLabel(req.docstatus)}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    {req.docstatus === 0 && (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAction(req.name, "approve")}
-                          disabled={processingId === req.name}
-                        >
-                          {processingId === req.name ? "..." : "Approve"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleAction(req.name, "reject")}
-                          disabled={processingId === req.name}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((r) => <WfhTableRow key={r.name} request={r} {...rowProps(r.name)} />)}
             </tbody>
           </table>
         </div>
-      )}
+      </section>
+    );
+  } else {
+    body = (
+      <div className="flex flex-col gap-3">
+        {rows.map((r) => <WfhCard key={r.name} request={r} {...rowProps(r.name)} />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 pb-6">
+      <h1 className="text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Work from home</h1>
+
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <Tabs value={tab} onValueChange={(v) => void setTab(v as (typeof WFH_TABS)[number])}>
+          <TabsList className="w-full md:w-auto">
+            <TabsTrigger value="pending" className="max-md:h-12 max-md:flex-1">
+              Pending{!loading && !loadError ? ` (${pendingCount})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="all" className="max-md:h-12 max-md:flex-1">
+              All{!loading && !loadError ? ` (${requests.length})` : ""}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="relative md:w-72">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            type="search"
+            aria-label="Search by employee"
+            placeholder="Search employee"
+            value={search}
+            onChange={(e) => void setSearch(e.target.value)}
+            className="rounded-full pl-10 max-md:h-12 max-md:pl-10"
+          />
+        </div>
+      </div>
+
+      {body}
     </div>
   );
 }
