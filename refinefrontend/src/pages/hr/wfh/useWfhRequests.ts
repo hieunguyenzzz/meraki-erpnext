@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Outcome } from "@/hooks/useNotificationActions";
 import type { WfhRequest } from "./types";
 
@@ -9,6 +10,7 @@ type Action = "approve" | "reject";
  * rolled back (with `errors`) if the API fails; the list reloads shortly after a success.
  */
 export function useWfhRequests() {
+  const queryClient = useQueryClient();
   const [requests, setRequests] = useState<WfhRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -76,6 +78,8 @@ export function useWfhRequests() {
     try {
       const res = await fetch(`/inquiry-api/wfh/${encodeURIComponent(name)}/${action}`, { method: "POST" });
       if (!res.ok) throw new Error(`${action} ${res.status}: ${await res.text()}`);
+      // Update the sidebar badge straight away
+      void queryClient.invalidateQueries({ queryKey: ["wfh-pending-count"] });
       // Leave the result visible for a moment, then reload so the row moves out of Pending
       clearTimeout(timer.current);
       timer.current = setTimeout(async () => {
