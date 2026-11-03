@@ -37,3 +37,8 @@ export function dayLabel(iso: string): { main: string; date?: string } {
   if (diff === 1) return { main: "Tomorrow", date: formatIsoWeekday(iso) };
   return { main: formatIsoWeekday(iso) };
 }
+
+/** True only for a real calendar date written YYYY-MM-DD ("2026-02-30" and "garbage" are not). */
+export function isIsoDate(v: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && addDays(v, 0) === v;
+}

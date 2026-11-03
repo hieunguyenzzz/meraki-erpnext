@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { parseAsString, useQueryStates } from "nuqs";
+import { createParser, parseAsString, useQueryStates } from "nuqs";
 import { CalendarX, RotateCw } from "lucide-react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -10,16 +10,19 @@ import { EventFilters } from "./events/EventFilters";
 import { EventsAgenda, EventsAgendaSkeleton } from "./events/EventsAgenda";
 import { EventsTable, EventsTableSkeleton } from "./events/EventsTable";
 import { groupByDay } from "./events/groupByDay";
-import { pastRange, shiftRange, upcomingRange, type DateRange } from "./events/range";
+import { isIsoDate, pastRange, shiftRange, upcomingRange, type DateRange } from "./events/range";
 import { useWeddingEvents } from "./events/useWeddingEvents";
+
+/** A date in the link only counts if it is a real YYYY-MM-DD; anything else falls back to the upcoming window. */
+const isoDate = createParser<string>({ parse: (v) => (isIsoDate(v) ? v : null), serialize: (v) => v });
 
 export default function EventsPage() {
   // Window and filters live in the URL so Back from a wedding returns to the same view.
   const defaults = useMemo(() => upcomingRange(), []);
   const [params, setParams] = useQueryStates(
     {
-      from: parseAsString.withDefault(defaults.from),
-      to: parseAsString.withDefault(defaults.to),
+      from: isoDate.withDefault(defaults.from),
+      to: isoDate.withDefault(defaults.to),
       q: parseAsString.withDefault(""),
       type: parseAsString.withDefault(""),
       wtype: parseAsString.withDefault(""),
