@@ -12,11 +12,11 @@ function Head({ year, className = "", children }: { year: number | null; classNa
   );
 }
 
-/** Desktop layout (D-Reports.dc.html): sticky header and employee column, scrolls inside its own frame. */
+/** Desktop layout (D-Reports.dc.html): the page scrolls; only the employee column is sticky (horizontal scroll if narrow). */
 export function LeaveTable({ rows, year, showAllocation }: { rows: LeaveReportRow[]; year: number; showAllocation: boolean }) {
   return (
     <section className="overflow-hidden rounded-card border bg-card">
-      <div className="max-h-[calc(100vh-24rem)] min-h-[16rem] overflow-auto">
+      <div className="overflow-x-auto">
         <table aria-label="Leave report" className="w-full min-w-[1000px] border-collapse text-sm tabular-nums">
           <thead className="sticky top-0 z-20 bg-muted text-muted-foreground">
             <tr>
@@ -34,8 +34,8 @@ export function LeaveTable({ rows, year, showAllocation }: { rows: LeaveReportRo
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.employee} className="border-t hover:bg-muted/40">
-                <th scope="row" className="sticky left-0 z-10 whitespace-nowrap bg-card px-3 py-2.5 text-left font-medium">{r.employee_name}</th>
+              <tr key={r.employee} className="group border-t hover:bg-muted">
+                <th scope="row" className="sticky left-0 z-10 whitespace-nowrap bg-card px-3 py-2.5 text-left font-medium group-hover:bg-muted">{r.employee_name}</th>
                 {r.monthly_leave.map((d, i) => (
                   <td key={i} className="px-1 py-2.5 text-center">
                     {d > 0 && (

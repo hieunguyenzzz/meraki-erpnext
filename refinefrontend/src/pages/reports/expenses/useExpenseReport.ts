@@ -14,14 +14,15 @@ export function useExpenseReport(project: string) {
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [listError, setListError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     getJson("/inquiry-api/reports/wedding-expenses/projects")
-      .then((d) => setProjects(d.data ?? []))
+      .then((d) => { setProjects(d.data ?? []); setListError(null); })
       .catch((e) => {
         console.error("Wedding list failed to load", e);
-        setError(e);
+        setListError(e);
         setProjects([]);
       });
   }, [attempt]);
@@ -55,6 +56,6 @@ export function useExpenseReport(project: string) {
     return () => ctrl.abort();
   }, [project, attempt]);
 
-  const retry = useCallback(() => { setError(null); setAttempt((n) => n + 1); }, []);
-  return { projects, rows, summary, isLoading, error, retry };
+  const retry = useCallback(() => { setError(null); setListError(null); setAttempt((n) => n + 1); }, []);
+  return { projects, rows, summary, isLoading, error, listError, retry };
 }

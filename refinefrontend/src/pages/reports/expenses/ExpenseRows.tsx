@@ -54,7 +54,7 @@ export function ExpenseTable({ rows, groups, summary }: { rows: ExpenseRow[]; gr
               ? groups.map((g) => (
                   <Fragment key={g.label}>
                     <tr className="border-t bg-muted/50">
-                      <td colSpan={5} className="px-3 py-2.5 font-semibold">{g.label}</td>
+                      <th scope="rowgroup" colSpan={5} className="px-3 py-2.5 text-left font-semibold">{g.label}</th>
                       <td className="px-3 py-2.5 text-right font-semibold">{formatVNDFull(g.subtotal)}</td>
                       <td />
                     </tr>

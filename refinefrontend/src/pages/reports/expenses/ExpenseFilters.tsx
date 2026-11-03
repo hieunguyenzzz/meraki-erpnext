@@ -19,7 +19,7 @@ interface Props {
 export function ExpenseFilters({ years, months, weddings, year, month, project, onYear, onMonth, onProject }: Props) {
   const back = (fn: (v: string) => void) => (v: string) => fn(v === NONE ? "" : v);
   return (
-    <div className="grid grid-cols-[0.8fr_0.8fr_1.4fr] gap-2 md:flex md:flex-wrap">
+    <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap">
       <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground md:contents">
         <span className="md:sr-only">Year</span>
         <Select value={year || NONE} onValueChange={back(onYear)}>
@@ -40,7 +40,7 @@ export function ExpenseFilters({ years, months, weddings, year, month, project, 
           </SelectContent>
         </Select>
       </label>
-      <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground md:contents">
+      <label className="col-span-2 flex min-w-0 flex-col gap-1 text-xs text-muted-foreground md:contents">
         <span className="md:sr-only">Wedding</span>
         <Select value={project || NONE} onValueChange={back(onProject)}>
           <SelectTrigger aria-label="Wedding" className="md:w-[280px]"><SelectValue placeholder="Select wedding..." /></SelectTrigger>

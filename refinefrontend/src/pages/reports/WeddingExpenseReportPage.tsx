@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { createParser, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { RotateCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatePanel } from "@/components/StatePanel";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -26,7 +27,7 @@ export default function WeddingExpenseReportPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   // Filters live in the URL so Back restores them; junk values fall back to the defaults.
   const [f, setF] = useQueryStates(parsers, { clearOnDefault: true });
-  const { projects, rows, summary, isLoading, error, retry } = useExpenseReport(f.project);
+  const { projects, rows, summary, isLoading, error, listError, retry } = useExpenseReport(f.project);
   const defaulted = useRef(false);
 
   // First visit with no filters: default to the current year if any wedding ends in it.
@@ -137,6 +138,13 @@ export default function WeddingExpenseReportPage() {
         onMonth={(month) => void setF({ month, project: "" })}
         onProject={(project) => void setF({ project })}
       />
+
+      {listError !== null && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-card border bg-danger-soft p-3 text-sm text-danger-soft-foreground">
+          <span className="mr-auto">Couldn't load the list of weddings, so the pickers may be incomplete.</span>
+          <Button variant="outline" size="sm" className="max-md:h-12" onClick={retry}>Try again</Button>
+        </div>
+      )}
 
       {showResults && summary && (
         <section aria-label="Totals" className="flex flex-col gap-1 rounded-card border bg-card p-4 tabular-nums">
