@@ -83,7 +83,8 @@ export default function InvoicesPage() {
   const visible = rows.slice(0, shown);
   // Only invoices on screen can be acted on, so a filter change never leaves hidden rows selected for delete.
   const selectedNames = visible.filter((i) => rowSelection.has(i.name)).map((i) => i.name);
-  const actions = useInvoiceActions(selectedNames, (failed) => setRowSelection(new Set(failed)));
+  // The backend reports failures as "name: error"; keep just the names selected.
+  const actions = useInvoiceActions(selectedNames, (failed) => setRowSelection(new Set(failed.map((f) => f.split(": ")[0]))));
 
   function resetShown<T>(setter: (v: T) => unknown) {
     return (v: T) => { setShown(PAGE); void setter(v); };

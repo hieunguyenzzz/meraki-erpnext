@@ -5,7 +5,7 @@ export type InvoiceCategory = "Wedding Payment" | "Referral Commission";
 
 /**
  * Bulk delete / assign-category for the selected invoice names. Endpoints and payloads are unchanged.
- * `onDone` receives the names that failed so the caller can keep exactly those selected.
+ * `onDone` receives the backend's failed entries ("name: error") so the caller can keep exactly those selected.
  */
 export function useInvoiceActions(names: string[], onDone: (failed: string[]) => void) {
   const invalidate = useInvalidate();

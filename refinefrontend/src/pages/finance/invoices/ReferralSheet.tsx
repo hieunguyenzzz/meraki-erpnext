@@ -177,7 +177,7 @@ export function ReferralSheet({ open, onOpenChange, projects, onRecorded }: Prop
         <form onSubmit={handleReferralSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {referralError && (
-              <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+              <div role="alert" className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 {referralError}
               </div>
