@@ -1,113 +1,63 @@
-import { useState, useEffect, useCallback } from "react";
-import { usePermissions } from "@refinedev/core";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
-import { getDashboardOptions, type DashboardOption } from "@/lib/roles";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { REQUIRED_PROFILE_FIELDS } from "@/lib/profile";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { StatePanel } from "@/components/StatePanel";
+import { CompletionBanner } from "./my-profile/CompletionBanner";
+import { DisplayPreferencesCard } from "./my-profile/DisplayPreferencesCard";
+import { WorkInfoCard } from "./my-profile/WorkInfoCard";
+import { SectionCard } from "./my-profile/SectionCard";
+import { AddressFields, BankFields, EmergencyFields, PersonalFields } from "./my-profile/ProfileSections";
+import {
+  INITIAL_FORM,
+  REQUIRED_FIELDS,
+  SECTIONS,
+  buildSavePayload,
+  formFromEmployee,
+  sectionMissing,
+  type FormData,
+  type SectionId,
+} from "./my-profile/profileForm";
 
-const REQUIRED_FIELDS = [
-  ...REQUIRED_PROFILE_FIELDS,
-  "addr_street",
-  "addr_ward",
-  "addr_district",
-  "addr_province",
-] as const;
+const SECTION_BODY = {
+  personal: PersonalFields,
+  address: AddressFields,
+  emergency: EmergencyFields,
+  bank: BankFields,
+} satisfies Record<SectionId, typeof PersonalFields>;
 
-function parseAddress(raw: string) {
-  const parts = raw.split("||");
-  return {
-    addr_street: parts[0]?.trim() ?? "",
-    addr_ward: parts[1]?.trim() ?? "",
-    addr_district: parts[2]?.trim() ?? "",
-    addr_province: parts[3]?.trim() ?? "",
-  };
+function ProfileSkeleton() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+      <Skeleton className="h-10 w-64" />
+      <div className="grid gap-4 md:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i}>
+            <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
 }
-
-function joinAddress(f: FormData) {
-  return [f.addr_street, f.addr_ward, f.addr_district, f.addr_province].join("||");
-}
-
-type FormData = {
-  first_name: string;
-  last_name: string;
-  gender: string;
-  date_of_birth: string;
-  cell_number: string;
-  personal_email: string;
-  addr_street: string;
-  addr_ward: string;
-  addr_district: string;
-  addr_province: string;
-  permanent_address: string;
-  person_to_be_contacted: string;
-  relation: string;
-  emergency_phone_number: string;
-  bank_name: string;
-  bank_ac_no: string;
-};
-
-const INITIAL_FORM: FormData = {
-  first_name: "",
-  last_name: "",
-  gender: "",
-  date_of_birth: "",
-  cell_number: "",
-  personal_email: "",
-  addr_street: "",
-  addr_ward: "",
-  addr_district: "",
-  addr_province: "",
-  permanent_address: "",
-  person_to_be_contacted: "",
-  relation: "",
-  emergency_phone_number: "",
-  bank_name: "",
-  bank_ac_no: "",
-};
 
 export default function MyProfilePage() {
   const { employee, employeeId, isLoading, refetch } = useMyEmployee();
-  const { data: roles } = usePermissions<string[]>({});
-  const dashboardOptions = getDashboardOptions(roles ?? []);
 
-  const [dashboardPref, setDashboardPref] = useState<DashboardOption>(() => {
-    const stored = localStorage.getItem("meraki-dashboard-preference") as DashboardOption | null;
-    if (stored && ["personal", "director"].includes(stored)) return stored;
-    return "personal";
-  });
-
-  function handleDashboardPrefChange(value: DashboardOption) {
-    setDashboardPref(value);
-    localStorage.setItem("meraki-dashboard-preference", value);
-  }
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const savingRef = useRef(false);
 
   useEffect(() => {
-    if (employee) {
-      setForm({
-        first_name: employee.first_name ?? "",
-        last_name: employee.last_name ?? "",
-        gender: employee.gender ?? "",
-        date_of_birth: employee.date_of_birth ?? "",
-        cell_number: employee.cell_number ?? "",
-        personal_email: employee.personal_email ?? "",
-        ...parseAddress(employee.current_address ?? ""),
-        permanent_address: employee.permanent_address ?? "",
-        person_to_be_contacted: employee.person_to_be_contacted ?? "",
-        relation: employee.relation ?? "",
-        emergency_phone_number: employee.emergency_phone_number ?? "",
-        bank_name: employee.bank_name ?? "",
-        bank_ac_no: employee.bank_ac_no ?? "",
-      });
-    }
+    if (employee) setForm(formFromEmployee(employee));
   }, [employee]);
 
   const setField = useCallback((field: keyof FormData, value: string) => {
@@ -115,20 +65,20 @@ export default function MyProfilePage() {
     setSaveSuccess(false);
   }, []);
 
-  const isProfileIncomplete = REQUIRED_FIELDS.some((f) => !form[f]?.trim());
-
   const allRequiredFilled = REQUIRED_FIELDS.every((f) => form[f]?.trim());
+  const doneSections = SECTIONS.filter((s) => sectionMissing(form, s.id) === 0).length;
 
   const handleSave = async () => {
-    if (!employeeId || !allRequiredFilled) return;
+    if (!employeeId || !allRequiredFilled || savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
+    setSaveError(null);
     try {
-      const { addr_street, addr_ward, addr_district, addr_province, ...rest } = form;
       const res = await fetch("/inquiry-api/me/profile", {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: { ...rest, current_address: joinAddress(form) } }),
+        body: JSON.stringify(buildSavePayload(form)),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -136,303 +86,64 @@ export default function MyProfilePage() {
       }
       setSaveSuccess(true);
       refetch();
+    } catch (err) {
+      console.error("my_profile_save_failed", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to save profile");
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-8 w-[200px]" />
-          <Skeleton className="h-6 w-[60px] rounded-full" />
-        </div>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="space-y-1">
-              <Skeleton className="h-4 w-[80px]" />
-              <Skeleton className="h-5 w-[120px]" />
-            </div>
-          ))}
-        </div>
-        <Card>
-          <CardHeader><Skeleton className="h-5 w-[160px]" /></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="space-y-2">
-                  <Skeleton className="h-4 w-[80px]" />
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  if (isLoading) return <ProfileSkeleton />;
 
   if (!employee) {
     return (
-      <div className="max-w-3xl mx-auto py-8">
-        <p className="text-destructive">
-          No employee record found for your account. Please contact your administrator.
-        </p>
-      </div>
+      <StatePanel
+        kind="error"
+        title="No employee record"
+        text="No employee record found for your account. Please contact your administrator."
+      />
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {isProfileIncomplete && (
-        <div className="rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30 px-4 py-3 text-yellow-800 dark:text-yellow-400">
-          Please complete your profile to get started. All required fields must be filled.
-        </div>
-      )}
+    <div className="mx-auto max-w-5xl space-y-5">
+      <header className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">
+          Welcome, {employee.employee_name}
+        </h1>
+        <Badge variant={employee.status === "Active" ? "default" : "secondary"}>{employee.status}</Badge>
+      </header>
+
+      <CompletionBanner doneSections={doneSections} totalSections={SECTIONS.length} />
 
       {saveSuccess && (
-        <div className="rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-3 text-green-800 dark:text-green-400">
+        <div role="status" className="rounded-card bg-success-soft px-4 py-3 text-sm text-success-soft-foreground">
           Profile saved successfully.
         </div>
       )}
-
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">Welcome, {employee.employee_name}</h1>
-        <Badge variant={employee.status === "Active" ? "default" : "secondary"}>
-          {employee.status}
-        </Badge>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-        <div>
-          <span className="text-muted-foreground">Employee ID</span>
-          <p className="font-medium">{employee.name}</p>
+      {saveError && (
+        <div role="alert" className="rounded-card bg-danger-soft px-4 py-3 text-sm text-destructive">
+          {saveError}
         </div>
-        <div>
-          <span className="text-muted-foreground">Department</span>
-          <p className="font-medium">{employee.department}</p>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Designation</span>
-          <p className="font-medium">{employee.designation}</p>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Date of Joining</span>
-          <p className="font-medium">{employee.date_of_joining}</p>
-        </div>
-      </div>
-
-      {/* Display Preferences */}
-      {dashboardOptions.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Display Preferences</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Default Dashboard</p>
-                <p className="text-xs text-muted-foreground">Choose what you see when you open the app</p>
-              </div>
-              <Select value={dashboardPref} onValueChange={handleDashboardPrefChange}>
-                <SelectTrigger className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {dashboardOptions.map((opt) => (
-                    <SelectItem key={opt} value={opt}>
-                      {opt === "director" ? "Director Dashboard" : "Personal Dashboard"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
       )}
 
-      {/* Personal Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Personal Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="first_name">First Name *</Label>
-              <Input
-                id="first_name"
-                value={form.first_name}
-                onChange={(e) => setField("first_name", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="last_name">Last Name</Label>
-              <Input
-                id="last_name"
-                value={form.last_name}
-                onChange={(e) => setField("last_name", e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <Label htmlFor="gender">Gender</Label>
-              <Select value={form.gender} onValueChange={(v) => setField("gender", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Male">Male</SelectItem>
-                  <SelectItem value="Female">Female</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="date_of_birth">Date of Birth</Label>
-              <Input
-                id="date_of_birth"
-                type="date"
-                value={form.date_of_birth}
-                onChange={(e) => setField("date_of_birth", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="cell_number">Phone *</Label>
-              <Input
-                id="cell_number"
-                value={form.cell_number}
-                onChange={(e) => setField("cell_number", e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <Label htmlFor="personal_email">Personal Email *</Label>
-              <Input
-                id="personal_email"
-                type="email"
-                value={form.personal_email}
-                onChange={(e) => setField("personal_email", e.target.value)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid items-start gap-4 md:grid-cols-2">
+        <WorkInfoCard employee={employee} />
+        <DisplayPreferencesCard />
+        {SECTIONS.map((s, i) => {
+          const Body = SECTION_BODY[s.id];
+          return (
+            <SectionCard key={s.id} step={i + 1} title={s.title} missing={sectionMissing(form, s.id)}>
+              <Body form={form} setField={setField} />
+            </SectionCard>
+          );
+        })}
+      </div>
 
-      {/* Address */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Current Address</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="addr_street">Số nhà / Đường *</Label>
-              <Input
-                id="addr_street"
-                placeholder="VD: 12 Nguyễn Huệ"
-                value={form.addr_street}
-                onChange={(e) => setField("addr_street", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="addr_ward">Phường / Xã *</Label>
-              <Input
-                id="addr_ward"
-                placeholder="VD: Phường Bến Nghé"
-                value={form.addr_ward}
-                onChange={(e) => setField("addr_ward", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="addr_district">Quận / Huyện *</Label>
-              <Input
-                id="addr_district"
-                placeholder="VD: Quận 1"
-                value={form.addr_district}
-                onChange={(e) => setField("addr_district", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="addr_province">Tỉnh / Thành phố *</Label>
-              <Input
-                id="addr_province"
-                placeholder="VD: TP. Hồ Chí Minh"
-                value={form.addr_province}
-                onChange={(e) => setField("addr_province", e.target.value)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Emergency Contact */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Emergency Contact</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <Label htmlFor="person_to_be_contacted">Contact Name *</Label>
-              <Input
-                id="person_to_be_contacted"
-                value={form.person_to_be_contacted}
-                onChange={(e) => setField("person_to_be_contacted", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="relation">Relationship</Label>
-              <Input
-                id="relation"
-                value={form.relation}
-                onChange={(e) => setField("relation", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="emergency_phone_number">Emergency Phone *</Label>
-              <Input
-                id="emergency_phone_number"
-                value={form.emergency_phone_number}
-                onChange={(e) => setField("emergency_phone_number", e.target.value)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Bank Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Bank Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="bank_name">Bank Name *</Label>
-              <Input
-                id="bank_name"
-                value={form.bank_name}
-                onChange={(e) => setField("bank_name", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="bank_ac_no">Account Number *</Label>
-              <Input
-                id="bank_ac_no"
-                value={form.bank_ac_no}
-                onChange={(e) => setField("bank_ac_no", e.target.value)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-end pb-8">
-        <Button onClick={handleSave} disabled={!allRequiredFilled || isSaving}>
+      <div className="sticky bottom-[calc(84px+env(safe-area-inset-bottom,0px))] z-10 -mx-4 border-t bg-background/95 px-4 pb-3 pt-3 backdrop-blur md:static md:mx-0 md:flex md:justify-end md:border-0 md:bg-transparent md:p-0 md:pb-8">
+        <Button className="h-14 w-full rounded-full text-base md:h-10 md:w-auto md:rounded-md md:text-sm" onClick={handleSave} disabled={!allRequiredFilled || isSaving}>
           {isSaving ? "Saving..." : "Save Profile"}
         </Button>
       </div>
