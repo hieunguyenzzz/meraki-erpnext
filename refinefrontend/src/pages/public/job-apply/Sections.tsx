@@ -166,6 +166,8 @@ export function DocumentsSection({
         onFile={onCv}
         inputRef={cvRef}
         hint="PDF, DOC, DOCX (max 10MB)"
+        maxBytes={10 * 1024 * 1024}
+        tooLargeMessage="CV file must be under 10MB."
       />
       {showPortfolio && (
         <FileField
@@ -176,8 +178,10 @@ export function DocumentsSection({
           file={portfolioFile}
           onFile={onPortfolio}
           inputRef={portfolioRef}
-          hint="PDF, DOC, DOCX, ZIP (max 20MB)"
-          accept=".pdf,.doc,.docx,.zip"
+          hint="PDF, DOC, DOCX (max 20MB)"
+          accept=".pdf,.doc,.docx"
+          maxBytes={20 * 1024 * 1024}
+          tooLargeMessage="Portfolio file must be under 20MB."
         />
       )}
       <TextAreaField

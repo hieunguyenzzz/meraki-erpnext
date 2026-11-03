@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Briefcase, Clock, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeProvider } from "@/context/theme-context";
 import { type Job } from "@/lib/jobs";
+import { FieldErrorContext } from "./job-apply/Field";
 import { StepProgress } from "./job-apply/StepProgress";
 import {
   BrandTitle,
@@ -24,6 +25,27 @@ import { INITIAL_FORM, type FormValues, type Level } from "./job-apply/types";
 const STEP_LABELS = ["Details", "CV & letter", "Review"];
 const TOTAL_STEPS = STEP_LABELS.length;
 
+/** Ignore a second tap this soon after the step changes (the same finger double-tapping a button). */
+const STEP_TAP_GUARD_MS = 400;
+
+/** Which field a validation message belongs to, so it can be marked and focused. */
+const ERROR_FIELDS: Array<[string, string]> = [
+  ["Full name", "applicant_name"],
+  ["Email", "email_id"],
+  ["Phone", "phone_number"],
+  ["Education degree", "education_degree"],
+  ["Institution", "institution"],
+  ["Graduation year", "graduation_year"],
+  ["Work experience", "work_experience"],
+  ["CV", "cv_file"],
+  ["Portfolio", "portfolio_file"],
+  ["Cover letter", "cover_letter"],
+];
+
+function fieldForError(message: string): string {
+  return ERROR_FIELDS.find(([prefix]) => message.startsWith(prefix))?.[1] ?? "";
+}
+
 function JobApplyForm() {
   const [searchParams] = useSearchParams();
   const jobParam = searchParams.get("job") ?? "";
@@ -41,7 +63,11 @@ function JobApplyForm() {
   // Multi-step: only used for Senior
   const [step, setStep] = useState(1);
 
-  const [validationError, setValidationError] = useState("");
+  const [validationError, setValidationErrorState] = useState("");
+  const [errorField, setErrorField] = useState("");
+  // Bumped on every validation failure so the same message re-focuses/scrolls.
+  const [errorTick, setErrorTick] = useState(0);
+  const stepChangedAt = useRef(0);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [submitError, setSubmitError] = useState("");
@@ -73,15 +99,32 @@ function JobApplyForm() {
       .finally(() => setLoadingJob(false));
   }, [jobParam]);
 
-  // Bring the error into view (the action bar can sit far below a long step).
+  function setValidationError(message: string) {
+    setValidationErrorState(message);
+    setErrorField(message ? fieldForError(message) : "");
+    if (message) setErrorTick((t) => t + 1);
+  }
+
+  // Bring the error into view: focus the offending field if it is on screen, else the banner.
   useEffect(() => {
-    if (validationError || submitError) {
-      errorRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    }
-  }, [validationError, submitError]);
+    if (!errorTick) return;
+    const field = errorField ? document.getElementById(errorField) : null;
+    if (field) field.focus();
+    else errorRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [errorTick, errorField]);
+
+  useEffect(() => {
+    if (submitError) errorRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [submitError]);
 
   // New step starts at the top.
+  const firstStepRender = useRef(true);
   useEffect(() => {
+    if (firstStepRender.current) {
+      firstStepRender.current = false;
+      return;
+    }
+    stepChangedAt.current = Date.now();
     window.scrollTo({ top: 0 });
   }, [step]);
 
@@ -218,6 +261,7 @@ function JobApplyForm() {
 
   function handleFormSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (Date.now() - stepChangedAt.current < STEP_TAP_GUARD_MS) return;
     if (isSenior && step < TOTAL_STEPS) handleNextStep();
     else handleSubmit();
   }
@@ -236,8 +280,14 @@ function JobApplyForm() {
       showPortfolio={showEducation}
       cvFile={cvFile}
       portfolioFile={portfolioFile}
-      onCv={setCvFile}
-      onPortfolio={setPortfolioFile}
+      onCv={(f) => {
+        setValidationError("");
+        setCvFile(f);
+      }}
+      onPortfolio={(f) => {
+        setValidationError("");
+        setPortfolioFile(f);
+      }}
       cvRef={cvRef}
       portfolioRef={portfolioRef}
     />
@@ -273,6 +323,9 @@ function JobApplyForm() {
         {isSenior && <StepProgress step={step} labels={STEP_LABELS} />}
       </header>
 
+      <FieldErrorContext.Provider
+        value={errorField && validationError ? { id: errorField, message: validationError } : null}
+      >
       <form onSubmit={handleFormSubmit} noValidate className="flex flex-1 flex-col">
         <div className="flex flex-1 flex-col gap-8 px-6 py-6">
           {/* Single-page: Intern (personal + documents), Standard (+ education) */}
@@ -323,17 +376,18 @@ function JobApplyForm() {
             </Button>
           )}
           {isSenior && step < TOTAL_STEPS ? (
-            <Button type="submit" size="lg" className="flex-1">
+            <Button key={`next-${step}`} type="submit" size="lg" className="flex-1">
               {step === TOTAL_STEPS - 1 ? "Review application" : "Continue"}
               <ArrowRight aria-hidden="true" />
             </Button>
           ) : (
-            <Button type="submit" size="lg" className="flex-1" disabled={submitting}>
+            <Button key="submit" type="submit" size="lg" className="flex-1" disabled={submitting}>
               {submitting ? "Submitting..." : "Submit application"}
             </Button>
           )}
         </div>
       </form>
+      </FieldErrorContext.Provider>
     </PageFrame>
   );
 }

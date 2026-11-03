@@ -9,12 +9,3 @@ export interface Job {
   custom_application_level: string;
   description: string;
 }
-
-export function formatClosesOn(dateStr: string): string {
-  if (!dateStr) return "";
-  return new Date(dateStr).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
