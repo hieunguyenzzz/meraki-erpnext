@@ -1,274 +1,47 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useList, useInvalidate } from "@refinedev/core";
-import { FileDown } from "lucide-react";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Card, CardContent } from "@/components/ui/card";
+import { useMemo, useState } from "react";
+import { useList } from "@refinedev/core";
+import { useQueryState, parseAsString } from "nuqs";
+import { RotateCw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { formatVND } from "@/lib/format";
-import { extractErrorMessage } from "@/lib/errors";
-import { BonusCell } from "@/components/payroll/BonusCell";
+import { StatePanel } from "@/components/StatePanel";
+import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { ConfirmActionDialog } from "./payroll/ConfirmActionDialog";
+import { CommissionBreakdown } from "./payroll/CommissionBreakdown";
+import { PayrollActions } from "./payroll/PayrollActions";
+import { PayrollCards } from "./payroll/PayrollCards";
+import { PayrollSummary } from "./payroll/PayrollSummary";
+import { PayrollTable } from "./payroll/PayrollTable";
+import { currentMonthStart, isMonthStart, lastDayOfMonth, monthLabel, monthParser, recentMonthStarts } from "./payroll/month";
+import { commissionOf, slipName, type CommissionRow } from "./payroll/types";
+import { usePayrollActions } from "./payroll/usePayrollActions";
+import { usePayrollEntries } from "./payroll/usePayrollEntries";
+import { usePayrollSlips } from "./payroll/usePayrollSlips";
 
-function now() { return new Date(); }
-function monthLabel(d: Date) { return d.toLocaleDateString("en-US", { month: "long", year: "numeric" }); }
-function firstOfMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; }
-function endOfMonth(d: Date) {
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`;
-}
-function docstatusLabel(ds: number) { return ds === 0 ? "Draft" : ds === 1 ? "Submitted" : ds === 2 ? "Cancelled" : "Unknown"; }
-function docstatusBadge(ds: number) { return ds === 1 ? "success" as const : ds === 2 ? "destructive" as const : "secondary" as const; }
-
-function parseDate(s: string) {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-interface SalarySlipEarning {
-  salary_component: string;
-  amount: number;
-}
-
-interface SalarySlip {
-  name: string;
-  modified?: string;
-  employee: string;
-  employee_name: string;
-  employee_display_name?: string;
-  dependents?: number;
-  gross_pay: number;
-  total_deduction: number;
-  net_pay: number;
-  posting_date: string;
-  docstatus: number;
-  earnings: SalarySlipEarning[];
-  deductions: SalarySlipEarning[];
-  // Pre-computed by backend
-  si_employee?: number;
-  employer_bhxh?: number;
-  tax_reduction?: number;
-  taxable_income?: number;
-  is_probation?: boolean;
-  pit_method?: string;
-}
-
-function getEarningAmount(earnings: SalarySlipEarning[] | undefined, component: string): number {
-  return earnings?.find(e => e.salary_component === component)?.amount ?? 0;
-}
-
-function getTotalCommission(earnings: SalarySlipEarning[] | undefined): number {
-  const commissionComponents = ["Assistant Commission", "Support Planner Commission", "Lead Planner Commission", "Full Package Commission", "Partial Package Commission"];
-  return earnings?.filter(e => commissionComponents.includes(e.salary_component))
-    .reduce((sum, e) => sum + e.amount, 0) ?? 0;
-}
-
-function getDeductionAmount(deductions: SalarySlipEarning[] | undefined, component: string): number {
-  return deductions?.find(e => e.salary_component === component)?.amount ?? 0;
-}
-
-interface PayrollEntry {
-  name: string;
-  posting_date: string;
-  start_date: string;
-  end_date: string;
-  docstatus: number;
-  status: string;
-  number_of_employees: number;
-}
-
-function buildSlipColumns(
-  weddingAllowanceMap: Record<string, number>,
-  onSetBonus: (employee: string, amount: number) => Promise<void>,
-): ColumnDef<SalarySlip, unknown>[] {
-  return [
-    {
-      accessorKey: "employee_name",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
-      cell: ({ row }) => (
-        <div className="flex flex-col gap-1">
-          <span className="font-medium">{row.original.employee_display_name || row.original.employee_name}</span>
-          {(row.original.is_probation || row.original.pit_method === "Flat 10%") && (
-            <div className="flex gap-1">
-              {row.original.is_probation && <Badge variant="outline" className="border-amber-500 text-amber-600 whitespace-nowrap px-1.5 py-0 text-[10px] leading-4">85%</Badge>}
-              {row.original.pit_method === "Flat 10%" && <Badge variant="outline" className="border-violet-500 text-violet-600 whitespace-nowrap px-1.5 py-0 text-[10px] leading-4">10% PIT</Badge>}
-            </div>
-          )}
-        </div>
-      ),
-      filterFn: "includesString",
-    },
-    {
-      id: "base",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Base" className="text-right" />,
-      cell: ({ row }) => <div className="text-right">{formatVND(getEarningAmount(row.original.earnings, "Basic Salary"))}</div>,
-    },
-    {
-      id: "commission",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Commission" className="text-right" />,
-      cell: ({ row }) => <div className="text-right">{formatVND(getTotalCommission(row.original.earnings))}</div>,
-    },
-    {
-      id: "wedding_allowance",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Wedding Allowance" className="text-right" />,
-      cell: ({ row }) => {
-        const amount = weddingAllowanceMap[row.original.employee] ?? 0;
-        return <div className="text-right">{amount > 0 ? formatVND(amount) : <span className="text-muted-foreground">-</span>}</div>;
-      },
-    },
-    {
-      id: "bonus",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Bonus" className="text-right" />,
-      cell: ({ row }) => (
-        <BonusCell
-          amount={getEarningAmount(row.original.earnings, "Bonus")}
-          editable={row.original.docstatus === 0}
-          onSave={(amount) => onSetBonus(row.original.employee, amount)}
-        />
-      ),
-    },
-    {
-      accessorKey: "gross_pay",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Gross Pay" className="text-right" />,
-      cell: ({ row }) => <div className="text-right">{formatVND(row.original.gross_pay)}</div>,
-    },
-    {
-      id: "si_employee",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="SI 10.5%" className="text-right" />,
-      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(row.original.si_employee ?? 0)}</div>,
-    },
-    {
-      id: "employer_bhxh",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Employer BHXH" className="text-right" />,
-      cell: ({ row }) => <div className="text-right text-amber-600 dark:text-amber-400">{formatVND(row.original.employer_bhxh ?? 0)}</div>,
-    },
-    {
-      id: "dependents",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Dependents" className="text-right" />,
-      cell: ({ row }) => {
-        const deps = row.original.dependents ?? 0;
-        return <div className="text-right">{deps > 0 ? deps : <span className="text-muted-foreground">0</span>}</div>;
-      },
-    },
-    {
-      id: "tax_reduction",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Tax Reduction" className="text-right" />,
-      cell: ({ row }) => <div className="text-right text-muted-foreground">{formatVND(row.original.tax_reduction ?? 0)}</div>,
-    },
-    {
-      id: "taxable_income",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Taxable Income" className="text-right" />,
-      cell: ({ row }) => {
-        const taxable = row.original.taxable_income ?? 0;
-        return <div className={`text-right ${taxable < 0 ? "text-muted-foreground" : ""}`}>{formatVND(taxable)}</div>;
-      },
-    },
-    {
-      id: "est_pit",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Income Tax" className="text-right" />,
-      cell: ({ row }) => {
-        const pit = getDeductionAmount(row.original.deductions, "Income Tax");
-        return <div className="text-right text-red-600 dark:text-red-400">{pit > 0 ? formatVND(pit) : <span className="text-muted-foreground">-</span>}</div>;
-      },
-    },
-    {
-      accessorKey: "net_pay",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Net Pay" className="text-right" />,
-      cell: ({ row }) => <div className="text-right">{formatVND(row.original.net_pay)}</div>,
-    },
-    {
-      accessorKey: "docstatus",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-      cell: ({ row }) => (
-        <Badge variant={docstatusBadge(row.original.docstatus)}>
-          {docstatusLabel(row.original.docstatus)}
-        </Badge>
-      ),
-    },
-  ];
-}
+type Confirm = "generate" | "submit" | null;
 
 export default function PayrollPage() {
-  const today = now();
-  const currentMonthStart = firstOfMonth(today);
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  // Month and search live in the URL so Back restores them; a bad ?month= falls back to the current month.
+  const [urlMonth, setUrlMonth] = useQueryState("month", monthParser.withDefault(currentMonthStart()).withOptions({ clearOnDefault: true }));
+  const [search, setSearch] = useQueryState("q", parseAsString.withDefault("").withOptions({ clearOnDefault: true }));
+  const [confirm, setConfirm] = useState<Confirm>(null);
 
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthStart);
-  const [isRunning, setIsRunning] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [enrichedSlips, setEnrichedSlips] = useState<SalarySlip[]>([]);
-  const [loadingSlips, setLoadingSlips] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const invalidate = useInvalidate();
-
-  // Fetch ALL payroll entries (for month selector + finding selected PE)
-  const { result: allEntriesResult } = useList({
-    resource: "Payroll Entry",
-    pagination: { mode: "off" },
-    sorters: [{ field: "start_date", order: "desc" }],
-    meta: { fields: ["name", "posting_date", "start_date", "end_date", "docstatus", "status", "number_of_employees"] },
-  });
-
-  const allEntries = (allEntriesResult?.data ?? []) as PayrollEntry[];
-
+  const { entries, loaded: entriesLoaded } = usePayrollEntries();
   const monthOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const opts: { value: string; label: string }[] = [];
+    const all = new Set(recentMonthStarts());
+    for (const e of entries) if (isMonthStart(e.start_date)) all.add(e.start_date);
+    return [...all].sort((a, b) => b.localeCompare(a));
+  }, [entries]);
 
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const val = firstOfMonth(d);
-      if (!seen.has(val)) {
-        seen.add(val);
-        opts.push({ value: val, label: monthLabel(d) });
-      }
-    }
-
-    for (const entry of allEntries) {
-      if (!seen.has(entry.start_date)) {
-        seen.add(entry.start_date);
-        const d = parseDate(entry.start_date);
-        opts.push({ value: entry.start_date, label: monthLabel(d) });
-      }
-    }
-
-    opts.sort((a, b) => b.value.localeCompare(a.value));
-    return opts;
-  }, [allEntries, currentMonthStart]);
-
-  const selectedPE = useMemo(() => {
-    return allEntries.find(e => e.start_date === selectedMonth) ?? null;
-  }, [allEntries, selectedMonth]);
-
-  const selectedEnd = useMemo(() => {
-    if (selectedPE) return selectedPE.end_date;
-    const d = parseDate(selectedMonth);
-    return endOfMonth(d);
-  }, [selectedPE, selectedMonth]);
-
-  // Fetch enriched salary slips from backend (single call, no N+1)
-  useEffect(() => {
-    if (!selectedPE) {
-      setEnrichedSlips([]);
-      return;
-    }
-    let cancelled = false;
-    setLoadingSlips(true);
-    fetch(`/inquiry-api/payroll/slips?pe_name=${encodeURIComponent(selectedPE.name)}`)
-      .then(res => res.json())
-      .then(json => { if (!cancelled) setEnrichedSlips(json.data ?? []); })
-      .catch(() => { if (!cancelled) setEnrichedSlips([]); })
-      .finally(() => { if (!cancelled) setLoadingSlips(false); });
-    return () => { cancelled = true; };
-  }, [selectedPE?.name, refreshKey]);
-
-  // Hide slips with zero gross pay (test accounts / placeholder employees)
-  const salarySlips = enrichedSlips.filter((s) => s.gross_pay > 0);
-  const hasDraftSlips = enrichedSlips.some((s) => s.docstatus === 0);
-  const allSlipsSubmitted = selectedPE && salarySlips.length > 0 && salarySlips.every((s) => s.docstatus === 1);
+  // A month from the URL is only trusted once the entries are known; unknown months fall back to the current one.
+  const month = !entriesLoaded || monthOptions.includes(urlMonth) ? urlMonth : currentMonthStart();
+  const selectedPE = useMemo(() => entries.find((e) => e.start_date === month) ?? null, [entries, month]);
+  const { slips, loading, loadError, refresh } = usePayrollSlips(selectedPE);
+  const monthEnd = selectedPE ? selectedPE.end_date : lastDayOfMonth(month);
+  const act = usePayrollActions({ month, monthEnd, selectedPE, refresh });
 
   const { result: empResult } = useList({
     resource: "Employee",
@@ -276,230 +49,161 @@ export default function PayrollPage() {
     filters: [{ field: "status", operator: "eq", value: "Active" }],
     meta: { fields: ["name"] },
   });
-
   const activeCount = empResult?.data?.length ?? 0;
 
-  // Build wedding allowance map from salary slip earnings (not Additional Salary records)
+  // Hide slips with zero gross pay (test accounts / placeholder employees)
+  const salarySlips = useMemo(() => slips.filter((s) => s.gross_pay > 0), [slips]);
+  const hasDraftSlips = slips.some((s) => s.docstatus === 0);
+  const allSlipsSubmitted = !!selectedPE && salarySlips.length > 0 && salarySlips.every((s) => s.docstatus === 1);
+
+  // Wedding allowance per employee, summed from the slips' earnings
   const weddingAllowanceMap = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const slip of enrichedSlips) {
+    for (const slip of slips) {
       for (const e of slip.earnings) {
-        if (e.salary_component === "Wedding Allowance" && e.amount > 0) {
-          map[slip.employee] = (map[slip.employee] ?? 0) + e.amount;
-        }
+        if (e.salary_component === "Wedding Allowance" && e.amount > 0) map[slip.employee] = (map[slip.employee] ?? 0) + e.amount;
       }
     }
     return map;
-  }, [enrichedSlips]);
+  }, [slips]);
 
-  const handleSetBonus = useCallback(async (employee: string, amount: number) => {
-    if (!selectedPE) return;
-    setError(null);
-    try {
-      const res = await fetch("/inquiry-api/payroll/bonus", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pe_name: selectedPE.name, employee, amount }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Failed to set bonus: ${res.status}`);
-      }
-      setRefreshKey(k => k + 1);
-    } catch (err: any) {
-      setError(extractErrorMessage(err, "Failed to set bonus"));
-    }
-  }, [selectedPE?.name]);
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? salarySlips.filter((s) => `${s.employee_name} ${slipName(s)}`.toLowerCase().includes(q)) : salarySlips;
+  }, [salarySlips, search]);
 
-  const slipColumns = useMemo(() => buildSlipColumns(weddingAllowanceMap, handleSetBonus), [weddingAllowanceMap, handleSetBonus]);
+  const commissionRows = useMemo(() => salarySlips.map(commissionOf).filter((r): r is CommissionRow => r !== null), [salarySlips]);
 
-  async function handleGenerate() {
-    setIsRunning(true);
-    setError(null);
-    try {
-      const res = await fetch("/inquiry-api/generate-payroll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ start_date: selectedMonth, end_date: selectedEnd }),
-      });
-      if (!res.ok) throw new Error(`Payroll generation failed: ${res.status}`);
-      invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
-      invalidate({ resource: "Additional Salary", invalidates: ["list"] });
-      setRefreshKey(k => k + 1);
-    } catch (err: any) {
-      setError(extractErrorMessage(err, "Failed to generate payroll"));
-    } finally {
-      setIsRunning(false);
-    }
+  const ready = entriesLoaded && !loading;
+  const actionProps = {
+    hasEntry: !!selectedPE,
+    canGenerate: ready && !allSlipsSubmitted,
+    canSubmit: !!selectedPE && hasDraftSlips,
+    canExport: !!selectedPE && ready,
+    isRunning: act.isRunning,
+    submitting: act.submitting,
+    exporting: act.exporting,
+    onGenerate: () => setConfirm("generate"),
+    onSubmit: () => setConfirm("submit"),
+    onExport: () => void act.exportPdf(),
+  };
+
+  const label = monthLabel(month);
+  const confirmCopy = confirm === "submit"
+    ? { title: `Submit all salary slips for ${label}?`, text: "Submitted slips are locked: bonus and figures can no longer be changed.", confirmLabel: "Submit All", busy: act.submitting }
+    : selectedPE
+      ? { title: `Recalculate payroll for ${label}?`, text: "This re-runs the payroll calculation for the draft salary slips of this month.", confirmLabel: "Recalculate", busy: act.isRunning }
+      : { title: `Generate payroll for ${label}?`, text: `This creates the payroll entry and salary slips for ${activeCount} active employees.`, confirmLabel: "Generate", busy: act.isRunning };
+
+  async function onConfirm() {
+    if (confirm === "submit") await act.submitAll();
+    else await act.generate();
+    setConfirm(null);
   }
 
-  async function handleSubmitAll() {
-    if (!selectedPE) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const resp = await fetch("/inquiry-api/payroll/submit-all", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payroll_entry: selectedPE.name }),
-      });
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to submit payroll");
-      }
-
-      const result = await resp.json();
-      if (result.failed && result.failed.length > 0) {
-        setError(result.failed.join(" | "));
-      }
-    } catch (err: any) {
-      setError(extractErrorMessage(err, "Failed to submit payroll"));
-    } finally {
-      setSubmitting(false);
-      invalidate({ resource: "Payroll Entry", invalidates: ["list"] });
-      setRefreshKey(k => k + 1);
-    }
+  let body;
+  if (!entriesLoaded || loading) {
+    body = <StaffSkeleton />;
+  } else if (!selectedPE) {
+    body = (
+      <StatePanel
+        kind="empty"
+        title={`No payroll for ${label}`}
+        text={`Generate it to create salary slips for ${activeCount} active employees.`}
+      />
+    );
+  } else if (loadError && slips.length === 0) {
+    body = (
+      <StatePanel
+        kind="error"
+        title="Couldn't load salary slips"
+        text={loadError}
+        action={{ label: "Try again", onClick: refresh, icon: <RotateCw className="h-4 w-4" /> }}
+      />
+    );
+  } else if (shown.length === 0) {
+    body = <StatePanel kind="empty" title={search.trim() ? "No employees match" : "No salary slips"} text={search.trim() ? "Try a different name." : "This payroll entry has no slips with pay."} />;
+  } else if (isDesktop) {
+    body = <PayrollTable slips={shown} weddingAllowanceMap={weddingAllowanceMap} onSetBonus={act.setBonus} />;
+  } else {
+    body = <PayrollCards slips={shown} weddingAllowanceMap={weddingAllowanceMap} onSetBonus={act.setBonus} />;
   }
 
-  async function handleExportPdf() {
-    if (!selectedPE) return;
-    setExporting(true);
-    setError(null);
-    try {
-      const res = await fetch(`/inquiry-api/payroll/slips/pdf?pe_name=${encodeURIComponent(selectedPE.name)}`, { credentials: "include" });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `PDF export failed: ${res.status}`);
-      }
-      const url = URL.createObjectURL(await res.blob());
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `bang-luong-${selectedMonth.slice(0, 7)}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err: any) {
-      setError(extractErrorMessage(err, "Failed to export PDF"));
-    } finally {
-      setExporting(false);
-    }
-  }
-
-  const isLoading = loadingSlips;
+  const showStatus = ready && !!selectedPE && (allSlipsSubmitted || hasDraftSlips);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Payroll</h1>
-          <p className="text-muted-foreground">Salary processing and history</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[200px]">
+    <div className="flex flex-col gap-4 pb-6">
+      <header className="flex flex-wrap items-center gap-3">
+        <h1 className="flex-1 text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Payroll</h1>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground max-md:w-full">
+          <span>Month</span>
+          <Select value={month} onValueChange={(v) => void setUrlMonth(v)}>
+            <SelectTrigger aria-label="Month" className="w-[160px] font-semibold text-foreground max-md:h-12 max-md:flex-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {monthOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
+              {monthOptions.map((m) => <SelectItem key={m} value={m}>{monthLabel(m)}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={handleExportPdf} disabled={!selectedPE || exporting || isLoading}>
-            <FileDown className="mr-2 h-4 w-4" />
-            {exporting ? "Đang xuất..." : "Xuất PDF"}
-          </Button>
-          {!isLoading && !allSlipsSubmitted && (
-            <Button onClick={handleGenerate} disabled={isRunning || submitting}>
-              {isRunning ? "Generating..." : selectedPE ? `Recalculate` : `Generate`}
-            </Button>
-          )}
-          {selectedPE && hasDraftSlips && (
-            <Button onClick={handleSubmitAll} disabled={submitting || isRunning}>
-              {submitting ? "Submitting..." : "Submit All"}
-            </Button>
-          )}
-          {allSlipsSubmitted && (
-            <Badge variant="success" className="px-3 py-1.5 text-sm">Payroll Submitted</Badge>
-          )}
-        </div>
-      </div>
+        </label>
+        {isDesktop && <PayrollActions {...actionProps} />}
+      </header>
 
-      {error && (
-        <div className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-4 font-medium hover:text-red-900">&times;</button>
+      {act.error && (
+        <div role="alert" className="flex items-center justify-between rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
+          <span>{act.error}</span>
+          <button type="button" aria-label="Dismiss" onClick={() => act.setError(null)} className="ml-4 flex h-8 w-8 items-center justify-center font-medium">&times;</button>
+        </div>
+      )}
+      {loadError && slips.length > 0 && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Couldn't refresh. Showing the last loaded slips.{" "}
+          <button type="button" className="font-semibold text-primary underline-offset-4 hover:underline" onClick={refresh}>Try again</button>
+        </p>
+      )}
+
+      {showStatus && selectedPE && (
+        <div className={`flex flex-wrap items-center gap-3 rounded-card px-4 py-3.5 ${allSlipsSubmitted ? "bg-success-soft text-success-soft-foreground" : "bg-warning-soft text-warning-soft-foreground"}`}>
+          <Badge variant={allSlipsSubmitted ? "success" : "warning"} className="bg-card">
+            {allSlipsSubmitted ? "Submitted" : "Draft · awaiting submission"}
+          </Badge>
+          <span className="text-sm">{salarySlips.length} employees · {selectedPE.start_date} to {selectedPE.end_date}</span>
         </div>
       )}
 
-      {!isLoading && !selectedPE ? (
-        <Card>
-          <CardContent className="py-8">
-            <p className="text-muted-foreground text-center">
-              {`No payroll entry for ${monthOptions.find(o => o.value === selectedMonth)?.label ?? selectedMonth}. Click "Generate" to create one for ${activeCount} active employees.`}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <DataTable
-          columns={slipColumns}
-          data={salarySlips}
-          isLoading={isLoading}
-          searchKey="employee_name"
-          searchPlaceholder="Search by employee..."
-        />
+      {ready && selectedPE && salarySlips.length > 0 && <PayrollSummary slips={salarySlips} />}
+
+      {ready && selectedPE && salarySlips.length > 0 && (
+        <div className="relative md:w-72">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            type="search"
+            aria-label="Search by employee"
+            placeholder="Search by employee..."
+            value={search}
+            onChange={(e) => void setSearch(e.target.value)}
+            className="rounded-full pl-10 max-md:h-12 max-md:pl-10"
+          />
+        </div>
       )}
 
-      {!isLoading && salarySlips.length > 0 && (() => {
-        const commissionRows = salarySlips
-          .map(s => {
-            const lead = getEarningAmount(s.earnings, "Lead Planner Commission");
-            const support = getEarningAmount(s.earnings, "Support Planner Commission");
-            const assistant = getEarningAmount(s.earnings, "Assistant Commission");
-            const fullPkg = getEarningAmount(s.earnings, "Full Package Commission");
-            const partialPkg = getEarningAmount(s.earnings, "Partial Package Commission");
-            const total = lead + support + assistant + fullPkg + partialPkg;
-            if (total === 0) return null;
-            return { name: s.employee_display_name || s.employee_name, lead, support, assistant, fullPkg, partialPkg, total };
-          })
-          .filter(Boolean) as { name: string; lead: number; support: number; assistant: number; fullPkg: number; partialPkg: number; total: number }[];
-        if (commissionRows.length === 0) return null;
-        const hasFullPkg = commissionRows.some(r => r.fullPkg > 0);
-        const hasPartialPkg = commissionRows.some(r => r.partialPkg > 0);
-        return (
-          <div className="text-xs text-muted-foreground mt-2">
-            <p className="font-medium mb-1">Commission Breakdown</p>
-            <table className="w-auto">
-              <thead>
-                <tr className="text-left">
-                  <th className="pr-4 font-normal">Employee</th>
-                  <th className="pr-4 font-normal text-right">Lead</th>
-                  <th className="pr-4 font-normal text-right">Support</th>
-                  <th className="pr-4 font-normal text-right">Assistant</th>
-                  {hasFullPkg && <th className="pr-4 font-normal text-right">Full Pkg</th>}
-                  {hasPartialPkg && <th className="pr-4 font-normal text-right">Partial Pkg</th>}
-                  <th className="font-normal text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {commissionRows.map(r => (
-                  <tr key={r.name}>
-                    <td className="pr-4">{r.name}</td>
-                    <td className="pr-4 text-right">{r.lead > 0 ? formatVND(r.lead) : "-"}</td>
-                    <td className="pr-4 text-right">{r.support > 0 ? formatVND(r.support) : "-"}</td>
-                    <td className="pr-4 text-right">{r.assistant > 0 ? formatVND(r.assistant) : "-"}</td>
-                    {hasFullPkg && <td className="pr-4 text-right">{r.fullPkg > 0 ? formatVND(r.fullPkg) : "-"}</td>}
-                    {hasPartialPkg && <td className="pr-4 text-right">{r.partialPkg > 0 ? formatVND(r.partialPkg) : "-"}</td>}
-                    <td className="text-right">{formatVND(r.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-      })()}
+      {body}
+
+      {isDesktop && ready && <CommissionBreakdown rows={commissionRows} />}
+
+      {/* Phone action bar: <main> has 104px bottom padding and sticky measures from its content edge, so -20px parks it on top of the 84px bottom nav. */}
+      {!isDesktop && entriesLoaded && (
+        <div className="sticky -bottom-5 z-20 -mx-4 flex gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur">
+          <PayrollActions {...actionProps} mobile />
+        </div>
+      )}
+
+      <ConfirmActionDialog
+        open={confirm !== null}
+        {...confirmCopy}
+        onConfirm={() => void onConfirm()}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   );
 }

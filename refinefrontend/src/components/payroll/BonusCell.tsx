@@ -6,11 +6,13 @@ import { formatVND } from "@/lib/format";
 interface BonusCellProps {
   amount: number;
   editable: boolean;
+  /** Phone layout: 48px tap target. */
+  touch?: boolean;
   onSave: (amount: number) => Promise<void>;
 }
 
 /** Bonus amount; for draft slips click to edit (Enter/blur saves, Escape cancels). */
-export function BonusCell({ amount, editable, onSave }: BonusCellProps) {
+export function BonusCell({ amount, editable, touch, onSave }: BonusCellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -31,7 +33,7 @@ export function BonusCell({ amount, editable, onSave }: BonusCellProps) {
     return (
       <button
         type="button"
-        className="ml-auto block rounded px-1 text-right hover:bg-muted"
+        className={`ml-auto block rounded px-1 text-right hover:bg-muted ${touch ? "min-h-12 min-w-12" : ""}`}
         title="Click to set bonus"
         onClick={(e) => {
           e.stopPropagation(); // don't toggle the row's detail expansion
@@ -67,7 +69,7 @@ export function BonusCell({ amount, editable, onSave }: BonusCellProps) {
   return (
     <MoneyInput
       autoFocus
-      className="ml-auto h-8 w-32 text-right"
+      className={`ml-auto w-32 text-right ${touch ? "h-12" : "h-8"}`}
       placeholder="0"
       value={draft}
       onChange={setDraft}
