@@ -17,7 +17,7 @@ import { VenueContactTab } from "@/components/venues/VenueContactTab";
 import type { ContactView } from "@/components/venues/VenueContactTab";
 import { VenueGalleryTab } from "@/components/venues/VenueGalleryTab";
 import { VenueForm } from "@/components/venues/VenueForm";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatVND } from "@/lib/format";
 import type { VenueSupplier, VenueWeddingArea } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -43,10 +43,6 @@ function soStatusVariant(s: string): "success" | "destructive" | "warning" | "se
   if (s === "Cancelled") return "destructive";
   if (s === "To Deliver and Bill") return "warning";
   return "secondary";
-}
-
-function formatVND(amount: number): string {
-  return new Intl.NumberFormat("vi-VN").format(amount) + " đ";
 }
 
 // ---------------------------------------------------------------------------

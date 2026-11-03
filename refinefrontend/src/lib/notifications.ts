@@ -1,3 +1,4 @@
+import { formatVNDFull } from "@/lib/format";
 import { Calendar, Home, Receipt, MessageSquare, Users, Heart, User, Bell, type LucideIcon } from "lucide-react";
 import { todayVN } from "@/lib/businessTime";
 import type { PwaNotification } from "@/hooks/useMyNotifications";
@@ -56,8 +57,9 @@ export interface MessagePart {
   bold: boolean;
 }
 
-/** Amounts arrive as "85,000 ₫"; the house style is the ISO prefix ("VND 85,000"). */
-const withVndPrefix = (text: string) => text.replace(/([\d][\d,.]*)\s*₫/g, "VND $1");
+/** Amounts arrive as "85,000 ₫"; the house style is "VND 85.000". */
+const withVndPrefix = (text: string) =>
+  text.replace(/([\d][\d,.]*)\s*₫/g, (_m, digits: string) => formatVNDFull(Number(digits.replace(/[,.]/g, ""))));
 
 /**
  * Split a notification's HTML message into text parts, keeping only <b>/<strong> emphasis.

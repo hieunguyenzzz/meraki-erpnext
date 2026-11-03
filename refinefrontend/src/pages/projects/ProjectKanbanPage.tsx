@@ -23,6 +23,7 @@ import { CreateWeddingDialog } from "./CreateWeddingDialog";
 import { PlannerCell, type PlannerEmployee } from "@/components/projects/PlannerCell";
 import { StaffFilterSelect } from "@/components/projects/StaffFilterSelect";
 import { hasModuleAccess, FINANCE_ROLES, CRM_ROLES } from "@/lib/roles";
+import { formatVND } from "@/lib/format";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
 export default function ProjectKanbanPage() {
@@ -228,7 +229,7 @@ export default function ProjectKanbanPage() {
           cell: ({ row }) => {
             const amount = row.getValue("package_amount") as number | undefined;
             return amount
-              ? <span>{amount.toLocaleString("vi-VN")} {"\u20AB"}</span>
+              ? <span>{formatVND(amount)}</span>
               : <span className="text-muted-foreground">{"\u2014"}</span>;
           },
         },
@@ -250,7 +251,7 @@ export default function ProjectKanbanPage() {
           cell: ({ row }) => {
             const amount = row.getValue("commission_base") as number | undefined;
             return amount
-              ? <span>{amount.toLocaleString("vi-VN")} {"\u20AB"}</span>
+              ? <span>{formatVND(amount)}</span>
               : <span className="text-muted-foreground">{"\u2014"}</span>;
           },
         },
