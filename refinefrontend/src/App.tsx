@@ -59,6 +59,9 @@ import VendorsPage from "@/pages/vendors/VendorsPage";
 import VendorDetailPage from "@/pages/vendors/VendorDetailPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import AddExpensePage from "@/pages/finance/AddExpensePage";
+import MyWeddingsPage from "@/pages/self-service/MyWeddingsPage";
+import MyWeddingDetailPage from "@/pages/self-service/MyWeddingDetailPage";
+import StaffHome from "@/components/dashboard/StaffHome";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,6 +86,7 @@ function RoleRedirect() {
     if (!employee || isProfileIncomplete(employee)) {
       return <Navigate to="/my-profile" replace />;
     }
+    return <StaffHome />;
   }
   return <DashboardPage />;
 }
@@ -95,6 +99,16 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   }
   if (isEmployeeSelfServiceOnly(roles)) {
     return <Navigate to="/my-profile" replace />;
+  }
+  return <>{children}</>;
+}
+
+/** Screens open to every signed-in user, Employee-only staff included (data is scoped by webhook_v2). */
+function StaffGuard({ children }: { children: React.ReactNode }) {
+  const { data: roles, isLoading, isError } = usePermissions<string[]>({});
+  if (isLoading) return null;
+  if (isError || !roles || roles.length === 0) {
+    return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 }
@@ -148,9 +162,16 @@ export default function App() {
                 </Authenticated>
               }
             >
-            {/* Admin routes: employee-only users are redirected to /my-profile */}
-            <Route element={<AdminGuard><Outlet /></AdminGuard>}>
+            {/* Staff routes first, then admin routes: employee-only users are redirected to /my-profile */}
+            <Route element={<StaffGuard><Outlet /></StaffGuard>}>
               <Route index element={<RoleRedirect />} />
+              <Route path="/my-weddings" element={<MyWeddingsPage />} />
+              <Route path="/my-weddings/:name" element={<MyWeddingDetailPage />} />
+              <Route path="/finance/expenses/new" element={<AddExpensePage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+            </Route>
+
+            <Route element={<AdminGuard><Outlet /></AdminGuard>}>
 
               {/* CRM */}
               <Route path="/crm" element={<KanbanPage />} />
@@ -193,15 +214,11 @@ export default function App() {
               <Route path="/finance/invoices" element={<InvoicesPage />} />
               <Route path="/finance/invoices/:name" element={<InvoiceDetailPage />} />
               <Route path="/finance/expenses" element={<ExpensesPage />} />
-              <Route path="/finance/expenses/new" element={<AddExpensePage />} />
               <Route path="/finance/expenses/:name" element={<ExpenseDetailPage />} />
               <Route path="/finance/payments" element={<PaymentsPage />} />
               <Route path="/finance/payments/:name" element={<PaymentDetailPage />} />
               <Route path="/finance/journals" element={<JournalsPage />} />
               <Route path="/finance/overview" element={<OverviewPage />} />
-
-              {/* Notifications */}
-              <Route path="/notifications" element={<NotificationsPage />} />
 
               {/* Admin / Settings */}
               <Route path="/admin/settings" element={<SettingsPage />} />

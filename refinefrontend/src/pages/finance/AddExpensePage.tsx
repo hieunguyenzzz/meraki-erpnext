@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useList, usePermissions } from "@refinedev/core";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
-import { hasModuleAccess, FINANCE_ROLES, WEDDING_EXPENSE_ROLES } from "@/lib/roles";
+import { hasModuleAccess, isEmployeeSelfServiceOnly, FINANCE_ROLES, WEDDING_EXPENSE_ROLES } from "@/lib/roles";
+import { useMyWeddings } from "@/hooks/useMyWeddings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,7 @@ export default function AddExpensePage() {
   const { employeeId } = useMyEmployee();
   const { data: roles } = usePermissions<string[]>({});
   const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
+  const selfServiceOnly = !!roles && isEmployeeSelfServiceOnly(roles);
   const seesAllWeddings = isFinance || hasModuleAccess(roles ?? [], WEDDING_EXPENSE_ROLES);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,17 +62,21 @@ export default function AddExpensePage() {
     meta: {
       fields: ["name", "project_name", "status", ...ASSIGNMENT_FIELDS],
     },
+    // Employee-only staff get their weddings from one scoped backend call instead
+    queryOptions: { enabled: !!roles && !selfServiceOnly },
   });
+  const { weddings: myWeddings } = useMyWeddings(selfServiceOnly);
   const allProjects = (projectsResult?.data ?? []) as Record<string, string>[];
 
   // Finance and Wedding Expense Managers see all projects; staff sees only their assigned weddings
   const projects = useMemo(() => {
+    if (selfServiceOnly) return myWeddings.map((w) => ({ name: w.id, project_name: w.project_name }));
     if (seesAllWeddings) return allProjects;
     if (!employeeId) return [];
     return allProjects.filter((p) =>
       ASSIGNMENT_FIELDS.some((f) => p[f] === employeeId)
     );
-  }, [allProjects, employeeId, seesAllWeddings]);
+  }, [allProjects, employeeId, seesAllWeddings, selfServiceOnly, myWeddings]);
 
   // Fetch expense categories
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);

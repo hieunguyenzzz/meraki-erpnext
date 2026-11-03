@@ -88,6 +88,15 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/** Employee-only staff sidebar: Home, Notifications, My Weddings, Requests, Me (Sidebar.dc.html). */
+const STAFF_SIDEBAR: NavItem[] = [
+  { label: "Home", path: "/", icon: Home },
+  { label: "Notifications", path: "/notifications", icon: Bell, badge: "notifications" },
+  { label: "My weddings", path: "/my-weddings", icon: Heart },
+  { label: "Requests", path: "/my-leaves", icon: FileSignature },
+  { label: "Me", path: "/my-profile", icon: User },
+];
+
 /** Self-service destinations (open to every signed-in user). */
 export const SELF_SERVICE_ITEMS: NavItem[] = [
   { label: "Me", path: "/my-profile", icon: User },
@@ -97,20 +106,21 @@ export const SELF_SERVICE_ITEMS: NavItem[] = [
 ];
 
 /** Reachable only through the command palette (not in the sidebar design). */
+const ADD_EXPENSE: NavItem = { label: "Add expense", path: "/finance/expenses/new", icon: Wallet };
 const PALETTE_EXTRAS: NavItem[] = [
   { label: "Job openings", path: "/hr/recruiting/jobs", icon: Briefcase, roles: HR_ROLES },
   { label: "Expense report", path: "/reports/expenses", icon: Receipt, roles: REPORT_ROLES },
-  { label: "Add expense", path: "/finance/expenses/new", icon: Wallet },
+  ADD_EXPENSE,
 ];
 
 function allowed(item: NavItem, roles: string[]) {
   return !item.roles || hasModuleAccess(roles, item.roles);
 }
 
-/** Sidebar groups the user may see. Employee-only users get just the self-service group. */
+/** Sidebar groups the user may see. Employee-only users get their own short list. */
 export function getVisibleNavGroups(roles: string[]): NavGroup[] {
   if (isEmployeeSelfServiceOnly(roles)) {
-    return [{ title: "Me", items: SELF_SERVICE_ITEMS }];
+    return [{ title: null, items: STAFF_SIDEBAR }];
   }
   return NAV_GROUPS
     .map((g) => ({ ...g, items: g.items.filter((i) => allowed(i, roles)) }))
@@ -172,6 +182,8 @@ export interface BottomBarConfig {
   /** Tabs after it (the More tab is always appended by the component). */
   trailing: BarTab[];
   showAdd: boolean;
+  /** Label/icon of the last tab (default "More"). */
+  more?: { label: string; icon: LucideIcon };
 }
 
 const HOME: BarTab = { label: "Home", path: "/", icon: Home, prefixes: ["/"] };
@@ -182,23 +194,14 @@ const PEOPLE: BarTab = { label: "People", path: "/hr/staff-overview", icon: User
 const APPROVALS: BarTab = { label: "Approvals", path: "/hr/leaves", icon: ClipboardCheck, prefixes: ["/hr/leaves", "/hr/wfh"] };
 const FINANCE: BarTab = { label: "Finance", path: "/finance/invoices", icon: Wallet, prefixes: ["/finance"] };
 const REQUESTS: BarTab = { label: "Requests", path: "/my-leaves", icon: FileSignature, prefixes: ["/my-leaves"] };
+const MY_WEDDINGS: BarTab = { label: "My Weddings", path: "/my-weddings", icon: Heart, prefixes: ["/my-weddings"] };
 const ME: BarTab = { label: "Me", path: "/my-profile", icon: User, prefixes: ["/my-profile"] };
 
 /** Bottom bar shaped by role (Main.dc.html, "One navigation, shaped by role"). */
 export function getBottomBar(roles: string[]): BottomBarConfig {
   if (isEmployeeSelfServiceOnly(roles)) {
-    // TODO(MWP-97): employee-only users get Home / My weddings / "+" once those screens open to them.
-    return {
-      leading: [
-        { label: "Profile", path: "/my-profile", icon: User, prefixes: ["/my-profile"] },
-        { label: "Leave", path: "/my-leaves", icon: ClipboardCheck, prefixes: ["/my-leaves"] },
-      ],
-      trailing: [
-        { label: "WFH", path: "/my-attendance", icon: House, prefixes: ["/my-attendance"] },
-        { label: "Payslips", path: "/my-payroll", icon: Wallet, prefixes: ["/my-payroll"] },
-      ],
-      showAdd: false,
-    };
+    // Home · My Weddings · + · Requests · Me (Main.dc.html). "Me" is the always-present More tab.
+    return { leading: [HOME, MY_WEDDINGS], trailing: [REQUESTS], showAdd: true, more: { label: "Me", icon: User } };
   }
   // "+" opens /finance/expenses/new, which every admin-shell user can reach today.
   const showAdd = true;
@@ -260,7 +263,7 @@ export function getPaletteGroups(roles: string[]): PaletteGroup[] {
     heading: g.title ?? "Go to",
     items: dedupe(g.items),
   }));
-  const extras = dedupe(selfOnly ? [] : [...PALETTE_EXTRAS.filter((i) => allowed(i, roles)), ...SELF_SERVICE_ITEMS]);
+  const extras = dedupe(selfOnly ? [ADD_EXPENSE, ...SELF_SERVICE_ITEMS] : [...PALETTE_EXTRAS.filter((i) => allowed(i, roles)), ...SELF_SERVICE_ITEMS]);
   if (extras.length) groups.push({ heading: "Also", items: extras });
   return groups.filter((g) => g.items.length > 0);
 }

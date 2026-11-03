@@ -25,6 +25,7 @@ from webhook_v2.services.classifier_client import RemoteClassifierClient
 from webhook_v2.services.receipt_image import to_browser_image
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries
+from webhook_v2.routers.my_weddings import require_assigned_unless_privileged
 from webhook_v2.auth import require_roles, has_roles, resolve_employee, PLANNER, FINANCE, WEDDING_MANAGER, DIRECTOR
 
 log = get_logger(__name__)
@@ -801,6 +802,9 @@ async def create_wedding_expense_with_receipt(
         staff=staff or None, note=note,
     )
     req.staff = resolve_employee(request, req.staff, override_roles=RECEIPT_STAFF_OVERRIDE_ROLES)
+    if req.project:
+        # Staff without a planner/finance/expense-manager role may only log against their own weddings.
+        require_assigned_unless_privileged(request, req.project, employee=req.staff)
     # Reuse existing logic (shared core — not the gated route handler)
     result = _create_wedding_expense_core(req)
 

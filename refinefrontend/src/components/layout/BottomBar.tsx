@@ -24,7 +24,7 @@ function Tab({ tab, active }: { tab: BarTab; active: boolean }) {
 export function BottomBar() {
   const { pathname } = useLocation();
   const { data, isLoading } = usePermissions<string[]>({});
-  const { leading, trailing, showAdd } = getBottomBar(data ?? []);
+  const { leading, trailing, showAdd, more } = getBottomBar(data ?? []);
 
   // Empty bar until roles are known so employee-only users never flash the staff tabs.
   if (isLoading) {
@@ -67,7 +67,7 @@ export function BottomBar() {
         <Tab key={t.path} tab={t} active={t.path === activePath} />
       ))}
       <Tab
-        tab={{ label: "More", path: "/more", icon: MoreHorizontal, prefixes: [] }}
+        tab={{ label: more?.label ?? "More", path: "/more", icon: more?.icon ?? MoreHorizontal, prefixes: [] }}
         active={moreActive}
       />
     </nav>

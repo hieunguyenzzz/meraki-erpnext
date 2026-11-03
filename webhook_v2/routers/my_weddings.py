@@ -1,0 +1,236 @@
+"""
+Staff-facing "My weddings" endpoints (MWP-97).
+
+Employee-only staff (no CRM/planner/HR/finance role) may see the weddings they
+are assigned to. webhook_v2 talks to ERPNext with the admin API key, so the
+user's DocPerms never apply here — scoping is done in this module:
+
+  * a caller only ever sees Projects where their OWN Employee (resolved from
+    the session, never a client-supplied id) is in an assignment field;
+  * the detail view is read-only and omits commission, price and payment data.
+
+GET /my/weddings            — assigned weddings: Open, plus Completed within the last 30 days
+GET /my/weddings/{project}  — read-only detail for one assigned wedding (403 otherwise)
+"""
+
+import json
+import uuid
+from datetime import date, timedelta
+
+import structlog
+from fastapi import APIRouter, HTTPException, Request
+
+from webhook_v2.auth import (
+    FINANCE, PLANNER, WEDDING_EXPENSE, get_current_user, has_roles, resolve_employee,
+)
+from webhook_v2.core.logging import get_logger
+from webhook_v2.routers.wedding_events import get_wedding_events
+from webhook_v2.services.erpnext import ERPNextClient
+
+log = get_logger(__name__)
+router = APIRouter()
+
+ASSIGNMENT_ROLES = {
+    "custom_lead_planner": "lead",
+    "custom_support_planner": "support",
+    "custom_assistant_1": "assistant",
+    "custom_assistant_2": "assistant",
+    "custom_assistant_3": "assistant",
+    "custom_assistant_4": "assistant",
+    "custom_assistant_5": "assistant",
+}
+# Roles that already see every wedding elsewhere in the app (frontend: seesAllWeddings + planners).
+ALL_WEDDINGS_ROLES = tuple(set(PLANNER) | set(FINANCE) | set(WEDDING_EXPENSE))
+RECENT_DAYS = 30
+
+_LIST_FIELDS = [
+    "name", "project_name", "status", "custom_project_stage", "customer",
+    "expected_end_date", "sales_order", "custom_wedding_type", "custom_service_type",
+    *ASSIGNMENT_ROLES,
+]
+
+
+def bind_correlation_id(request: Request) -> None:
+    """Tag every log line of this request with one id (client's X-Request-ID if sent)."""
+    cid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    structlog.contextvars.bind_contextvars(correlation_id=cid)
+
+
+def role_on_project(project: dict, employee: str) -> str | None:
+    """'lead' / 'support' / 'assistant' if `employee` is on the project, else None."""
+    for field, role in ASSIGNMENT_ROLES.items():
+        if project.get(field) == employee:
+            return role
+    return None
+
+
+def require_assigned_unless_privileged(request: Request, project: str, employee: str | None = None) -> None:
+    """403 unless the caller sees all weddings anyway or is assigned to `project`."""
+    bind_correlation_id(request)
+    if has_roles(request, ALL_WEDDINGS_ROLES):
+        return
+    employee = employee or resolve_employee(request, None)
+    doc = ERPNextClient()._get(f"/api/resource/Project/{project}").get("data", {})
+    if not role_on_project(doc, employee):
+        log.warning("my_weddings_forbidden", user=get_current_user(request), employee=employee, project=project)
+        raise HTTPException(status_code=403, detail="You are not assigned to this wedding")
+
+
+def _venue_names(client: ERPNextClient, sales_order_ids: set[str]) -> dict[str, str]:
+    """Sales Order name -> venue display name."""
+    if not sales_order_ids:
+        return {}
+    sos = client._get("/api/resource/Sales Order", params={
+        "filters": json.dumps([["name", "in", list(sales_order_ids)]]),
+        "fields": json.dumps(["name", "custom_venue"]),
+        "limit_page_length": 0,
+    }).get("data", [])
+    venue_ids = {so["custom_venue"] for so in sos if so.get("custom_venue")}
+    suppliers = {}
+    if venue_ids:
+        suppliers = {s["name"]: s.get("supplier_name") or s["name"] for s in client._get(
+            "/api/resource/Supplier", params={
+                "filters": json.dumps([["name", "in", list(venue_ids)]]),
+                "fields": json.dumps(["name", "supplier_name"]),
+                "limit_page_length": 0,
+            }).get("data", [])}
+    return {so["name"]: suppliers.get(so.get("custom_venue"), so.get("custom_venue")) for so in sos if so.get("custom_venue")}
+
+
+def _days_to_go(wedding_date: str | None, today: date) -> int | None:
+    return (date.fromisoformat(wedding_date) - today).days if wedding_date else None
+
+
+@router.get("/my/weddings")
+def my_weddings(request: Request):
+    bind_correlation_id(request)
+    user = get_current_user(request)
+    try:
+        employee = resolve_employee(request, None)
+    except HTTPException as e:
+        if e.status_code != 403:
+            raise
+        log.info("my_weddings_no_employee", user=user)
+        return {"data": []}
+
+    client = ERPNextClient()
+    projects = client._get("/api/resource/Project", params={
+        "or_filters": json.dumps([[f, "=", employee] for f in ASSIGNMENT_ROLES]),
+        "filters": json.dumps([["status", "in", ["Open", "Completed"]]]),
+        "fields": json.dumps(_LIST_FIELDS),
+        "limit_page_length": 0,
+    }).get("data", [])
+
+    today = date.today()
+    cutoff = (today - timedelta(days=RECENT_DAYS)).isoformat()
+    projects = [
+        p for p in projects
+        if p["status"] == "Open" or (p.get("expected_end_date") or "") >= cutoff
+    ]
+    venues = _venue_names(client, {p["sales_order"] for p in projects if p.get("sales_order")})
+
+    items = []
+    for p in projects:
+        items.append({
+            "id": p["name"],
+            "project_name": p.get("project_name") or p["name"],
+            "wedding_date": p.get("expected_end_date"),
+            "days_to_go": _days_to_go(p.get("expected_end_date"), today),
+            "venue_name": venues.get(p.get("sales_order") or ""),
+            "stage": p.get("custom_project_stage") or "Planning",
+            "status": p["status"],
+            "my_role": role_on_project(p, employee),
+        })
+    # Upcoming (soonest first), then past (most recent first); undated last.
+    items.sort(key=lambda i: (
+        i["days_to_go"] is None,
+        i["days_to_go"] is not None and i["days_to_go"] < 0,
+        abs(i["days_to_go"] or 0),
+    ))
+    log.info("my_weddings_listed", user=user, employee=employee, count=len(items))
+    return {"data": items}
+
+
+@router.get("/my/weddings/{project}")
+def my_wedding_detail(project: str, request: Request):
+    bind_correlation_id(request)
+    user = get_current_user(request)
+    employee = resolve_employee(request, None)
+    client = ERPNextClient()
+
+    doc = client._get(f"/api/resource/Project/{project}").get("data", {})
+    my_role = role_on_project(doc, employee)
+    if not my_role:
+        log.warning("my_wedding_forbidden", user=user, employee=employee, project=project)
+        raise HTTPException(status_code=403, detail="You are not assigned to this wedding")
+
+    team_ids = [doc.get(f) for f in ASSIGNMENT_ROLES if doc.get(f)]
+    names = {e["name"]: e.get("first_name") or e.get("employee_name") or e["name"] for e in client._get(
+        "/api/resource/Employee", params={
+            "filters": json.dumps([["name", "in", team_ids]]),
+            "fields": json.dumps(["name", "employee_name", "first_name"]),
+            "limit_page_length": 0,
+        }).get("data", [])} if team_ids else {}
+    team = [
+        {"employee": doc[f], "name": names.get(doc[f], doc[f]), "role": role}
+        for f, role in ASSIGNMENT_ROLES.items() if doc.get(f)
+    ]
+
+    venue = _venue_names(client, {doc["sales_order"]} if doc.get("sales_order") else set()).get(doc.get("sales_order") or "")
+    customer_name = None
+    if doc.get("customer"):
+        customer_name = client._get(f"/api/resource/Customer/{doc['customer']}").get("data", {}).get("customer_name")
+
+    events = get_wedding_events(from_date=None, to_date=None, employee=None, project=project)["events"]
+    events = [
+        {k: ev.get(k) for k in ("name", "event_type", "event_date", "start_time", "end_time", "venue_name", "venue_area", "guest_count", "notes")}
+        | {"staff": [{"name": s["employee_name"], "role": s.get("role"), "call_time": s.get("call_time")} for s in ev.get("staff", [])]}
+        for ev in events
+    ]
+    guests = max((ev["guest_count"] or 0 for ev in events), default=0) or None
+
+    today = date.today()
+    result = {
+        "id": doc["name"],
+        "project_name": doc.get("project_name") or doc["name"],
+        "customer_name": customer_name,
+        "wedding_date": doc.get("expected_end_date"),
+        "days_to_go": _days_to_go(doc.get("expected_end_date"), today),
+        "venue_name": venue,
+        "guest_count": guests,
+        "package": doc.get("custom_service_type") or None,
+        "wedding_type": doc.get("custom_wedding_type") or None,
+        "stage": doc.get("custom_project_stage") or "Planning",
+        "status": doc.get("status"),
+        "my_role": my_role,
+        "team": team,
+        "events": events,
+        "my_expenses": _my_expenses(client, project, employee),
+    }
+    log.info("my_wedding_read", user=user, employee=employee, project=project, events=len(events))
+    return {"data": result}
+
+
+def _my_expenses(client: ERPNextClient, project: str, employee: str) -> list[dict]:
+    """The caller's own expenses on this wedding (Draft = pending, Submitted = approved)."""
+    pis = client._get("/api/resource/Purchase Invoice", params={
+        "filters": json.dumps([
+            ["docstatus", "in", [0, 1]], ["project", "=", project], ["custom_expense_staff", "=", employee],
+        ]),
+        "fields": json.dumps(["name", "posting_date", "grand_total", "docstatus", "custom_rejected"]),
+        "order_by": "posting_date desc",
+        "limit_page_length": 50,
+    }).get("data", [])
+    expenses = []
+    for pi in pis:
+        # Child rows return 403 on direct list access; read them off the parent doc.
+        items = client._get(f"/api/resource/Purchase Invoice/{pi['name']}").get("data", {}).get("items", [])
+        status = "Approved" if pi["docstatus"] == 1 else "Rejected" if pi.get("custom_rejected") else "Pending"
+        expenses.append({
+            "name": pi["name"],
+            "date": pi["posting_date"],
+            "amount": pi["grand_total"],
+            "description": items[0].get("item_name", "") if items else "",
+            "status": status,
+        })
+    return expenses
