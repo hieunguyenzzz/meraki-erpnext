@@ -17,6 +17,7 @@ interface SegmentedRatingProps {
   max?: number;
   readOnly?: boolean;
   size?: "sm" | "md";
+  hideValue?: boolean;
   className?: string;
 }
 
@@ -26,6 +27,7 @@ export function SegmentedRating({
   max = 10,
   readOnly = false,
   size = "md",
+  hideValue = false,
   className,
 }: SegmentedRatingProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -107,9 +109,9 @@ export function SegmentedRating({
           );
         })}
       </div>
-      <span className={cn("tabular-nums text-right shrink-0", size === "sm" ? "w-4 text-xs text-muted-foreground" : "w-6 text-sm")}>
+      {!hideValue && <span className={cn("tabular-nums text-right shrink-0", size === "sm" ? "w-4 text-xs text-muted-foreground" : "w-6 text-sm")}>
         {value ?? "–"}
-      </span>
+      </span>}
     </div>
   );
 }
