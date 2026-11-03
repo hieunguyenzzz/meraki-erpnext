@@ -23,8 +23,13 @@ function Tab({ tab, active }: { tab: BarTab; active: boolean }) {
 /** Mobile bottom bar (hidden from md up). Tabs are shaped by role in lib/navigation.ts. */
 export function BottomBar() {
   const { pathname } = useLocation();
-  const { data } = usePermissions<string[]>({});
+  const { data, isLoading } = usePermissions<string[]>({});
   const { leading, trailing, showAdd } = getBottomBar(data ?? []);
+
+  // Empty bar until roles are known so employee-only users never flash the staff tabs.
+  if (isLoading) {
+    return <nav aria-hidden className="fixed inset-x-0 bottom-0 z-50 h-[84px] border-t bg-card md:hidden" />;
+  }
 
   const tabs = [...leading, ...trailing];
   let activePath: string | null = null;
@@ -36,7 +41,7 @@ export function BottomBar() {
       activePath = t.path;
     }
   }
-  const moreActive = !activePath && pathname !== "/";
+  const moreActive = pathname === "/more" || (!activePath && pathname !== "/" && pathname !== "/notifications");
 
   return (
     <nav
@@ -63,7 +68,7 @@ export function BottomBar() {
       ))}
       <Tab
         tab={{ label: "More", path: "/more", icon: MoreHorizontal, prefixes: [] }}
-        active={moreActive || pathname === "/more"}
+        active={moreActive}
       />
     </nav>
   );

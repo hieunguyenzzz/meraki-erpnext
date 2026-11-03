@@ -1,6 +1,6 @@
 import { Refine, Authenticated, usePermissions } from "@refinedev/core";
 import routerProvider from "@refinedev/react-router";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router";
 import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -140,16 +140,16 @@ export default function App() {
             <Route path="/inquiry" element={<InquiryPage />} />
             <Route path="/apply" element={<JobApplyPage />} />
 
-            {/* Admin routes: one adaptive shell (sidebar on desktop, bottom bar on mobile) */}
+            {/* One adaptive shell for every signed-in screen, so it stays mounted across sections */}
             <Route
               element={
                 <Authenticated key="main" fallback={<Navigate to="/login" />}>
-                  <AdminGuard>
-                    <AppShell />
-                  </AdminGuard>
+                  <AppShell />
                 </Authenticated>
               }
             >
+            {/* Admin routes: employee-only users are redirected to /my-profile */}
+            <Route element={<AdminGuard><Outlet /></AdminGuard>}>
               <Route index element={<RoleRedirect />} />
 
               {/* CRM */}
@@ -207,14 +207,7 @@ export default function App() {
               <Route path="/admin/settings" element={<SettingsPage />} />
             </Route>
 
-            {/* Self-service routes - same shell, open to all authenticated users */}
-            <Route
-              element={
-                <Authenticated key="self-service" fallback={<Navigate to="/login" />}>
-                  <AppShell />
-                </Authenticated>
-              }
-            >
+            {/* Self-service routes - open to all authenticated users */}
               <Route path="/my-profile" element={<MyProfilePage />} />
               <Route path="/my-leaves" element={<MyLeavesPage />} />
               <Route path="/my-attendance" element={<MyAttendancePage />} />

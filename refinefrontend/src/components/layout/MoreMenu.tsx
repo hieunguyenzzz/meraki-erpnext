@@ -6,6 +6,7 @@ import { useMyEmployee } from "@/hooks/useMyEmployee";
 import {
   PRIMARY_ROLE_LABEL, getBottomBar, getMoreSections, getPrimaryRole, type NavItem,
 } from "@/lib/navigation";
+import { getInitials } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 
 const THEMES = [
@@ -38,21 +39,18 @@ function Tile({ item, tone }: { item: NavItem; tone: string }) {
 
 /** Mobile "More" page (M-More.dc.html): everything not in the bottom bar, plus appearance and sign out. */
 export function MoreMenu() {
-  const { data } = usePermissions<string[]>({});
+  const { data, isLoading } = usePermissions<string[]>({});
   const roles = data ?? [];
   const { data: identity } = useGetIdentity<{ email: string; name?: string }>();
   const { employee } = useMyEmployee();
   const { theme, setTheme } = useTheme();
   const { mutate: logout } = useLogout({});
 
+  if (isLoading) return null;
+
   const sections = getMoreSections(roles, getBottomBar(roles));
   const name = employee?.employee_name ?? identity?.name ?? identity?.email ?? "";
-  const initials = name
-    .split(/[\s@._-]+/)
-    .filter(Boolean)
-    .map((p) => p[0].toUpperCase())
-    .slice(0, 2)
-    .join("");
+  const initials = getInitials(name);
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-[18px]">
@@ -85,13 +83,12 @@ export function MoreMenu() {
         <div className="overflow-hidden rounded-card border bg-card">
           <div className="flex min-h-[52px] items-center justify-between px-4 text-[15px]">
             <span>Appearance</span>
-            <div role="radiogroup" aria-label="Appearance" className="flex gap-0.5 rounded-full bg-muted p-[3px]">
+            <div className="flex gap-0.5 rounded-full bg-muted p-[3px]">
               {THEMES.map((t) => (
                 <button
                   key={t.value}
                   type="button"
-                  role="radio"
-                  aria-checked={theme === t.value}
+                  aria-pressed={theme === t.value}
                   onClick={() => setTheme(t.value)}
                   className={cn(
                     "h-9 rounded-full px-3 text-[13px]",

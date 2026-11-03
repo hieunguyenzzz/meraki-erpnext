@@ -64,21 +64,21 @@ function MobileBellLink() {
 /** Top bar on every screen: breadcrumbs (desktop), wordmark (mobile), search and the unread bell. */
 export function TopBar() {
   const { setOpen } = useSearch();
-  const { data } = usePermissions<string[]>({});
+  const { data, isLoading } = usePermissions<string[]>({});
   const selfOnly = isEmployeeSelfServiceOnly(data ?? []);
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 pl-5 pr-3 backdrop-blur md:px-4 max-md:h-[68px] max-md:border-b-0">
+    <header className="z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 pl-5 pr-3 backdrop-blur md:px-4 max-md:h-[68px] max-md:border-b-0">
       <div className="md:hidden">
         <Wordmark to={selfOnly ? "/my-profile" : "/"} />
       </div>
-      <div className="hidden md:block">{!selfOnly && <Breadcrumbs />}</div>
+      <div className="hidden md:block">{!isLoading && !selfOnly && <Breadcrumbs />}</div>
 
       <div className="ml-auto flex items-center gap-1">
         <Button variant="ghost" size="icon" onClick={() => setOpen(true)} aria-label="Search" className={BELL_CLASS}>
           <Search strokeWidth={1.75} />
         </Button>
-        {selfOnly ? (
+        {isLoading ? null : selfOnly ? (
           <NotificationBell className={BELL_CLASS} />
         ) : (
           <>
@@ -90,7 +90,7 @@ export function TopBar() {
             </div>
           </>
         )}
-        {!selfOnly && (
+        {!isLoading && !selfOnly && (
           <div className="ml-1 hidden md:block">
             <UserNav />
           </div>

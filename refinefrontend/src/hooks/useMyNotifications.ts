@@ -28,13 +28,6 @@ export function useMyNotifications() {
   return {
     notifications,
     count: message?.total ?? 0,
-    // Pending approvals already carried by the notification feed - no extra API call.
-    pendingLeaves: notifications.filter(
-      (n) => n.is_pending && n.reference_document_type === "Leave Application"
-    ).length,
-    pendingWfh: notifications.filter(
-      (n) => n.is_pending && n.reference_document_type === "Attendance Request"
-    ).length,
     refetch: query.refetch,
   };
 }

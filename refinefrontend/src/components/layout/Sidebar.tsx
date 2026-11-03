@@ -8,6 +8,7 @@ import {
   PRIMARY_ROLE_LABEL, getActiveItem, getPrimaryRole, getVisibleNavGroups,
   type BadgeKey, type NavItem,
 } from "@/lib/navigation";
+import { getInitials } from "@/lib/initials";
 import { isEmployeeSelfServiceOnly } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { ThemeSwitch } from "@/components/theme-switch";
@@ -17,8 +18,6 @@ const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigat
 
 const BADGE_TONE: Record<BadgeKey, string> = {
   notifications: "bg-primary-fill text-primary-fill-foreground",
-  leaves: "bg-warning-soft text-warning-soft-foreground",
-  wfh: "bg-warning-soft text-warning-soft-foreground",
 };
 
 function SidebarLink({ item, active, badge }: { item: NavItem; active: boolean; badge: number }) {
@@ -50,12 +49,7 @@ function UserFooter({ roles }: { roles: string[] }) {
   const { mutate: logout } = useLogout({});
 
   const name = employee?.employee_name ?? identity?.name ?? identity?.email ?? "";
-  const initials = name
-    .split(/[\s@._-]+/)
-    .filter(Boolean)
-    .map((p) => p[0].toUpperCase())
-    .slice(0, 2)
-    .join("");
+  const initials = getInitials(name);
 
   return (
     <div className="mt-3 flex shrink-0 items-center gap-2.5 border-t px-3 pt-3.5">
@@ -84,17 +78,22 @@ function UserFooter({ roles }: { roles: string[] }) {
 /** Desktop sidebar (hidden below md). Groups are filtered by role in lib/navigation.ts. */
 export function Sidebar() {
   const { pathname } = useLocation();
-  const { data } = usePermissions<string[]>({});
+  const { data, isLoading } = usePermissions<string[]>({});
   const roles = data ?? [];
   const { setOpen } = useSearch();
-  const { count, pendingLeaves, pendingWfh } = useMyNotifications();
-  const badges: Record<BadgeKey, number> = { notifications: count, leaves: pendingLeaves, wfh: pendingWfh };
+  const { count } = useMyNotifications();
+  const badges: Record<BadgeKey, number> = { notifications: count };
+
+  // Render an empty column until roles are known so employee-only users never flash the staff nav.
+  if (isLoading) {
+    return <aside className="hidden h-dvh w-[248px] shrink-0 border-r bg-sidebar md:block" aria-hidden />;
+  }
 
   const groups = getVisibleNavGroups(roles);
   const active = getActiveItem(pathname, groups.flatMap((g) => g.items));
 
   return (
-    <aside className="hidden h-screen w-[248px] shrink-0 flex-col border-r bg-sidebar px-3.5 py-5 text-sidebar-foreground md:flex">
+    <aside className="hidden h-dvh w-[248px] shrink-0 flex-col border-r bg-sidebar px-3.5 py-5 text-sidebar-foreground md:flex">
       <Wordmark large to={isEmployeeSelfServiceOnly(roles) ? "/my-profile" : "/"} className="mb-3.5 shrink-0 px-3 pt-1" />
       <button
         type="button"
@@ -103,7 +102,7 @@ export function Sidebar() {
       >
         <Search className="h-4 w-4" strokeWidth={1.75} aria-hidden />
         <span className="flex-1 text-left">Jump to…</span>
-        <kbd className="rounded-[5px] border border-input px-1.5 py-px font-sans text-[11px]">
+        <kbd aria-hidden className="rounded-[5px] border border-input px-1.5 py-px font-sans text-[11px]">
           {isMac ? "⌘K" : "Ctrl K"}
         </kbd>
       </button>
