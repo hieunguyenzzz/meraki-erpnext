@@ -1,1071 +1,206 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { useList, useInvalidate } from "@refinedev/core";
-import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, Plus, Trash2, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X, BadgeCheck, Pencil } from "lucide-react";
-import { formatVND, formatDate } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { BadgeCheck, ChevronDown, Plus, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
-import {
-  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from "@/components/ui/command";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatePanel } from "@/components/StatePanel";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { formatVNDFull } from "@/lib/format";
+import { EditExpenseSheet } from "./expenses/EditExpenseSheet";
+import { ExpenseCard, ExpenseTableRow } from "./expenses/ExpenseRows";
+import { ExpenseFilters } from "./expenses/ExpenseFilters";
+import { QuickExpenseSheet } from "./expenses/QuickExpenseSheet";
+import { SupplierInvoiceSheet } from "./expenses/SupplierInvoiceSheet";
+import { filterExpenses, useExpenseFilters, type Filters } from "./expenses/filters";
+import { useBulkActions } from "./expenses/useBulkActions";
+import { useExpenseData } from "./expenses/useExpenseData";
+import { categoryLabel, type Expense } from "./expenses/types";
 
+const PAGE = 50;
 
-interface Expense {
-  name: string;
-  supplier: string;
-  supplier_name: string;
-  posting_date: string;
-  grand_total: number;
-  status: string;
-  against_expense_account: string;
-  project: string;
-}
-
-interface ExpenseCategory {
-  name: string;
-  account_name: string;
-}
-
-interface Supplier {
-  name: string;
-  supplier_name: string;
-}
-
-interface InvoiceItem {
-  description: string;
-  category: string;
-  amount: string;
-}
-
-// Initial form states
-const initialQuickForm = {
-  date: new Date().toISOString().slice(0, 10),
-  description: "",
-  amount: "",
-  category: "",
-  wedding: "",
-};
-
-const initialInvoiceForm = {
-  supplier: "",
-  date: new Date().toISOString().slice(0, 10),
-  items: [{ description: "", category: "", amount: "" }] as InvoiceItem[],
-};
-
-function getColumns(
-  onEdit: (expense: Expense) => void,
-  projectMap: Record<string, string>,
-  rowInfo: Record<string, { description: string; staff: string; note: string }>,
-): ColumnDef<Expense, unknown>[] {
-  return [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "name",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
-      cell: ({ row }) => (
-        <Link to={`/finance/expenses/${row.original.name}`} className="font-medium text-primary hover:underline">
-          {row.original.name}
-        </Link>
-      ),
-    },
-    {
-      id: "description",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Description" />,
-      cell: ({ row }) => {
-        const description = rowInfo[row.original.name]?.description;
-        if (!description) return <span className="text-muted-foreground">—</span>;
-        const note = rowInfo[row.original.name]?.note;
-        return (
-          <div className="max-w-[280px]">
-            <div className="truncate" title={description}>{description}</div>
-            {note && <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2" title={note}>{note}</div>}
-          </div>
-        );
-      },
-      enableSorting: false,
-    },
-    {
-      accessorKey: "posting_date",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
-      cell: ({ row }) => formatDate(row.original.posting_date),
-    },
-    {
-      accessorKey: "grand_total",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Total" className="text-right" />,
-      cell: ({ row }) => <div className="text-right">{formatVND(row.original.grand_total)}</div>,
-    },
-    {
-      accessorKey: "against_expense_account",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />,
-      cell: ({ row }) => {
-        const acc = row.original.against_expense_account;
-        if (!acc) return <span className="text-muted-foreground">—</span>;
-        return acc.replace(/ - MWP$/, "");
-      },
-      filterFn: "arrIncludesSome",
-    },
-    {
-      accessorKey: "project",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Wedding" />,
-      cell: ({ row }) => {
-        const project = row.original.project;
-        if (!project) return <span className="text-muted-foreground">—</span>;
-        const label = projectMap[project] || project;
-        return (
-          <Link
-            to={`/projects/${project}`}
-            className="text-primary hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {label}
-          </Link>
-        );
-      },
-    },
-    {
-      id: "staff",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Staff" />,
-      cell: ({ row }) => {
-        const staff = rowInfo[row.original.name]?.staff;
-        if (!staff) return <span className="text-muted-foreground">—</span>;
-        return staff;
-      },
-      enableSorting: false,
-    },
-    {
-      id: "actions",
-      cell: ({ row }) => (
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(row.original)}>
-          <Pencil className="h-4 w-4" />
-        </Button>
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-  ];
+function ListSkeleton() {
+  return (
+    <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading expenses">
+      {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-card" />)}
+    </div>
+  );
 }
 
 export default function ExpensesPage() {
-  const invalidate = useInvalidate();
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const data = useExpenseData();
+  const [params, setParams] = useExpenseFilters();
+  const [selection, setSelection] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState<Expense | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [supplierOpen, setSupplierOpen] = useState(false);
+  const [shown, setShown] = useState(PAGE);
 
-  // Row selection state
-  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const [bulkAction, setBulkAction] = useState<"deleting" | "paying" | null>(null);
-  const [bulkError, setBulkError] = useState<string | null>(null);
+  const { expenses, info, weddingNames, receipts, receiptsKnown } = data;
 
-  // Edit expense state
-  const [editExpense, setEditExpense] = useState<Expense | null>(null);
-  const [editForm, setEditForm] = useState({ amount: "", description: "", date: "", account: "" });
-  const [editOpen, setEditOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [editCatOpen, setEditCatOpen] = useState(false);
-  const [editCatSearch, setEditCatSearch] = useState("");
+  // Option lists come from the data; a URL value that is not among them is ignored.
+  const categoryOptions = useMemo(() => {
+    const used = new Set(expenses.map((e) => e.against_expense_account).filter(Boolean));
+    return [...used].sort().map((a) => ({ value: a, label: categoryLabel(a) }));
+  }, [expenses]);
+  const weddingOptions = useMemo(() => {
+    const used = new Set(expenses.map((e) => e.project).filter(Boolean));
+    return [...used].map((p) => ({ value: p, label: weddingNames[p] || p })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [expenses, weddingNames]);
+  const staffOptions = useMemo(() => [...new Set(Object.values(info).map((i) => i.staff).filter(Boolean))].sort(), [info]);
 
-  // Dialog states
-  const [quickExpenseOpen, setQuickExpenseOpen] = useState(false);
-  const [supplierInvoiceOpen, setSupplierInvoiceOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const filters: Filters = useMemo(() => ({
+    ...params,
+    category: categoryOptions.some((o) => o.value === params.category) ? params.category : "",
+    wedding: weddingOptions.some((o) => o.value === params.wedding) ? params.wedding : "",
+    staff: staffOptions.includes(params.staff) ? params.staff : "",
+  }), [params, categoryOptions, weddingOptions, staffOptions]);
 
-  // Feedback states
-  const [quickError, setQuickError] = useState<string | null>(null);
-  const [quickSuccess, setQuickSuccess] = useState<string | null>(null);
-  const [invoiceError, setInvoiceError] = useState<string | null>(null);
-  const [invoiceSuccess, setInvoiceSuccess] = useState<string | null>(null);
+  const withReceipt = useMemo(() => (receiptsKnown ? new Set(Object.keys(receipts)) : null), [receipts, receiptsKnown]);
+  const rows = useMemo(
+    () => filterExpenses(expenses, filters, { info, weddingNames, withReceipt }),
+    [expenses, filters, info, weddingNames, withReceipt],
+  );
+  const missingCount = withReceipt ? expenses.filter((e) => !withReceipt.has(e.name)).length : null;
+  const total = useMemo(() => rows.reduce((s, e) => s + (e.grand_total || 0), 0), [rows]);
 
-  // Quick Expense form state
-  const [quickForm, setQuickForm] = useState(initialQuickForm);
+  // Selection only ever covers rows currently listed, so a bulk action never touches hidden ones.
+  const selectedNames = useMemo(() => rows.filter((r) => selection[r.name]).map((r) => r.name), [rows, selection]);
+  const bulk = useBulkActions(() => setSelection({}));
+  const bulkBusy = bulk.action !== null;
 
-  // Per-PI extra info (description + staff) resolved by the backend
-  const [rowInfo, setRowInfo] = useState<Record<string, { description: string; staff: string; note: string }>>({});
+  useEffect(() => { setShown(PAGE); }, [filters]);
 
-  // Category combobox state
-  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
-  // Quick-expense picker: wedding categories when linked to a wedding, otherwise all
-  const [quickCategories, setQuickCategories] = useState<ExpenseCategory[]>([]);
-  const [categoryOpen, setCategoryOpen] = useState(false);
-  const [categorySearch, setCategorySearch] = useState("");
-  const [creatingCategory, setCreatingCategory] = useState(false);
+  const change = (patch: Partial<Filters>) => void setParams(patch);
+  const visible = rows.slice(0, shown);
+  const filtered = Object.entries(filters).some(([, v]) => v !== "" && v !== null);
 
-  // Wedding combobox state
-  const [weddingOpen, setWeddingOpen] = useState(false);
-  const [weddingSearch, setWeddingSearch] = useState("");
+  if (data.error) console.error("Expenses list failed to load", data.error);
 
-  // Supplier Invoice form state
-  const [invoiceForm, setInvoiceForm] = useState(initialInvoiceForm);
-
-  const { result, query } = useList({
-    resource: "Purchase Invoice",
-    pagination: { mode: "off" },
-    sorters: [{ field: "posting_date", order: "desc" }],
-    meta: {
-      fields: [
-        "name", "supplier", "supplier_name", "posting_date",
-        "grand_total", "status", "against_expense_account", "project",
-      ],
-    },
+  const rowProps = (e: Expense) => ({
+    expense: e,
+    info: info[e.name],
+    weddingName: weddingNames[e.project],
+    receipt: receipts[e.name],
+    receiptsKnown,
+    selected: !!selection[e.name],
+    onSelect: (checked: boolean) => setSelection((s) => ({ ...s, [e.name]: checked })),
+    onEdit: () => setEditing(e),
   });
 
-  // Fetch suppliers
-  const { result: suppliersResult } = useList({
-    resource: "Supplier",
-    pagination: { mode: "off" },
-    meta: { fields: ["name", "supplier_name"] },
-  });
-
-  // Fetch projects (weddings) for autocomplete
-  const { result: projectsResult } = useList({
-    resource: "Project",
-    pagination: { mode: "off" },
-    meta: { fields: ["name", "project_name", "customer", "expected_end_date"] },
-  });
-
-  const expenses = (result?.data ?? []) as Expense[];
-  const suppliers = (suppliersResult?.data ?? []) as Supplier[];
-  const projects = (projectsResult?.data ?? []) as { name: string; project_name: string; customer: string; expected_end_date: string }[];
-  const isLoading = query.isLoading;
-
-  // Fetch expense categories from API
-  useEffect(() => {
-    fetch("/inquiry-api/expense/categories")
-      .then(r => r.json())
-      .then(data => setCategories(data))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(`/inquiry-api/expense/categories${quickForm.wedding ? "?scope=wedding" : ""}`, { signal: controller.signal })
-      .then(r => r.json())
-      .then((data: ExpenseCategory[]) => {
-        setQuickCategories(data);
-        setQuickForm(prev => (data.some(c => c.name === prev.category) ? prev : { ...prev, category: "" }));
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [quickForm.wedding]);
-
-  // Fetch per-PI description + staff (resolved server-side) from API
-  useEffect(() => {
-    fetch("/inquiry-api/expense/descriptions")
-      .then(r => r.json())
-      .then(data => setRowInfo(data))
-      .catch(() => {});
-  }, []);
-
-  const filteredProjects = weddingSearch
-    ? projects.filter(p => p.project_name.toLowerCase().includes(weddingSearch.toLowerCase()))
-    : projects;
-
-  // Reset quick expense form
-  async function handleCreateCategory() {
-    if (!categorySearch.trim()) return;
-    setCreatingCategory(true);
-    try {
-      const resp = await fetch("/inquiry-api/expense/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: categorySearch.trim(), scope: quickForm.wedding ? "wedding" : "office" }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to create category");
-      }
-      const newCat = await resp.json();
-      setCategories(prev => [...prev, newCat]);
-      setQuickCategories(prev => [...prev, newCat]);
-      setQuickForm({ ...quickForm, category: newCat.name });
-      setCategoryOpen(false);
-    } catch (error) {
-      setQuickError(error instanceof Error ? error.message : "Failed to create category");
-    } finally {
-      setCreatingCategory(false);
-    }
+  let body;
+  if (data.error) {
+    body = <StatePanel kind="error" title="Couldn't load expenses" text="The server didn't answer. Your data is safe."
+      action={{ label: "Try again", onClick: data.refetch, icon: <RotateCw className="h-4 w-4" /> }} />;
+  } else if (data.loading) {
+    body = <ListSkeleton />;
+  } else if (rows.length === 0) {
+    body = <StatePanel kind="empty" title={filtered ? "No expenses match" : "No expenses yet"}
+      text={filtered ? "Try different filters or clear them." : "Add an expense to see it here."} />;
+  } else if (isDesktop) {
+    body = (
+      <section className="overflow-hidden rounded-card border bg-card">
+        <div className="overflow-x-auto">
+          <table aria-label="Expenses" className="w-full min-w-[960px] border-collapse text-sm">
+            <thead className="bg-muted text-[13px] text-muted-foreground">
+              <tr>
+                <th scope="col" className="w-12 px-4 py-3 text-left">
+                  <Checkbox aria-label="Select all listed"
+                    checked={selectedNames.length > 0 && selectedNames.length === visible.length ? true : selectedNames.length > 0 ? "indeterminate" : false}
+                    onCheckedChange={(v) => setSelection(v ? Object.fromEntries(visible.map((r) => [r.name, true])) : {})} />
+                </th>
+                {["Date", "Description", "Wedding", "Category", "Staff", "Bill", "Status"].map((h) => (
+                  <th key={h} scope="col" className="px-3 py-3 text-left font-semibold">{h}</th>
+                ))}
+                <th scope="col" className="px-3 py-3 text-right font-semibold">Amount</th>
+                <th scope="col" className="w-14 px-3 py-3"><span className="sr-only">Edit</span></th>
+              </tr>
+            </thead>
+            <tbody>{visible.map((e) => <ExpenseTableRow key={e.name} {...rowProps(e)} />)}</tbody>
+          </table>
+        </div>
+      </section>
+    );
+  } else {
+    body = <div className="flex flex-col gap-3">{visible.map((e) => <ExpenseCard key={e.name} {...rowProps(e)} />)}</div>;
   }
-
-  function resetQuickForm() {
-    setQuickForm({ ...initialQuickForm, date: new Date().toISOString().slice(0, 10) });
-    setWeddingSearch("");
-    setCategorySearch("");
-    setQuickError(null);
-    setQuickSuccess(null);
-  }
-
-  // Reset invoice form
-  function resetInvoiceForm() {
-    setInvoiceForm({ ...initialInvoiceForm, date: new Date().toISOString().slice(0, 10) });
-    setInvoiceError(null);
-    setInvoiceSuccess(null);
-  }
-
-  // Handle quick expense dialog close
-  function handleQuickExpenseOpenChange(open: boolean) {
-    setQuickExpenseOpen(open);
-    if (!open) {
-      resetQuickForm();
-    }
-  }
-
-  // Handle supplier invoice dialog close
-  function handleSupplierInvoiceOpenChange(open: boolean) {
-    setSupplierInvoiceOpen(open);
-    if (!open) {
-      resetInvoiceForm();
-    }
-  }
-
-  // Submit Journal Entry for quick expense
-  async function handleQuickExpenseSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const amount = parseFloat(quickForm.amount);
-    if (!quickForm.description || !quickForm.amount || !quickForm.category) return;
-    if (amount <= 0) {
-      setQuickError("Amount must be greater than 0");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setQuickError(null);
-    setQuickSuccess(null);
-
-    try {
-      const resp = await fetch("/inquiry-api/expense/quick", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: quickForm.date,
-          description: quickForm.description,
-          amount,
-          account: quickForm.category,
-          project: quickForm.wedding || null,
-        }),
-      });
-
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Failed to create expense");
-      }
-
-      const result = await resp.json();
-      setQuickSuccess(`Expense ${result.purchase_invoice} created successfully`);
-      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
-
-      setTimeout(() => {
-        setQuickExpenseOpen(false);
-        resetQuickForm();
-      }, 1500);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to create expense";
-      setQuickError(message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  // Submit Purchase Invoice for supplier invoice
-  async function handleSupplierInvoiceSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!invoiceForm.supplier || invoiceForm.items.some(i => !i.description || !i.category || !i.amount)) return;
-
-    const invalidAmount = invoiceForm.items.find(i => parseFloat(i.amount) <= 0);
-    if (invalidAmount) {
-      setInvoiceError("All amounts must be greater than 0");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setInvoiceError(null);
-    setInvoiceSuccess(null);
-
-    try {
-      const resp = await fetch("/inquiry-api/expense/supplier-invoice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          supplier: invoiceForm.supplier,
-          date: invoiceForm.date,
-          items: invoiceForm.items.map((item) => ({
-            description: item.description,
-            account: item.category,
-            amount: parseFloat(item.amount),
-          })),
-        }),
-      });
-
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Failed to create invoice");
-      }
-
-      const result = await resp.json();
-      setInvoiceSuccess(`Purchase Invoice ${result.purchase_invoice} created successfully`);
-      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
-
-      setTimeout(() => {
-        setSupplierInvoiceOpen(false);
-        resetInvoiceForm();
-      }, 1500);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to create invoice";
-      setInvoiceError(message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  // Add item row for supplier invoice
-  function addInvoiceItem() {
-    setInvoiceForm({
-      ...invoiceForm,
-      items: [...invoiceForm.items, { description: "", category: "", amount: "" }],
-    });
-  }
-
-  // Remove item row from supplier invoice
-  function removeInvoiceItem(index: number) {
-    if (invoiceForm.items.length <= 1) return;
-    setInvoiceForm({
-      ...invoiceForm,
-      items: invoiceForm.items.filter((_, i) => i !== index),
-    });
-  }
-
-  // Update invoice item
-  function updateInvoiceItem(index: number, field: keyof InvoiceItem, value: string) {
-    const items = [...invoiceForm.items];
-    items[index] = { ...items[index], [field]: value };
-    setInvoiceForm({ ...invoiceForm, items });
-  }
-
-  // Calculate invoice total
-  const invoiceTotal = invoiceForm.items.reduce((sum, item) => {
-    const amount = parseFloat(item.amount) || 0;
-    return sum + amount;
-  }, 0);
-
-  const selectedNames = Object.keys(rowSelection).filter((k) => rowSelection[k]);
-  const selectedCount = selectedNames.length;
-
-  async function handleDeleteSelected() {
-    if (selectedCount === 0) return;
-    if (!confirm(`Delete ${selectedCount} expense${selectedCount === 1 ? "" : "s"}? This cannot be undone.`)) return;
-
-    setBulkAction("deleting");
-    setBulkError(null);
-    try {
-      const names = selectedNames.map((idx) => expenses[Number(idx)]?.name).filter(Boolean);
-      const res = await fetch("/inquiry-api/purchase-invoices/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ names }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Delete failed: ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.failed?.length) {
-        setBulkError(`Some failed: ${data.failed.join(", ")}`);
-      }
-      setRowSelection({});
-      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
-    } catch (err: any) {
-      setBulkError(err.message || "Failed to delete expenses");
-    } finally {
-      setBulkAction(null);
-    }
-  }
-
-  async function handleMarkPaidSelected() {
-    if (selectedCount === 0) return;
-    if (!confirm(`Mark ${selectedCount} expense${selectedCount === 1 ? "" : "s"} as paid?`)) return;
-
-    setBulkAction("paying");
-    setBulkError(null);
-    try {
-      const names = selectedNames.map((idx) => expenses[Number(idx)]?.name).filter(Boolean);
-      const res = await fetch("/inquiry-api/purchase-invoices/mark-paid", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ names }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Mark paid failed: ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.failed?.length) {
-        setBulkError(`Some failed: ${data.failed.join(", ")}`);
-      }
-      setRowSelection({});
-      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
-    } catch (err: any) {
-      setBulkError(err.message || "Failed to mark expenses as paid");
-    } finally {
-      setBulkAction(null);
-    }
-  }
-
-  function openEditSheet(expense: Expense) {
-    setEditExpense(expense);
-    setEditForm({
-      amount: String(expense.grand_total),
-      description: "",  // will be fetched or left empty to keep existing
-      date: expense.posting_date,
-      account: expense.against_expense_account || "",
-    });
-    setEditError(null);
-    setEditCatSearch("");
-    setEditOpen(true);
-  }
-
-  async function handleEditSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editExpense || !editForm.amount) return;
-    setIsEditing(true);
-    setEditError(null);
-    try {
-      const resp = await fetch(`/inquiry-api/expense/${editExpense.name}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: parseFloat(editForm.amount),
-          description: editForm.description || null,
-          date: editForm.date || null,
-          account: editForm.account || null,
-        }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to update expense");
-      }
-      setEditOpen(false);
-      invalidate({ resource: "Purchase Invoice", invalidates: ["list"] });
-    } catch (error) {
-      setEditError(error instanceof Error ? error.message : "Failed to update expense");
-    } finally {
-      setIsEditing(false);
-    }
-  }
-
-  const projectMap = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const p of projects) m[p.name] = p.project_name;
-    return m;
-  }, [projects]);
-
-  const columns = getColumns(openEditSheet, projectMap, rowInfo);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
-          <p className="text-muted-foreground">Purchase invoices and supplier billing</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {selectedCount > 0 && (
-            <>
-              <Button variant="outline" size="sm" onClick={handleMarkPaidSelected} disabled={!!bulkAction}>
-                <BadgeCheck className="mr-1.5 h-4 w-4" />
-                {bulkAction === "paying" ? "Paying..." : `Mark ${selectedCount} paid`}
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={!!bulkAction}>
-                <Trash2 className="mr-1.5 h-4 w-4" />
-                {bulkAction === "deleting" ? "Deleting..." : `Delete ${selectedCount}`}
-              </Button>
-            </>
+    <div className="flex flex-col gap-4 pb-6">
+      <header className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1 basis-48">
+          <h1 className="text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Expenses</h1>
+          {!data.loading && !data.error && (
+            <p className="text-sm text-muted-foreground">
+              {rows.length} {rows.length === 1 ? "expense" : "expenses"} · {formatVNDFull(total)}
+            </p>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-1.5" />
-                Add Expense
-                <ChevronDown className="h-4 w-4 ml-1" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setQuickExpenseOpen(true)}>
-                Quick Expense
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setSupplierInvoiceOpen(true)}>
-                Supplier Invoice
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
-      </div>
+        <Button asChild className="max-md:h-12">
+          <Link to="/finance/expenses/new"><Plus className="mr-1 h-4 w-4" /> Add expense</Link>
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" aria-label="More ways to add an expense" className="max-md:h-12">More <ChevronDown className="ml-1 h-4 w-4" /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setQuickOpen(true)}>Quick expense (approved)</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setSupplierOpen(true)}>Supplier invoice</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
 
-      {bulkError && (
-        <div className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-          <span>{bulkError}</span>
-          <button onClick={() => setBulkError(null)} className="ml-4 font-medium hover:text-red-900">&times;</button>
+      <ExpenseFilters filters={filters} onChange={change} categories={categoryOptions} weddings={weddingOptions}
+        staff={staffOptions} missingCount={missingCount} isDesktop={isDesktop} />
+
+      {data.infoError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-card bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
+          <span>Descriptions and staff names didn't load. {data.infoError}</span>
+          <Button size="sm" variant="outline" onClick={data.reloadInfo}>Retry</Button>
         </div>
       )}
 
-      {/* Edit Expense Sheet */}
-      <Sheet open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) setEditExpense(null); }}>
-        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0">
-          <SheetHeader className="px-6 py-4 border-b shrink-0">
-            <SheetTitle>Edit Expense</SheetTitle>
-          </SheetHeader>
-          <form onSubmit={handleEditSubmit} className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {editError && (
-                <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
-                  <AlertCircle className="h-4 w-4" />
-                  {editError}
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="edit-date">Date</Label>
-                <Input id="edit-date" type="date" value={editForm.date}
-                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-description">Description</Label>
-                <Input id="edit-description" placeholder="Leave empty to keep existing"
-                  value={editForm.description}
-                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-amount">Amount (VND) *</Label>
-                <Input id="edit-amount" type="number" min="1" step="1" required
-                  value={editForm.amount}
-                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <Popover open={editCatOpen} onOpenChange={setEditCatOpen}>
-                  <PopoverTrigger asChild>
-                    <button type="button" className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm">
-                      <span className={editForm.account ? "" : "text-muted-foreground"}>
-                        {editForm.account ? editForm.account.replace(/ - MWP$/, "") : "Keep existing"}
-                      </span>
-                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search..." value={editCatSearch} onValueChange={setEditCatSearch} />
-                      <CommandList>
-                        <CommandEmpty><p className="py-2 text-center text-sm text-muted-foreground">No match</p></CommandEmpty>
-                        <CommandGroup>
-                          {categories
-                            .filter(c => !editCatSearch || c.account_name.toLowerCase().includes(editCatSearch.toLowerCase()))
-                            .map(c => (
-                              <CommandItem key={c.name} value={c.account_name} onSelect={() => { setEditForm({ ...editForm, account: c.name }); setEditCatOpen(false); }}>
-                                <Check className={cn("mr-2 h-4 w-4", editForm.account === c.name ? "opacity-100" : "opacity-0")} />
-                                {c.account_name}
-                              </CommandItem>
-                            ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-            <SheetFooter className="px-6 py-4 border-t shrink-0">
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={isEditing || !editForm.amount}>
-                {isEditing ? "Saving..." : "Save"}
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
+      {bulk.error && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-card bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
+          <span>{bulk.error}</span>
+          <button type="button" onClick={bulk.clearError} aria-label="Dismiss" className="flex h-11 w-11 items-center justify-center text-lg">&times;</button>
+        </div>
+      )}
 
-      {/* Quick Expense Sheet */}
-      <Sheet open={quickExpenseOpen} onOpenChange={handleQuickExpenseOpenChange}>
-        <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
-          <SheetHeader className="px-6 py-4 border-b shrink-0">
-            <SheetTitle>Add Quick Expense</SheetTitle>
-          </SheetHeader>
-          <form onSubmit={handleQuickExpenseSubmit} className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {quickError && (
-                <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
-                  <AlertCircle className="h-4 w-4" />
-                  {quickError}
-                </div>
-              )}
-              {quickSuccess && (
-                <div className="flex items-center gap-2 p-3 text-sm text-green-600 bg-green-50 rounded-md">
-                  <CheckCircle2 className="h-4 w-4" />
-                  {quickSuccess}
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="quick-date">Date *</Label>
-                <Input
-                  id="quick-date"
-                  type="date"
-                  value={quickForm.date}
-                  onChange={(e) => setQuickForm({ ...quickForm, date: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="quick-description">Description *</Label>
-                <Input
-                  id="quick-description"
-                  placeholder="e.g. Office supplies"
-                  value={quickForm.description}
-                  onChange={(e) => setQuickForm({ ...quickForm, description: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="quick-amount">Amount (VND) *</Label>
-                <Input
-                  id="quick-amount"
-                  type="number"
-                  min="1"
-                  step="1"
-                  placeholder="500000"
-                  value={quickForm.amount}
-                  onChange={(e) => setQuickForm({ ...quickForm, amount: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Category *</Label>
-                <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className={quickForm.category ? "" : "text-muted-foreground"}>
-                        {quickForm.category
-                          ? (quickCategories.find(c => c.name === quickForm.category)?.account_name ?? quickForm.category)
-                          : "Search categories..."}
-                      </span>
-                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder="Search or create..."
-                        value={categorySearch}
-                        onValueChange={setCategorySearch}
-                      />
-                      <CommandList>
-                        <CommandEmpty>
-                          <div className="py-2 text-center">
-                            <p className="text-sm text-muted-foreground mb-2">No categories found</p>
-                            {categorySearch.trim() && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={handleCreateCategory}
-                                disabled={creatingCategory}
-                              >
-                                <Plus className="h-3 w-3 mr-1" />
-                                {creatingCategory ? "Creating..." : `Create "${categorySearch.trim()}"`}
-                              </Button>
-                            )}
-                          </div>
-                        </CommandEmpty>
-                        <CommandGroup>
-                          {quickCategories
-                            .filter(c => !categorySearch || c.account_name.toLowerCase().includes(categorySearch.toLowerCase()))
-                            .map(c => (
-                              <CommandItem
-                                key={c.name}
-                                value={c.account_name}
-                                onSelect={() => {
-                                  setQuickForm({ ...quickForm, category: c.name });
-                                  setCategoryOpen(false);
-                                }}
-                              >
-                                <Check className={cn("mr-2 h-4 w-4", quickForm.category === c.name ? "opacity-100" : "opacity-0")} />
-                                {c.account_name}
-                              </CommandItem>
-                            ))}
-                        </CommandGroup>
-                        {categorySearch.trim() && quickCategories.some(c => c.account_name.toLowerCase().includes(categorySearch.toLowerCase())) && (
-                          <CommandGroup heading="Create new">
-                            <CommandItem
-                              value={`__create_${categorySearch}`}
-                              onSelect={handleCreateCategory}
-                            >
-                              <Plus className="mr-2 h-4 w-4" />
-                              Create "{categorySearch.trim()}"
-                            </CommandItem>
-                          </CommandGroup>
-                        )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="space-y-2">
-                <Label>Wedding (optional)</Label>
-                <Popover open={weddingOpen} onOpenChange={setWeddingOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className={quickForm.wedding ? "" : "text-muted-foreground"}>
-                        {quickForm.wedding
-                          ? (projects.find(p => p.name === quickForm.wedding)?.project_name ?? quickForm.wedding)
-                          : "Link to a wedding..."}
-                      </span>
-                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder="Search weddings..."
-                        value={weddingSearch}
-                        onValueChange={setWeddingSearch}
-                      />
-                      <CommandList>
-                        <CommandEmpty>No weddings found.</CommandEmpty>
-                        <CommandGroup>
-                          {quickForm.wedding && (
-                            <CommandItem
-                              value="__clear__"
-                              onSelect={() => {
-                                setQuickForm({ ...quickForm, wedding: "" });
-                                setWeddingOpen(false);
-                              }}
-                            >
-                              <X className="mr-2 h-4 w-4" />
-                              Clear
-                            </CommandItem>
-                          )}
-                          {filteredProjects.map(p => (
-                            <CommandItem
-                              key={p.name}
-                              value={p.project_name}
-                              onSelect={() => {
-                                setQuickForm({ ...quickForm, wedding: p.name });
-                                setWeddingOpen(false);
-                              }}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", quickForm.wedding === p.name ? "opacity-100" : "opacity-0")} />
-                              <div>
-                                <p>{p.project_name}</p>
-                                {p.expected_end_date && (
-                                  <p className="text-xs text-muted-foreground">{formatDate(p.expected_end_date)}</p>
-                                )}
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-            <SheetFooter className="px-6 py-4 border-t shrink-0">
-              <Button type="button" variant="outline" onClick={() => setQuickExpenseOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting || !quickForm.description || !quickForm.amount || !quickForm.category || !!quickSuccess}
-              >
-                {isSubmitting ? "Creating..." : "Create Expense"}
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
+      {selectedNames.length > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-card border bg-card p-2 pl-4 shadow-md">
+          <b className="mr-auto text-sm">{selectedNames.length} selected</b>
+          <Button variant="outline" disabled={bulkBusy} onClick={() => void bulk.run("paying", selectedNames)} className="max-md:h-12">
+            <BadgeCheck className="mr-1.5 h-4 w-4" /> {bulk.action === "paying" ? "Paying..." : "Mark paid"}
+          </Button>
+          <Button variant="destructive" disabled={bulkBusy} onClick={() => void bulk.run("deleting", selectedNames)} className="max-md:h-12">
+            <Trash2 className="mr-1.5 h-4 w-4" /> {bulk.action === "deleting" ? "Deleting..." : "Delete"}
+          </Button>
+        </div>
+      )}
 
-      {/* Supplier Invoice Sheet */}
-      <Sheet open={supplierInvoiceOpen} onOpenChange={handleSupplierInvoiceOpenChange}>
-        <SheetContent side="right" className="sm:max-w-xl flex flex-col p-0">
-          <SheetHeader className="px-6 py-4 border-b shrink-0">
-            <SheetTitle>Add Supplier Invoice</SheetTitle>
-          </SheetHeader>
-          <form onSubmit={handleSupplierInvoiceSubmit} className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {invoiceError && (
-                <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
-                  <AlertCircle className="h-4 w-4" />
-                  {invoiceError}
-                </div>
-              )}
-              {invoiceSuccess && (
-                <div className="flex items-center gap-2 p-3 text-sm text-green-600 bg-green-50 rounded-md">
-                  <CheckCircle2 className="h-4 w-4" />
-                  {invoiceSuccess}
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="invoice-supplier">Supplier *</Label>
-                  <Select
-                    value={invoiceForm.supplier}
-                    onValueChange={(value) => setInvoiceForm({ ...invoiceForm, supplier: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select supplier" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {suppliers.map((s) => (
-                        <SelectItem key={s.name} value={s.name}>
-                          {s.supplier_name || s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="invoice-date">Date *</Label>
-                  <Input
-                    id="invoice-date"
-                    type="date"
-                    value={invoiceForm.date}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, date: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
+      {body}
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Line Items *</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={addInvoiceItem}>
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add Item
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {invoiceForm.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
-                      <div>
-                        {index === 0 && <Label className="text-xs text-muted-foreground">Description</Label>}
-                        <Input
-                          placeholder="Item description"
-                          value={item.description}
-                          onChange={(e) => updateInvoiceItem(index, "description", e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div>
-                        {index === 0 && <Label className="text-xs text-muted-foreground">Category</Label>}
-                        <Select
-                          value={item.category}
-                          onValueChange={(value) => updateInvoiceItem(index, "category", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.map((acc) => (
-                              <SelectItem key={acc.name} value={acc.name}>
-                                {acc.account_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        {index === 0 && <Label className="text-xs text-muted-foreground">Amount</Label>}
-                        <Input
-                          type="number"
-                          min="1"
-                          step="1"
-                          placeholder="Amount"
-                          className="w-32"
-                          value={item.amount}
-                          onChange={(e) => updateInvoiceItem(index, "amount", e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div>
-                        {index === 0 && <Label className="text-xs text-muted-foreground">&nbsp;</Label>}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeInvoiceItem(index)}
-                          disabled={invoiceForm.items.length <= 1}
-                          className="h-10 w-10"
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+      {rows.length > shown && (
+        <Button variant="outline" onClick={() => setShown((n) => n + PAGE)} className="mx-auto max-md:h-12">
+          Show more ({rows.length - shown} left)
+        </Button>
+      )}
 
-              <div className="flex justify-end text-sm">
-                <span className="font-medium">Total: {formatVND(invoiceTotal)}</span>
-              </div>
-            </div>
-            <SheetFooter className="px-6 py-4 border-t shrink-0">
-              <Button type="button" variant="outline" onClick={() => setSupplierInvoiceOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  isSubmitting ||
-                  !invoiceForm.supplier ||
-                  invoiceForm.items.some(i => !i.description || !i.category || !i.amount) ||
-                  !!invoiceSuccess
-                }
-              >
-                {isSubmitting ? "Creating..." : "Create Invoice"}
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
-
-      <DataTable
-        columns={columns}
-        data={expenses}
-        isLoading={isLoading}
-        searchKey="supplier_name"
-        searchPlaceholder="Search by supplier..."
-        enableRowSelection
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
+      <EditExpenseSheet
+        key={editing?.name ?? "none"}
+        expense={editing}
+        info={editing ? info[editing.name] : undefined}
+        categories={data.categories}
+        weddingName={editing ? weddingNames[editing.project] : undefined}
+        isDesktop={isDesktop}
+        onClose={() => setEditing(null)}
+        onSaved={() => { setEditing(null); setSelection({}); data.reloadInfo(); }}
       />
+      <QuickExpenseSheet open={quickOpen} onOpenChange={setQuickOpen} weddings={data.allWeddings} isDesktop={isDesktop} onCategoryCreated={data.reloadCategories} />
+      <SupplierInvoiceSheet open={supplierOpen} onOpenChange={setSupplierOpen} categories={data.categories} isDesktop={isDesktop} />
     </div>
   );
 }
