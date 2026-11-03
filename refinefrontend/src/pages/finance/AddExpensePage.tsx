@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Loader2, NotebookPen, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ export default function AddExpensePage() {
   const [searchParams] = useSearchParams();
   const requestedWedding = searchParams.get("project");
   const { weddings, assigned, loading, employeeId } = useExpenseWeddings();
+  const assignedIds = useMemo(() => new Set(assigned.map((w) => w.id)), [assigned]);
   const today = todayVN();
 
   const [project, setProject] = useState("");
@@ -148,6 +149,7 @@ export default function AddExpensePage() {
 
           <ContextRow
             weddings={weddings}
+            assignedIds={assignedIds}
             project={project}
             onProject={(id) => { weddingTouched.current = true; setProject(id); }}
             date={date}

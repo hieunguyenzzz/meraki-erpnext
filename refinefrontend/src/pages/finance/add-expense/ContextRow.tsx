@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { CalendarDays, ChevronDown, Heart } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { ExpenseWedding } from "./defaults";
+import { WeddingSheet } from "./WeddingSheet";
 
 interface Props {
   weddings: ExpenseWedding[];
+  assignedIds: Set<string>;
   project: string;
   onProject: (id: string) => void;
   date: string;
@@ -16,14 +17,13 @@ interface Props {
 const pill = "inline-flex h-11 items-center gap-2 rounded-full border border-input bg-card px-4 text-sm font-semibold";
 
 /** Wedding and date, shown as two small pills so the defaults stay out of the way. */
-export function ContextRow({ weddings, project, onProject, date, today, onDate }: Props) {
+export function ContextRow({ weddings, assignedIds, project, onProject, date, today, onDate }: Props) {
   const [open, setOpen] = useState(false);
   const selected = weddings.find((w) => w.id === project);
   const label = selected ? selected.name : "Office expense";
   const sub = selected?.date === today ? "today" : null;
 
   const choose = (id: string) => { onProject(id); setOpen(false); };
-  const rowClass = "flex h-12 w-full items-center justify-between rounded-lg px-2 text-left text-base hover:bg-muted";
 
   return (
     <div className="flex items-center gap-2">
@@ -49,27 +49,7 @@ export function ContextRow({ weddings, project, onProject, date, today, onDate }
         />
       </div>
 
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto p-4 pb-[calc(16px+env(safe-area-inset-bottom,0px))]">
-          <SheetHeader><SheetTitle>Wedding</SheetTitle></SheetHeader>
-          <ul className="mt-3">
-            <li>
-              <button type="button" className={rowClass} onClick={() => choose("")}>
-                No wedding (office expense)
-                {!project && <span className="text-primary">Selected</span>}
-              </button>
-            </li>
-            {weddings.map((w) => (
-              <li key={w.id}>
-                <button type="button" className={rowClass} onClick={() => choose(w.id)}>
-                  <span className="truncate">{w.name}</span>
-                  <span className="ml-3 shrink-0 text-sm tabular-nums text-muted-foreground">{w.date ?? ""}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </SheetContent>
-      </Sheet>
+      <WeddingSheet open={open} onOpenChange={setOpen} weddings={weddings} assignedIds={assignedIds} today={today} project={project} onChoose={choose} />
     </div>
   );
 }

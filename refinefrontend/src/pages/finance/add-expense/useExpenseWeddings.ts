@@ -37,7 +37,7 @@ export function useExpenseWeddings() {
     let weddings: ExpenseWedding[];
     let assigned: ExpenseWedding[];
     if (selfServiceOnly) {
-      weddings = mine.weddings.map((w) => ({ id: w.id, name: w.project_name, date: w.wedding_date }));
+      weddings = mine.weddings.map((w) => ({ id: w.id, name: w.project_name, date: w.wedding_date, venue: w.venue_name }));
       assigned = weddings;
     } else {
       const all = result?.data ?? [];

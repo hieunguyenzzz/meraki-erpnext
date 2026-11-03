@@ -8,6 +8,8 @@ export interface ExpenseWedding {
   name: string;
   /** ISO date of the wedding, or null when unknown. */
   date: string | null;
+  /** Venue name when the data source provides one (searchable only). */
+  venue?: string | null;
 }
 
 /** The assigned wedding happening today, else the next upcoming one; null when none is current. */
@@ -57,4 +59,27 @@ export function parsePastedAmount(text: string): string {
 
 export function formatAmount(digits: string): string {
   return digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
+}
+
+/** Lower-case, accent-free text for matching ("Đức" -> "duc"). */
+export function normaliseText(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase();
+}
+
+/** Assigned upcoming weddings first (soonest first), then the rest newest first. */
+export function orderWeddings(weddings: ExpenseWedding[], assignedIds: Set<string>, today: string): ExpenseWedding[] {
+  const upcomingMine = (w: ExpenseWedding) => assignedIds.has(w.id) && !!w.date && w.date >= today;
+  const first = weddings.filter(upcomingMine).sort((a, b) => (a.date as string).localeCompare(b.date as string));
+  const rest = weddings.filter((w) => !upcomingMine(w)).sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+  return [...first, ...rest];
+}
+
+/** Every word of the query must appear in the couple/project name or venue. */
+export function searchWeddings(ordered: ExpenseWedding[], query: string): ExpenseWedding[] {
+  const words = normaliseText(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return ordered;
+  return ordered.filter((w) => {
+    const hay = normaliseText(`${w.name} ${w.venue ?? ""}`);
+    return words.every((word) => hay.includes(word));
+  });
 }
