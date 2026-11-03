@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import DOMPurify from "dompurify";
 import { Phone, MessageSquare, Mail, Users, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { splitQuoted, stampTime, stripHtml } from "./chatFormat";
@@ -21,7 +20,7 @@ export function MessageBubble({ comm, leadName }: { comm: Communication; leadNam
   const Icon = MEDIUM_ICONS[comm.communication_medium] ?? MoreHorizontal;
 
   const { main, quoted } = useMemo(
-    () => splitQuoted(DOMPurify.sanitize(comm.content ?? "")),
+    () => splitQuoted(comm.content ?? ""),
     [comm.content],
   );
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, MessageSquare, RefreshCw } from "lucide-react";
+import { Link } from "react-router";
+import { AlertCircle, ChevronLeft, MessageSquare, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -78,5 +79,30 @@ export function NoChatSelected() {
       title="Select a lead"
       body="Pick a conversation on the left to read its messages."
     />
+  );
+}
+
+/** Deep link to a lead that has no conversation in the list (or that the user can't see). */
+export function ChatUnavailable({ leadName, onBack }: { leadName: string; onBack: () => void }) {
+  return (
+    <section
+      aria-label="Conversation unavailable"
+      className="fixed inset-0 z-[60] flex flex-col bg-background md:static md:z-auto md:h-full md:min-w-0"
+    >
+      <header className="flex shrink-0 items-center border-b bg-card py-2 pl-1 pr-3 md:hidden">
+        <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to chats" className="h-12 w-12">
+          <ChevronLeft className="h-[22px] w-[22px]" aria-hidden />
+        </Button>
+      </header>
+      <StatePanel
+        icon={<MessageSquare className="h-9 w-9" strokeWidth={1.4} aria-hidden />}
+        title="This conversation isn't available"
+        body="This lead has no emails or messages yet, or you can't view it here."
+      >
+        <Button asChild variant="outline">
+          <Link to={`/crm/leads/${encodeURIComponent(leadName)}`}>Open lead</Link>
+        </Button>
+      </StatePanel>
+    </section>
   );
 }

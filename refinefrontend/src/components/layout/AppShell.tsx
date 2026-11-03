@@ -24,7 +24,7 @@ export function AppShell() {
               <TopBar />
               <main
                 id="main-content"
-                className="flex-1 overflow-y-auto p-4 pb-[calc(104px+env(safe-area-inset-bottom,0px))] md:p-6"
+                className="relative flex-1 overflow-y-auto p-4 pb-[calc(104px+env(safe-area-inset-bottom,0px))] md:p-6"
               >
                 <Outlet />
               </main>
