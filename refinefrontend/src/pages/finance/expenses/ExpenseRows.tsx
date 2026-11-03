@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatVNDFull } from "@/lib/format";
 import type { Receipt } from "./useExpenseData";
-import { LOCKED_NOTE, canEdit, categoryLabel, expenseStatus, isoDay, statusVariant, type Expense, type RowInfo } from "./types";
+import { canEdit, categoryLabel, expenseStatus, lockedNote, isoDay, statusVariant, type Expense, type RowInfo } from "./types";
 
 export interface RowProps {
   expense: Expense;
@@ -63,8 +63,8 @@ export function ExpenseTableRow(p: RowProps) {
       <td className="px-3 py-3"><StatusBadge expense={e} /></td>
       <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums">{formatVNDFull(e.grand_total)}</td>
       <td className="px-3 py-3">
-        <span title={canEdit(e) ? undefined : LOCKED_NOTE}>
-          <Button variant="ghost" size="icon" onClick={p.onEdit} disabled={!canEdit(e)} aria-label={canEdit(e) ? `Edit ${e.name}` : `Edit ${e.name} (locked: ${LOCKED_NOTE})`}><Pencil className="h-4 w-4" /></Button>
+        <span title={canEdit(e) ? undefined : lockedNote(e)}>
+          <Button variant="ghost" size="icon" onClick={p.onEdit} disabled={!canEdit(e)} aria-label={canEdit(e) ? `Edit ${e.name}` : `Edit ${e.name} (locked: ${lockedNote(e)})`}><Pencil className="h-4 w-4" /></Button>
         </span>
       </td>
     </tr>
@@ -100,7 +100,7 @@ export function ExpenseCard(p: RowProps) {
             <Pencil className="mr-1.5 h-4 w-4" /> Edit
           </Button>
         ) : (
-          <p className="text-xs text-muted-foreground">{LOCKED_NOTE}</p>
+          <p className="text-xs text-muted-foreground">{lockedNote(e)}</p>
         )}
       </div>
     </article>

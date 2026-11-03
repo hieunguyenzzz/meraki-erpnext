@@ -1022,7 +1022,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
         log.warning("expense_edit_blocked", pi=pi_name, docstatus=docstatus)
         raise HTTPException(
             status_code=409,
-            detail="Approved expenses can't be edited — reject or cancel it and add a new one",
+            detail=f"{'Paid' if pi.get('status') == 'Paid' else 'Approved'} expenses can't be edited — reject or cancel it and add a new one",
         )
 
     posting_date = req.date or pi.get("posting_date")

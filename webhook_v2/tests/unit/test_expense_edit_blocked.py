@@ -37,3 +37,12 @@ def test_draft_is_still_updated_in_place():
     assert result == {"success": True, "name": "PI-1"}
     client._put.assert_called_once()
     client._delete.assert_not_called()
+
+
+@pytest.mark.parametrize("status,word", [("Paid", "Paid"), ("Unpaid", "Approved")])
+def test_message_says_paid_for_paid_expenses(status, word):
+    client = MagicMock()
+    client._get.return_value = {"data": {"docstatus": 1, "status": status, "items": []}}
+    with patch.object(ex, "ERPNextClient", return_value=client), pytest.raises(HTTPException) as err:
+        ex.edit_expense("PI-1", ex.EditExpenseRequest(amount=1000), MagicMock())
+    assert err.value.detail.startswith(f"{word} expenses can't be edited")
