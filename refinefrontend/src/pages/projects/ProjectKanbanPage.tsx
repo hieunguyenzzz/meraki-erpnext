@@ -9,7 +9,7 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { CreateWeddingSheet } from "./create-wedding/CreateWeddingSheet";
 import { FilterBar } from "./weddings-list/FilterBar";
-import { StatePanel } from "./weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { WeddingCards, WeddingCardsSkeleton } from "./weddings-list/WeddingCards";
 import { WeddingsBoard, WeddingsBoardSkeleton } from "./weddings-list/WeddingsBoard";
 import { WeddingsTable, WeddingsTableSkeleton } from "./weddings-list/WeddingsTable";

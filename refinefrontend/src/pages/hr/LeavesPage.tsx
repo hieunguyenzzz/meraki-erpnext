@@ -17,7 +17,7 @@ export default function LeavesPage() {
   const [tab, setTab] = useQueryState("tab", parseAsStringLiteral(TABS).withDefault("applications").withOptions({ clearOnDefault: true }));
   const [addLeaveOpen, setAddLeaveOpen] = useState(false);
   const actions = useLeaveActions();
-  const balances = useLeaveBalances(true);
+  const balances = useLeaveBalances();
 
   const { result, query } = useList({
     resource: "Leave Application",
@@ -62,13 +62,12 @@ export default function LeavesPage() {
         </Button>
       </header>
 
-      <div role="tablist" aria-label="Leave views" className="-mx-4 flex gap-7 border-b px-4 md:mx-0 md:px-0">
+      <div role="group" aria-label="Leave views" className="-mx-4 flex gap-7 border-b px-4 md:mx-0 md:px-0">
         {TABS.map((t) => (
           <button
             key={t}
             type="button"
-            role="tab"
-            aria-selected={tab === t}
+            aria-pressed={tab === t}
             onClick={() => setTab(t)}
             className={cn(
               "-mb-px h-12 border-b-2 text-[15px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-11",

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { LeaveCards } from "./LeaveCards";
@@ -21,7 +21,7 @@ interface Props {
   processingId: string | null;
   isDeleting: boolean;
   onDecide: (name: string, verb: "approve" | "reject" | "re-approve") => void;
-  onDelete: (names: string[]) => Promise<boolean>;
+  onDelete: (names: string[]) => Promise<string[]>;
 }
 
 const PAGE_SIZE = 50;
@@ -78,8 +78,8 @@ export function ApplicationsTab({ apps, isLoading, isError, refetch, processingI
     });
   }
   async function confirmDelete() {
-    const ok = await onDelete(selectedApps.map((a) => a.name));
-    if (ok) setSelected(new Set());
+    const deleted = new Set(await onDelete(selectedApps.map((a) => a.name)));
+    setSelected((prev) => new Set([...prev].filter((n) => !deleted.has(n))));
     setConfirmOpen(false);
   }
 
@@ -94,7 +94,7 @@ export function ApplicationsTab({ apps, isLoading, isError, refetch, processingI
               aria-pressed={status === s}
               onClick={() => setStatus(s)}
               className={cn(
-                "h-10 shrink-0 rounded-full border px-3.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-[34px] md:border-0",
+                "h-11 shrink-0 rounded-full border px-3.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-11 md:border-0",
                 status === s
                   ? "border-foreground bg-foreground text-background md:bg-card md:text-foreground md:shadow-sm"
                   : "border-border bg-card text-foreground hover:bg-muted md:bg-transparent",
@@ -120,7 +120,7 @@ export function ApplicationsTab({ apps, isLoading, isError, refetch, processingI
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search employee"
-            className="h-12 rounded-full pl-10 max-md:pl-10 md:h-10"
+            className="h-12 rounded-full pl-10 md:h-10"
           />
         </label>
       </div>
@@ -156,7 +156,7 @@ export function ApplicationsTab({ apps, isLoading, isError, refetch, processingI
         </Button>
       )}
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog open={confirmOpen} onOpenChange={(o) => { if (!isDeleting) setConfirmOpen(o); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete {selectedApps.length} leave record{selectedApps.length > 1 ? "s" : ""}?</DialogTitle>

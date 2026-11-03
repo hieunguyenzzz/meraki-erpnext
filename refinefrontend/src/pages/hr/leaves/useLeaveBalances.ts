@@ -13,12 +13,6 @@ export interface BalanceRow {
   toDate: string | null;
 }
 
-interface AllocEdit {
-  allocated?: number;
-  remaining?: number;
-  editedField?: "allocated" | "remaining";
-}
-
 interface EmployeeDoc { name: string; employee_name?: string; first_name?: string; last_name?: string }
 interface AllocDoc {
   name: string; employee: string; leave_type: string;
@@ -47,12 +41,12 @@ export function formatPeriod(fromDate: string | null, toDate: string | null): st
  * allocated = total_leaves_allocated (falling back to new_leaves_allocated), taken = sum of approved applications
  * of that type, remaining = allocated - taken. Edits write new_leaves_allocated through the backend.
  */
-export function useLeaveBalances(enabled: boolean) {
+export function useLeaveBalances() {
   const invalidate = useInvalidate();
-  const [edits, setEdits] = useState<Record<string, AllocEdit>>({});
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [edits, setEdits] = useState<Record<string, number>>({});
+  const [savingIds, setSavingIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const saving = useRef(false);
+  const saving = useRef(new Set<string>());
 
   const { result: allocsResult, query: allocsQuery } = useList({
     resource: "Leave Allocation",
@@ -63,7 +57,6 @@ export function useLeaveBalances(enabled: boolean) {
       { field: "leave_type", operator: "ne", value: "Sick Leave" },
     ],
     meta: { fields: ["name", "employee", "employee_name", "leave_type", "new_leaves_allocated", "total_leaves_allocated", "from_date", "to_date"] },
-    queryOptions: { enabled },
   });
   const { result: employeesResult, query: employeesQuery } = useList({
     resource: "Employee",
@@ -79,7 +72,6 @@ export function useLeaveBalances(enabled: boolean) {
       { field: "docstatus", operator: "eq", value: 1 },
     ],
     meta: { fields: ["name", "employee", "leave_type", "total_leave_days"] },
-    queryOptions: { enabled },
   });
 
   const employees = useMemo(() => (employeesResult?.data ?? []) as EmployeeDoc[], [employeesResult]);
@@ -124,31 +116,26 @@ export function useLeaveBalances(enabled: boolean) {
 
   function values(row: BalanceRow) {
     if (!row.allocName) return { allocated: null, remaining: null };
-    const edit = edits[row.allocName];
-    if (!edit) return { allocated: row.allocated, remaining: row.remaining };
-    if (edit.editedField === "allocated") {
-      const a = edit.allocated ?? row.allocated;
-      return { allocated: a, remaining: a - row.taken };
-    }
-    if (edit.editedField === "remaining") {
-      const r = edit.remaining ?? row.remaining;
-      return { allocated: r + row.taken, remaining: r };
-    }
-    return { allocated: row.allocated, remaining: row.remaining };
+    const allocated = edits[row.allocName] ?? row.allocated;
+    return { allocated, remaining: allocated - row.taken };
   }
 
+  /** Negative days are refused; the field keeps its last valid value. */
   function setAllocated(allocName: string, value: string) {
     const num = value === "" ? 0 : parseFloat(value);
-    if (isNaN(num)) return;
-    setEdits((prev) => ({ ...prev, [allocName]: { allocated: num, editedField: "allocated" } }));
+    if (isNaN(num) || num < 0) return;
+    setEdits((prev) => ({ ...prev, [allocName]: num }));
   }
 
-  async function save(allocName: string, taken: number) {
-    const edit = edits[allocName];
-    if (!edit || saving.current) return;
-    saving.current = true;
-    const newAllocated = edit.editedField === "allocated" ? edit.allocated ?? 0 : (edit.remaining ?? 0) + taken;
-    setSavingId(allocName);
+  function reset(allocName: string) {
+    setEdits((prev) => { const next = { ...prev }; delete next[allocName]; return next; });
+  }
+
+  async function save(allocName: string) {
+    const newAllocated = edits[allocName];
+    if (newAllocated === undefined || saving.current.has(allocName)) return;
+    saving.current.add(allocName);
+    setSavingIds((ids) => [...ids, allocName]);
     setError(null);
     try {
       const res = await fetch(`/inquiry-api/leave/allocation/${encodeURIComponent(allocName)}`, {
@@ -157,19 +144,19 @@ export function useLeaveBalances(enabled: boolean) {
         body: JSON.stringify({ new_leaves_allocated: newAllocated }),
       });
       if (!res.ok) throw new Error(await res.text());
-      setEdits((prev) => { const next = { ...prev }; delete next[allocName]; return next; });
+      reset(allocName);
       invalidate({ resource: "Leave Allocation", invalidates: ["list"] });
     } catch (err) {
       console.error("leave allocation save failed", allocName, err);
       setError(`Failed to update ${allocName}. ${err instanceof Error ? err.message : "Please try again."}`);
     } finally {
-      saving.current = false;
-      setSavingId(null);
+      saving.current.delete(allocName);
+      setSavingIds((ids) => ids.filter((id) => id !== allocName));
     }
   }
 
   return {
-    rows, employees, values, setAllocated, save, savingId, error, setError,
+    rows, employees, values, setAllocated, save, reset, isSaving: (allocName: string) => savingIds.includes(allocName), error, setError,
     isEdited: (allocName: string) => allocName in edits,
     isLoading: employeesQuery.isLoading || allocsQuery.isLoading || approvedQuery.isLoading,
     isError: employeesQuery.isError || allocsQuery.isError || approvedQuery.isError,

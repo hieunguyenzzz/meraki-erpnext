@@ -4,7 +4,7 @@ import { RotateCw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { WFH_TABS } from "./wfh/types";
 import { useWfhRequests } from "./wfh/useWfhRequests";

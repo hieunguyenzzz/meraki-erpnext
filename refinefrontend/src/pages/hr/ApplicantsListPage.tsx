@@ -5,7 +5,7 @@ import { RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RecruitingHeader } from "@/components/recruiting/RecruitingHeader";
 import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { extractErrorMessage } from "@/lib/errors";
 import { ratingToStars } from "@/lib/recruiting-kanban";

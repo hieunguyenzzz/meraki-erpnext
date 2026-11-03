@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 /** Pending work-from-home requests (HR only), from GET /inquiry-api/wfh/pending-count. */
 export function usePendingWfhCount(enabled: boolean) {
-  const { data } = useQuery({
+  const { data, isError, error } = useQuery({
     queryKey: ["wfh-pending-count"],
     enabled,
     staleTime: 60_000,
@@ -14,5 +15,8 @@ export function usePendingWfhCount(enabled: boolean) {
       return json.count ?? 0;
     },
   });
+  useEffect(() => {
+    if (isError) console.error("pending WFH count failed", error);
+  }, [isError, error]);
   return data ?? 0;
 }

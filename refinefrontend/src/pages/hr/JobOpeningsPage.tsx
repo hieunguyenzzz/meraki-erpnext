@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RecruitingHeader } from "@/components/recruiting/RecruitingHeader";
 import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { JobCards } from "./job-openings/JobCards";
 import { JobSheet } from "./job-openings/JobSheet";

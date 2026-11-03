@@ -4,7 +4,7 @@ import { useList, useCreate } from "@refinedev/core";
 import { useQueryState } from "nuqs";
 import { Plus, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { VendorFormSheet } from "@/components/vendors/VendorFormSheet";
 import { EMPTY_VENDOR_FORM, type VendorFormValue, type VendorRow } from "@/lib/vendor";
 import { VendorCard, VendorCardsSkeleton } from "./vendors-list/VendorCard";

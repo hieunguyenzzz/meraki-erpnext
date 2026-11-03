@@ -6,7 +6,7 @@ import { Plus, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { VenueForm } from "@/components/venues/VenueForm";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import type { VenueRow } from "@/lib/venue";
 import { CITY_TABS } from "./venues-list/cities";
 import { VenueCard, VenueCardsSkeleton } from "./venues-list/VenueCard";

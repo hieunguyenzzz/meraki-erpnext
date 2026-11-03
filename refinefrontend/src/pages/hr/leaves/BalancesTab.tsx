@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StaffAvatar } from "@/components/staff/StaffAvatar";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { formatPeriod, poolOf, type BalanceRow, type useLeaveBalances } from "./useLeaveBalances";
 
@@ -26,18 +26,21 @@ function AllocationInput({ row, b }: { row: BalanceRow; b: Balances }) {
       className="ml-auto h-12 w-full text-right md:h-10 md:w-20"
       value={b.values(row).allocated ?? 0}
       onChange={(e) => b.setAllocated(row.allocName!, e.target.value)}
-      disabled={b.savingId === row.allocName}
+      disabled={b.isSaving(row.allocName!)}
     />
   );
 }
 
 function SaveButton({ row, b }: { row: BalanceRow; b: Balances }) {
   if (!row.allocName || !b.isEdited(row.allocName)) return null;
-  const saving = b.savingId === row.allocName;
+  const saving = b.isSaving(row.allocName);
   return (
-    <Button size="sm" onClick={() => b.save(row.allocName!, row.taken)} disabled={saving}>
-      {saving ? "Saving..." : "Save"}
-    </Button>
+    <div className="flex gap-2">
+      <Button size="sm" onClick={() => b.save(row.allocName!)} disabled={saving}>
+        {saving ? "Saving..." : "Save"}
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => b.reset(row.allocName!)} disabled={saving}>Reset</Button>
+    </div>
   );
 }
 

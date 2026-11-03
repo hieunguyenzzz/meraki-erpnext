@@ -5,7 +5,7 @@ import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { type StaffOption } from "@/lib/projectKanban";
 import { EVENT_TYPES } from "@/lib/weddingEvents";
-import { StatePanel } from "./weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { EventFilters } from "./events/EventFilters";
 import { EventsAgenda, EventsAgendaSkeleton } from "./events/EventsAgenda";
 import { EventsTable, EventsTableSkeleton } from "./events/EventsTable";

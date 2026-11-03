@@ -8,7 +8,7 @@ import { ASSIGNABLE_ROLES, HR_ROLES, hasModuleAccess } from "@/lib/roles";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { StaffFilterBar } from "@/components/staff/StaffFilterBar";
 import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { StaffKpis } from "./staff-overview/StaffKpis";
 import { StaffTable } from "./staff-overview/StaffTable";
 import { StaffCards } from "./staff-overview/StaffCards";

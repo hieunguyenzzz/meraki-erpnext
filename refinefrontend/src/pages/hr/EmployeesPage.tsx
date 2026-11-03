@@ -10,7 +10,7 @@ import { StaffAvatar } from "@/components/staff/StaffAvatar";
 import { StaffFilterBar } from "@/components/staff/StaffFilterBar";
 import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
 import { EmployeeStatusBadge } from "@/components/staff/EmployeeStatusBadge";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 
 interface Employee {
   name: string;

@@ -25,12 +25,14 @@ export function LeaveCards({ apps, selected, processingId, onToggle, onDecide }:
               <span className="text-sm text-muted-foreground">{a.leave_type}</span>
             </div>
             <Badge variant={statusVariant(a.status)}>{a.status}</Badge>
-            <Checkbox
-              className="h-6 w-6"
-              checked={selected.has(a.name)}
-              onCheckedChange={() => onToggle(a.name)}
-              aria-label={`Select ${a.employee_name} ${a.from_date}`}
-            />
+            <label className="-mr-2 flex h-12 w-12 shrink-0 items-center justify-center">
+              <Checkbox
+                className="h-6 w-6"
+                checked={selected.has(a.name)}
+                onCheckedChange={() => onToggle(a.name)}
+                aria-label={`Select ${a.employee_name} ${a.from_date}`}
+              />
+            </label>
           </div>
           <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="font-medium">{dateRange(a.from_date, a.to_date)}</span>

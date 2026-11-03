@@ -7,7 +7,7 @@ import { CVReviewSheet } from "@/components/recruiting/CVReviewSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { StatePanel } from "@/pages/projects/weddings-list/StatePanel";
+import { StatePanel } from "@/components/StatePanel";
 import { buildRecruitingItems, enrichRecruitingItems } from "@/lib/recruiting-kanban";
 import { PipelineBoard, STAGE_VALUES } from "./recruiting-pipeline/PipelineBoard";
 
