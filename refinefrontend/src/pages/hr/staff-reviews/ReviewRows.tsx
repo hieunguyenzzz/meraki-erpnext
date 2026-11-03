@@ -10,7 +10,7 @@ function Score({ review }: { review: MerakiReview }) {
   const score = reviewScore(review);
   return (
     <div className="flex items-center gap-3">
-      <div className="w-28"><SegmentedRating value={score === null ? null : Math.round(score)} readOnly size="sm" hideValue /></div>
+      <div className="w-28"><SegmentedRating value={score === null ? null : Math.round(score)} readOnly size="sm" hideValue ariaLabel={`Score for ${who(review)}`} /></div>
       <span className="whitespace-nowrap text-sm font-semibold tabular-nums">{formatScore(score)}</span>
     </div>
   );

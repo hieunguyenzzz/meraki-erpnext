@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useList, useInvalidate } from "@refinedev/core";
 import { useQueryState } from "nuqs";
 import { Plus, RotateCw, Search } from "lucide-react";
@@ -46,7 +46,9 @@ export default function StaffReviewsPage() {
   const loadError = query.isError && reviews.length === 0;
   const filtered = search.trim() !== "" || period !== "";
 
-  if (query.isError) console.error("Staff reviews list failed to load", query.error);
+  useEffect(() => {
+    if (query.isError) console.error("Staff reviews list failed to load", query.error);
+  }, [query.isError, query.error]);
 
   let body;
   if (loadError) {

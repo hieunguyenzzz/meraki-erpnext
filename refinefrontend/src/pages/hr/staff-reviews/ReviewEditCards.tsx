@@ -13,11 +13,13 @@ interface RatingsProps {
   onRetry: () => void;
   ratings: Record<string, number>;
   onChange: (criterion: string, n: number) => void;
+  disabled: boolean;
 }
 
-export function RatingsCard({ criteria, criteriaError, onRetry, ratings, onChange }: RatingsProps) {
+export function RatingsCard({ criteria, criteriaError, onRetry, ratings, onChange, disabled }: RatingsProps) {
   const active = new Set(criteria.map((c) => c.criterion_name));
-  // Ratings on criteria that are no longer active still ride along in the save, so show them.
+  // Ratings on criteria that are no longer active are kept on the review (the backend still accepts
+  // them), so show them read-only instead of hiding them.
   const retired = Object.keys(ratings).filter((k) => !active.has(k));
   const values = Object.values(ratings);
   const average = values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
@@ -38,6 +40,8 @@ export function RatingsCard({ criteria, criteriaError, onRetry, ratings, onChang
             <SegmentedRating
               value={ratings[c.criterion_name] ?? null}
               onChange={(n) => onChange(c.criterion_name, n)}
+              readOnly={disabled}
+              ariaLabel={c.criterion_name}
               className="flex-1"
             />
           </div>
@@ -45,7 +49,7 @@ export function RatingsCard({ criteria, criteriaError, onRetry, ratings, onChang
         {retired.map((k) => (
           <div key={k} className="flex flex-col gap-1.5 md:flex-row md:items-center md:gap-3">
             <span className="text-sm font-medium text-muted-foreground md:w-40 md:shrink-0">{k} (inactive)</span>
-            <SegmentedRating value={ratings[k]} readOnly className="flex-1" />
+            <SegmentedRating value={ratings[k]} readOnly ariaLabel={k} className="flex-1" />
           </div>
         ))}
         {average !== null && (
@@ -67,6 +71,7 @@ interface DetailsProps {
   onOverall: (v: number | undefined) => void;
   saveError: string;
   saveSuccess: boolean;
+  disabled: boolean;
 }
 
 export function DetailsCard(p: DetailsProps) {
@@ -76,7 +81,7 @@ export function DetailsCard(p: DetailsProps) {
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="review-period">Period</Label>
-          <Input id="review-period" className="max-md:h-12" placeholder="e.g. Q2 2026" value={p.period} onChange={(e) => p.onPeriod(e.target.value)} />
+          <Input id="review-period" className="max-md:h-12" placeholder="e.g. Q2 2026" value={p.period} disabled={p.disabled} onChange={(e) => p.onPeriod(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="review-notes">Notes</Label>
@@ -84,16 +89,17 @@ export function DetailsCard(p: DetailsProps) {
             id="review-notes"
             rows={6}
             value={p.notes}
+            disabled={p.disabled}
             onChange={(e) => p.onNotes(e.target.value)}
             placeholder="Observations, highlights, areas for improvement..."
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-muted-foreground">Overall score override</Label>
+          <Label id="review-override-label" className="text-muted-foreground">Overall score override</Label>
           <div className="flex items-center gap-3">
-            <SegmentedRating value={p.overallScore ?? null} onChange={p.onOverall} size="sm" className="flex-1" />
+            <SegmentedRating value={p.overallScore ?? null} onChange={p.onOverall} readOnly={p.disabled} labelledBy="review-override-label" ariaLabel="Overall score override" size="sm" className="flex-1" />
             {p.overallScore !== undefined && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => p.onOverall(undefined)}>Clear</Button>
+              <Button type="button" variant="ghost" size="sm" disabled={p.disabled} onClick={() => p.onOverall(undefined)}>Clear</Button>
             )}
           </div>
         </div>

@@ -72,17 +72,6 @@ export default function StaffReviewDetailPage() {
   const [deleteError, setDeleteError] = useState("");
   const busy = useRef(false);
 
-  // Re-seed the form only when the server copy actually changed (not on every background refetch).
-  const syncKey = `${review?.name ?? ""}|${review?.modified ?? ""}`;
-  useEffect(() => {
-    if (!review) return;
-    setPeriod(baseline.period);
-    setNotes(baseline.notes);
-    setOverallScore(baseline.overallScore);
-    setRatings(baseline.ratings);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncKey]);
-
   const payload = useMemo(() => {
     const body: Record<string, unknown> = {};
     if (period !== baseline.period) body.period = period || null;
@@ -92,6 +81,27 @@ export default function StaffReviewDetailPage() {
     return body;
   }, [period, notes, overallScore, ratings, baseline]);
   const dirty = Object.keys(payload).length > 0;
+
+  // Seed the form on first load, and re-seed when the server copy changes only if there are no
+  // unsaved edits (a background refetch must not wipe what the user is typing).
+  const syncKey = `${review?.name ?? ""}|${review?.modified ?? ""}`;
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!review || (seeded.current && dirty)) return;
+    seeded.current = true;
+    setPeriod(baseline.period);
+    setNotes(baseline.notes);
+    setOverallScore(baseline.overallScore);
+    setRatings(baseline.ratings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncKey]);
+
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
+
+  useEffect(() => {
+    if (query.isError) console.error("Review failed to load", name, query.error);
+  }, [query.isError, query.error, name]);
 
   async function handleSave() {
     if (busy.current || !dirty) return;
@@ -113,7 +123,8 @@ export default function StaffReviewDetailPage() {
       await query.refetch();
       invalidate({ resource: "Meraki Review", invalidates: ["list"] });
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error("Review save failed", name, err);
       setSaveError(err instanceof Error ? err.message : "Failed to save");
@@ -147,7 +158,6 @@ export default function StaffReviewDetailPage() {
 
   if (query.isLoading) return <DetailSkeleton />;
   if (query.isError) {
-    console.error("Review failed to load", name, query.error);
     return (
       <StatePanel
         kind="error"
@@ -178,7 +188,7 @@ export default function StaffReviewDetailPage() {
             </p>
           </div>
           {shown !== null && (
-            <div className="shrink-0 rounded-md px-3 py-2 text-2xl font-semibold tabular-nums text-white" style={{ backgroundColor: rampColor(shown) }}>
+            <div className="shrink-0 rounded-md px-3 py-2 text-2xl font-semibold tabular-nums text-primary-foreground" style={{ backgroundColor: rampColor(shown) }}>
               {shown}
               <span className="text-sm font-medium opacity-80"> / 10</span>
             </div>
@@ -192,6 +202,7 @@ export default function StaffReviewDetailPage() {
           criteriaError={criteriaError}
           onRetry={retryCriteria}
           ratings={ratings}
+          disabled={saving}
           onChange={(c, n) => setRatings((prev) => ({ ...prev, [c]: n }))}
         />
         <DetailsCard
@@ -203,6 +214,7 @@ export default function StaffReviewDetailPage() {
           onOverall={setOverallScore}
           saveError={saveError}
           saveSuccess={saveSuccess}
+          disabled={saving}
         />
       </div>
 
