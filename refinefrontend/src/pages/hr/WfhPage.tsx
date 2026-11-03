@@ -12,13 +12,13 @@ import { WfhCard, WfhTableRow } from "./wfh/WfhRows";
 
 export default function WfhPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const { requests, loading, loadError, retry, outcomes, errors, processing, decide } = useWfhRequests();
+  const { requests, loading, loadError, refreshFailed, retry, outcomes, errors, processing, decide } = useWfhRequests();
 
   // Tab and search live in the URL so Back restores them; junk values fall back to the defaults.
   const [tab, setTab] = useQueryState("tab", parseAsStringLiteral(WFH_TABS).withDefault("pending").withOptions({ clearOnDefault: true }));
   const [search, setSearch] = useQueryState("q", { defaultValue: "", clearOnDefault: true });
 
-  const pendingCount = useMemo(() => requests.filter((r) => r.docstatus === 0).length, [requests]);
+  const pendingCount = useMemo(() => requests.filter((r) => r.docstatus === 0 && !outcomes[r.name]).length, [requests, outcomes]);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -59,15 +59,15 @@ export default function WfhPage() {
     body = (
       <section className="overflow-hidden rounded-card border bg-card">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
+          <table aria-label="Work from home requests" className="w-full min-w-[760px] border-collapse text-sm">
             <thead className="bg-muted text-[13px] text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">Employee</th>
-                <th className="px-4 py-3 text-left font-semibold">Dates</th>
-                <th className="px-4 py-3 text-right font-semibold">Days</th>
-                <th className="px-4 py-3 text-left font-semibold">Reason</th>
-                <th className="px-4 py-3 text-left font-semibold">Status</th>
-                <th className="px-4 py-3 text-left font-semibold"><span className="sr-only">Actions</span></th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Employee</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Dates</th>
+                <th scope="col" className="px-4 py-3 text-right font-semibold">Days</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Reason</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Status</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -112,6 +112,13 @@ export default function WfhPage() {
           />
         </div>
       </div>
+
+      {refreshFailed && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Couldn't refresh. Showing the last loaded list.{" "}
+          <button type="button" className="font-semibold text-primary underline-offset-4 hover:underline" onClick={retry}>Try again</button>
+        </p>
+      )}
 
       {body}
     </div>

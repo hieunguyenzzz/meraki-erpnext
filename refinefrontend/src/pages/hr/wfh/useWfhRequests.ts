@@ -12,24 +12,34 @@ export function useWfhRequests() {
   const [requests, setRequests] = useState<WfhRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const [outcomes, setOutcomes] = useState<Record<string, Outcome>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [processing, setProcessing] = useState<Set<string>>(new Set());
   const inFlight = useRef(new Set<string>());
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const alive = useRef(true);
+  const loadedOnce = useRef(false);
 
-  const load = useCallback(async () => {
+  /** Returns whether the list was refreshed. Once data has loaded, a failed reload keeps the list and only flags `refreshFailed`. */
+  const load = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch("/inquiry-api/wfh/list-all");
       if (!res.ok) throw new Error(`list-all ${res.status}`);
       const json = await res.json();
-      if (!alive.current) return;
+      if (!alive.current) return false;
       setRequests(json.data ?? []);
       setLoadError(false);
+      setRefreshFailed(false);
+      loadedOnce.current = true;
+      return true;
     } catch (err) {
-      console.error("wfh_list_failed", err);
-      if (alive.current) setLoadError(true);
+      console.error("wfh_list_failed", { firstLoad: !loadedOnce.current, err });
+      if (alive.current) {
+        if (loadedOnce.current) setRefreshFailed(true);
+        else setLoadError(true);
+      }
+      return false;
     } finally {
       if (alive.current) setLoading(false);
     }
@@ -45,7 +55,7 @@ export function useWfhRequests() {
   }, [load]);
 
   const retry = () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     void load();
   };
 
@@ -69,19 +79,22 @@ export function useWfhRequests() {
       // Leave the result visible for a moment, then reload so the row moves out of Pending
       clearTimeout(timer.current);
       timer.current = setTimeout(async () => {
-        await load();
-        if (!alive.current) return;
+        const refreshed = await load();
+        // If the reload failed, keep the shown results so decided rows don't look pending again
+        if (!refreshed || !alive.current) return;
         setOutcomes((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => inFlight.current.has(k))));
       }, 1200);
     } catch (err) {
       console.error("wfh_decision_failed", { name, action, err });
-      patch(setOutcomes, name, null);
-      patch(setErrors, name, `Could not ${action} this request. Nothing was changed, try again.`);
+      if (alive.current) {
+        patch(setOutcomes, name, null);
+        patch(setErrors, name, `Could not ${action} this request. It may not have saved \u2014 refresh and check.`);
+      }
     } finally {
       inFlight.current.delete(name);
       if (alive.current) setProcessing(new Set(inFlight.current));
     }
   }
 
-  return { requests, loading, loadError, retry, outcomes, errors, processing, decide };
+  return { requests, loading, loadError, refreshFailed, retry, outcomes, errors, processing, decide };
 }
