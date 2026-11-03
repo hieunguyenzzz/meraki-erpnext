@@ -566,6 +566,7 @@ def list_payments():
         "fields": json.dumps([
             "name", "payment_type", "party", "party_name",
             "posting_date", "paid_amount", "docstatus",
+            "base_paid_amount", "paid_from_account_currency", "paid_to_account_currency",
         ]),
         "order_by": "posting_date desc",
         "limit_page_length": 0,

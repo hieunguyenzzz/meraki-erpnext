@@ -31,12 +31,12 @@ export default function PaymentsPage() {
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<unknown>(null);
   const [shown, setShown] = useState(PAGE);
 
   const load = useCallback(() => {
     setIsLoading(true);
-    setError(false);
+    setError(null);
     fetch("/inquiry-api/payments")
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -44,12 +44,14 @@ export default function PaymentsPage() {
       })
       .then((data) => setPayments(Array.isArray(data) ? data : []))
       .catch((e) => {
-        console.error("Payments list failed to load", e);
-        setError(true);
+        setError(e);
       })
       .finally(() => setIsLoading(false));
   }, []);
   useEffect(load, [load]);
+  useEffect(() => {
+    if (error) console.error("Payments list failed to load", error);
+  }, [error]);
 
   const deferredSearch = useDeferredValue(search);
   const rows = useMemo(() => {
@@ -63,12 +65,15 @@ export default function PaymentsPage() {
   }, [payments, deferredSearch, type, from, to]);
 
   // Plain sums of the listed rows; money in and out are kept apart so they are never netted.
+  // Drafts are not counted; amounts are summed in company currency (base_paid_amount).
   const totals = useMemo(() => {
-    const t = { Receive: 0, Pay: 0, Internal: 0 };
+    const t = { Receive: 0, Pay: 0, Internal: 0, drafts: 0 };
     for (const p of rows) {
-      if (p.payment_type === "Receive") t.Receive += p.paid_amount || 0;
-      else if (p.payment_type === "Pay") t.Pay += p.paid_amount || 0;
-      else t.Internal += p.paid_amount || 0;
+      if (p.docstatus !== 1) { if (p.docstatus === 0) t.drafts += 1; continue; }
+      const amount = p.base_paid_amount ?? p.paid_amount ?? 0;
+      if (p.payment_type === "Receive") t.Receive += amount;
+      else if (p.payment_type === "Pay") t.Pay += amount;
+      else t.Internal += amount;
     }
     return t;
   }, [rows]);
@@ -78,7 +83,7 @@ export default function PaymentsPage() {
   const reset = <T,>(setter: (v: T) => unknown) => (v: T) => { setShown(PAGE); void setter(v); };
 
   let body;
-  if (error && payments.length === 0) {
+  if (error !== null && payments.length === 0) {
     body = (
       <StatePanel
         kind="error"
@@ -168,6 +173,7 @@ export default function PaymentsPage() {
           {totals.Receive > 0 && <div><span className="text-sm text-muted-foreground">Received </span><b className="text-lg font-semibold">{formatVNDFull(totals.Receive)}</b></div>}
           {totals.Pay > 0 && <div><span className="text-sm text-muted-foreground">Paid </span><b className="text-lg font-semibold">{formatVNDFull(totals.Pay)}</b></div>}
           {totals.Internal > 0 && <div><span className="text-sm text-muted-foreground">Internal transfers </span><b className="text-lg font-semibold">{formatVNDFull(totals.Internal)}</b></div>}
+          {totals.drafts > 0 && <div className="w-full text-sm text-muted-foreground">{totals.drafts} {totals.drafts === 1 ? "draft" : "drafts"} not counted</div>}
         </section>
       )}
 

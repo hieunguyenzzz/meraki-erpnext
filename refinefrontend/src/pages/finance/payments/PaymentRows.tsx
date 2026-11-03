@@ -1,9 +1,8 @@
 import { Link } from "react-router";
 import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatVNDFull } from "@/lib/format";
 import { isoDate } from "../invoices/types";
-import { type Payment, docstatusLabel, partyOf, typeVariant } from "./types";
+import { type Payment, docstatusLabel, formatPaid, partyOf, typeVariant } from "./types";
 
 const href = (p: Payment) => `/finance/payments/${encodeURIComponent(p.name)}`;
 
@@ -53,7 +52,7 @@ export function PaymentTable({ rows }: { rows: Payment[] }) {
                 <td className="min-w-[10rem] px-3 py-3 font-medium">{partyOf(p)}</td>
                 <td className="whitespace-nowrap px-3 py-3">{isoDate(p.posting_date)}</td>
                 <td className="min-w-[10rem] px-3 py-3"><Description p={p} /></td>
-                <td className="whitespace-nowrap px-3 py-3 text-right font-semibold">{formatVNDFull(p.paid_amount)}</td>
+                <td className="whitespace-nowrap px-3 py-3 text-right font-semibold">{formatPaid(p.paid_amount, p.paid_from_account_currency)}</td>
               </tr>
             ))}
           </tbody>
@@ -74,7 +73,7 @@ export function PaymentCard({ p }: { p: Payment }) {
       {p.description && <p className="-mt-1 text-sm"><Description p={p} /></p>}
       <p className="text-sm text-muted-foreground tabular-nums">{p.name} · {isoDate(p.posting_date)}</p>
       <div className="flex items-end justify-between gap-2 tabular-nums">
-        <div className="font-semibold">{formatVNDFull(p.paid_amount)}</div>
+        <div className="font-semibold">{formatPaid(p.paid_amount, p.paid_from_account_currency)}</div>
         <span className="flex items-center gap-1.5">
           <DraftFlag p={p} />
           <Badge variant={typeVariant(p.payment_type)}>{p.payment_type}</Badge>

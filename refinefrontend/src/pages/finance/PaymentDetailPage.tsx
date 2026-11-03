@@ -1,4 +1,5 @@
-import { useParams, Link } from "react-router";
+import { useEffect } from "react";
+import { useParams, Link, useNavigate } from "react-router";
 import { useOne } from "@refinedev/core";
 import { ChevronRight, RotateCw } from "lucide-react";
 import { formatVNDFull } from "@/lib/format";
@@ -7,7 +8,7 @@ import { StatePanel } from "@/components/StatePanel";
 import FileAttachments from "@/components/FileAttachments";
 import { DetailSkeleton } from "@/components/detail-skeleton";
 import { isoDate } from "./invoices/types";
-import { docstatusLabel, docstatusVariant, typeVariant } from "./payments/types";
+import { docstatusLabel, docstatusVariant, formatPaid, typeVariant } from "./payments/types";
 
 interface Reference { reference_doctype: string; reference_name: string; allocated_amount: number }
 
@@ -48,16 +49,39 @@ function RefRow({ r }: { r: Reference }) {
 
 export default function PaymentDetailPage() {
   const { name } = useParams<{ name: string }>();
+  const navigate = useNavigate();
 
-  const { result: payment, query } = useOne({ resource: "Payment Entry", id: name! });
+  const { result: payment, query } = useOne({
+    resource: "Payment Entry",
+    id: name!,
+    // A missing or forbidden record will not appear on retry; show the state straight away.
+    queryOptions: {
+      retry: (count, err) => {
+        const code = (err as { statusCode?: number } | null)?.statusCode;
+        return code !== 403 && code !== 404 && count < 1;
+      },
+    },
+  });
+  const status = (query.error as { statusCode?: number } | null)?.statusCode;
+  const notFound = status === 404 || status === 403;
+
+  useEffect(() => {
+    if (query.isError) console.error("Payment failed to load", name, query.error);
+  }, [query.isError, query.error, name]);
 
   if (query.isError) {
-    console.error("Payment failed to load", name, query.error);
-    return (
+    return notFound ? (
+      <StatePanel
+        kind="empty"
+        title="Payment not found"
+        text="It may have been deleted, or you may not have access to it."
+        action={{ label: "Back to payments", onClick: () => navigate("/finance/payments") }}
+      />
+    ) : (
       <StatePanel
         kind="error"
         title="Couldn't load this payment"
-        text="It may not exist, or the server didn't answer."
+        text="The server didn't answer. Your data is safe."
         action={{ label: "Try again", onClick: () => void query.refetch(), icon: <RotateCw className="h-4 w-4" /> }}
       />
     );
@@ -76,7 +100,7 @@ export default function PaymentDetailPage() {
         </div>
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Amount</div>
-          <div className="text-3xl font-semibold tabular-nums">{formatVNDFull(payment.paid_amount)}</div>
+          <div className="text-3xl font-semibold tabular-nums">{formatPaid(payment.paid_amount, payment.paid_from_account_currency)}</div>
         </div>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t pt-4 md:grid-cols-4">
           <Fact label="Party">{payment.party_name || payment.party || "—"}</Fact>
