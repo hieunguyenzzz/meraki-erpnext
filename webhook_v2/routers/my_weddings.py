@@ -103,10 +103,10 @@ def _chunks(items, size: int = VENUE_BATCH):
         yield items[i:i + size]
 
 
-def _get_in(client: ERPNextClient, doctype: str, ids, fields: list[str]) -> list[dict]:
+def _get_in(client: ERPNextClient, doctype: str, ids, fields: list[str], batch_size: int = VENUE_BATCH) -> list[dict]:
     """GET a doctype's rows by name, in URL-safe batches."""
     rows: list[dict] = []
-    for chunk in _chunks(ids):
+    for chunk in _chunks(ids, batch_size):
         rows += client._get(f"/api/resource/{doctype}", params={
             "filters": json.dumps([["name", "in", chunk]]),
             "fields": json.dumps(fields),

@@ -367,20 +367,28 @@ def test_listing_survives_cover_lookup_failure_and_batches():
     assert len(venues) == 120 and venues[0]["cover_url"] is None
 
 
-def test_listing_batches_cover_lookup():
+def test_listing_batches_cover_lookup_under_request_size_limit():
+    from urllib.parse import urlencode
     from webhook_v2.routers.venues import list_venues
 
     file_calls = []
 
-    def _fake_get(url, params=None):
-        if url == "/api/resource/Supplier":
-            return {"data": [{"name": f"V{i}", "custom_cover_photo": f"f{i}"} for i in range(120)]}
-        if url == "/api/resource/File":
-            file_calls.append(params)
-            return {"data": []}
-        return {"data": {"custom_venue_wedding_areas": []}}
+    def run(id_len):
+        file_calls.clear()
 
-    client = MagicMock()
-    client._get.side_effect = _fake_get
-    list_venues(_client=client)
-    assert len(file_calls) == 2  # VENUE_BATCH (100) + 20
+        def _fake_get(url, params=None):
+            if url == "/api/resource/Supplier":
+                return {"data": [{"name": f"V{i}", "custom_cover_photo": f"{i:0{id_len}d}"} for i in range(120)]}
+            if url == "/api/resource/File":
+                file_calls.append(urlencode(params))
+                return {"data": []}
+            return {"data": {"custom_venue_wedding_areas": []}}
+
+        client = MagicMock()
+        client._get.side_effect = _fake_get
+        list_venues(_client=client)
+        return max(len(q.encode()) for q in file_calls)
+
+    assert run(10) < 3500   # real File names are 10-char hashes
+    assert len(file_calls) == 3  # 40 + 40 + 40
+    assert run(80) < 4096   # worst case: 80-char ids

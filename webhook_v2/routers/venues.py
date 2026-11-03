@@ -20,6 +20,8 @@ from webhook_v2.auth import require_roles, PLANNER
 from webhook_v2.routers.my_weddings import _get_in
 
 log = get_logger(__name__)
+COVER_BATCH = 40  # each id travels in the GET query string; keep one request well under 4 KB
+
 router = APIRouter(prefix="/venues", tags=["venues"], dependencies=[Depends(require_roles(*PLANNER))])
 
 
@@ -74,7 +76,7 @@ def list_venues(city: str | None = None, _client: ERPNextClient | None = None) -
     cover_names = [v["custom_cover_photo"] for v in venues if v.get("custom_cover_photo")]
     cover_urls: dict[str, str] = {}
     try:
-        files = _get_in(client, "File", cover_names, ["name", "file_url"]) if cover_names else []
+        files = _get_in(client, "File", cover_names, ["name", "file_url"], batch_size=COVER_BATCH) if cover_names else []
         cover_urls = {f["name"]: f["file_url"] for f in files if f.get("file_url")}
     except Exception:
         log.exception("Venue cover lookup failed; listing without covers")
