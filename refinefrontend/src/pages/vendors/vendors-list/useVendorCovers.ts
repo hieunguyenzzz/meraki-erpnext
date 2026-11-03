@@ -24,8 +24,14 @@ export function useVendorCovers(names: string[]): Record<string, string> {
     queryFn: async () => {
       const map: Record<string, string> = {};
       for (let i = 0; i < names.length; i += CHUNK) {
-        for (const f of await fetchChunk(names.slice(i, i + CHUNK))) {
-          if (!map[f.attached_to_name] && /\.(jpg|jpeg|png|webp)$/i.test(f.file_url)) map[f.attached_to_name] = f.file_url;
+        const batch = names.slice(i, i + CHUNK);
+        try {
+          for (const f of await fetchChunk(batch)) {
+            if (!map[f.attached_to_name] && /\.(jpg|jpeg|png|webp)$/i.test(f.file_url)) map[f.attached_to_name] = f.file_url;
+          }
+        } catch (err) {
+          // Covers are decoration: keep the other batches, show initials for this one.
+          console.error(`Vendor covers batch failed (${batch.length} vendors)`, err);
         }
       }
       return map;

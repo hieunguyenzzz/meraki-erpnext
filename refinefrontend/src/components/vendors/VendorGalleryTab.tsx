@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useInvalidate } from "@refinedev/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, ChevronLeft, ChevronRight, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +20,7 @@ interface Props {
 
 export function VendorGalleryTab({ vendorName, images, loading }: Props) {
   const invalidate = useInvalidate();
+  const queryClient = useQueryClient();
   const uploadingRef = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -45,6 +47,7 @@ export function VendorGalleryTab({ vendorName, images, loading }: Props) {
     try {
       await uploadFile(file, "Supplier", vendorName, false);
       invalidate({ resource: "File", invalidates: ["list"] });
+      void queryClient.invalidateQueries({ queryKey: ["vendor-covers"] });
     } catch (err) {
       console.error("Vendor photo upload failed", err);
       setUploadError("Upload failed. Please try again.");
