@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { isProfileIncomplete } from "@/lib/profile";
 import { StatePanel } from "@/components/StatePanel";
 import { CompletionBanner } from "./my-profile/CompletionBanner";
 import { DisplayPreferencesCard } from "./my-profile/DisplayPreferencesCard";
@@ -16,6 +17,7 @@ import {
   SECTIONS,
   buildSavePayload,
   formFromEmployee,
+  isFormDirty,
   sectionMissing,
   type FormData,
   type SectionId,
@@ -54,6 +56,7 @@ export default function MyProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const savingRef = useRef(false);
 
   useEffect(() => {
@@ -63,14 +66,21 @@ export default function MyProfilePage() {
   const setField = useCallback((field: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setSaveSuccess(false);
+    setSaveError(null);
   }, []);
 
   const allRequiredFilled = REQUIRED_FIELDS.every((f) => form[f]?.trim());
   const doneSections = SECTIONS.filter((s) => sectionMissing(form, s.id) === 0).length;
 
+  const savedComplete = useMemo(
+    () => !!employee && !isProfileIncomplete(employee) && !isFormDirty(form, employee),
+    [employee, form],
+  );
+
   const handleSave = async () => {
     if (!employeeId || !allRequiredFilled || savingRef.current) return;
     savingRef.current = true;
+    setAttempted(true);
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -116,16 +126,11 @@ export default function MyProfilePage() {
         <Badge variant={employee.status === "Active" ? "default" : "secondary"}>{employee.status}</Badge>
       </header>
 
-      <CompletionBanner doneSections={doneSections} totalSections={SECTIONS.length} />
+      <CompletionBanner doneSections={doneSections} totalSections={SECTIONS.length} saved={savedComplete} />
 
       {saveSuccess && (
         <div role="status" className="rounded-card bg-success-soft px-4 py-3 text-sm text-success-soft-foreground">
           Profile saved successfully.
-        </div>
-      )}
-      {saveError && (
-        <div role="alert" className="rounded-card bg-danger-soft px-4 py-3 text-sm text-destructive">
-          {saveError}
         </div>
       )}
 
@@ -136,13 +141,18 @@ export default function MyProfilePage() {
           const Body = SECTION_BODY[s.id];
           return (
             <SectionCard key={s.id} step={i + 1} title={s.title} missing={sectionMissing(form, s.id)}>
-              <Body form={form} setField={setField} />
+              <Body form={form} setField={setField} showErrors={attempted} />
             </SectionCard>
           );
         })}
       </div>
 
-      <div className="sticky bottom-[calc(84px+env(safe-area-inset-bottom,0px))] z-10 -mx-4 border-t bg-background/95 px-4 pb-3 pt-3 backdrop-blur md:static md:mx-0 md:flex md:justify-end md:border-0 md:bg-transparent md:p-0 md:pb-8">
+      <div className="sticky bottom-[-20px] z-10 -mx-4 border-t bg-background/95 px-4 pb-3 pt-3 backdrop-blur md:static md:mx-0 md:flex md:items-center md:justify-end md:border-0 md:bg-transparent md:p-0 md:pb-8">
+        {saveError && (
+          <div role="alert" className="mb-2 rounded-card bg-danger-soft px-4 py-2 text-sm text-destructive md:mb-0 md:mr-4 md:self-center md:bg-transparent md:p-0">
+            {saveError}
+          </div>
+        )}
         <Button className="h-14 w-full rounded-full text-base md:h-10 md:w-auto md:rounded-md md:text-sm" onClick={handleSave} disabled={!allRequiredFilled || isSaving}>
           {isSaving ? "Saving..." : "Save Profile"}
         </Button>

@@ -93,12 +93,20 @@ export function formFromEmployee(employee: EmployeeProfile): FormData {
 
 /** Request body for PATCH /inquiry-api/me/profile (unchanged from the pre-redesign page). */
 export function buildSavePayload(form: FormData) {
-  const { addr_street, addr_ward, addr_district, addr_province, ...rest } = form;
-  void addr_street; void addr_ward; void addr_district; void addr_province;
+  const rest: Partial<FormData> = { ...form };
+  delete rest.addr_street;
+  delete rest.addr_ward;
+  delete rest.addr_district;
+  delete rest.addr_province;
   return { values: { ...rest, current_address: joinAddress(form) } };
 }
 
 export function sectionMissing(form: FormData, id: SectionId): number {
   const s = SECTIONS.find((x) => x.id === id)!;
   return s.required.filter((f) => !form[f]?.trim()).length;
+}
+
+export function isFormDirty(form: FormData, employee: EmployeeProfile): boolean {
+  const saved = formFromEmployee(employee);
+  return (Object.keys(saved) as (keyof FormData)[]).some((k) => saved[k] !== form[k]);
 }
