@@ -1,6 +1,6 @@
 import { CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatVND } from "@/lib/format";
+import { leadBudgetValue } from "@/lib/kanban";
 import { ReadOnlyField } from "@/components/crm/ReadOnlyField";
 import { EditableField } from "@/components/crm/EditableField";
 import { InfoCard } from "./InfoCard";
@@ -36,7 +36,7 @@ export function ContactCard({ lead, fullName, sources, onSaved }: {
 export function WeddingCard({ lead }: { lead: Lead }) {
   const date = lead.custom_wedding_date_raw || lead.custom_wedding_date?.slice(0, 10);
   const guests = lead.custom_guest_count_raw || (lead.custom_guest_count ? String(lead.custom_guest_count) : "");
-  const budget = lead.custom_budget_raw || (lead.custom_estimated_budget ? formatVND(lead.custom_estimated_budget) : "");
+  const budget = leadBudgetValue(lead) ?? "";
   if (!date && !lead.custom_wedding_venue && !guests && !budget && !lead.custom_couple_name && !lead.custom_partner_name) return null;
 
   return (

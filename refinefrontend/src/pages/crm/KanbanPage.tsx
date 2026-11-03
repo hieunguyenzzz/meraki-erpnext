@@ -6,8 +6,9 @@ import { Plus } from "lucide-react";
 import { PipelineBoard } from "@/components/crm/pipeline/PipelineBoard";
 import { PipelineFilters, WAITING_VALUES, SORT_VALUES } from "@/components/crm/pipeline/PipelineFilters";
 import { CreateLeadSheet } from "@/components/crm/pipeline/CreateLeadSheet";
+import { useChatSummaries } from "@/components/chats/useChatData";
 import { ErrorPanel } from "@/components/chats/ChatStates";
-import { buildKanbanItems, enrichWithActivity, enrichWithMeetings, getColumnForItem, awaitingOf, COLUMNS } from "@/lib/kanban";
+import { buildKanbanItems, enrichWithSummaries, enrichWithMeetings, getColumnForItem, awaitingOf, COLUMNS } from "@/lib/kanban";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
@@ -46,18 +47,7 @@ export default function KanbanPage() {
     },
   });
 
-  const { result: commsResult, query: commsQuery } = useList({
-    resource: "Communication",
-    pagination: { mode: "off" },
-    sorters: [{ field: "communication_date", order: "desc" }],
-    filters: [
-      { field: "reference_doctype", operator: "in", value: ["Lead", "Opportunity"] },
-      { field: "communication_type", operator: "eq", value: "Communication" },
-    ],
-    meta: {
-      fields: ["name", "reference_doctype", "reference_name", "sent_or_received", "communication_date", "creation"],
-    },
-  });
+  const { chats, isLoading: chatsLoading, isError: chatsError, refetch: refetchChats } = useChatSummaries();
 
   // Fetch Events with Lead participants using direct API call
   // frappe.client.get_list supports child table filters and fields
@@ -128,7 +118,7 @@ export default function KanbanPage() {
   // Build and filter items
   const items = useMemo(() => {
     const base = buildKanbanItems(leadsResult?.data ?? [], oppsResult?.data ?? []);
-    const withActivity = enrichWithActivity(base, commsResult?.data ?? []);
+    const withActivity = enrichWithSummaries(base, chats);
     const withMeetings = enrichWithMeetings(withActivity, meetingEvents);
 
     // Apply filters
@@ -158,10 +148,10 @@ export default function KanbanPage() {
     });
 
     return filtered;
-  }, [leadsResult, oppsResult, commsResult, meetingEvents, waitingFilter, locationFilter, sortOrder, leadLocationMap]);
+  }, [leadsResult, oppsResult, chats, meetingEvents, waitingFilter, locationFilter, sortOrder, leadLocationMap]);
 
-  const isLoading = leadsQuery?.isLoading || oppsQuery?.isLoading || commsQuery?.isLoading;
-  const isError = leadsQuery?.isError || oppsQuery?.isError || commsQuery?.isError;
+  const isLoading = leadsQuery?.isLoading || oppsQuery?.isLoading || chatsLoading;
+  const isError = leadsQuery?.isError || oppsQuery?.isError || chatsError;
   const openCount = items.filter((i) => !["won", "lost"].includes(getColumnForItem(i))).length;
 
   return (
@@ -191,7 +181,7 @@ export default function KanbanPage() {
       {isError ? (
         <ErrorPanel
           title="Couldn't load leads"
-          onRetry={() => { leadsQuery.refetch(); oppsQuery.refetch(); commsQuery.refetch(); }}
+          onRetry={() => { leadsQuery.refetch(); oppsQuery.refetch(); refetchChats(); }}
         />
       ) : isLoading ? (
         <div aria-busy="true" aria-label="Loading leads">

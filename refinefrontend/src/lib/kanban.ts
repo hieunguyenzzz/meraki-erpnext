@@ -122,14 +122,26 @@ function leadWeddingDate(l: any): string | undefined {
  * ("600", "$20,000 AUD", "500-800tr", free text) is shown as written, never with an assumed unit.
  * custom_estimated_budget is not used: it is a digit-stripped copy of the raw text ("500 tr" -> 500).
  */
-export function leadBudget(l: any): string | undefined {
+function parseBudget(l: any): { text: string; asWritten: boolean } | undefined {
   const raw = typeof l.custom_budget_raw === "string" ? l.custom_budget_raw.trim() : "";
   if (!raw) return undefined;
-  if (/^\d[\d.,\s]*(vnd|vnđ|đ)?$/i.test(raw)) {
+  // A trailing ".5" / ",25" is a decimal, not thousands grouping, so it is shown as written.
+  if (/^\d[\d.,\s]*(vnd|vnđ|đ)?$/i.test(raw) && !/[.,]\d{1,2}\s*(vnd|vnđ|đ)?$/i.test(raw)) {
     const amount = Number(raw.replace(/\D/g, ""));
-    if (amount >= 1_000_000) return formatVNDCompact(amount);
+    if (amount >= 1_000_000) return { text: formatVNDCompact(amount), asWritten: false };
   }
-  return `Budget: ${raw}`;
+  return { text: raw, asWritten: true };
+}
+
+/** Budget value for the lead page (its row is already labelled "Budget"). */
+export function leadBudgetValue(l: any): string | undefined {
+  return parseBudget(l)?.text;
+}
+
+/** Card line: compact VND as is; the couple's own text gets a "Budget: " prefix so it never reads as VND. */
+export function leadBudget(l: any): string | undefined {
+  const b = parseBudget(l);
+  return b && (b.asWritten ? `Budget: ${b.text}` : b.text);
 }
 
 export function buildKanbanItems(
@@ -205,27 +217,23 @@ export function hoursElapsed(timestamp: string): number {
   return (Date.now() - new Date(timestamp).getTime()) / 3_600_000;
 }
 
-/** Merge latest Communication data into kanban items */
-export function enrichWithActivity(
+/** Merge each lead's last message (from /inquiry-api/chats/summaries) into kanban items. */
+export function enrichWithSummaries(
   items: KanbanItem[],
-  communications: any[], // ERPNext Communication records, pre-sorted desc
+  summaries: { name: string; last_at?: string; last_direction: "Sent" | "Received" | null }[],
 ): KanbanItem[] {
-  const latestByRef = new Map<string, { date: string; waitingFor: "client" | "staff" }>();
-  for (const c of communications) {
-    const key = `${c.reference_doctype}::${c.reference_name}`;
-    if (!latestByRef.has(key)) {
-      // communication_date and creation are both stored in server local time
-      const dateStr = (c.communication_date || c.creation).replace(" ", "T");
-      latestByRef.set(key, {
-        date: dateStr,
-        waitingFor: c.sent_or_received === "Sent" ? "client" : "staff",
-      });
-    }
-  }
-  return items.map(item => ({
-    ...item,
-    lastActivity: latestByRef.get(item.id),
-  }));
+  const byLead = new Map(summaries.map((c) => [`Lead::${c.name}`, c]));
+  return items.map((item) => {
+    const c = byLead.get(item.id);
+    if (!c || !c.last_at || !c.last_direction) return item;
+    return {
+      ...item,
+      lastActivity: {
+        date: c.last_at.replace(" ", "T"),
+        waitingFor: c.last_direction === "Sent" ? "client" : "staff",
+      },
+    };
+  });
 }
 
 /** Merge meeting dates from Events into kanban items (for Leads) */
