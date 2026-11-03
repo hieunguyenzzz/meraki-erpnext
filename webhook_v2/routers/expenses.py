@@ -18,7 +18,7 @@ import json
 from typing import Literal
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, File, Form
 from pydantic import BaseModel, Field, field_validator
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.classifier_client import RemoteClassifierClient
@@ -773,6 +773,7 @@ RECEIPT_STAFF_OVERRIDE_ROLES = FINANCE + WEDDING_MANAGER
 @router.post("/expense/wedding-with-receipt")
 async def create_wedding_expense_with_receipt(
     request: Request,
+    response: Response,
     project: str = Form(""),
     date: str = Form(...),
     description: str = Form(...),
@@ -794,7 +795,7 @@ async def create_wedding_expense_with_receipt(
     """
     from fastapi import Form as _  # noqa — already imported above
 
-    bind_correlation_id(request)
+    bind_correlation_id(request, response)
     if len(note.strip()) > 1000:
         raise HTTPException(status_code=400, detail="Note must be 1000 characters or fewer")
     req = WeddingExpenseRequest(
@@ -811,7 +812,11 @@ async def create_wedding_expense_with_receipt(
 
     # Attach receipt if provided. The expense is already saved, so an upload failure
     # must not fail the request; it is reported as receipt_attached=false instead.
-    if receipt and receipt.size and result.get("name"):
+    if receipt and not receipt.size:
+        # An empty upload (e.g. a failed camera capture) is not a receipt
+        result["receipt_attached"] = False
+        log.warning("receipt_attach_failed", pi=result.get("name"), error="empty file")
+    elif receipt and result.get("name"):
         result["receipt_attached"] = True
         try:
             file_data = await receipt.read()
@@ -830,7 +835,7 @@ async def create_wedding_expense_with_receipt(
             log.info("receipt_attached", pi=result["name"])
         except Exception as e:
             result["receipt_attached"] = False
-            log.warning("receipt_attach_failed", pi=result["name"], error=str(e))
+            log.warning("receipt_attach_failed", pi=result["name"], error=str(e), exc_info=True)
 
     return result
 

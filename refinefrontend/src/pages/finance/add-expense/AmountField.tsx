@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
-import { formatAmount } from "./defaults";
+import { formatAmount, parsePastedAmount, sanitiseAmount } from "./defaults";
 
 interface Props {
   digits: string;
@@ -8,13 +8,11 @@ interface Props {
   error?: string;
 }
 
-const MAX_DIGITS = 12;
-
 /** Big amount-first field: numeric keypad, thousands separators as you type, tabular figures, "000" quick key. */
 export const AmountField = forwardRef<HTMLInputElement, Props>(({ digits, onChange, error }, ref) => {
   const shown = formatAmount(digits);
   const separators = Math.max(0, Math.ceil(digits.length / 3) - 1);
-  const set = (raw: string) => onChange(raw.replace(/\D/g, "").replace(/^0+/, "").slice(0, MAX_DIGITS));
+  const set = (raw: string) => onChange(sanitiseAmount(raw));
 
   return (
     <div>
@@ -33,6 +31,7 @@ export const AmountField = forwardRef<HTMLInputElement, Props>(({ digits, onChan
           aria-invalid={!!error}
           aria-describedby={error ? "expense-amount-error" : undefined}
           onChange={(e) => set(e.target.value)}
+          onPaste={(e) => { e.preventDefault(); onChange(parsePastedAmount(e.clipboardData.getData("text"))); }}
           style={{ width: `${Math.max(digits.length, 1) + separators * 0.4 + 0.6}ch` }}
           className={cn(
             "min-w-[3ch] max-w-[calc(100%-9rem)] border-b-2 bg-transparent text-center font-semibold tabular-nums tracking-tight outline-none placeholder:text-muted-foreground/60",

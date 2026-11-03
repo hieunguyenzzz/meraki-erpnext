@@ -25,13 +25,13 @@ export function CategoryChips({ categories, recents, value, onChange, error }: P
 
   return (
     <div>
-      <div id="expense-category" role="radiogroup" aria-label="Category" className="flex flex-wrap gap-2">
+      <div id="expense-category" role="group" aria-label="Category" className="flex flex-wrap gap-2">
         {shown.map((n) => (
           <button
             key={n}
             type="button"
-            role="radio"
-            aria-checked={value === n}
+            aria-pressed={value === n}
+            aria-describedby={error ? "expense-category-error" : undefined}
             onClick={() => onChange(n)}
             className={cn(chip, value === n ? "border-foreground bg-foreground text-background" : "border-input bg-card text-foreground")}
           >
@@ -44,7 +44,7 @@ export function CategoryChips({ categories, recents, value, onChange, error }: P
           </button>
         )}
       </div>
-      {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+      {error && <p id="expense-category-error" role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto p-4 pb-[calc(16px+env(safe-area-inset-bottom,0px))]">

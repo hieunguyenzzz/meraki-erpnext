@@ -35,7 +35,7 @@ export function ContextRow({ weddings, project, onProject, date, today, onDate }
       </button>
 
       {/* A real date input sits transparently over the pill, so the tap works everywhere; showPicker is an enhancement. */}
-      <div className={cn(pill, "relative shrink-0")}>
+      <div className={cn(pill, "relative shrink-0 focus-within:ring-2 focus-within:ring-ring")}>
         <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden />
         {date === today ? "Today" : date}
         <input

@@ -10,7 +10,7 @@ import { ContextRow } from "./add-expense/ContextRow";
 import { ReceiptPicker } from "./add-expense/ReceiptPicker";
 import { SavedState, type SavedSummary } from "./add-expense/SavedState";
 import { fetchCategories, scanBill, submitExpense, type ExpenseCategory } from "./add-expense/api";
-import { loadRecents, pickDefaultWedding, rememberCategory, todayVN } from "./add-expense/defaults";
+import { loadRecents, pickDefaultWedding, rememberCategory, sanitiseAmount, todayVN } from "./add-expense/defaults";
 import { useExpenseWeddings } from "./add-expense/useExpenseWeddings";
 
 type Errors = Partial<Record<"amount" | "category" | "proof", string>>;
@@ -32,6 +32,7 @@ export default function AddExpensePage() {
   const [recents, setRecents] = useState<string[]>(loadRecents);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [saved, setSaved] = useState<SavedSummary | null>(null);
@@ -51,10 +52,11 @@ export default function AddExpensePage() {
     fetchCategories(!!project, controller.signal)
       .then((data) => {
         setCategories(data);
+        setCategoriesError(null);
         setCategory((prev) => (data.some((c) => c.name === prev) ? prev : ""));
       })
       .catch((err: unknown) => {
-        if (!controller.signal.aborted) setFormError(err instanceof Error ? err.message : "Could not load categories");
+        if (!controller.signal.aborted) setCategoriesError(err instanceof Error ? err.message : "Could not load categories");
       });
     return () => controller.abort();
   }, [project]);
@@ -70,7 +72,7 @@ export default function AddExpensePage() {
     setFormError(null);
     try {
       const r = await scanBill(receipt);
-      if (r.amount != null) setAmount(String(Math.round(r.amount)));
+      if (r.amount != null) setAmount(sanitiseAmount(String(Math.round(Math.abs(r.amount)))));
       if (r.description) setDescription(r.description);
       if (r.date && r.date <= today) setDate(r.date);
       if (r.category && categories.some((c) => c.name === r.category)) setCategory(r.category);
@@ -91,7 +93,7 @@ export default function AddExpensePage() {
     if (Object.keys(found).length) {
       // Bring the first invalid field into view (the save bar covers the page bottom)
       const target = found.amount ? amountRef.current
-        : found.category ? document.querySelector<HTMLElement>("#expense-category [role=radio]")
+        : found.category ? document.querySelector<HTMLElement>("#expense-category button")
         : document.getElementById("expense-description");
       target?.scrollIntoView({ block: "center" });
       target?.focus({ preventScroll: true });
@@ -188,8 +190,8 @@ export default function AddExpensePage() {
 
           {/* Thumb-reach save: pinned above the bottom bar on phones, inline on desktop */}
           <div className="sticky bottom-[calc(84px+env(safe-area-inset-bottom,0px))] z-10 -mx-4 bg-background/95 px-4 pb-2 pt-3 backdrop-blur md:static md:mx-0 md:bg-transparent md:p-0">
-            {formError && (
-              <div role="alert" className="mb-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{formError}</div>
+            {(formError ?? categoriesError) && (
+              <div role="alert" className="mb-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{formError ?? categoriesError}</div>
             )}
             <Button type="submit" size="lg" className="h-14 w-full text-base" disabled={saving}>
               {saving ? <><Loader2 className="h-5 w-5 animate-spin" />Saving...</> : "Save expense"}

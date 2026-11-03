@@ -49,6 +49,18 @@ export function chipNames(all: string[], recents: string[]): string[] {
   return [...valid, ...all.filter((c) => !valid.includes(c))].slice(0, CHIP_COUNT);
 }
 
+export const MAX_AMOUNT_DIGITS = 12;
+
+/** Keep digits only: no sign, no leading zeros, at most 12 digits. */
+export function sanitiseAmount(raw: string): string {
+  return raw.replace(/\D/g, "").replace(/^0+/, "").slice(0, MAX_AMOUNT_DIGITS);
+}
+
+/** Pasted text such as "1.500.000,00": drop a trailing 1-2 digit decimal part, then keep digits. */
+export function parsePastedAmount(text: string): string {
+  return sanitiseAmount(text.trim().replace(/[.,]\d{1,2}$/, ""));
+}
+
 export function formatAmount(digits: string): string {
   return digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
 }
