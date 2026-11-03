@@ -12,7 +12,8 @@ interface Props {
   onClose: () => void;
   title: string;
   subtitle?: string;
-  footer: ReactNode;
+  /** Footer buttons; pass a function to get the guarded close (asks before discarding when dirty) for Cancel. */
+  footer: ReactNode | ((requestClose: () => void) => ReactNode);
   wide?: boolean;
   children: ReactNode;
 }
@@ -39,7 +40,7 @@ export function StaffSheet({ open, dirty, onClose, title, subtitle, footer, wide
             {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
           </SheetHeader>
           <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">{children}</div>
-          <SheetFooter className="shrink-0 gap-2 border-t px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</SheetFooter>
+          <SheetFooter className="shrink-0 gap-2 border-t px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">{typeof footer === "function" ? footer(requestClose) : footer}</SheetFooter>
         </SheetContent>
       </Sheet>
 

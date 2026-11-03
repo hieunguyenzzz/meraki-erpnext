@@ -13,6 +13,7 @@ GET  /leave/my-applications     — list leave applications for an employee
 import json
 import math
 from datetime import date, timedelta
+import requests
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
 from webhook_v2.services.erpnext import ERPNextClient
@@ -890,7 +891,13 @@ def get_leave_employee_detail(employee: str):
     """
     client = ERPNextClient()
     today = date.today()
-    pools_by_type = _employee_pools(client, employee, today)
+    try:
+        pools_by_type = _employee_pools(client, employee, today)
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            log.warning("leave_employee_detail_not_found", employee=employee)
+            raise HTTPException(status_code=404, detail=f"Employee {employee} not found")
+        raise
 
     periods: dict[str, dict] = {}
     for pools in pools_by_type.values():

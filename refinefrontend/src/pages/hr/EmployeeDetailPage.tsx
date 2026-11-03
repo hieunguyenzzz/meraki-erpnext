@@ -65,6 +65,10 @@ export default function EmployeeDetailPage() {
   const leave = useLeaveDetail(name);
   const records = useEmployeeRecords(name, leave.refetch);
 
+  useEffect(() => {
+    if (employeeQuery.isError) console.error("Could not load employee", name, employeeQuery.error);
+  }, [employeeQuery.isError, employeeQuery.error, name]);
+
   // Roles of the linked user, shown as badges on the Employment card
   useEffect(() => {
     if (!employee?.user_id) {
@@ -84,7 +88,12 @@ export default function EmployeeDetailPage() {
   }, [employee?.user_id]);
 
   if (employeeQuery.isError) {
-    return <p role="alert" className="text-sm text-danger-soft-foreground">Could not load this employee. Go back and try again.</p>;
+    const notFound = (employeeQuery.error as { statusCode?: number } | null)?.statusCode === 404;
+    return (
+      <p role="alert" className="text-sm text-danger-soft-foreground">
+        {notFound ? "Employee not found." : "Could not load this employee. Go back and try again."}
+      </p>
+    );
   }
   if (!employee) return <DetailSkeleton />;
 

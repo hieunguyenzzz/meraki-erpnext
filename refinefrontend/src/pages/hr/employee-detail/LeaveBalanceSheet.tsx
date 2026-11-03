@@ -51,12 +51,12 @@ export function LeaveBalanceSheet({ alloc, employeeName, onClose, onSaved }: Pro
       onClose={close}
       title="Edit Leave Balance"
       subtitle={employeeName}
-      footer={
+      footer={(requestClose) => (
         <>
-          <Button variant="outline" onClick={close} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={requestClose} disabled={saving}>Cancel</Button>
           <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
         </>
-      }
+      )}
     >
       <div className="space-y-2">
         <Label htmlFor="leave-allocated">Allocated Days</Label>

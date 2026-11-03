@@ -164,12 +164,12 @@ export function EditSectionSheet({ employee, section, users, designations, canMa
       onClose={close}
       title={TITLES[section]}
       subtitle={employee.employee_name}
-      footer={
+      footer={(requestClose) => (
         <>
-          <Button variant="outline" onClick={close} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={requestClose} disabled={saving}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
         </>
-      }
+      )}
     >
       {section === "personal" && (
         <>
