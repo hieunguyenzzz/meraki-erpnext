@@ -1,14 +1,11 @@
-import { useState, useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { useList } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
-import DOMPurify from "dompurify";
-import {
-  Phone, MessageSquare, Mail, Users, MoreHorizontal,
-  ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { formatDateTime } from "@/lib/format";
+import { MessageSquare } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MessageBubble } from "@/components/chats/MessageBubble";
+import { dayLabel, stampDay } from "@/components/chats/chatFormat";
+import { commStamp, type Communication } from "@/components/chats/useChatData";
 
 interface ConversationRef {
   doctype: string;
@@ -17,32 +14,9 @@ interface ConversationRef {
 
 interface ConversationSectionProps {
   references: ConversationRef[];
+  /** Shown under each received message; defaults to "Client" */
+  leadName?: string;
 }
-
-type Medium = "Phone" | "WhatsApp" | "Email" | "Meeting" | "Other";
-
-const MEDIUM_ICONS: Record<Medium, typeof Phone> = {
-  Phone, WhatsApp: MessageSquare, Email: Mail, Meeting: Users, Other: MoreHorizontal,
-};
-
-// Helper to strip HTML tags and get plain text for preview
-function stripHtml(html: string): string {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  return doc.body.textContent || "";
-}
-
-const PREVIEW_LENGTH = 150;
-
-type ConversationItem = {
-  name: string;
-  content: string;
-  subject?: string;
-  medium: string;
-  author: string;
-  creation: string;
-  communication_date?: string;
-  sent_or_received?: "Sent" | "Received";
-};
 
 // Fetch Communications linked via timeline_links (child table)
 function useTimelineLinkedConversations(ref: ConversationRef) {
@@ -104,8 +78,7 @@ function useConversationsForRef(ref: ConversationRef) {
   });
 }
 
-function ConversationFeed({ references }: ConversationSectionProps) {
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+function ConversationFeed({ references, leadName = "Client" }: ConversationSectionProps) {
   const ref0 = references[0];
   const ref1 = references.length > 1 ? references[1] : null;
 
@@ -121,17 +94,8 @@ function ConversationFeed({ references }: ConversationSectionProps) {
     ref1 ?? { doctype: "__none__", docName: "__none__" },
   );
 
-  function toggleExpanded(id: string) {
-    setExpandedItems((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  const items = useMemo<ConversationItem[]>(() => {
-    const all: ConversationItem[] = [];
+  const items = useMemo<Communication[]>(() => {
+    const all: Communication[] = [];
     const seen = new Set<string>();
 
     function addItem(c: any) {
@@ -141,11 +105,11 @@ function ConversationFeed({ references }: ConversationSectionProps) {
         name: c.name,
         content: c.content ?? "",
         subject: c.subject || undefined,
-        medium: c.communication_medium ?? "Other",
-        author: c.sender ?? "",
+        communication_medium: c.communication_medium ?? "Other",
+        sender: c.sender ?? "",
         creation: c.creation,
         communication_date: c.communication_date,
-        sent_or_received: c.sent_or_received as "Sent" | "Received" | undefined,
+        sent_or_received: c.sent_or_received === "Sent" ? "Sent" : "Received",
       });
     }
 
@@ -159,118 +123,48 @@ function ConversationFeed({ references }: ConversationSectionProps) {
     for (const c of timelineComms0) addItem(c);
     for (const c of timelineComms1) addItem(c);
 
-    all.sort((a, b) => {
-      const dateA = new Date(a.communication_date || a.creation).getTime();
-      const dateB = new Date(b.communication_date || b.creation).getTime();
-      return dateB - dateA;
-    });
+    // Oldest first, so the thread reads top to bottom like the Chats page.
+    all.sort((a, b) => new Date(commStamp(a)).getTime() - new Date(commStamp(b)).getTime());
     return all;
   }, [result0, result1, ref1, timelineComms0, timelineComms1]);
 
   if (items.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-4">
-        No conversations logged yet.
-      </p>
+      <div className="flex flex-col items-center gap-2 py-8 text-center text-muted-foreground">
+        <MessageSquare className="h-8 w-8" strokeWidth={1.4} aria-hidden />
+        <p className="text-sm">No conversations logged yet.</p>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {items.map((item) => {
-        const MediumIcon = MEDIUM_ICONS[item.medium as Medium] ?? MoreHorizontal;
-
+    <div className="flex flex-col gap-2">
+      {items.map((c, i) => {
+        const day = stampDay(commStamp(c));
+        const newDay = i === 0 || day !== stampDay(commStamp(items[i - 1]));
         return (
-          <div
-            key={item.name}
-            className="rounded-md p-3 border bg-muted/30"
-          >
-            <div className="flex items-center gap-2 text-sm flex-wrap">
-              <span className="inline-flex items-center gap-1 text-muted-foreground">
-                <MediumIcon className="h-3.5 w-3.5" /> {item.medium}
-              </span>
-              {item.sent_or_received && (
-                <span className={cn(
-                  "inline-flex items-center gap-0.5 text-xs font-medium",
-                  item.sent_or_received === "Sent"
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-blue-600 dark:text-blue-400"
-                )}>
-                  {item.sent_or_received === "Sent" ? (
-                    <><ArrowUpRight className="h-3 w-3" /> Sent</>
-                  ) : (
-                    <><ArrowDownLeft className="h-3 w-3" /> Received</>
-                  )}
-                </span>
-              )}
-              <span className="text-muted-foreground ml-auto text-xs">
-                {formatDateTime(item.communication_date || item.creation)}
-              </span>
-            </div>
-            {item.subject && (
-              <p className="text-sm font-medium mt-1">{item.subject}</p>
+          <Fragment key={c.name}>
+            {newDay && (
+              <div className="my-1 self-center rounded-xl bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                {dayLabel(day)}
+              </div>
             )}
-            {(() => {
-              const plainText = stripHtml(item.content);
-              const needsTruncation = plainText.length > PREVIEW_LENGTH;
-              const isExpanded = expandedItems.has(item.name);
-
-              if (!needsTruncation) {
-                return (
-                  <div
-                    className="text-sm prose prose-sm max-w-none mt-2"
-                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
-                  />
-                );
-              }
-
-              if (isExpanded) {
-                return (
-                  <div className="mt-2">
-                    <div
-                      className="text-sm prose prose-sm max-w-none"
-                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.content) }}
-                    />
-                    <button
-                      onClick={() => toggleExpanded(item.name)}
-                      className="mt-2 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                    >
-                      <ChevronUp className="h-3 w-3" />
-                      Show less
-                    </button>
-                  </div>
-                );
-              }
-
-              const preview = plainText.slice(0, PREVIEW_LENGTH).trim() + "...";
-              return (
-                <div className="mt-2">
-                  <p className="text-sm text-muted-foreground">{preview}</p>
-                  <button
-                    onClick={() => toggleExpanded(item.name)}
-                    className="mt-1 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                  >
-                    <ChevronDown className="h-3 w-3" />
-                    Show more
-                  </button>
-                </div>
-              );
-            })()}
-          </div>
+            <MessageBubble comm={c} leadName={leadName} />
+          </Fragment>
         );
       })}
     </div>
   );
 }
 
-export function ConversationSection({ references }: ConversationSectionProps) {
+export function ConversationSection({ references, leadName }: ConversationSectionProps) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Conversation</CardTitle>
       </CardHeader>
-      <CardContent>
-        <ConversationFeed references={references} />
+      <CardContent className="sm:pt-0">
+        <ConversationFeed references={references} leadName={leadName} />
       </CardContent>
     </Card>
   );

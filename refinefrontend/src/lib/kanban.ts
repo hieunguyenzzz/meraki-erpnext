@@ -1,3 +1,5 @@
+import { formatVNDCompact } from "@/lib/format";
+
 export type ColumnKey = "new" | "engaged" | "meeting" | "quoted" | "won" | "lost";
 
 export interface KanbanItem {
@@ -13,6 +15,9 @@ export interface KanbanItem {
     waitingFor: "client" | "staff";  // Sent by staff → waiting for client, Received → waiting for staff
   };
   meetingDate?: string; // ISO datetime of scheduled meeting (from ERPNext Event)
+  source?: string;      // Lead.source
+  weddingDate?: string; // ISO date, or the couple's own text when no date was parsed
+  budget?: string;      // "VND 400 M" for a numeric budget, otherwise the raw text the couple wrote
 }
 
 export interface ColumnDef {
@@ -106,6 +111,17 @@ export function getColumnForItem(item: KanbanItem): ColumnKey {
 /** Lead statuses that should be hidden from Kanban (none - all Leads are now shown) */
 const HIDDEN_LEAD_STATUSES = new Set<string>();
 
+/** Wedding date for a card: the ISO date, else the couple's own text (e.g. "2027-06"). */
+function leadWeddingDate(l: any): string | undefined {
+  return l.custom_wedding_date?.slice(0, 10) || l.custom_wedding_date_raw || undefined;
+}
+
+/** Budget for a card: compact VND when there is a number, else the raw text the couple wrote. */
+function leadBudget(l: any): string | undefined {
+  if (l.custom_estimated_budget) return formatVNDCompact(l.custom_estimated_budget);
+  return l.custom_budget_raw || undefined;
+}
+
 export function buildKanbanItems(
   leads: any[],
   opportunities: any[],
@@ -129,6 +145,9 @@ export function buildKanbanItems(
       email: l.email_id,
       phone: l.phone,
       creation: l.creation,
+      source: l.source || undefined,
+      weddingDate: leadWeddingDate(l),
+      budget: leadBudget(l),
     });
   }
   for (const o of opportunities) {
