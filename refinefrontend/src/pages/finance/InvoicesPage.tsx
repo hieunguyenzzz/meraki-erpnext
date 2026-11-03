@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useList, useInvalidate } from "@refinedev/core";
 import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
 import { ChevronDown, Plus, RotateCw, Search } from "lucide-react";
@@ -53,15 +53,16 @@ export default function InvoicesPage() {
   const weddingName = useMemo(() => new Map(projects.map((p) => [p.name, p.project_name])), [projects]);
 
   // Search + type narrow the set; the status chips count within it.
+  const deferredSearch = useDeferredValue(search);
   const scoped = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     return invoices.filter((i) => {
       if (type !== ALL && i.custom_invoice_category !== type) return false;
       if (!q) return true;
       const wedding = (i.project && weddingName.get(i.project)) || "";
       return [i.name, i.customer_name, wedding].some((v) => v.toLowerCase().includes(q));
     });
-  }, [invoices, search, type, weddingName]);
+  }, [invoices, deferredSearch, type, weddingName]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { [ALL]: scoped.length };
@@ -82,7 +83,7 @@ export default function InvoicesPage() {
   const visible = rows.slice(0, shown);
   // Only invoices on screen can be acted on, so a filter change never leaves hidden rows selected for delete.
   const selectedNames = visible.filter((i) => rowSelection.has(i.name)).map((i) => i.name);
-  const actions = useInvoiceActions(selectedNames, () => setRowSelection(new Set()));
+  const actions = useInvoiceActions(selectedNames, (failed) => setRowSelection(new Set(failed)));
 
   function resetShown<T>(setter: (v: T) => unknown) {
     return (v: T) => { setShown(PAGE); void setter(v); };
@@ -94,7 +95,9 @@ export default function InvoicesPage() {
   const toggleAll = (on: boolean) =>
     setRowSelection((prev) => { const n = new Set(prev); visible.forEach((i) => (on ? n.add(i.name) : n.delete(i.name))); return n; });
 
-  if (query.isError) console.error("Invoices list failed to load", query.error);
+  useEffect(() => {
+    if (query.isError) console.error("Invoices list failed to load", query.error);
+  }, [query.isError, query.error]);
   const loadError = query.isError && invoices.length === 0;
   const filtered = search.trim() !== "" || type !== ALL || status !== ALL;
   const busy = actions.assigning || actions.deleting;
@@ -185,7 +188,7 @@ export default function InvoicesPage() {
       {actions.error && (
         <div role="alert" className="flex items-center justify-between rounded-md border border-destructive/30 bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
           <span>{actions.error}</span>
-          <button type="button" onClick={actions.clearError} aria-label="Dismiss" className="ml-4 font-medium">&times;</button>
+          <button type="button" onClick={actions.clearError} aria-label="Dismiss" className="ml-4 flex h-8 w-8 items-center justify-center font-medium max-md:h-12 max-md:w-12">&times;</button>
         </div>
       )}
 

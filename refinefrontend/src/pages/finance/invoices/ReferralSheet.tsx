@@ -48,6 +48,7 @@ export function ReferralSheet({ open, onOpenChange, projects, onRecorded }: Prop
   const [partnerSearch, setPartnerSearch] = useState("");
   const [partners, setPartners] = useState<Partner[]>([]);
   const [creatingPartner, setCreatingPartner] = useState(false);
+  const creatingPartnerRef = useRef(false);
 
   // Wedding combobox state
   const [weddingOpen, setWeddingOpen] = useState(false);
@@ -87,12 +88,15 @@ export function ReferralSheet({ open, onOpenChange, projects, onRecorded }: Prop
   }
 
   function handleOpenChange(next: boolean) {
+    if (!next && submittingRef.current) return; // don't close while the record request is in flight
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
     onOpenChange(next);
     if (!next) resetReferralForm();
   }
 
   async function handleCreatePartner() {
-    if (!partnerSearch.trim()) return;
+    if (!partnerSearch.trim() || creatingPartnerRef.current) return; // Enter twice must not create two partners
+    creatingPartnerRef.current = true;
     setCreatingPartner(true);
     try {
       const resp = await fetch("/inquiry-api/referral/partners", {
@@ -106,12 +110,13 @@ export function ReferralSheet({ open, onOpenChange, projects, onRecorded }: Prop
       }
       const newPartner = await resp.json();
       setPartners(prev => [...prev, newPartner]);
-      setReferralForm({ ...referralForm, partner: newPartner.name });
+      setReferralForm((f) => ({ ...f, partner: newPartner.name }));
       setPartnerOpen(false);
     } catch (error) {
       console.error("Referral partner create failed", error);
       setReferralError(error instanceof Error ? error.message : "Failed to create partner");
     } finally {
+      creatingPartnerRef.current = false;
       setCreatingPartner(false);
     }
   }
@@ -119,9 +124,9 @@ export function ReferralSheet({ open, onOpenChange, projects, onRecorded }: Prop
   async function handleReferralSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (submittingRef.current || referralSuccess) return; // a double tap or Enter after success must not create a second invoice
-    const amount = parseFloat(referralForm.amount);
+    const amount = Number(referralForm.amount);
     if (!referralForm.partner || !referralForm.amount) return;
-    if (amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       setReferralError("Amount must be greater than 0");
       return;
     }
@@ -153,7 +158,7 @@ export function ReferralSheet({ open, onOpenChange, projects, onRecorded }: Prop
       setReferralSuccess(`Invoice ${result.invoice} created and paid`);
       onRecorded();
 
-      closeTimer.current = setTimeout(() => handleOpenChange(false), 1500);
+      closeTimer.current = setTimeout(() => { closeTimer.current = null; handleOpenChange(false); }, 1500);
     } catch (error) {
       console.error("Referral record failed", error);
       setReferralError(error instanceof Error ? error.message : "Failed to record referral");
@@ -186,11 +191,12 @@ export function ReferralSheet({ open, onOpenChange, projects, onRecorded }: Prop
 
             {/* Partner */}
             <div className="space-y-2">
-              <Label>Partner *</Label>
+              <Label id="referral-partner-label">Partner *</Label>
               <Popover open={partnerOpen} onOpenChange={setPartnerOpen}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
+                    aria-labelledby="referral-partner-label"
                     className="w-full flex min-h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span className={referralForm.partner ? "" : "text-muted-foreground"}>
@@ -303,11 +309,12 @@ export function ReferralSheet({ open, onOpenChange, projects, onRecorded }: Prop
 
             {/* Wedding */}
             <div className="space-y-2">
-              <Label>Wedding (optional)</Label>
+              <Label id="referral-wedding-label">Wedding (optional)</Label>
               <Popover open={weddingOpen} onOpenChange={setWeddingOpen}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
+                    aria-labelledby="referral-wedding-label"
                     className="w-full flex min-h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span className={referralForm.project ? "" : "text-muted-foreground"}>

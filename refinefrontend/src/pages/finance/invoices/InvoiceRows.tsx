@@ -49,6 +49,7 @@ interface TableProps {
 /** Desktop layout (D-Invoices.dc.html): sticky header, scrolls inside its own frame. */
 export function InvoiceTable({ rows, selected, onToggle, onToggleAll, sort, onSort }: TableProps) {
   const allOn = rows.length > 0 && rows.every((r) => selected.has(r.invoice.name));
+  const someOn = !allOn && rows.some((r) => selected.has(r.invoice.name));
   return (
     <section className="overflow-hidden rounded-card border bg-card">
       <div className="max-h-[calc(100vh-22rem)] min-h-[16rem] overflow-auto">
@@ -56,7 +57,7 @@ export function InvoiceTable({ rows, selected, onToggle, onToggleAll, sort, onSo
           <thead className="sticky top-0 z-10 bg-muted text-[13px] text-muted-foreground">
             <tr>
               <th scope="col" className="w-10 px-3 py-3">
-                <Checkbox checked={allOn} onCheckedChange={(v) => onToggleAll(!!v)} aria-label="Select all shown invoices" />
+                <Checkbox checked={allOn ? true : someOn ? "indeterminate" : false} onCheckedChange={(v) => onToggleAll(!!v)} aria-label="Select all shown invoices" />
               </th>
               <th scope="col" className="px-3 py-3 text-left font-semibold">Invoice</th>
               <th scope="col" className="px-3 py-3 text-left font-semibold">Customer / wedding</th>
