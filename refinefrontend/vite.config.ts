@@ -40,6 +40,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // The single JS bundle sits right at the 2 MiB default; above it the build fails.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/app\.merakiwp\.com\/api\/.*/i,

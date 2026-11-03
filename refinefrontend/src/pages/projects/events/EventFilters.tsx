@@ -63,7 +63,7 @@ export function EventFilters(p: Props) {
               aria-selected={p.mode === m}
               onClick={() => p.onMode(m)}
               className={cn(
-                "h-9 rounded-full px-4 text-sm font-semibold capitalize transition-colors max-md:h-11",
+                "h-[34px] rounded-full px-4 text-sm font-semibold capitalize transition-colors max-md:h-[42px]",
                 p.mode === m ? "bg-card shadow-sm" : "text-muted-foreground"
               )}
             >
@@ -71,27 +71,31 @@ export function EventFilters(p: Props) {
             </button>
           ))}
         </div>
-        <button type="button" aria-label="Previous window" onClick={() => p.onShift(-1)} className={ARROW}>
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <Input
-          type="date"
-          aria-label="From date"
-          className="w-auto max-md:flex-1"
-          value={p.range.from}
-          onChange={(e) => e.target.value && p.onRange({ ...p.range, from: e.target.value })}
-        />
-        <span className="text-sm text-muted-foreground">to</span>
-        <Input
-          type="date"
-          aria-label="To date"
-          className="w-auto max-md:flex-1"
-          value={p.range.to}
-          onChange={(e) => e.target.value && p.onRange({ ...p.range, to: e.target.value })}
-        />
-        <button type="button" aria-label="Next window" onClick={() => p.onShift(1)} className={ARROW}>
-          <ChevronRight className="h-4 w-4" />
-        </button>
+        <div className="order-2 flex w-full items-center gap-2 md:order-none md:w-auto">
+          <Input
+            type="date"
+            aria-label="From date"
+            className="min-w-0 flex-1 md:w-auto md:flex-none"
+            value={p.range.from}
+            onChange={(e) => e.target.value && p.onRange({ ...p.range, from: e.target.value })}
+          />
+          <span className="text-sm text-muted-foreground">to</span>
+          <Input
+            type="date"
+            aria-label="To date"
+            className="min-w-0 flex-1 md:w-auto md:flex-none"
+            value={p.range.to}
+            onChange={(e) => e.target.value && p.onRange({ ...p.range, to: e.target.value })}
+          />
+        </div>
+        <div className="ml-auto flex gap-2 md:order-last md:ml-0">
+          <button type="button" aria-label="Previous window" onClick={() => p.onShift(-1)} className={ARROW}>
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button type="button" aria-label="Next window" onClick={() => p.onShift(1)} className={ARROW}>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="scrollbar-hide -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
