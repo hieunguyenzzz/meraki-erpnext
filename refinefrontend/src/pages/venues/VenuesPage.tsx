@@ -11,7 +11,6 @@ import type { VenueRow } from "@/lib/venue";
 import { CITY_TABS } from "./venues-list/cities";
 import { VenueCard, VenueCardsSkeleton } from "./venues-list/VenueCard";
 import { VenuesFilterBar } from "./venues-list/VenuesFilterBar";
-import { useVenueCovers } from "./venues-list/useVenueCovers";
 
 export default function VenuesPage() {
   const navigate = useNavigate();
@@ -35,12 +34,6 @@ export default function VenuesPage() {
   if (isError) console.error("Venues listing failed", error);
 
   const allVenues = useMemo(() => data?.venues ?? [], [data]);
-
-  const coverNames = useMemo(
-    () => allVenues.map((v) => v.custom_cover_photo).filter((n): n is string => !!n),
-    [allVenues]
-  );
-  const covers = useVenueCovers(coverNames);
 
   // Counts per tab
   const counts = useMemo(() => {
@@ -67,8 +60,8 @@ export default function VenuesPage() {
     const s = search.toLowerCase();
     return allVenues.filter((v) => {
       if (activeTabCity && v.custom_venue_city !== activeTabCity) return false;
-      if (typeFilter && typeFilter !== "__all__" && v.custom_venue_type !== typeFilter) return false;
-      if (priceFilter && priceFilter !== "__all__" && v.custom_venue_price_range !== priceFilter) return false;
+      if (typeFilter && v.custom_venue_type !== typeFilter) return false;
+      if (priceFilter && v.custom_venue_price_range !== priceFilter) return false;
       if (s) {
         const hay = [v.supplier_name, v.custom_venue_location_subarea, v.custom_venue_insights]
           .filter(Boolean)
@@ -114,7 +107,6 @@ export default function VenuesPage() {
             <VenueCard
               key={v.name}
               venue={v}
-              coverUrl={v.custom_cover_photo ? covers[v.custom_cover_photo] : undefined}
               showCity={tabKey === "all"}
             />
           ))}
@@ -160,7 +152,7 @@ export default function VenuesPage() {
             onSaved={(name) => {
               setAddOpen(false);
               void refetch();
-              navigate(`/venues/${name}`);
+              navigate(`/venues/${encodeURIComponent(name)}`);
             }}
             onCancel={() => setAddOpen(false)}
           />

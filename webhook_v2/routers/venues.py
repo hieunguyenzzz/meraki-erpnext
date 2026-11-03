@@ -70,8 +70,19 @@ def list_venues(city: str | None = None, _client: ERPNextClient | None = None) -
     with ThreadPoolExecutor(max_workers=10) as pool:
         results = list(pool.map(_fetch_areas, [v["name"] for v in venues]))
 
+    cover_names = [v["custom_cover_photo"] for v in venues if v.get("custom_cover_photo")]
+    cover_urls: dict[str, str] = {}
+    if cover_names:
+        files = client._get("/api/resource/File", params={
+            "filters": json.dumps([["name", "in", cover_names]]),
+            "fields": json.dumps(["name", "file_url"]),
+            "limit_page_length": 0,
+        }).get("data", [])
+        cover_urls = {f["name"]: f["file_url"] for f in files if f.get("file_url")}
+
     for v, areas in zip(venues, results):
         v["areas"] = areas
+        v["cover_url"] = cover_urls.get(v.get("custom_cover_photo") or "")
 
     return {"venues": venues}
 

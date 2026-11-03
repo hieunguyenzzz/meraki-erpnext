@@ -24,12 +24,11 @@ function initials(name: string): string {
 
 interface Props {
   venue: VenueRow;
-  coverUrl?: string;
   showCity: boolean;
 }
 
 /** Photo card: stacked on desktop (grid), thumbnail-left row on phones. */
-export function VenueCard({ venue, coverUrl, showCity }: Props) {
+export function VenueCard({ venue, showCity }: Props) {
   const where = [venue.custom_venue_location_subarea, showCity ? venue.custom_venue_city : null].filter(Boolean).join(" · ");
   const bounds = capacityBounds(venue.areas);
   const phoneMeta = [where, bounds?.max ? `up to ${bounds.max}` : null].filter(Boolean).join(" · ");
@@ -45,11 +44,11 @@ export function VenueCard({ venue, coverUrl, showCity }: Props) {
       <div
         className={cn(
           "flex h-24 w-24 shrink-0 items-end overflow-hidden rounded-xl md:h-[150px] md:w-full md:rounded-none",
-          !coverUrl && tintFor(venue.name)
+          !venue.cover_url && tintFor(venue.name)
         )}
       >
-        {coverUrl ? (
-          <img src={coverUrl} alt={venue.supplier_name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+        {venue.cover_url ? (
+          <img src={venue.cover_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
         ) : (
           <span className="p-2.5 text-xs font-semibold md:text-sm">{initials(venue.supplier_name)}</span>
         )}

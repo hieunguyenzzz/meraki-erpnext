@@ -64,12 +64,12 @@ function ParsedContactCard({ contact }: { contact: ContactView }) {
         )}
         {contact.phone && (
           <ContactRow label="Phone">
-<PhoneLink value={contact.phone} />
+            <PhoneLink value={contact.phone} />
           </ContactRow>
         )}
         {contact.alt_phone && (
           <ContactRow label="Alt">
-<PhoneLink value={contact.alt_phone} />
+            <PhoneLink value={contact.alt_phone} />
           </ContactRow>
         )}
       </div>

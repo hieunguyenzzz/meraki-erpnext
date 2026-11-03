@@ -21,14 +21,16 @@ function initials(name: string): string {
 export function VenueDetailHero({ venue, coverPhotoUrl, photoUrls, driveLinkUrl, onSeeAll }: VenueDetailHeroProps) {
   const cover = coverPhotoUrl ?? photoUrls[0] ?? null;
   const others = photoUrls.filter((u) => u !== cover).slice(0, 3);
-  const remaining = Math.max(0, photoUrls.length - 1 - others.length);
+  // The cover may or may not be one of the attached images; count it once either way.
+  const total = new Set(cover ? [cover, ...photoUrls] : photoUrls).size;
+  const remaining = Math.max(0, total - 1 - others.length);
 
   const drive = driveLinkUrl && (
     <a
       href={driveLinkUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="absolute bottom-3 left-3 flex h-10 items-center gap-1.5 rounded-full bg-background/90 px-3.5 text-sm font-semibold shadow-sm backdrop-blur-sm hover:bg-background"
+      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 absolute bottom-3 left-3 flex h-10 items-center gap-1.5 rounded-full bg-background/90 px-3.5 text-sm font-semibold shadow-sm backdrop-blur-sm hover:bg-background"
     >
       View Drive
       <ExternalLink className="h-3.5 w-3.5" aria-hidden />
@@ -59,9 +61,9 @@ export function VenueDetailHero({ venue, coverPhotoUrl, photoUrls, driveLinkUrl,
       <button
         type="button"
         onClick={onSeeAll}
-        className="h-10 rounded-full bg-foreground px-4 text-sm font-semibold text-background max-md:absolute max-md:bottom-3 max-md:right-3 md:h-auto md:rounded-2xl md:text-[15px]"
+        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-10 rounded-full bg-foreground px-4 text-sm font-semibold text-background max-md:absolute max-md:bottom-3 max-md:right-3 md:h-auto md:rounded-2xl md:text-[15px]"
       >
-        <span className="md:hidden">{photoUrls.length} photos</span>
+        <span className="md:hidden">{total} photos</span>
         <span className="max-md:hidden">{remaining > 0 ? `+ ${remaining} photos` : "All photos"}</span>
       </button>
       {drive}

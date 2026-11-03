@@ -306,3 +306,27 @@ def test_upsert_changed_name_clears_last_name_and_updates_phones_in_place():
     body = client._put.call_args[0][1]
     assert body["first_name"] == "Mai Lan" and body["last_name"] == ""
     assert [(p["name"], p["phone"]) for p in body["phone_nos"]] == [("p1", "333"), ("p2", "444")]
+
+
+def test_listing_returns_cover_url_from_one_file_lookup():
+    from webhook_v2.routers.venues import list_venues
+
+    calls = []
+
+    def _fake_get(url, params=None):
+        calls.append(url)
+        if url == "/api/resource/Supplier":
+            return {"data": [
+                {"name": "A", "custom_cover_photo": "f1"},
+                {"name": "B", "custom_cover_photo": None},
+            ]}
+        if url == "/api/resource/File":
+            return {"data": [{"name": "f1", "file_url": "/files/a.jpg"}]}
+        return {"data": {"custom_venue_wedding_areas": []}}
+
+    client = MagicMock()
+    client._get.side_effect = _fake_get
+    venues = {v["name"]: v for v in list_venues(_client=client)["venues"]}
+    assert venues["A"]["cover_url"] == "/files/a.jpg"
+    assert venues["B"]["cover_url"] is None
+    assert calls.count("/api/resource/File") == 1

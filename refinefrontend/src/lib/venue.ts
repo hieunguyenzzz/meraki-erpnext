@@ -37,4 +37,5 @@ export function capacityLabel(areas: VenueWeddingArea[]): string | null {
 /** Listing row from /inquiry-api/venues/listing: a Supplier with its wedding areas. */
 export interface VenueRow extends VenueSupplier {
   areas: VenueWeddingArea[];
+  cover_url?: string | null;
 }

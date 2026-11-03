@@ -24,15 +24,14 @@ interface Props {
 export function VenuesFilterBar(p: Props) {
   return (
     <div className="flex flex-col gap-3">
-      <div role="tablist" aria-label="City" className="scrollbar-hide -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
+      <div role="group" aria-label="City" className="scrollbar-hide -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
         {CITY_TABS.map((t) => {
           const active = p.city === t.key;
           return (
             <button
               key={t.key}
               type="button"
-              role="tab"
-              aria-selected={active}
+              aria-pressed={active}
               onClick={() => p.onCity(t.key)}
               className={cn(
                 "h-10 shrink-0 whitespace-nowrap rounded-full border px-3.5 text-sm font-semibold tabular-nums transition-colors",
