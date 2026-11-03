@@ -1,26 +1,23 @@
 /* Mobile Theme - Wedding-Inspired Design */
 
-/* Typography - Elegant but highly readable */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Source+Sans+3:wght@400;500;600&display=swap');
-
 :root {
   /* Warm, wedding-inspired palette */
-  --color-cream: #FDF8F3;
-  --color-blush: #F5E6E0;
-  --color-rose: #C9A9A6;
-  --color-sage: #A8B5A0;
-  --color-charcoal: #3D3D3D;
-  --color-gold: #C4A962;
+  --color-cream: hsl(var(--background));
+  --color-blush: hsl(var(--accent));
+  --color-rose: hsl(var(--primary));
+  --color-sage: hsl(var(--success));
+  --color-charcoal: hsl(var(--foreground));
+  --color-gold: hsl(var(--gilt));
 
   /* Status colors - soft but clear */
-  --status-new: #7BA3C9;       /* Soft blue */
-  --status-pending: #E8C47C;   /* Warm gold */
-  --status-confirmed: #8FB573; /* Sage green */
-  --status-urgent: #D4837A;    /* Muted coral */
+  --status-new: hsl(var(--info));
+  --status-pending: hsl(var(--warning));
+  --status-confirmed: hsl(var(--success));
+  --status-urgent: hsl(var(--destructive));
 
   /* Typography */
   --font-display: 'Cormorant Garamond', Georgia, serif;
-  --font-body: 'Source Sans 3', system-ui, sans-serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
 
   /* Touch targets - minimum 48px for accessibility */
   --touch-target-min: 48px;
@@ -131,31 +128,30 @@
 }
 
 .status-new {
-  background-color: rgba(123, 163, 201, 0.15);
-  color: var(--status-new);
+  background-color: hsl(var(--info-soft));
+  color: hsl(var(--info-soft-foreground));
 }
 
 .status-pending {
-  background-color: rgba(232, 196, 124, 0.15);
-  color: var(--status-pending);
+  background-color: hsl(var(--warning-soft));
+  color: hsl(var(--warning-soft-foreground));
 }
 
 .status-confirmed {
-  background-color: rgba(143, 181, 115, 0.15);
-  color: var(--status-confirmed);
+  background-color: hsl(var(--success-soft));
+  color: hsl(var(--success-soft-foreground));
 }
 
 .status-urgent {
-  background-color: rgba(212, 131, 122, 0.15);
-  color: var(--status-urgent);
+  background-color: hsl(var(--danger-soft));
+  color: hsl(var(--danger-soft-foreground));
 }
 
 /* Card styles */
 .mobile-card {
-  background: white;
-  border-radius: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: hsl(var(--card));
+  border-radius: var(--radius-card);
+  border: 1px solid hsl(var(--border));
   overflow: hidden;
 }
 
@@ -177,26 +173,26 @@
 }
 
 .action-btn-call {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: rgb(5, 150, 105);
+  background-color: hsl(var(--success-soft));
+  color: hsl(var(--success-soft-foreground));
 }
 
 .action-btn-call:active {
-  background-color: rgba(16, 185, 129, 0.2);
+  background-color: hsl(var(--success-soft) / 0.7);
 }
 
 .action-btn-email {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: rgb(37, 99, 235);
+  background-color: hsl(var(--info-soft));
+  color: hsl(var(--info-soft-foreground));
 }
 
 .action-btn-email:active {
-  background-color: rgba(59, 130, 246, 0.2);
+  background-color: hsl(var(--info-soft) / 0.7);
 }
 
 /* Frosted glass effect */
 .frosted-glass {
-  background: rgba(255, 255, 255, 0.8);
+  background: hsl(var(--background) / 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
@@ -212,8 +208,8 @@
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 9999px;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: hsl(var(--card));
+  box-shadow: 0 2px 8px hsl(var(--foreground) / 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -233,7 +229,7 @@
   width: 5rem;
   height: 5rem;
   border-radius: 9999px;
-  background: #f3f4f6;
+  background: hsl(var(--accent));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -243,13 +239,13 @@
 .empty-state-title {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #111827;
+  color: hsl(var(--foreground));
   margin-bottom: 0.5rem;
   font-family: var(--font-display);
 }
 
 .empty-state-description {
-  color: #6b7280;
+  color: hsl(var(--muted-foreground));
   max-width: 16rem;
 }
 
@@ -266,9 +262,9 @@
 .skeleton {
   background: linear-gradient(
     90deg,
-    #f0f0f0 25%,
-    #e0e0e0 50%,
-    #f0f0f0 75%
+    hsl(var(--muted)) 25%,
+    hsl(var(--border)) 50%,
+    hsl(var(--muted)) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
@@ -277,8 +273,8 @@
 
 /* Offline banner */
 .offline-banner {
-  background: var(--status-pending);
-  color: white;
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
   padding: 0.75rem 1rem;
   display: flex;
   align-items: center;
@@ -294,9 +290,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: white;
-  border-radius: 1.5rem 1.5rem 0 0;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  background: hsl(var(--card));
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  box-shadow: 0 -4px 20px hsl(var(--foreground) / 0.15);
   padding-bottom: var(--safe-bottom);
   max-height: 90vh;
   overflow-y: auto;
@@ -305,7 +301,7 @@
 .bottom-sheet-handle {
   width: 2.5rem;
   height: 0.25rem;
-  background: #d1d5db;
+  background: hsl(var(--input));
   border-radius: 9999px;
   margin: 0.75rem auto;
 }
