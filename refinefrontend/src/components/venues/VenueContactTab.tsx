@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { VenueSupplier } from "@/lib/types";
+import { telHref } from "@/lib/phone";
 
 export interface ContactView {
   name?: string;
@@ -22,7 +23,7 @@ function hasAnyField(c: ContactView): boolean {
 function ContactRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-3 text-sm">
-      <span className="w-12 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-0.5">
+      <span className="w-14 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-0.5">
         {label}
       </span>
       <span>{children}</span>
@@ -30,10 +31,20 @@ function ContactRow({ label, children }: { label: string; children: React.ReactN
   );
 }
 
+function PhoneLink({ value }: { value: string }) {
+  const href = telHref(value);
+  if (!href) return <>{value}</>;
+  return (
+    <a href={href} className="inline-flex min-h-[44px] items-center text-primary hover:underline md:min-h-0">
+      {value}
+    </a>
+  );
+}
+
 function ParsedContactCard({ contact }: { contact: ContactView }) {
   return (
-    <div className="space-y-2">
-      <p className="text-sm font-semibold mb-3">Contact</p>
+    <div className="space-y-2 rounded-2xl border bg-card p-5">
+      <p className="text-[17px] font-semibold mb-3">Contact</p>
       <div className="border-t pt-3 space-y-2">
         {contact.name && (
           <ContactRow label="Name">{contact.name}</ContactRow>
@@ -45,7 +56,7 @@ function ParsedContactCard({ contact }: { contact: ContactView }) {
           <ContactRow label="Email">
             <a
               href={`mailto:${contact.email}`}
-              className="text-primary hover:underline"
+              className="inline-flex min-h-[44px] items-center break-all text-primary hover:underline md:min-h-0"
             >
               {contact.email}
             </a>
@@ -53,22 +64,12 @@ function ParsedContactCard({ contact }: { contact: ContactView }) {
         )}
         {contact.phone && (
           <ContactRow label="Phone">
-            <a
-              href={`tel:${contact.phone}`}
-              className="text-primary hover:underline"
-            >
-              {contact.phone}
-            </a>
+<PhoneLink value={contact.phone} />
           </ContactRow>
         )}
         {contact.alt_phone && (
           <ContactRow label="Alt">
-            <a
-              href={`tel:${contact.alt_phone}`}
-              className="text-primary hover:underline"
-            >
-              {contact.alt_phone}
-            </a>
+<PhoneLink value={contact.alt_phone} />
           </ContactRow>
         )}
       </div>
@@ -83,9 +84,9 @@ function RawContactCard({ raw }: { raw: string }) {
   const isLong = raw.length > PREVIEW_LENGTH;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 rounded-2xl border bg-card p-5">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold">Original text</p>
+        <p className="text-[17px] font-semibold">Original text</p>
         {isLong && (
           <Button
             variant="ghost"

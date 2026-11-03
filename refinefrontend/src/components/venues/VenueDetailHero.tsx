@@ -1,119 +1,70 @@
-import { useMemo } from "react";
-import { MapPin, Users, CalendarDays, ExternalLink } from "lucide-react";
-import type { VenueSupplier, VenueWeddingArea } from "@/lib/types";
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
+import { ExternalLink } from "lucide-react";
+import type { VenueSupplier } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface VenueDetailHeroProps {
   venue: VenueSupplier;
-  areas: VenueWeddingArea[];
   coverPhotoUrl?: string | null;
-  weddingsCount: number;
+  /** All image URLs attached to the venue (cover included). */
+  photoUrls: string[];
   driveLinkUrl?: string | null;
+  onSeeAll: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+const FILLERS = ["bg-success-soft", "bg-info-soft", "bg-accent"];
 
-function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
+function initials(name: string): string {
+  return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("");
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+/** Photo mosaic: cover plus up to three more photos; tinted tiles stand in where photos are missing. */
+export function VenueDetailHero({ venue, coverPhotoUrl, photoUrls, driveLinkUrl, onSeeAll }: VenueDetailHeroProps) {
+  const cover = coverPhotoUrl ?? photoUrls[0] ?? null;
+  const others = photoUrls.filter((u) => u !== cover).slice(0, 3);
+  const remaining = Math.max(0, photoUrls.length - 1 - others.length);
 
-export function VenueDetailHero({
-  venue,
-  areas,
-  coverPhotoUrl,
-  weddingsCount,
-  driveLinkUrl,
-}: VenueDetailHeroProps) {
-  const capacityPill = useMemo(() => {
-    const mins = areas
-      .map((a) => a.capacity_min)
-      .filter((v): v is number => typeof v === "number" && v > 0);
-    const maxs = areas
-      .map((a) => a.capacity_max)
-      .filter((v): v is number => typeof v === "number" && v > 0);
+  const drive = driveLinkUrl && (
+    <a
+      href={driveLinkUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="absolute bottom-3 left-3 flex h-10 items-center gap-1.5 rounded-full bg-background/90 px-3.5 text-sm font-semibold shadow-sm backdrop-blur-sm hover:bg-background"
+    >
+      View Drive
+      <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+    </a>
+  );
 
-    const min = mins.length > 0 ? Math.min(...mins) : null;
-    const max = maxs.length > 0 ? Math.max(...maxs) : null;
-
-    if (min === null && max === null) return null;
-
-    const val = min !== null && max !== null && min !== max
-      ? `${min}–${max} pax`
-      : min !== null
-      ? `${min} pax`
-      : `${max} pax`;
-
-    return `Capacity ${val}`;
-  }, [areas]);
+  if (!cover) {
+    return (
+      <div className="relative flex h-[200px] items-center justify-center overflow-hidden rounded-2xl bg-success-soft md:h-[310px]">
+        <span className="select-none font-display text-7xl font-semibold text-success-soft-foreground/60">
+          {initials(venue.supplier_name)}
+        </span>
+        {drive}
+      </div>
+    );
+  }
 
   return (
-    <div className="relative h-[280px] w-full overflow-hidden rounded-lg">
-      {/* Background: photo or gradient */}
-      {coverPhotoUrl ? (
-        <>
-          <img
-            src={coverPhotoUrl}
-            alt={venue.supplier_name}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-          <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/60 to-transparent" />
-        </>
-      ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-[#C9A9A6] to-[#C4A962] flex items-center justify-center">
-          <span className="text-7xl font-bold text-white/60 select-none">
-            {getInitials(venue.supplier_name)}
-          </span>
-        </div>
-      )}
-
-      {/* Stat pills — bottom-left */}
-      <div className="absolute bottom-4 left-4 flex gap-2 flex-wrap">
-        {/* Pill 1: areas count */}
-        <div className="bg-background/90 backdrop-blur-sm rounded-full px-3 py-1.5 text-sm font-medium shadow-sm">
-          <MapPin className="inline h-3.5 w-3.5 mr-1.5 -mt-0.5" />
-          {areas.length} area{areas.length === 1 ? "" : "s"}
-        </div>
-
-        {/* Pill 2: capacity (conditional) */}
-        {capacityPill && (
-          <div className="bg-background/90 backdrop-blur-sm rounded-full px-3 py-1.5 text-sm font-medium shadow-sm">
-            <Users className="inline h-3.5 w-3.5 mr-1.5 -mt-0.5" />
-            {capacityPill}
-          </div>
-        )}
-
-        {/* Pill 3: weddings count */}
-        <div className="bg-background/90 backdrop-blur-sm rounded-full px-3 py-1.5 text-sm font-medium shadow-sm">
-          <CalendarDays className="inline h-3.5 w-3.5 mr-1.5 -mt-0.5" />
-          {weddingsCount} wedding{weddingsCount === 1 ? "" : "s"}
-        </div>
+    <div className="relative grid h-[200px] grid-cols-1 gap-2.5 md:h-[310px] md:grid-cols-4 md:grid-rows-2">
+      <div className="overflow-hidden rounded-2xl bg-muted md:col-span-2 md:row-span-2">
+        <img src={cover} alt={venue.supplier_name} className="h-full w-full object-cover" />
       </div>
-
-      {/* View Drive link — bottom-right (conditional) */}
-      {driveLinkUrl && (
-        <a
-          href={driveLinkUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-sm rounded-full px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-background flex items-center gap-1.5"
-        >
-          View Drive
-          <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      )}
+      {[0, 1, 2].map((i) => (
+        <div key={i} className={cn("hidden overflow-hidden rounded-2xl md:block", !others[i] && FILLERS[i])}>
+          {others[i] && <img src={others[i]} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />}
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={onSeeAll}
+        className="h-10 rounded-full bg-foreground px-4 text-sm font-semibold text-background max-md:absolute max-md:bottom-3 max-md:right-3 md:h-auto md:rounded-2xl md:text-[15px]"
+      >
+        <span className="md:hidden">{photoUrls.length} photos</span>
+        <span className="max-md:hidden">{remaining > 0 ? `+ ${remaining} photos` : "All photos"}</span>
+      </button>
+      {drive}
     </div>
   );
 }
