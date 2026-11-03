@@ -37,7 +37,9 @@ export default function ApplicantDetailPage() {
         "name", "applicant_name", "email_id", "phone_number",
         "job_title", "source", "applicant_rating", "creation",
         "cover_letter", "resume_attachment", "custom_recruiting_stage",
-        "status",
+        "status", "custom_city", "custom_linkedin_url", "lower_range",
+        "custom_education_degree", "custom_education_institution",
+        "custom_education_graduation_year", "custom_work_experience",
       ],
     },
   });
@@ -110,8 +112,8 @@ export default function ApplicantDetailPage() {
           <div className="flex min-w-0 flex-[2_1_320px] flex-col gap-4">
             <ContactCard applicant={applicant} />
             {application}
-            <InterviewsCard interviews={interviews} failed={interviewsQuery.isError} />
-            <OffersCard offers={offers} failed={offersQuery.isError} />
+            <InterviewsCard interviews={interviews} failed={interviewsQuery.isError} loading={interviewsQuery.isLoading} />
+            <OffersCard offers={offers} failed={offersQuery.isError} loading={offersQuery.isLoading} />
           </div>
         </div>
       ) : (
@@ -128,8 +130,8 @@ export default function ApplicantDetailPage() {
           </TabsContent>
           <TabsContent value="cv" className="space-y-3">{documents}</TabsContent>
           <TabsContent value="interviews" className="space-y-3">
-            <InterviewsCard interviews={interviews} failed={interviewsQuery.isError} />
-            <OffersCard offers={offers} failed={offersQuery.isError} />
+            <InterviewsCard interviews={interviews} failed={interviewsQuery.isError} loading={interviewsQuery.isLoading} />
+            <OffersCard offers={offers} failed={offersQuery.isError} loading={offersQuery.isLoading} />
           </TabsContent>
           <TabsContent value="comments"><CommentsCard name={id} /></TabsContent>
         </Tabs>

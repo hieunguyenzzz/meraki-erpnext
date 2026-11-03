@@ -28,7 +28,7 @@ export function DeleteApplicantDialog({ id, open, onOpenChange }: { id: string; 
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => { if (!loading) onOpenChange(o); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Delete Applicant</DialogTitle>

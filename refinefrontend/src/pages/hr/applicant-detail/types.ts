@@ -11,6 +11,13 @@ export interface Applicant {
   resume_attachment?: string;
   custom_recruiting_stage?: string;
   status?: string;
+  custom_city?: string;
+  custom_linkedin_url?: string;
+  lower_range?: number;
+  custom_education_degree?: string;
+  custom_education_institution?: string;
+  custom_education_graduation_year?: number;
+  custom_work_experience?: string;
 }
 
 export interface InterviewRow {

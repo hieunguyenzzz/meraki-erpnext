@@ -3,6 +3,7 @@ import { useList } from "@refinedev/core";
 import { MentionsInput, Mention } from "react-mentions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StaffAvatar } from "@/components/staff/StaffAvatar";
 import { isoDate } from "../employee-detail/dates";
 import { commentToSafeHtml, toFrappeHTML } from "./commentHtml";
@@ -108,8 +109,14 @@ export function CommentsCard({ name }: { name: string }) {
       <CardHeader><CardTitle>Comments{comments.length > 0 ? ` · ${comments.length}` : ""}</CardTitle></CardHeader>
       <CardContent>
         <div className="mb-4 space-y-4">
+          {query?.isLoading && (
+            <div className="space-y-3" aria-busy="true">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-4/5" />
+            </div>
+          )}
           {query?.isError && <p role="alert" className="text-sm text-danger-soft-foreground">Could not load comments.</p>}
-          {!query?.isError && comments.length === 0 && <p className="text-sm text-muted-foreground">No comments yet.</p>}
+          {!query?.isLoading && !query?.isError && comments.length === 0 && <p className="text-sm text-muted-foreground">No comments yet.</p>}
           {comments.map((c) => (
             <div key={c.name} className="flex gap-2.5 text-sm leading-relaxed">
               <StaffAvatar name={c.owner} id={c.owner} className="h-8 w-8 text-[11px]" />

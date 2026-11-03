@@ -13,7 +13,7 @@ export function RatingStars({ stars, onChange, disabled }: Props) {
   const [hovered, setHovered] = useState(0);
   return (
     <div className="flex items-center gap-2">
-      <span role="group" aria-label="Rating" className="flex items-center" onMouseLeave={() => setHovered(0)}>
+      <span role="radiogroup" aria-label="Rating" className="flex items-center" onMouseLeave={() => setHovered(0)}>
         {[1, 2, 3, 4, 5].map((i) => {
           const filled = hovered > 0 ? i <= hovered : i <= stars;
           return (
@@ -22,7 +22,8 @@ export function RatingStars({ stars, onChange, disabled }: Props) {
               type="button"
               disabled={disabled}
               aria-label={`${i} star${i > 1 ? "s" : ""}`}
-              aria-pressed={i <= stars}
+              role="radio"
+              aria-checked={i === stars}
               onMouseEnter={() => setHovered(i)}
               onClick={() => onChange(i)}
               className="flex h-11 w-9 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 md:h-8 md:w-7"
