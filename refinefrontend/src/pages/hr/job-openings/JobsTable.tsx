@@ -12,7 +12,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
 
 interface Props {
   jobs: JobOpening[];
-  sort: Sort;
+  sort: Sort | null;
   onSort: (key: SortKey) => void;
   onEdit: (job: JobOpening) => void;
   onToggleStatus: (job: JobOpening) => void;
@@ -27,10 +27,10 @@ export function JobsTable({ jobs, sort, onSort, onEdit, onToggleStatus }: Props)
           <thead className="bg-muted/60">
             <tr>
               {COLUMNS.map((c) => (
-                <th key={c.key} scope="col" aria-sort={sort.key === c.key ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className="whitespace-nowrap px-4 py-3 text-left text-[13px] font-semibold text-muted-foreground">
+                <th key={c.key} scope="col" aria-sort={sort?.key === c.key ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className="whitespace-nowrap px-4 py-3 text-left text-[13px] font-semibold text-muted-foreground">
                   <button type="button" onClick={() => onSort(c.key)} className="inline-flex items-center gap-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     {c.label}
-                    {sort.key === c.key && (sort.dir === 1 ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)}
+                    {sort?.key === c.key && (sort.dir === 1 ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)}
                   </button>
                 </th>
               ))}

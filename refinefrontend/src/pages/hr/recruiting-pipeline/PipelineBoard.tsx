@@ -16,13 +16,29 @@ function groupByStage(items: RecruitingItem[]): Grouped {
   return grouped;
 }
 
+const REJECTED_KEY = "recruiting-show-rejected";
+
 function EmptyStage({ label }: { label: string }) {
   return <p className="py-8 text-center text-sm text-muted-foreground">No applicants in {label}</p>;
 }
 
 /** Desktop: five columns side by side; Rejected starts collapsed like the design. No drag, as before. */
 function DesktopBoard({ grouped, onOpenSheet }: { grouped: Grouped; onOpenSheet: OpenSheet }) {
-  const [showRejected, setShowRejected] = useState(false);
+  const [showRejected, setShowRejectedState] = useState(() => {
+    try {
+      return localStorage.getItem(REJECTED_KEY) === "1";
+    } catch {
+      return false; // storage blocked: start collapsed
+    }
+  });
+  function setShowRejected(show: boolean) {
+    setShowRejectedState(show);
+    try {
+      localStorage.setItem(REJECTED_KEY, show ? "1" : "0");
+    } catch {
+      // storage blocked: the choice just won't persist
+    }
+  }
   return (
     <div className="overflow-x-auto pb-2">
       <div className="flex w-max gap-3">

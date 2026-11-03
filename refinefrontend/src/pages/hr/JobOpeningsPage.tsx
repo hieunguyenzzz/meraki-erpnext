@@ -112,7 +112,7 @@ export default function JobOpeningsPage() {
           {rows.length} position{rows.length === 1 ? "" : "s"}
         </span>
         {isDesktop
-          ? <JobsTable jobs={rows} sort={sort ?? { key: "job_title", dir: 1 }} onSort={toggleSort} onEdit={openEdit} onToggleStatus={(j) => void handleToggleStatus(j)} />
+          ? <JobsTable jobs={rows} sort={sort} onSort={toggleSort} onEdit={openEdit} onToggleStatus={(j) => void handleToggleStatus(j)} />
           : <JobCards jobs={rows} onEdit={openEdit} onToggleStatus={(j) => void handleToggleStatus(j)} />}
       </>
     );
