@@ -1,6 +1,10 @@
 import type { ExpenseRow } from "./types";
 
-const cell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+/** Text cells that start with = + - @ tab or CR are prefixed with ' so a spreadsheet won't run them as formulas. Numbers stay raw. */
+const cell = (v: string | number) => {
+  const text = typeof v === "string" && /^[=+\-@\t\r]/.test(v) ? `'${v}` : String(v);
+  return `"${text.replace(/"/g, '""')}"`;
+};
 
 /** Download the rows on screen as a CSV (ISO dates, raw VND amounts so a spreadsheet can sum them). */
 export function exportExpensesCsv(rows: ExpenseRow[], filename: string) {

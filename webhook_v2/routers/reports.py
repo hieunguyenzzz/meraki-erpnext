@@ -7,6 +7,7 @@ GET /reports/wedding-expenses/projects   — lightweight project list for dropdo
 """
 
 import json
+import uuid
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from webhook_v2.services.erpnext import ERPNextClient
@@ -246,6 +247,11 @@ def wedding_expense_projects():
     return {"data": projects}
 
 
+def _get_list(client: ERPNextClient, doctype: str, **kwargs) -> list[dict]:
+    """frappe.client.get_list over POST (long `in` filters would overflow a GET URL)."""
+    return client._post("/api/method/frappe.client.get_list", {"doctype": doctype, **kwargs}).get("message") or []
+
+
 def _wedding_projects_in_period(client: ERPNextClient, year: str, month: str) -> list[dict]:
     """Non-cancelled weddings whose end date falls in the year (and month, if given)."""
     filters: list = [["status", "!=", "Cancelled"]]
@@ -271,8 +277,8 @@ def wedding_expense_report(
     """
     Expense report for one wedding (project) or for every wedding ending in year[/month].
 
-    Category totals use the wedding page's Expenses card rule: rejected expenses are
-    left out and the label is the expense account without the " - MWP" suffix.
+    Totals and category amounts count approved expenses only, like the wedding page's
+    Expenses card (label = expense account without " - MWP"); pending is reported apart.
     """
     client = ERPNextClient()
 
@@ -288,95 +294,92 @@ def wedding_expense_report(
             return {"data": [], "summary": {"total": 0.0, "approved": 0.0, "pending": 0.0, "count": 0, "counted": 0}, "categories": []}
         pis_filter = ["project", "in", list(names)]
 
-    # Fetch all PIs (Draft + Submitted)
-    pis = client._get("/api/resource/Purchase Invoice", params={
-        "filters": json.dumps([
-            pis_filter,
-            ["docstatus", "in", [0, 1]],
-        ]),
-        "fields": json.dumps([
-            "name", "supplier", "supplier_name", "posting_date", "project",
+    # Constant number of ERPNext calls however many invoices there are. Lookups with long
+    # `in` lists go over POST (frappe.client.get_list) so they cannot overflow a GET URL.
+    rows_raw = _get_list(
+        client, "Purchase Invoice",
+        fields=[
+            "name", "supplier_name", "posting_date", "project",
             "grand_total", "docstatus", "custom_rejected", "custom_expense_staff",
-        ]),
-        "order_by": "posting_date desc, creation desc",
-        "limit_page_length": 0,
-    }).get("data", [])
-    if project:
-        names = {project: project}
-        proj = client._get(f"/api/resource/Project/{project}").get("data", {})
-        names[project] = proj.get("project_name") or project
+            "`tabPurchase Invoice Item`.idx", "`tabPurchase Invoice Item`.item_name",
+            "`tabPurchase Invoice Item`.expense_account",
+        ],
+        filters=[pis_filter, ["docstatus", "in", [0, 1]]],
+        order_by="`tabPurchase Invoice`.posting_date desc, `tabPurchase Invoice`.creation desc",  # qualified: the item join also has `creation`
+        limit_page_length=0,
+    )
+    # One row per invoice item: keep the lowest-idx (first) item per invoice.
+    first: dict[str, dict] = {}
+    for r in rows_raw:
+        cur = first.get(r["name"])
+        if cur is None or (r.get("idx") or 999) < (cur.get("idx") or 999):
+            first[r["name"]] = r
+    pis = list(first.values())  # dicts keep the query order
 
-    # Batch-fetch attached files for receipt thumbnails
+    if project:
+        proj = client._get(f"/api/resource/Project/{project}").get("data", {})
+        names = {project: proj.get("project_name") or project}
+
+    # Receipt thumbnails: first attached file per invoice. A failure costs the thumbnails, not the report.
     pi_names = [pi["name"] for pi in pis]
     file_map: dict[str, str] = {}
     if pi_names:
         try:
-            files = client._get("/api/resource/File", params={
-                "filters": json.dumps([
+            files = _get_list(
+                client, "File",
+                fields=["attached_to_name", "file_url"],
+                filters=[
                     ["attached_to_doctype", "=", "Purchase Invoice"],
                     ["attached_to_name", "in", pi_names],
                     ["file_url", "is", "set"],
-                ]),
-                "fields": json.dumps(["attached_to_name", "file_url"]),
-                "limit_page_length": 0,
-            }).get("data", [])
+                ],
+                limit_page_length=0,
+            )
             for f in files:
                 doc_name = f.get("attached_to_name")
                 if doc_name and doc_name not in file_map:
                     file_map[doc_name] = f["file_url"]
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("wedding_expense_receipts_failed", correlation_id=uuid.uuid4().hex[:8],
+                        invoices=len(pi_names), error=str(e))
 
-    # Collect unique staff IDs for batch name lookup
-    staff_ids = {pi["custom_expense_staff"] for pi in pis if pi.get("custom_expense_staff")}
+    staff_ids = list({pi["custom_expense_staff"] for pi in pis if pi.get("custom_expense_staff")})
     staff_names: dict[str, str] = {}
     if staff_ids:
-        emps = client._get("/api/resource/Employee", params={
-            "filters": json.dumps([["name", "in", list(staff_ids)]]),
-            "fields": json.dumps(["name", "employee_name"]),
-            "limit_page_length": 0,
-        }).get("data", [])
+        emps = _get_list(client, "Employee", fields=["name", "employee_name"],
+                         filters=[["name", "in", staff_ids]], limit_page_length=0)
         staff_names = {e["name"]: e["employee_name"] for e in emps}
 
-    # Build result rows — must fetch each PI doc for items (child table 403)
     rows = []
-    total = 0.0  # approved + pending; rejected expenses are left out, as on the wedding page
-    approved_total = 0.0
+    approved_total = 0.0  # same rule as the wedding page's Expenses card: approved only, rejected left out
     pending_total = 0.0
+    approved_count = 0
     by_category: dict[str, float] = {}
     for pi in pis:
-        docstatus = pi.get("docstatus", 0)
-        rejected = pi.get("custom_rejected", 0)
-        if docstatus == 0 and rejected:
+        if pi.get("docstatus") == 0 and pi.get("custom_rejected"):
             status = "Rejected"
-        elif docstatus == 0:
+        elif pi.get("docstatus") == 0:
             status = "Pending"
         else:
             status = "Approved"
 
-        pi_doc = client._get(f"/api/resource/Purchase Invoice/{pi['name']}").get("data", {})
-        items = pi_doc.get("items", [])
-        first_item = items[0] if items else {}
-
-        amount = float(pi.get("grand_total", 0))
-        category = first_item.get("expense_account", "")
-        description = first_item.get("item_name", "")
-        staff_id = pi.get("custom_expense_staff", "")
-
+        amount = float(pi.get("grand_total") or 0)
+        category = pi.get("expense_account") or ""
         category_label = category.replace(" - MWP", "") if category else ""
-        if status != "Rejected":
-            total += amount
-            key = category_label or "Uncategorised"
-            by_category[key] = by_category.get(key, 0.0) + amount
+        staff_id = pi.get("custom_expense_staff") or ""
+
         if status == "Approved":
             approved_total += amount
+            approved_count += 1
+            key = category_label or "Uncategorised"
+            by_category[key] = by_category.get(key, 0.0) + amount
         elif status == "Pending":
             pending_total += amount
 
         rows.append({
             "name": pi["name"],
             "posting_date": pi["posting_date"],
-            "description": description,
+            "description": pi.get("item_name") or "",
             "amount": amount,
             "category": category,
             "category_label": category_label,
@@ -392,11 +395,11 @@ def wedding_expense_report(
     return {
         "data": rows,
         "summary": {
-            "total": total,
+            "total": approved_total,
             "approved": approved_total,
             "pending": pending_total,
             "count": len(rows),
-            "counted": sum(1 for r in rows if r["status"] != "Rejected"),
+            "counted": approved_count,
         },
         "categories": [{"label": k, "amount": v} for k, v in sorted(by_category.items(), key=lambda kv: -kv[1])],
     }

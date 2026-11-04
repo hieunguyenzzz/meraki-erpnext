@@ -20,7 +20,7 @@ function StatusBadge({ s }: { s: string }) {
 
 /** Desktop layout (D-ExpenseReport.dc.html). */
 export function ExpenseTable({ rows, summary }: { rows: ExpenseRow[]; summary: ExpenseSummary }) {
-  const rejected = summary.count - summary.counted;
+  const notCounted = summary.count - summary.counted;
   return (
     <section className="overflow-hidden rounded-card border bg-card">
       <div className="overflow-x-auto">
@@ -50,8 +50,8 @@ export function ExpenseTable({ rows, summary }: { rows: ExpenseRow[]; summary: E
             ))}
             <tr className="border-t bg-muted/60 font-bold">
               <td colSpan={5} className="px-4 py-3">
-                Total · {summary.counted} {summary.counted === 1 ? "expense" : "expenses"}
-                {rejected > 0 && <span className="font-normal text-muted-foreground"> ({rejected} rejected not counted)</span>}
+                Total · {summary.counted} approved {summary.counted === 1 ? "expense" : "expenses"}
+                {notCounted > 0 && <span className="font-normal text-muted-foreground"> ({notCounted} pending or rejected not counted)</span>}
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-right">{formatVNDFull(summary.total)}</td>
               <td />

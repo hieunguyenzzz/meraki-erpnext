@@ -20,7 +20,8 @@ export function ExpenseFilters({ years, months, weddings, year, month, project, 
   const back = (fn: (v: string) => void) => (v: string) => fn(v === ALL ? "" : v);
   const label = "flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground";
   return (
-    <div className="grid grid-cols-2 gap-3 md:flex md:flex-wrap md:items-end md:gap-2.5 print:hidden">
+    <div className="flex flex-col gap-2 print:hidden">
+    <div className="grid grid-cols-2 gap-3 md:flex md:flex-wrap md:items-end md:gap-2.5">
       <label className={label}>
         Year
         <Select value={year} onValueChange={onYear}>
@@ -50,6 +51,8 @@ export function ExpenseFilters({ years, months, weddings, year, month, project, 
           </SelectContent>
         </Select>
       </label>
+    </div>
+    <p className="text-xs text-muted-foreground">Weddings are filtered by wedding date; all of a wedding's expenses are included.</p>
     </div>
   );
 }

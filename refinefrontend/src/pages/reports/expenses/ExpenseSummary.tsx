@@ -8,10 +8,8 @@ export function ExpenseSummary({ label, summary, categories }: { label: string; 
       <div className="col-span-2 flex flex-col gap-1.5 rounded-card border border-foreground bg-foreground p-4 text-background">
         <span className="text-xs opacity-80">Total · {label}</span>
         <b className="text-[22px] leading-7">{formatVNDFull(summary.total)}</b>
-        <span className="text-xs opacity-80">
-          {summary.counted} {summary.counted === 1 ? "expense" : "expenses"}
-          {summary.pending > 0 && ` · ${formatVNDFull(summary.pending)} pending`}
-        </span>
+        <span className="text-xs opacity-80">{summary.counted} approved {summary.counted === 1 ? "expense" : "expenses"}</span>
+        {summary.pending > 0 && <span className="text-xs opacity-80">+ {formatVNDFull(summary.pending)} pending</span>}
       </div>
       {categories.map((c) => (
         <div key={c.label} className="flex min-w-0 flex-col gap-1.5 rounded-card border bg-card p-4">
