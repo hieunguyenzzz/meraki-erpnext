@@ -50,3 +50,14 @@ def test_existing_income_tax_line_not_duplicated():
     _to_staff_view(slip)
     assert [d for d in slip["deductions"] if d["salary_component"] == "Income Tax"] == [
         {"salary_component": "Income Tax", "amount": 5}]
+
+
+def test_total_deduction_excludes_proration_so_gross_minus_deductions_is_net():
+    # Prorated slip: ERPNext gross 12,000,000 less a 2,000,000 proration adjustment deduction -> backend gross_pay 10,000,000.
+    slip = _slip()
+    slip["gross_pay"], slip["net_pay"] = 10_000_000, 10_000_000 - 1_050_000
+    slip["total_deduction"] = 1_050_000 + 2_000_000  # raw ERPNext total still includes proration
+    slip["deductions"].append({"salary_component": "Salary Proration Adj", "amount": 2_000_000})
+    _to_staff_view(slip)
+    assert slip["total_deduction"] == 1_050_000
+    assert slip["gross_pay"] - slip["total_deduction"] == slip["net_pay"]

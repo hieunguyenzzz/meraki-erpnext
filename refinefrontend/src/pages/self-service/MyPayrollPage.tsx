@@ -8,7 +8,7 @@ import { PayslipsMobile } from "./my-payroll/PayslipsMobile";
 import type { MySlipsResponse } from "./my-payroll/types";
 
 export default function MyPayrollPage() {
-  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const [response, setResponse] = useState<MySlipsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export default function MyPayrollPage() {
   const retry = () => load(() => false);
 
   return (
-    <div className="flex max-w-5xl flex-col gap-5 pb-28 max-md:mx-auto lg:pb-8">
+    <div className="flex max-w-5xl flex-col gap-5 pb-28 max-md:mx-auto md:pb-8">
       <div className="md:hidden">
         <h1 className="font-display text-3xl font-semibold tracking-tight">My Payroll</h1>
         <p className="text-muted-foreground">Your submitted payslips</p>

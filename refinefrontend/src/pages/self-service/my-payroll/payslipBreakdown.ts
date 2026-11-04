@@ -37,8 +37,8 @@ export interface PayslipBreakdown {
  * deduction ERPNext applies for prorated/probation slips). To keep the
  * breakdown reconciling (sum(earnings) === Gross, Gross - Total Deductions
  * === Net Pay) that adjustment moves out of Deductions into a negative
- * Earnings line, and the visible deduction lines are totalled here rather
- * than trusting the raw total_deduction (which still includes proration).
+ * Earnings line. The backend (_to_staff_view) already returns total_deduction
+ * without it, so the total is shown as given, not summed here.
  */
 export function buildBreakdown(slip: MySlip, commissionComponents: string[]): PayslipBreakdown {
   const prorationAdj = getAmount(slip.deductions, "Salary Proration Adj");
@@ -53,6 +53,6 @@ export function buildBreakdown(slip: MySlip, commissionComponents: string[]): Pa
     bonus: getAmount(slip.earnings, BONUS_COMPONENT),
     prorationAdj,
     visibleDeductions,
-    totalDeductions: visibleDeductions.reduce((sum, d) => sum + d.amount, 0),
+    totalDeductions: slip.total_deduction,
   };
 }

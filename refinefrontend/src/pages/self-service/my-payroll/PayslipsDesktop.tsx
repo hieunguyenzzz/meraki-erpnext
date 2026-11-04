@@ -3,7 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { formatVNDPlain } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PayslipBreakdownView } from "./PayslipBreakdownView";
-import { buildBreakdown, monthIso } from "./payslipBreakdown";
+import { monthIso } from "./payslipBreakdown";
 import type { MySlip } from "./types";
 
 interface Props {
@@ -28,7 +28,7 @@ export function PayslipsDesktop({ slips, commissionComponents }: Props) {
         </div>
         {slips.map((slip) => {
           const open = openName === slip.name;
-          const deductions = buildBreakdown(slip, commissionComponents).totalDeductions;
+          const deductions = slip.total_deduction;
           return (
             <div key={slip.name} className="border-t">
               <button
