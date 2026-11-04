@@ -13,7 +13,7 @@ interface ConversationSectionProps {
 }
 
 function ConversationFeed({ references, leadName = "Client" }: ConversationSectionProps) {
-  const items = useConversationItems(references);
+  const { items } = useConversationItems(references);
 
   if (items.length === 0) {
     return (

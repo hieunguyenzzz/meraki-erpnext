@@ -1,5 +1,5 @@
 import { useParams } from "react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useOne, useList, useDelete, useUpdate, useInvalidate, useNavigation } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -131,12 +131,19 @@ export default function LeadDetailPage() {
     }
   }
 
-  const references = [
-    { doctype: "Lead", docName: name! },
-    ...(linkedOpportunity ? [{ doctype: "Opportunity", docName: linkedOpportunity.name }] : []),
-  ];
-  const conversation = useConversationItems(references);
-  const activity = useActivityItems(references);
+  const linkedOpportunityName: string | undefined = linkedOpportunity?.name;
+  const references = useMemo(
+    () => [
+      { doctype: "Lead", docName: name! },
+      ...(linkedOpportunityName ? [{ doctype: "Opportunity", docName: linkedOpportunityName }] : []),
+    ],
+    [name, linkedOpportunityName],
+  );
+  const { items: conversation, capped: conversationCapped } = useConversationItems(references);
+  const { items: activity, loaded: activityLoaded, capped: activityCapped, notesCapped } = useActivityItems(references);
+  const count = (n: number, capped: boolean) => (capped ? `${n}+` : String(n));
+  // Notes and stage history only: the emails in the activity list are not deleted with the lead.
+  const noteCount = activity.filter((a) => a.type === "note" || a.type === "stage_change").length;
 
   if (!lead) {
     return <DetailSkeleton />;
@@ -193,8 +200,8 @@ export default function LeadDetailPage() {
 
           <Tabs defaultValue="conversation" className="w-full space-y-3.5">
             <TabsList className="w-full gap-[26px]">
-              <TabsTrigger value="conversation" className={tab}>Conversation · {conversation.length}</TabsTrigger>
-              <TabsTrigger value="activity" className={tab}>Activity · {activity.length + 1}</TabsTrigger>
+              <TabsTrigger value="conversation" className={tab}>Conversation · {count(conversation.length, conversationCapped)}</TabsTrigger>
+              <TabsTrigger value="activity" className={tab}>Activity · {count(activity.length + 1, activityCapped)}</TabsTrigger>
             </TabsList>
             <TabsContent value="conversation" className="mt-0">
               <LeadConversationTab
@@ -221,8 +228,7 @@ export default function LeadDetailPage() {
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         name={lead.lead_name}
-        emails={conversation.length}
-        activities={activity.length + 1}
+        notes={activityLoaded ? count(noteCount, notesCapped) : undefined}
         onConfirm={handleDelete}
       />
     </div>

@@ -79,27 +79,41 @@ function useTimelineLinkedCommunications(ref: NoteRef) {
   });
 }
 
-/** Comments, notes and emails on the given records, newest first. */
-export function useActivityItems(references: NoteRef[]): ActivityItem[] {
+/** Each source query returns at most this many rows. */
+export const SOURCE_CAP = 50;
+
+export interface ActivityResult {
+  /** Comments, notes and emails, newest first. */
+  items: ActivityItem[];
+  /** True once every source query has answered. */
+  loaded: boolean;
+  /** True when any source returned SOURCE_CAP rows, so the list may be longer than shown. */
+  capped: boolean;
+  /** Same, for the note and stage-change sources only. */
+  notesCapped: boolean;
+}
+
+/** Comments, notes and emails on the given records. */
+export function useActivityItems(references: NoteRef[]): ActivityResult {
   const ref0 = references[0];
   const ref1 = references.length > 1 ? references[1] : null;
 
   // Fetch Comments (both Comment and Info types)
-  const { result: comments0 } = useCommentsForRef(ref0, ["Comment", "Info"]);
-  const { result: comments1 } = useCommentsForRef(
+  const { result: comments0, query: commentsQ0 } = useCommentsForRef(ref0, ["Comment", "Info"]);
+  const { result: comments1, query: commentsQ1 } = useCommentsForRef(
     ref1 ?? { doctype: "__none__", docName: "__none__" },
     ["Comment", "Info"],
   );
 
   // Fetch Communications (emails) - direct reference
-  const { result: comms0 } = useCommunicationsForRef(ref0);
-  const { result: comms1 } = useCommunicationsForRef(
+  const { result: comms0, query: commsQ0 } = useCommunicationsForRef(ref0);
+  const { result: comms1, query: commsQ1 } = useCommunicationsForRef(
     ref1 ?? { doctype: "__none__", docName: "__none__" },
   );
 
   // Fetch Communications via timeline_links
-  const { data: timelineComms0 = [] } = useTimelineLinkedCommunications(ref0);
-  const { data: timelineComms1 = [] } = useTimelineLinkedCommunications(
+  const { data: timelineComms0 = [], isLoading: tlLoading0 } = useTimelineLinkedCommunications(ref0);
+  const { data: timelineComms1 = [], isLoading: tlLoading1 } = useTimelineLinkedCommunications(
     ref1 ?? { doctype: "__none__", docName: "__none__" },
   );
 
@@ -162,5 +176,10 @@ export function useActivityItems(references: NoteRef[]): ActivityItem[] {
     all.sort((a, b) => new Date(b.creation).getTime() - new Date(a.creation).getTime());
     return all;
   }, [comments0, comments1, comms0, comms1, ref1, timelineComms0, timelineComms1]);
-  return items;
+
+  const rows = (r: unknown) => ((r as { data?: unknown[] } | undefined)?.data ?? []).length >= SOURCE_CAP;
+  const notesCapped = rows(comments0) || (!!ref1 && rows(comments1));
+  const capped = notesCapped || rows(comms0) || (!!ref1 && rows(comms1)) || timelineComms0.length >= SOURCE_CAP || timelineComms1.length >= SOURCE_CAP;
+  const loaded = !(commentsQ0.isLoading || commentsQ1.isLoading || commsQ0.isLoading || commsQ1.isLoading || tlLoading0 || tlLoading1);
+  return { items, loaded, capped, notesCapped };
 }

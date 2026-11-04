@@ -18,7 +18,7 @@ export function LeadHeader({ name, status, email, phone, stageBusy, onStage, onD
 
   return (
     <header className="space-y-3">
-      <nav aria-label="Breadcrumb" className="hidden text-sm text-muted-foreground lg:block">
+      <nav aria-label="Breadcrumb" className="hidden text-sm text-muted-foreground md:block">
         <Link to="/crm" className="text-primary hover:underline">Leads</Link> / {name}
       </nav>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">

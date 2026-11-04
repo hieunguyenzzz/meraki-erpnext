@@ -68,20 +68,31 @@ function useConversationsForRef(ref: ConversationRef) {
   });
 }
 
-/** Every Communication on the given records (direct reference and timeline links), oldest first. */
-export function useConversationItems(references: ConversationRef[]): Communication[] {
+/** Each source query returns at most this many rows. */
+const SOURCE_CAP = 50;
+
+export interface ConversationResult {
+  /** Every Communication on the given records (direct reference and timeline links), oldest first. */
+  items: Communication[];
+  /** True once every source query has answered. */
+  loaded: boolean;
+  /** True when a source returned SOURCE_CAP rows, so the thread may be longer than shown. */
+  capped: boolean;
+}
+
+export function useConversationItems(references: ConversationRef[]): ConversationResult {
   const ref0 = references[0];
   const ref1 = references.length > 1 ? references[1] : null;
 
   // Direct reference queries
-  const { result: result0 } = useConversationsForRef(ref0);
-  const { result: result1 } = useConversationsForRef(
+  const { result: result0, query: q0 } = useConversationsForRef(ref0);
+  const { result: result1, query: q1 } = useConversationsForRef(
     ref1 ?? { doctype: "__none__", docName: "__none__" },
   );
 
   // Timeline links queries
-  const { data: timelineComms0 = [] } = useTimelineLinkedConversations(ref0);
-  const { data: timelineComms1 = [] } = useTimelineLinkedConversations(
+  const { data: timelineComms0 = [], isLoading: tlLoading0 } = useTimelineLinkedConversations(ref0);
+  const { data: timelineComms1 = [], isLoading: tlLoading1 } = useTimelineLinkedConversations(
     ref1 ?? { doctype: "__none__", docName: "__none__" },
   );
 
@@ -118,5 +129,9 @@ export function useConversationItems(references: ConversationRef[]): Communicati
     all.sort((a, b) => new Date(commStamp(a)).getTime() - new Date(commStamp(b)).getTime());
     return all;
   }, [result0, result1, ref1, timelineComms0, timelineComms1]);
-  return items;
+
+  const rows = (r: unknown) => ((r as { data?: unknown[] } | undefined)?.data ?? []).length >= SOURCE_CAP;
+  const capped = rows(result0) || (!!ref1 && rows(result1)) || timelineComms0.length >= SOURCE_CAP || timelineComms1.length >= SOURCE_CAP;
+  const loaded = !(q0.isLoading || q1.isLoading || tlLoading0 || tlLoading1);
+  return { items, loaded, capped };
 }

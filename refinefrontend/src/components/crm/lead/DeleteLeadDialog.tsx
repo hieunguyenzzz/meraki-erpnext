@@ -1,14 +1,15 @@
 import { useState } from "react";
+import { extractErrorMessage } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 /** Confirmation before the lead is deleted. Stays open with an error if the delete fails. */
-export function DeleteLeadDialog({ open, onOpenChange, name, emails, activities, onConfirm }: {
+export function DeleteLeadDialog({ open, onOpenChange, name, notes, onConfirm }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   name: string;
-  emails: number;
-  activities: number;
+  /** Notes and stage-history entries, e.g. "3" or "50+"; undefined until they have loaded. */
+  notes?: string;
   onConfirm: () => Promise<void>;
 }) {
   const [deleting, setDeleting] = useState(false);
@@ -21,7 +22,7 @@ export function DeleteLeadDialog({ open, onOpenChange, name, emails, activities,
       await onConfirm();
     } catch (err) {
       console.error("DeleteLeadDialog: deleting the lead failed", err);
-      setError("The lead was not deleted. Try again.");
+      setError(extractErrorMessage(err, "The lead was not deleted. Try again."));
       setDeleting(false);
     }
   }
@@ -32,7 +33,7 @@ export function DeleteLeadDialog({ open, onOpenChange, name, emails, activities,
         <DialogHeader>
           <DialogTitle>Delete {name}?</DialogTitle>
           <DialogDescription className="text-[15px] leading-[22px]">
-            This deletes the lead ({emails} {emails === 1 ? "email" : "emails"} and {activities} activity {activities === 1 ? "entry" : "entries"} are linked to it). It can't be undone.
+            This permanently deletes the lead, its {notes ? `${notes} ` : ""}{notes === "1" ? "note" : "notes"} and stage history, and the linked contact and address. Emails stay in ERPNext but are no longer linked to it.
           </DialogDescription>
         </DialogHeader>
         {error && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">{error}</p>}

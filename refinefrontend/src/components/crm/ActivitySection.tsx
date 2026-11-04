@@ -77,7 +77,7 @@ function EmailContent({ content, isExpanded, onToggle }: EmailContentProps) {
 
 function ActivityFeed({ references }: ActivitySectionProps) {
   const [expandedEmails, setExpandedEmails] = useState<Set<string>>(new Set());
-  const items = useActivityItems(references);
+  const { items } = useActivityItems(references);
 
   function toggleEmailExpanded(id: string) {
     setExpandedEmails((prev) => {

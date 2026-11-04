@@ -13,18 +13,21 @@ type Block = { kind: "p" | "ol" | "ul"; lines: string[] };
 
 function toBlocks(text: string): Block[] {
   const blocks: Block[] = [];
+  let afterBlank = false;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
-    if (!line) { blocks.push({ kind: "p", lines: [] }); continue; }
+    if (!line) { afterBlank = true; continue; }
     const ol = /^\d+[.)]\s+(.*)$/.exec(line);
     const ul = /^[-*•]\s+(.*)$/.exec(line);
     const kind = ol ? "ol" : ul ? "ul" : "p";
     const body = (ol ?? ul)?.[1] ?? line;
     const last = blocks[blocks.length - 1];
-    if (last && last.kind === kind && last.lines.length > 0) last.lines.push(body);
+    // A blank line ends a paragraph but not a list: items separated by blank lines stay one list.
+    if (last && last.kind === kind && (kind !== "p" || !afterBlank)) last.lines.push(body);
     else blocks.push({ kind, lines: [body] });
+    afterBlank = false;
   }
-  return blocks.filter((b) => b.lines.length > 0);
+  return blocks;
 }
 
 /** The AI summary: bold, paragraphs and numbered or bulleted lists, rendered as React elements. */
