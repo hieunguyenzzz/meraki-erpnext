@@ -11,6 +11,17 @@ interface Options {
   onRead?: (name: string) => void;
 }
 
+/** The backend's `detail` from an "API error 502: {...}" message, if present. */
+function serverDetail(err: unknown): string | null {
+  const text = err instanceof Error ? err.message.replace(/^API error \d+: /, "") : "";
+  try {
+    const detail = (JSON.parse(text) as { detail?: unknown }).detail;
+    return typeof detail === "string" ? detail : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Read / approve / reject for PWA notifications, shared by the page and the bell.
  * Approve/reject is optimistic: `outcomes` flips immediately and is rolled back (with `errors`) on failure.
@@ -123,6 +134,14 @@ export function useNotificationActions({ onRead }: Options = {}) {
       refreshNotifications(1500);
     } catch (err) {
       console.error("notification_decision_failed", { name: notif.name, action, err });
+      // 502 from expense reject: the expense IS rejected, only the reason was not saved. Keep the outcome.
+      const partial = notif.reference_document_type === "Purchase Invoice" && action === "reject"
+        && (err as { statusCode?: number }).statusCode === 502;
+      if (partial) {
+        setError(notif.name, serverDetail(err) ?? "Expense rejected, but the reason could not be saved.");
+        refreshNotifications();
+        return;
+      }
       setOutcomes((prev) => {
         const next = { ...prev };
         delete next[notif.name];

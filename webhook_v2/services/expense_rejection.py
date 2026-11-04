@@ -2,6 +2,9 @@
 
 A reason is a plain-text Comment, HTML-escaped, whose content starts with REASON_PREFIX so it can be
 found among any other comments. History is kept: a later rejection adds a new Comment and the newest wins.
+
+Only Comments owned by the backend's own API user count. Frappe stamps `owner` with the session user on
+insert and a normal user cannot override it, so a staff member typing "Rejected: ..." as a comment is ignored.
 """
 
 import html
@@ -13,6 +16,15 @@ log = get_logger(__name__)
 
 REASON_PREFIX = "Rejected: "
 _BATCH = 50  # long `in` filters break GET URLs
+_api_user: str | None = None
+
+
+def api_user(client) -> str:
+    """The ERPNext user the backend's API key acts as (the owner of every Comment it writes). Cached."""
+    global _api_user
+    if _api_user is None:
+        _api_user = client._get("/api/method/frappe.auth.get_logged_user")["message"]
+    return _api_user
 
 
 def add_rejection_comment(client, pi_name: str, reason: str) -> None:
@@ -30,6 +42,9 @@ def rejection_reasons(client, pi_names: list[str]) -> dict[str, str]:
     """Latest rejection reason per invoice, as plain text. One Comment query per 50 names, newest first."""
     out: dict[str, str] = {}
     names = sorted(set(pi_names))
+    if not names:
+        return out
+    owner = api_user(client)
     for i in range(0, len(names), _BATCH):
         rows = client._get("/api/resource/Comment", params={
             "filters": json.dumps([
@@ -37,6 +52,7 @@ def rejection_reasons(client, pi_names: list[str]) -> dict[str, str]:
                 ["reference_doctype", "=", "Purchase Invoice"],
                 ["reference_name", "in", names[i:i + _BATCH]],
                 ["content", "like", f"{REASON_PREFIX}%"],
+                ["owner", "=", owner],
             ]),
             "fields": json.dumps(["reference_name", "content", "creation"]),
             "order_by": "creation desc",

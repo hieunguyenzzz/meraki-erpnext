@@ -1016,7 +1016,7 @@ def approve_all_expenses(project: str):
 
 
 class RejectExpenseRequest(BaseModel):
-    reason: str | None = Field(None, max_length=500)  # optional for old callers; every app screen requires it
+    reason: str | None = Field(None, max_length=500)  # required by the endpoint (400 when blank)
 
     @field_validator("reason", mode="before")
     @classmethod
@@ -1028,9 +1028,12 @@ class RejectExpenseRequest(BaseModel):
 def reject_expense(pi_name: str, req: RejectExpenseRequest | None = None):
     """Reject a Draft Purchase Invoice (marks as rejected, keeps visible).
 
-    A reason is kept as a Comment on the invoice so the submitter can see why.
+    A reason is required; it is kept as a Comment on the invoice so the submitter can see why.
+    Rejecting an already rejected expense is a no-op, so a retry or double click adds no second Comment.
     """
     reason = req.reason if req else None
+    if not reason:
+        raise HTTPException(status_code=400, detail="A reason is required to reject an expense")
     client = ERPNextClient()
 
     pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
@@ -1038,21 +1041,23 @@ def reject_expense(pi_name: str, req: RejectExpenseRequest | None = None):
         raise HTTPException(status_code=404, detail="Purchase Invoice not found")
     if pi.get("docstatus") != 0:
         raise HTTPException(status_code=400, detail="Only Draft expenses can be rejected")
+    if pi.get("custom_rejected"):
+        log.info("expense_reject_already_rejected", pi=pi_name)
+        return {"success": True}
 
     try:
         client._put(f"/api/resource/Purchase Invoice/{pi_name}", {"custom_rejected": 1})
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to reject expense: {e}")
 
-    if reason:
-        try:
-            add_rejection_comment(client, pi_name, reason)
-        except Exception as e:
-            # The expense is already rejected; retrying this call is safe and adds the reason.
-            log.error("expense_rejection_comment_failed", pi=pi_name, error=str(e), exc_info=True)
-            raise HTTPException(status_code=502, detail="Expense rejected, but the reason could not be saved. Reject again to retry.")
+    try:
+        add_rejection_comment(client, pi_name, reason)
+    except Exception as e:
+        # The expense is already rejected, so the flag stays; a retry would now be a no-op.
+        log.error("expense_rejection_comment_failed", pi=pi_name, error=str(e), exc_info=True)
+        raise HTTPException(status_code=502, detail="Expense rejected, but the reason could not be saved.")
 
-    log.info("expense_rejected", pi=pi_name, has_reason=bool(reason))
+    log.info("expense_rejected", pi=pi_name)
     return {"success": True}
 
 
@@ -1072,7 +1077,7 @@ class EditExpenseRequest(BaseModel):
 
 @router.put("/expense/{pi_name}", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
 def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
-    """Edit a Draft (pending) expense in place. Submitted/paid expenses are refused with 409."""
+    """Edit a Draft (pending or rejected) expense in place; a rejected one goes back to Pending. Submitted/paid are refused with 409."""
     client = ERPNextClient()
 
     if req.amount <= 0:
@@ -1106,6 +1111,8 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
         "posting_date": posting_date,
         "set_posting_time": 1,
         "custom_expense_staff": staff,
+        # Editing a rejected expense puts it back in Finance's queue; the old reason stays in history only.
+        **({"custom_rejected": 0} if pi.get("custom_rejected") else {}),
         **({"remarks": req.note} if req.note is not None else {}),
         "items": [{
             "name": first_item.get("name"),
@@ -1122,7 +1129,7 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
         client._put(f"/api/resource/Purchase Invoice/{pi_name}", update_values)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update expense: {e}")
-    log.info("expense_edited_inplace", pi=pi_name, amount=amount, note_changed=req.note is not None)
+    log.info("expense_edited_inplace", pi=pi_name, amount=amount, note_changed=req.note is not None, reopened=bool(pi.get("custom_rejected")))
     return {"success": True, "name": pi_name}
 
 

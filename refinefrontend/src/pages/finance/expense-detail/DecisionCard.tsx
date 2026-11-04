@@ -3,7 +3,7 @@ import { useInvalidate } from "@refinedev/core";
 import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { REJECT_REASON_MAX } from "@/components/notifications/RejectReasonForm";
+import { REJECT_REASON_MAX } from "@/lib/rejectReason";
 import { DetailCard } from "../DetailCard";
 import { responseError } from "../expenses/types";
 
@@ -34,7 +34,19 @@ export function DecisionCard({ piName, staffName, onDecided }: { piName: string;
         credentials: "include",
         ...(kind === "reject" && { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason }) }),
       });
-      if (!res.ok) throw await responseError(res, kind === "approve" ? "Failed to approve" : "Failed to reject");
+      if (!res.ok) {
+        const failure = await responseError(res, kind === "approve" ? "Failed to approve" : "Failed to reject");
+        // 502 on reject: the expense is rejected, only the reason was not saved. Refresh so the page shows Rejected.
+        if (kind === "reject" && res.status === 502) {
+          decidedRef.current = true;
+          setDecided(true);
+          setError(failure.message);
+          onDecided?.();
+          await invalidate({ resource: "Purchase Invoice", invalidates: ["list", "detail"], id: piName });
+          return;
+        }
+        throw failure;
+      }
       decidedRef.current = true;
       setDecided(true);
       onDecided?.();

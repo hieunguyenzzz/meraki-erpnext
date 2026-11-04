@@ -1,8 +1,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-
-export const REJECT_REASON_MAX = 500;
+import { REJECT_REASON_MAX } from "@/lib/rejectReason";
 
 interface Props {
   busy?: boolean;

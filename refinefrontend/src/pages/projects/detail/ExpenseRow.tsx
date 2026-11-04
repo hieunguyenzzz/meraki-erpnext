@@ -212,9 +212,9 @@ export function ExpenseRow({ exp, employees, weddingTeam, categories: expenseCat
               </td>
               <td className="px-3 py-2">
                 <div className="flex gap-1">
-                  {exp.status === "Pending" && (
+                  {(exp.status === "Pending" || exp.status === "Rejected") && (
                     <Button variant="ghost" size="icon" className="h-7 w-7"
-                      onClick={() => startEditExpense()} title="Edit">
+                      onClick={() => startEditExpense()} title={exp.status === "Rejected" ? "Edit and send back to Finance" : "Edit"}>
                       <Pencil className="h-4 w-4 text-muted-foreground" />
                     </Button>
                   )}
