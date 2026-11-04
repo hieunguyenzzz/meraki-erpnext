@@ -1,28 +1,56 @@
 import { Link } from "react-router";
-import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/format";
-import { countdownLabel, ROLE_LABEL, type MyWedding } from "@/hooks/useMyWeddings";
+import { Check } from "lucide-react";
+import { formatIsoWeekday } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import type { MyWedding } from "@/hooks/useMyWeddings";
+import { StageBadge } from "@/pages/projects/weddings-list/WeddingBadges";
+import { RoleBadge, isFinished } from "@/pages/self-service/my-weddings/RoleBadge";
 
-/** One assigned wedding as a tappable card (Home and My Weddings). */
+/** Within this many days the countdown block turns rose. */
+const SOON_DAYS = 14;
+
+function DaysBlock({ wedding: w }: { wedding: MyWedding }) {
+  const base = "flex h-[62px] w-[58px] shrink-0 flex-col items-center justify-center rounded-xl";
+  if (isFinished(w)) {
+    return (
+      <div className={cn(base, "bg-secondary text-muted-foreground")}>
+        <Check className="h-[22px] w-[22px]" strokeWidth={2.2} aria-hidden />
+        <span className="text-[11px] font-semibold">Done</span>
+      </div>
+    );
+  }
+  if (w.days_to_go == null) return <div className={cn(base, "bg-secondary text-muted-foreground")}><span className="text-[11px] font-semibold">No date</span></div>;
+  return (
+    <div className={cn(base, w.days_to_go <= SOON_DAYS ? "bg-accent text-accent-foreground" : "bg-muted text-foreground")}>
+      <span className="font-display text-[28px] font-semibold leading-7 lining-nums tabular-nums">{w.days_to_go}</span>
+      <span className="text-[11px] font-semibold">{w.days_to_go === 1 ? "day" : "days"}</span>
+    </div>
+  );
+}
+
+/** One assigned wedding as a tappable card (phones). */
 export function WeddingRow({ wedding: w }: { wedding: MyWedding }) {
-  const days = countdownLabel(w.days_to_go);
+  const finished = isFinished(w);
   return (
     <Link
       to={`/my-weddings/${w.id}`}
-      className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-accent"
-    >
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold">{w.project_name}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          {[formatDate(w.wedding_date), w.venue_name].filter((v) => v && v !== "-").join(" · ")}
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">{ROLE_LABEL[w.my_role]} · {w.stage}</p>
-      </div>
-      {days && (
-        <Badge variant={w.days_to_go != null && w.days_to_go >= 0 && w.days_to_go <= 7 ? "destructive" : "secondary"} className="shrink-0">
-          {days}
-        </Badge>
+      className={cn(
+        "flex items-center gap-3 rounded-card border bg-card px-3.5 py-3 transition-colors hover:bg-accent/40",
+        finished && "bg-muted/50",
+        !finished && w.days_to_go != null && w.days_to_go <= SOON_DAYS && "border-primary/30"
       )}
+    >
+      <DaysBlock wedding={w} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <b className={cn("truncate text-base", finished && "text-muted-foreground")}>{w.project_name}</b>
+        <span className="truncate text-[13px] text-muted-foreground tabular-nums">
+          {[w.wedding_date ? formatIsoWeekday(w.wedding_date) : null, w.venue_name].filter(Boolean).join(" · ")}
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          <RoleBadge role={w.my_role} />
+          <StageBadge stage={finished ? "Completed" : w.stage} />
+        </div>
+      </div>
     </Link>
   );
 }

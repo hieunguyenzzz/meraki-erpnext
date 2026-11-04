@@ -2,12 +2,14 @@ import { Link, useNavigate, useParams } from "react-router";
 import { ArrowLeft, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EventsTimeline, pickGlanceEvents, type TimelineEvent } from "@/components/wedding/EventsTimeline";
+import type { TimelineEvent } from "@/components/wedding/EventsTimeline";
 import { FactList, SectionCard } from "@/components/wedding/SectionCard";
 import { TeamList } from "@/components/wedding/TeamAvatars";
 import { WeddingHero } from "@/components/wedding/WeddingHero";
-import { formatVNDFull } from "@/lib/format";
+import { formatIsoWeekday } from "@/lib/format";
 import { HttpError, ROLE_LABEL, useMyWedding } from "@/hooks/useMyWeddings";
+import { EventsByDay } from "./my-weddings/EventsByDay";
+import { MyExpensesList } from "./my-weddings/MyExpensesList";
 
 /** Read-only wedding view for assigned staff. No price, commission or payment data. */
 export default function MyWeddingDetailPage() {
@@ -37,41 +39,40 @@ export default function MyWeddingDetailPage() {
     guests: ev.guest_count,
     staff: ev.staff.map((s) => s.name),
   }));
-  const picked = pickGlanceEvents(timeline);
-  const others = timeline.filter((e) => !picked?.items.includes(e)).sort((a, b) => a.date.localeCompare(b.date) || (a.start ?? "").localeCompare(b.start ?? ""));
+  const addExpense = `/finance/expenses/new?project=${encodeURIComponent(w.id)}`;
 
   return (
     <div className="space-y-5">
       <WeddingHero
         title={w.project_name}
         date={w.wedding_date}
-        facts={[w.venue_name, w.guest_count ? `${w.guest_count} guests` : null]}
-        badges={<Badge variant="secondary">{w.stage}</Badge>}
-        subtitle={ROLE_LABEL[w.my_role]}
+        facts={[w.venue_name, [w.guest_count ? `${w.guest_count} guests` : null, w.package].filter(Boolean).join(" · ") || null]}
+        badges={
+          <>
+            <span className="basis-full md:hidden">You're on this team as <b className="text-info-soft-foreground">{ROLE_LABEL[w.my_role]}</b></span>
+            <span className="hidden items-center gap-2 md:inline-flex">
+              <span aria-hidden>·</span>You: <Badge variant="info">{ROLE_LABEL[w.my_role]}</Badge><Badge variant="secondary">Read-only</Badge>
+            </span>
+          </>
+        }
         daysToGo={w.days_to_go}
         onBack={() => navigate("/my-weddings")}
+        actions={
+          <Link to={addExpense} className="hidden h-11 items-center gap-1.5 rounded-full bg-primary-fill px-[18px] text-[15px] font-semibold text-primary-fill-foreground md:flex">
+            <Plus className="h-[18px] w-[18px]" aria-hidden />Add expense
+          </Link>
+        }
       />
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-start gap-4">
-        <SectionCard title={picked?.heading ?? "Events"}>
-          {picked ? <EventsTimeline events={picked.items} /> : w.events.length === 0 && <p className="text-sm text-muted-foreground">No events scheduled yet.</p>}
-          {others.length > 0 && (
-            <ul className="space-y-2 border-t pt-3 text-sm">
-              {others.map((e) => (
-                <li key={e.key} className="flex justify-between gap-2">
-                  <span className="font-medium">{e.title}</span>
-                  <span className="tabular-nums text-muted-foreground">{e.date}{e.start ? ` · ${e.start.slice(0, 5)}` : ""}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </SectionCard>
-
-        <SectionCard title="Details">
+        <SectionCard title="Details" className="max-md:hidden">
           <FactList
             rows={[
               { label: "Couple", value: w.customer_name || "-" },
-              { label: "Service", value: w.package || "-" },
+              { label: "Date", value: w.wedding_date ? formatIsoWeekday(w.wedding_date) : "-" },
+              { label: "Venue", value: w.venue_name || "-" },
+              { label: "Guests", value: w.guest_count ?? "-" },
+              { label: "Package", value: w.package || "-" },
               { label: "Type", value: w.wedding_type || "-" },
             ]}
           />
@@ -81,28 +82,20 @@ export default function MyWeddingDetailPage() {
           <TeamList members={w.team.map((t) => ({ id: t.employee, name: t.name, role: ROLE_LABEL[t.role] ?? t.role, phone: t.phone }))} />
         </SectionCard>
 
-        <SectionCard
-          title="My expenses"
-          action={
-            <Link to={`/finance/expenses/new?project=${encodeURIComponent(w.id)}`} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary-fill px-3 text-sm font-semibold text-primary-fill-foreground">
-              <Plus className="h-4 w-4" />Add expense
-            </Link>
-          }
-        >
-          {w.my_expenses.length === 0 && <p className="text-sm text-muted-foreground">You have not logged any expenses here.</p>}
-          {w.my_expenses.map((e) => (
-            <div key={e.name} className="flex items-center justify-between gap-2 text-sm">
-              <div className="min-w-0">
-                <p className="truncate">{e.description || e.name}</p>
-                <p className="text-xs text-muted-foreground tabular-nums">{e.date}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="tabular-nums">{formatVNDFull(e.amount)}</span>
-                <Badge variant={e.status === "Approved" ? "success" : e.status === "Rejected" ? "destructive" : "warning"}>{e.status}</Badge>
-              </div>
-            </div>
-          ))}
+        <SectionCard title="Events">
+          <EventsByDay events={timeline} />
         </SectionCard>
+
+        <SectionCard title="My expenses here">
+          <MyExpensesList expenses={w.my_expenses} />
+        </SectionCard>
+      </div>
+
+      {/* Thumb-reach action above the bottom bar (sticky offset clears the bottom nav and its centre button); desktop has it in the header. */}
+      <div className="sticky bottom-2 z-10 -mx-4 bg-background/95 px-4 py-2 backdrop-blur md:hidden">
+        <Link to={addExpense} className="flex min-h-14 items-center justify-center gap-2 rounded-full px-4 py-2 text-center bg-primary-fill text-[17px] font-semibold text-primary-fill-foreground shadow-lg">
+          <Plus className="h-[22px] w-[22px]" aria-hidden />Add expense to {w.project_name}
+        </Link>
       </div>
     </div>
   );
