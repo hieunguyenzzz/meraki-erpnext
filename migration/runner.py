@@ -67,6 +67,7 @@ ORDERED_PHASES = [
     "v102_bhxh_skip_early_leavers",
     "v103_bonus_not_prorated",
     "v104_supplier_vendor_contact_fields",
+    "v105_holiday_list_2027",
 ]
 
 SKIP_PHASES = set()  # phases that should never auto-run
@@ -157,6 +158,7 @@ def run_pending(client) -> int:
             v102_bhxh_skip_early_leavers,
             v103_bonus_not_prorated,
             v104_supplier_vendor_contact_fields,
+            v105_holiday_list_2027,
         )
     except ModuleNotFoundError:
         from phases import (
@@ -219,6 +221,7 @@ def run_pending(client) -> int:
             v102_bhxh_skip_early_leavers,
             v103_bonus_not_prorated,
             v104_supplier_vendor_contact_fields,
+            v105_holiday_list_2027,
         )
 
     phase_fns = {
@@ -285,6 +288,7 @@ def run_pending(client) -> int:
         "v102_bhxh_skip_early_leavers": v102_bhxh_skip_early_leavers.run,
         "v103_bonus_not_prorated": v103_bonus_not_prorated.run,
         "v104_supplier_vendor_contact_fields": v104_supplier_vendor_contact_fields.run,
+        "v105_holiday_list_2027": v105_holiday_list_2027.run,
     }
 
     state_file = get_state_file()
