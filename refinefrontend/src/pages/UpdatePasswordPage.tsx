@@ -7,7 +7,7 @@ import { AuthShell, CardWordmark } from "@/components/auth/AuthShell";
 import { AuthAlert } from "@/components/auth/AuthAlert";
 import { AuthIcon } from "@/components/auth/AuthIcon";
 import { PasswordField } from "@/components/auth/PasswordField";
-import { PasswordStrength } from "@/components/auth/PasswordStrength";
+import { PasswordStrength, MIN_PASSWORD_LENGTH } from "@/components/auth/PasswordStrength";
 import { updatePasswordErrorMessage, EXPIRED_LINK_MESSAGE } from "@/components/auth/updatePasswordError";
 
 const primaryBtn = "h-12 w-full text-base md:h-[54px] lg:h-[52px]";
@@ -55,7 +55,7 @@ export default function UpdatePasswordPage() {
     if (submittingRef.current) return;
     if (!newPassword) { setError("Please enter a new password"); return; }
     if (newPassword !== confirmPassword) { setError("Passwords do not match"); return; }
-    if (newPassword.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (newPassword.length < MIN_PASSWORD_LENGTH) { setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`); return; }
 
     submittingRef.current = true;
     setSubmitting(true);

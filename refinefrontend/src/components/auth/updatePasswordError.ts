@@ -27,12 +27,14 @@ export async function updatePasswordErrorMessage(resp: Response): Promise<string
   }
 
   if (resp.status === 429) return "Too many attempts, try again in a few minutes.";
+  // Frappe answers 410 Gone for a reset key that was already used or is invalid.
+  if (resp.status === 410) return EXPIRED_LINK_MESSAGE;
   const lc = rawMsg.toLowerCase();
   if (lc.includes("commonly used") || lc.includes("capitalization") || lc.includes("similar to")) {
     return "This password is too common. Choose something more unique — mix uppercase, lowercase, numbers and symbols. Example: Meraki2026! or Blue#Cloud9";
   }
   if (lc.includes("too short") || lc.includes("at least")) return "Password is too short. Use at least 8 characters.";
-  if (lc.includes("expired") || lc.includes("invalid key") || lc.includes("not found")) {
+  if (lc.includes("expired") || lc.includes("invalid key")) {
     return EXPIRED_LINK_MESSAGE;
   }
   return rawMsg || "Failed to update password. Please try a different password.";

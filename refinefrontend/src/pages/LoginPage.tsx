@@ -18,6 +18,15 @@ const linkBtn =
   "inline-flex h-11 max-md:h-12 items-center justify-center text-[15px] font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md";
 const primaryBtn = "h-12 w-full text-base md:h-[54px]";
 
+/** Frappe's reset_password answers an unknown user with 404 and the JSON body {"message":"not found"}. */
+async function isUnknownUser(res: Response): Promise<boolean> {
+  const data = await res.json().catch((err) => {
+    console.error("[reset-password] unreadable 404 body", err);
+    return null;
+  });
+  return data?.message === "not found";
+}
+
 export default function LoginPage() {
   const { data: authData, isLoading } = useIsAuthenticated();
   const { mutate: login } = useLogin();
@@ -99,9 +108,8 @@ export default function LoginPage() {
       );
       if (res.ok) {
         setView("forgot-success");
-      } else if (res.status === 404) {
-        // Unknown email: show the same screen as a known one so the form can't be used to probe for accounts.
-        console.error("[reset-password] no such user (404), showing neutral success");
+      } else if (res.status === 404 && (await isUnknownUser(res))) {
+        // Unknown email: same screen as a known one (UX only; this does not stop account probing).
         setView("forgot-success");
       } else if (res.status === 429) {
         console.error("[reset-password] rate limited (429)");
