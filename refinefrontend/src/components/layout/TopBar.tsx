@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { usePermissions } from "@refinedev/core";
 import { Bell, Search } from "lucide-react";
 import { useSearch } from "@/context/search-context";
@@ -66,13 +66,15 @@ export function TopBar() {
   const { setOpen } = useSearch();
   const { data, isLoading } = usePermissions<string[]>({});
   const selfOnly = isEmployeeSelfServiceOnly(data ?? []);
+  // The staff wedding page carries its own "My Weddings / <couple>" crumb (the top bar only knows the record id).
+  const ownCrumb = useLocation().pathname.startsWith("/my-weddings/");
 
   return (
     <header className="z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 pl-5 pr-3 backdrop-blur md:px-4 max-md:h-[68px] max-md:border-b-0">
       <div className="md:hidden">
         <Wordmark to="/" />
       </div>
-      <div className="hidden md:block">{!isLoading && !selfOnly && <Breadcrumbs />}</div>
+      <div className="hidden md:block">{!isLoading && !selfOnly && !ownCrumb && <Breadcrumbs />}</div>
 
       <div className="ml-auto flex items-center gap-1">
         <Button variant="ghost" size="icon" onClick={() => setOpen(true)} aria-label="Search" className={BELL_CLASS}>

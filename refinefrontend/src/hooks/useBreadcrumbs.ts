@@ -67,6 +67,8 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     }
   }
 
+  if (pathname === "/my-weddings") return [...crumbs, { label: "My Weddings" }];
+
   // Fallback: split path segments
   const segments = pathname.split("/").filter(Boolean);
   segments.forEach((rawSeg, i) => {

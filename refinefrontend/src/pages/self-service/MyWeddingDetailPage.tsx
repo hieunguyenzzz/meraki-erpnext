@@ -21,7 +21,7 @@ export default function MyWeddingDetailPage() {
   if (error || !w) {
     return (
       <div className="space-y-3">
-        <Link to="/my-weddings" className="inline-flex items-center gap-1 text-sm text-primary"><ArrowLeft className="h-4 w-4" /> My weddings</Link>
+        <Link to="/my-weddings" className="inline-flex items-center gap-1 text-sm text-primary"><ArrowLeft className="h-4 w-4" /> My Weddings</Link>
         <p className="text-sm text-muted-foreground">
           {error instanceof HttpError && error.status === 403 ? "You are not assigned to this wedding." : "Could not load this wedding."}
         </p>
@@ -43,6 +43,9 @@ export default function MyWeddingDetailPage() {
 
   return (
     <div className="space-y-5">
+      <nav aria-label="Breadcrumb" className="hidden text-sm text-muted-foreground md:block">
+        <Link to="/my-weddings" className="hover:underline">My Weddings</Link> / <span className="text-foreground">{w.project_name}</span>
+      </nav>
       <WeddingHero
         title={w.project_name}
         date={w.wedding_date}
@@ -93,8 +96,9 @@ export default function MyWeddingDetailPage() {
 
       {/* Thumb-reach action above the bottom bar (sticky offset clears the bottom nav and its centre button); desktop has it in the header. */}
       <div className="sticky bottom-2 z-10 -mx-4 bg-background/95 px-4 py-2 backdrop-blur md:hidden">
-        <Link to={addExpense} className="flex min-h-14 items-center justify-center gap-2 rounded-full px-4 py-2 text-center bg-primary-fill text-[17px] font-semibold text-primary-fill-foreground shadow-lg">
-          <Plus className="h-[22px] w-[22px]" aria-hidden />Add expense to {w.project_name}
+        <Link to={addExpense} className="flex h-14 items-center justify-center gap-2 rounded-full bg-primary-fill px-5 text-[17px] font-semibold text-primary-fill-foreground">
+          <Plus className="h-[22px] w-[22px] shrink-0" aria-hidden />
+          <span className="min-w-0 truncate">Add expense to {w.project_name.replace(/\s+Wedding$/i, "")}</span>
         </Link>
       </div>
     </div>
