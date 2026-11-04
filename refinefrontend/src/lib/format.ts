@@ -18,6 +18,9 @@ export function formatVNDFull(amount: number | undefined | null): string {
   return `${rounded < 0 ? "-" : ""}VND ${GROUPED.format(Math.abs(rounded))}`;
 }
 
+/** Grouped amount without the currency prefix, for tables whose header already says (VND). */
+export const formatVNDPlain = (amount: number | undefined | null): string => formatVNDFull(amount).replace(/^(-?)VND /, "$1");
+
 /** Same as formatVNDFull; kept as the everyday name for table cells and labels. */
 export const formatVND = formatVNDFull;
 

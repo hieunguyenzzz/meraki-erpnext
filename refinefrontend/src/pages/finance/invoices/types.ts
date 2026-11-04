@@ -31,3 +31,9 @@ export function statusVariant(status: string) {
 
 /** ERPNext dates arrive as YYYY-MM-DD (datetimes as "YYYY-MM-DD hh:mm:ss"); show the date part. */
 export const isoDate = (d: string | null | undefined) => (d ? d.slice(0, 10) : "—");
+
+/** Whole days past due for an unpaid, submitted invoice; null when it is not overdue. */
+export function overdueDays(i: { docstatus?: number; due_date?: string | null; outstanding_amount: number }, today = new Date().toISOString().slice(0, 10)): number | null {
+  if (i.docstatus !== 1 || !i.due_date || !(i.outstanding_amount > 0) || i.due_date.slice(0, 10) >= today) return null;
+  return Math.round((Date.parse(today) - Date.parse(i.due_date.slice(0, 10))) / 86_400_000);
+}

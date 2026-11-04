@@ -5,16 +5,17 @@ import { formatVNDFull } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { StatePanel } from "@/components/StatePanel";
 import { DetailSkeleton } from "@/components/detail-skeleton";
-import { isoDate, statusVariant } from "./invoices/types";
+import { cn } from "@/lib/utils";
+import { DetailCard, Fact, Facts } from "./DetailCard";
+import { LinkedPaymentsCard } from "./invoice-detail/LinkedPaymentsCard";
+import { LineItemsCard, type InvoiceItem, type InvoiceTax } from "./invoice-detail/LineItemsCard";
+import { isoDate, overdueDays, statusVariant } from "./invoices/types";
 
-interface InvoiceItem { item_name: string; qty: number; amount: number; sales_order?: string }
-interface InvoiceTax { description: string; tax_amount: number }
-
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "paid" | "due" }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="text-sm tabular-nums">{children}</dd>
+    <div className={cn("flex flex-col gap-0.5 rounded-card border bg-card p-5", tone === "due" && "border-danger-soft-foreground/25")}>
+      <span className={cn("text-[13px] text-muted-foreground", tone === "due" && "font-semibold text-danger-soft-foreground")}>{label}</span>
+      <b className={cn("text-2xl tabular-nums md:text-[26px]", tone === "paid" && "text-success")}>{value}</b>
     </div>
   );
 }
@@ -28,7 +29,7 @@ export default function InvoiceDetailPage() {
     resource: "Project",
     id: projectId ?? "",
     queryOptions: { enabled: !!projectId },
-    meta: { fields: ["name", "project_name"] },
+    meta: { fields: ["name", "project_name", "expected_end_date"] },
   });
 
   if (query.isError) {
@@ -46,64 +47,53 @@ export default function InvoiceDetailPage() {
 
   const items = (invoice.items ?? []) as InvoiceItem[];
   const taxes = ((invoice.taxes ?? []) as InvoiceTax[]).filter((t) => t.tax_amount);
-  const linkedSalesOrder = items.find((item) => item.sales_order)?.sales_order;
+  const linkedSalesOrder = (invoice.items as { sales_order?: string }[] | undefined)?.find((item) => item.sales_order)?.sales_order;
+  const late = overdueDays({ docstatus: invoice.docstatus, due_date: invoice.due_date, outstanding_amount: invoice.outstanding_amount });
+  // ERPNext reports any past-due invoice as "Overdue"; the days badge says that, so the status badge says how far it is paid.
+  const statusLabel = late !== null && invoice.status === "Overdue" ? (invoice.outstanding_amount < invoice.grand_total ? "Partly paid" : "Unpaid") : invoice.status;
+  const weddingLabel = [project?.project_name || projectId, project?.expected_end_date ? isoDate(project.expected_end_date) : null].filter(Boolean).join(" · ");
 
   return (
-    <div className="flex flex-col gap-4 pb-6">
-      <header className="flex flex-col gap-4 rounded-card border bg-card p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">{invoice.name}</h1>
-          <Badge variant={statusVariant(invoice.status)}>{invoice.status}</Badge>
-          {invoice.custom_invoice_category && <Badge variant="outline">{invoice.custom_invoice_category}</Badge>}
-        </div>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
-          <Fact label="Customer">{invoice.customer_name}</Fact>
-          <Fact label="Wedding">
-            {projectId ? (
-              <Link to={`/projects/${encodeURIComponent(projectId)}`} className="inline-flex min-h-10 items-center font-medium text-primary hover:underline md:min-h-0">
-                {project?.project_name || projectId}
-              </Link>
-            ) : "—"}
-          </Fact>
-          <Fact label="Issued">{isoDate(invoice.posting_date)}</Fact>
-          <Fact label="Due">{isoDate(invoice.due_date)}</Fact>
-          {linkedSalesOrder && <Fact label="Sales order">{linkedSalesOrder}</Fact>}
-        </dl>
-        <div className="grid grid-cols-1 gap-3 border-t pt-4 sm:grid-cols-2">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total</div>
-            <div className="text-2xl font-semibold tabular-nums">{formatVNDFull(invoice.grand_total)}</div>
-          </div>
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Outstanding</div>
-            <div className="text-2xl font-semibold tabular-nums">{formatVNDFull(invoice.outstanding_amount)}</div>
-          </div>
+    <div className="flex flex-col gap-4 pb-6 md:gap-[18px]">
+      <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground md:hidden">
+        <Link to="/finance/invoices" className="hover:text-foreground hover:underline">Invoices</Link> / {invoice.name}
+      </nav>
+
+      <header className="flex flex-col gap-1.5">
+        <h1 className="break-words text-2xl font-semibold leading-tight md:font-display md:text-[38px] md:leading-[42px]">{invoice.name}</h1>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant={statusVariant(statusLabel)}>{statusLabel}</Badge>
+          {late !== null && <Badge variant="destructive">Overdue · {late} d</Badge>}
         </div>
       </header>
 
-      {(items.length > 0 || taxes.length > 0) && (
-        <section aria-label="Items" className="rounded-card border bg-card p-5">
-          <h2 className="mb-2 text-lg font-semibold">Items</h2>
-          <ul className="divide-y">
-            {items.map((item, i) => (
-              <li key={i} className="flex justify-between gap-3 py-2.5 text-sm tabular-nums">
-                <span>{item.item_name} x{item.qty}</span>
-                <span className="shrink-0">{formatVNDFull(item.amount)}</span>
-              </li>
-            ))}
-            {taxes.map((t, i) => (
-              <li key={`tax-${i}`} className="flex justify-between gap-3 py-2.5 text-sm tabular-nums text-muted-foreground">
-                <span>{t.description}</span>
-                <span className="shrink-0">{formatVNDFull(t.tax_amount)}</span>
-              </li>
-            ))}
-            <li className="flex justify-between gap-3 py-2.5 font-semibold tabular-nums">
-              <span>Total</span>
-              <span>{formatVNDFull(invoice.grand_total)}</span>
-            </li>
-          </ul>
-        </section>
-      )}
+      <section aria-label="Amounts" className="grid gap-4 sm:grid-cols-3">
+        <Stat label="Total" value={formatVNDFull(invoice.grand_total)} />
+        <Stat label="Paid" value={formatVNDFull(invoice.grand_total - invoice.outstanding_amount)} tone="paid" />
+        <Stat label="Outstanding" value={formatVNDFull(invoice.outstanding_amount)} tone={late !== null ? "due" : undefined} />
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <DetailCard title="Details">
+          <Facts>
+            <Fact label="Number">{invoice.name}</Fact>
+            <Fact label="Customer">{invoice.customer_name || "—"}</Fact>
+            <Fact label="Wedding">
+              {projectId ? (
+                <Link to={`/projects/${encodeURIComponent(projectId)}`} className="font-medium text-primary hover:underline">{weddingLabel}</Link>
+              ) : "—"}
+            </Fact>
+            {invoice.custom_invoice_category && <Fact label="Type">{invoice.custom_invoice_category}</Fact>}
+            {linkedSalesOrder && <Fact label="Sales order">{linkedSalesOrder}</Fact>}
+            <Fact label="Issued">{isoDate(invoice.posting_date)}</Fact>
+            <Fact label="Due">{isoDate(invoice.due_date)}</Fact>
+          </Facts>
+        </DetailCard>
+
+        <LinkedPaymentsCard invoiceName={invoice.name} outstanding={invoice.outstanding_amount} collectable={invoice.docstatus === 1} />
+
+        {(items.length > 0 || taxes.length > 0) && <LineItemsCard items={items} taxes={taxes} total={invoice.grand_total} />}
+      </div>
     </div>
   );
 }
