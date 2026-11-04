@@ -31,3 +31,6 @@ export const INITIAL_FORM: FormValues = {
 };
 
 export type SetField = (field: keyof FormValues) => (value: string) => void;
+
+/** Ignore a second tap this soon after the step changes (the same finger double-tapping a button). */
+export const STEP_TAP_GUARD_MS = 400;

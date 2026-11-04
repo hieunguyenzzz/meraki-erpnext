@@ -3,9 +3,12 @@ import { useSearchParams } from "react-router";
 import { ArrowLeft, ArrowRight, Briefcase, Clock, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeProvider } from "@/context/theme-context";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { type Job } from "@/lib/jobs";
 import { FieldErrorContext } from "./job-apply/Field";
 import { StepProgress } from "./job-apply/StepProgress";
+import { DesktopApply } from "./job-apply/DesktopApply";
+import { DesktopLoading, DesktopNotFound, DesktopSuccess } from "./job-apply/DesktopScreens";
 import {
   BrandTitle,
   LoadingScreen,
@@ -20,13 +23,10 @@ import {
   PersonalSection,
   ReviewSection,
 } from "./job-apply/Sections";
-import { INITIAL_FORM, type FormValues, type Level } from "./job-apply/types";
+import { INITIAL_FORM, STEP_TAP_GUARD_MS, type FormValues, type Level } from "./job-apply/types";
 
 const STEP_LABELS = ["Details", "CV & letter", "Review"];
 const TOTAL_STEPS = STEP_LABELS.length;
-
-/** Ignore a second tap this soon after the step changes (the same finger double-tapping a button). */
-const STEP_TAP_GUARD_MS = 400;
 
 /** Which field a validation message belongs to, so it can be marked and focused. */
 const ERROR_FIELDS: Array<[string, string]> = [
@@ -49,6 +49,8 @@ function fieldForError(message: string): string {
 function JobApplyForm() {
   const [searchParams] = useSearchParams();
   const jobParam = searchParams.get("job") ?? "";
+  // Desktop has its own stepped layout (D-JobApply); phones keep the mobile one.
+  const desktop = useMediaQuery("(min-width: 768px)");
 
   const [job, setJob] = useState<Job | null>(null);
   const [loadingJob, setLoadingJob] = useState(true);
@@ -268,9 +270,15 @@ function JobApplyForm() {
 
   // ─── Render loading/error/success ───────────────────────────────────────────
 
-  if (loadingJob) return <LoadingScreen />;
-  if (jobNotFound || !job) return <NotFoundScreen />;
-  if (submitted) return <SuccessScreen jobTitle={job.job_title} />;
+  if (loadingJob) return desktop ? <DesktopLoading /> : <LoadingScreen />;
+  if (jobNotFound || !job) return desktop ? <DesktopNotFound /> : <NotFoundScreen />;
+  if (submitted) {
+    return desktop ? (
+      <DesktopSuccess jobTitle={job.job_title} name={form.applicant_name} />
+    ) : (
+      <SuccessScreen jobTitle={job.job_title} />
+    );
+  }
 
   const documents = (
     <DocumentsSection
@@ -294,6 +302,39 @@ function JobApplyForm() {
   );
 
   const errorText = validationError || submitError;
+
+  if (desktop) {
+    return (
+      <FieldErrorContext.Provider
+        value={errorField && validationError ? { id: errorField, message: validationError } : null}
+      >
+        <DesktopApply
+          job={job}
+          level={level}
+          form={form}
+          set={set}
+          cvFile={cvFile}
+          portfolioFile={portfolioFile}
+          onCv={(f) => {
+            setValidationError("");
+            setCvFile(f);
+          }}
+          onPortfolio={(f) => {
+            setValidationError("");
+            setPortfolioFile(f);
+          }}
+          cvRef={cvRef}
+          portfolioRef={portfolioRef}
+          errorText={errorText}
+          errorRef={errorRef}
+          setValidationError={setValidationError}
+          clearSubmitError={() => setSubmitError("")}
+          submitting={submitting}
+          onSubmit={handleSubmit}
+        />
+      </FieldErrorContext.Provider>
+    );
+  }
 
   return (
     <PageFrame>
