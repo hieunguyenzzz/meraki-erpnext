@@ -1,22 +1,29 @@
 import { useParams } from "react-router";
-import { useOne, useList, useDelete, useInvalidate, useNavigation } from "@refinedev/core";
+import { useState } from "react";
+import { useOne, useList, useDelete, useUpdate, useInvalidate, useNavigation } from "@refinedev/core";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { COLUMNS, type ColumnKey } from "@/lib/kanban";
 import { Sparkles } from "lucide-react";
 import { DetailSkeleton } from "@/components/detail-skeleton";
-import { ConversationSection } from "@/components/crm/ConversationSection";
-import { SuggestedResponseSection } from "@/components/crm/SuggestedResponseSection";
-import { InternalNotesSection } from "@/components/crm/ActivitySection";
+import { useConversationItems } from "@/components/crm/useConversationItems";
+import { useActivityItems } from "@/components/crm/useActivityItems";
+import { LeadConversationTab } from "@/components/crm/lead/LeadConversationTab";
+import { LeadActivityTab } from "@/components/crm/lead/LeadActivityTab";
+import { DeleteLeadDialog } from "@/components/crm/lead/DeleteLeadDialog";
 import { LeadHeader } from "@/components/crm/lead/LeadHeader";
 import { DateConflictAlert, type ConflictLead, type ConflictOrder } from "@/components/crm/lead/DateConflictAlert";
 import { ContactCard, WeddingCard, SubmissionCard, MeetingsCard, type Meeting } from "@/components/crm/lead/LeadCards";
-import { LeadMetaCard } from "@/components/crm/lead/LeadMetaCard";
 
 export default function LeadDetailPage() {
   const { name } = useParams<{ name: string }>();
   const invalidate = useInvalidate();
   const { mutateAsync: deleteRecord } = useDelete();
+  const { mutateAsync: updateRecord } = useUpdate();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [stageBusy, setStageBusy] = useState(false);
+  const [stageError, setStageError] = useState<string | null>(null);
   const { list } = useNavigation();
   const { result: lead } = useOne({ resource: "Lead", id: name! });
 
@@ -108,6 +115,28 @@ export default function LeadDetailPage() {
     invalidate({ resource: "Lead", invalidates: ["detail"], id: name! });
   }
 
+  async function handleStage(key: ColumnKey) {
+    const target = COLUMNS.find((c) => c.key === key)!.leadTarget;
+    setStageBusy(true);
+    setStageError(null);
+    try {
+      await updateRecord({ resource: "Lead", id: name!, values: { status: target }, successNotification: false });
+      invalidate({ resource: "Lead", invalidates: ["list", "detail"] });
+    } catch (err) {
+      console.error(`LeadDetailPage: stage change to ${target} failed for ${name}`, err);
+      setStageError("The stage was not changed. Try again.");
+    } finally {
+      setStageBusy(false);
+    }
+  }
+
+  const references = [
+    { doctype: "Lead", docName: name! },
+    ...(linkedOpportunity ? [{ doctype: "Opportunity", docName: linkedOpportunity.name }] : []),
+  ];
+  const conversation = useConversationItems(references);
+  const activity = useActivityItems(references);
+
   if (!lead) {
     return <DetailSkeleton />;
   }
@@ -120,29 +149,35 @@ export default function LeadDetailPage() {
     .map((row: { note?: string }) => row?.note?.trim())
     .filter((note: string | undefined): note is string => Boolean(note));
 
-  const references = [
-    { doctype: "Lead", docName: name! },
-    ...(linkedOpportunity ? [{ doctype: "Opportunity", docName: linkedOpportunity.name }] : []),
-  ];
+  const tab = "h-11 flex-none px-0 text-[15px] font-semibold text-muted-foreground data-[state=active]:text-foreground";
 
   return (
     <div className="space-y-4">
-      <LeadHeader name={lead.lead_name} status={lead.status} email={lead.email_id} phone={lead.phone} />
+      <LeadHeader
+        name={lead.lead_name}
+        status={lead.status}
+        email={lead.email_id}
+        phone={lead.phone}
+        stageBusy={stageBusy}
+        onStage={handleStage}
+        onDelete={() => setConfirmDelete(true)}
+      />
+      {stageError && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">{stageError}</p>}
 
       <DateConflictAlert date={weddingDate ?? ""} leads={conflictingLeads} orders={conflictingSalesOrders} />
 
-      {/* Phones: cards, then the thread, then Meta. Desktop: cards in a left column, thread on the right. */}
-      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-6">
-        <div className="space-y-4 lg:col-start-1 lg:row-start-1">
+      {/* Phones: cards, then the thread. Desktop: cards in a left column, thread on the right. */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:items-start lg:gap-4">
+        <div className="space-y-3.5">
           <ContactCard lead={lead} fullName={fullName} sources={leadSources} onSaved={handleFieldSaved} />
           <WeddingCard lead={lead} />
           <SubmissionCard notes={submissionNotes} />
           <MeetingsCard meetings={scheduledMeetings} error={meetingsError} />
         </div>
 
-        <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        <div className="min-w-0 space-y-3.5">
           {lead.custom_ai_summary && (
-            <Card className="mb-4">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium">
                   <Sparkles className="h-4 w-4 text-warning" aria-hidden />
@@ -155,33 +190,40 @@ export default function LeadDetailPage() {
             </Card>
           )}
 
-          <Tabs defaultValue="conversation" className="w-full">
-            <TabsList className="w-full lg:w-auto">
-              <TabsTrigger value="conversation" className="flex-1 lg:flex-none">Conversation</TabsTrigger>
-              <TabsTrigger value="activity" className="flex-1 lg:flex-none">Activity</TabsTrigger>
+          <Tabs defaultValue="conversation" className="w-full space-y-3.5">
+            <TabsList className="w-full gap-[26px]">
+              <TabsTrigger value="conversation" className={tab}>Conversation · {conversation.length}</TabsTrigger>
+              <TabsTrigger value="activity" className={tab}>Activity · {activity.length + 1}</TabsTrigger>
             </TabsList>
-            <TabsContent value="conversation" className="mt-4">
-              <ConversationSection references={references} leadName={lead.lead_name} />
-              {/* AI Suggested Response */}
-              <SuggestedResponseSection
+            <TabsContent value="conversation" className="mt-0">
+              <LeadConversationTab
+                items={conversation}
                 leadName={lead.lead_name}
-                references={references}
-                weddingDate={lead.custom_wedding_date}
-                venue={lead.custom_wedding_venue}
-                budget={lead.custom_budget_raw || (lead.custom_estimated_budget ? String(lead.custom_estimated_budget) : undefined)}
-                guestCount={lead.custom_guest_count_raw || (lead.custom_guest_count ? String(lead.custom_guest_count) : undefined)}
+                suggestion={{
+                  leadName: lead.lead_name,
+                  references,
+                  weddingDate: lead.custom_wedding_date,
+                  venue: lead.custom_wedding_venue,
+                  budget: lead.custom_budget_raw || (lead.custom_estimated_budget ? String(lead.custom_estimated_budget) : undefined),
+                  guestCount: lead.custom_guest_count_raw || (lead.custom_guest_count ? String(lead.custom_guest_count) : undefined),
+                }}
               />
             </TabsContent>
-            <TabsContent value="activity" className="mt-4">
-              <InternalNotesSection references={references} />
+            <TabsContent value="activity" className="mt-0">
+              <LeadActivityTab items={activity} leadName={lead.lead_name} primaryRef={references[0]} created={lead.creation} source={lead.source} />
             </TabsContent>
           </Tabs>
         </div>
-
-        <div className="lg:col-start-1 lg:row-start-2">
-          <LeadMetaCard created={lead.creation} id={lead.name} status={lead.status} onDelete={handleDelete} />
-        </div>
       </div>
+
+      <DeleteLeadDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        name={lead.lead_name}
+        emails={conversation.length}
+        activities={activity.length + 1}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

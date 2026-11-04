@@ -286,7 +286,7 @@ export function SuggestedResponseSection({
   // Initial state - show generate button with tone selector
   if (!suggestion && !isPending) {
     return (
-      <Card className="mt-4">
+      <Card className="rounded-xl">
         <CardContent className="py-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             {/* Tone selector */}
@@ -325,7 +325,7 @@ export function SuggestedResponseSection({
   // Loading state
   if (isPending) {
     return (
-      <Card className="mt-4">
+      <Card className="rounded-xl">
         <CardContent className="py-6">
           <div className="flex items-center gap-3 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -338,12 +338,12 @@ export function SuggestedResponseSection({
 
   // Result state
   return (
-    <Card className="mt-4">
+    <Card className="rounded-xl">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm flex items-center gap-2 font-medium">
             <Sparkles className="h-4 w-4 text-muted-foreground" />
-            Suggested Response
+            Suggested reply
           </CardTitle>
           <Button
             variant="ghost"
@@ -403,8 +403,8 @@ export function SuggestedResponseSection({
               )}
 
               {/* Suggested response */}
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">
+              <div className="rounded-xl border border-primary/30 bg-accent/60 p-3">
+                <p className="text-[13px] whitespace-pre-wrap leading-[19px] text-accent-foreground">
                   {suggestion.suggested_response}
                 </p>
               </div>
