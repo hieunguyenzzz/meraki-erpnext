@@ -2,6 +2,7 @@ import type { WeddingEvent } from "@/lib/weddingEvents";
 import { DetailsCard } from "./DetailsCard";
 import { EventsCard } from "./EventsCard";
 import { ExpensesCard } from "./ExpensesCard";
+import { NotesCard } from "./NotesCard";
 import { PaymentsCard } from "./PaymentsCard";
 import { SalesCard } from "./SalesCard";
 import { TeamCard } from "./TeamCard";
@@ -13,10 +14,12 @@ interface Props {
   events: WeddingEvent[];
   expenses: ReturnType<typeof useWeddingExpenses>;
   onOpenTab: (tab: string) => void;
+  /** Desktop only: the phone has no notes card on Details. */
+  showNotes?: boolean;
 }
 
 /** Desktop overview (and the phone's "Details" tab): the cards that used to live in one long column. */
-export function OverviewTab({ w, events, expenses, onOpenTab }: Props) {
+export function OverviewTab({ w, events, expenses, onOpenTab, showNotes = false }: Props) {
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-start gap-4">
       <DetailsCard w={w} />
@@ -25,6 +28,7 @@ export function OverviewTab({ w, events, expenses, onOpenTab }: Props) {
       <SalesCard w={w} />
       <EventsCard events={events} onOpenAll={() => onOpenTab("events")} />
       {w.showExpensesTab && <ExpensesCard w={w} data={expenses} onOpenAll={() => onOpenTab("expenses")} />}
+      {showNotes && <NotesCard w={w} onOpenAll={() => onOpenTab("activity")} />}
     </div>
   );
 }

@@ -51,7 +51,7 @@ export function WeddingTabs({ w, events, expenses }: Props) {
         <GlanceTab w={w} events={events} expenses={expenses} onOpenTab={setTab} />
       </TabsContent>
       <TabsContent value="overview" className="mt-4">
-        <OverviewTab w={w} events={events} expenses={expenses} onOpenTab={setTab} />
+        <OverviewTab w={w} events={events} expenses={expenses} onOpenTab={setTab} showNotes />
       </TabsContent>
       <TabsContent value="details" className="mt-4">
         <OverviewTab w={w} events={events} expenses={expenses} onOpenTab={setTab} />

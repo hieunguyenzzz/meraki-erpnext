@@ -5,7 +5,7 @@ import { hasModuleAccess, FINANCE_ROLES, WEDDING_EXPENSE_ROLES, WEDDING_MANAGER_
 import { useMyEmployee } from "@/hooks/useMyEmployee";
 
 export interface SOItem { name: string; item_code: string; item_name: string; qty: number; rate: number; amount: number }
-export interface Employee { id: string; name: string; userId?: string }
+export interface Employee { id: string; name: string; firstName?: string; userId?: string }
 export interface Supplier { name: string; supplier_name: string }
 export interface AddOnCatalogItem { name: string; item_name: string; custom_include_in_commission?: number }
 
@@ -124,7 +124,7 @@ export function useWeddingData(name: string) {
     return () => { cancelled = true; };
   }, [reportLoad]);
   const employees: Employee[] = useMemo(
-    () => employeeDirectory.map((e: any) => ({ id: e.name, name: displayName(e), userId: e.user_id })),
+    () => employeeDirectory.map((e: any) => ({ id: e.name, name: displayName(e), firstName: e.first_name || undefined, userId: e.user_id })),
     [employeeDirectory]
   );
   const getEmployeeName = useCallback(
