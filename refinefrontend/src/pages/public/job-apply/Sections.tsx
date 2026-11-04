@@ -111,12 +111,12 @@ export function ExperienceSection({ form, set, isSenior }: FormProps & { isSenio
       />
       <TextField
         id="lower_range"
-        label="Expected monthly salary (USD)"
+        label="Salary expectation (VND / month, gross)"
         optional
         type="number"
         value={form.lower_range}
         onChange={set("lower_range")}
-        placeholder="e.g. 1500"
+        placeholder="e.g. 15000000"
         inputMode="numeric"
       />
       <TextField
@@ -214,7 +214,7 @@ export function ReviewSection({ form, cvFile, portfolioFile }: ReviewProps) {
       }`,
     ]);
   }
-  if (form.lower_range) rows.push(["Expected salary", `USD ${form.lower_range}/mo`]);
+  if (form.lower_range) rows.push(["Expected salary", `VND ${form.lower_range}/mo`]);
   if (cvFile) rows.push(["CV", cvFile.name]);
   if (portfolioFile) rows.push(["Portfolio", portfolioFile.name]);
 
