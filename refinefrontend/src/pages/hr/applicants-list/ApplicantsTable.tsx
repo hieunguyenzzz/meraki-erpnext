@@ -1,9 +1,9 @@
 import { Link } from "react-router";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { StaffAvatar } from "@/components/staff/StaffAvatar";
-import { RatingStars } from "@/components/recruiting/RatingStars";
 import { STAGE_BADGE } from "@/components/recruiting/stageBadge";
+import { ratingToStars } from "@/lib/recruiting-kanban";
+import { Pager } from "./Pager";
 import { stageOf, type ApplicantRow, type Sort, type SortKey } from "./types";
 
 const COLUMNS: { key: SortKey; label: string }[] = [
@@ -22,10 +22,26 @@ interface Props {
   selected: Set<string>;
   onToggle: (name: string, on: boolean) => void;
   onToggleAll: (on: boolean) => void;
+  page: number;
+  pageSize: number;
+  total: number;
+  onPage: (page: number) => void;
 }
 
-/** Desktop table, D-Staff style: rounded card, muted header, sortable columns. */
-export function ApplicantsTable({ rows, sort, onSort, selected, onToggle, onToggleAll }: Props) {
+/** ERPNext keeps the rating as a 0-1 fraction; the design shows a bar and a score out of 5. */
+function RatingBar({ value }: { value: number }) {
+  if (!ratingToStars(value)) return <span className="text-muted-foreground">—</span>;
+  const score = value * 5;
+  return (
+    <span className="flex items-center gap-2" role="img" aria-label={`Rating ${score.toFixed(1)} out of 5`}>
+      <span className="h-1.5 w-[60px] rounded-[3px] bg-muted" aria-hidden><span className="block h-1.5 rounded-[3px] bg-success" style={{ width: `${Math.min(100, value * 100)}%` }} /></span>
+      <b className="tabular-nums">{score.toFixed(1)}</b>
+    </span>
+  );
+}
+
+/** Desktop table (D-Applicants): rounded card, muted header, sortable columns, pager footer. */
+export function ApplicantsTable({ rows, sort, onSort, selected, onToggle, onToggleAll, page, pageSize, total, onPage }: Props) {
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.name));
   return (
     <div className="overflow-hidden rounded-2xl border bg-card">
@@ -55,22 +71,20 @@ export function ApplicantsTable({ rows, sort, onSort, selected, onToggle, onTogg
                     <input type="checkbox" aria-label={`Select ${a.applicant_name || a.name}`} className="h-4 w-4 accent-[hsl(var(--primary-fill))]" checked={selected.has(a.name)} onChange={(e) => onToggle(a.name, e.target.checked)} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
-                    <Link to={`/hr/recruiting/${a.name}`} className="flex items-center gap-2.5 font-semibold text-foreground hover:underline">
-                      <StaffAvatar name={a.applicant_name || a.name} id={a.name} />
-                      {a.applicant_name || a.name}
-                    </Link>
+                    <Link to={`/hr/recruiting/${a.name}`} className="font-bold text-foreground hover:underline">{a.applicant_name || a.name}</Link>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">{a.job_title || "-"}</td>
                   <td className="whitespace-nowrap px-4 py-3"><Badge variant={STAGE_BADGE[stage] ?? "secondary"}>{stage}</Badge></td>
                   <td className="whitespace-nowrap px-4 py-3">{a.source || "-"}</td>
                   <td className="whitespace-nowrap px-4 py-3 tabular-nums text-muted-foreground">{a.creation.slice(0, 10)}</td>
-                  <td className="whitespace-nowrap px-4 py-3"><RatingStars value={a.applicant_rating} /></td>
+                  <td className="whitespace-nowrap px-4 py-3"><RatingBar value={a.applicant_rating} /></td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      <Pager page={page} pageSize={pageSize} total={total} onPage={onPage} />
     </div>
   );
 }

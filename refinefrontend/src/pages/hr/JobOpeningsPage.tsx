@@ -9,6 +9,7 @@ import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
 import { StatePanel } from "@/components/StatePanel";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { JobCards } from "./job-openings/JobCards";
+import { JobPanel } from "./job-openings/JobPanel";
 import { JobSheet } from "./job-openings/JobSheet";
 import { JobsTable } from "./job-openings/JobsTable";
 import { SORT_KEYS, statusOf, type JobOpening, type Sort, type SortKey } from "./job-openings/types";
@@ -40,6 +41,20 @@ export default function JobOpeningsPage() {
   useEffect(() => {
     if (query.isError) console.error("Job openings list failed", query.error);
   }, [query.isError, query.error]);
+
+  // Applicants per opening, for the table's Applicants column
+  const { result: applicantsResult } = useList({
+    resource: "Job Applicant",
+    pagination: { mode: "off" },
+    meta: { fields: ["name", "job_title"] },
+  });
+  const applicantCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const a of (applicantsResult?.data ?? []) as { job_title?: string }[]) {
+      if (a.job_title) counts.set(a.job_title, (counts.get(a.job_title) ?? 0) + 1);
+    }
+    return counts;
+  }, [applicantsResult]);
 
   const jobs = useMemo(() => (result?.data ?? []) as JobOpening[], [result]);
 
@@ -84,6 +99,9 @@ export default function JobOpeningsPage() {
     }
   }
 
+  // The edit form keeps the record it opened with; status actions use the refreshed one
+  const liveJob = editingJob ? jobs.find((j) => j.name === editingJob.name) ?? editingJob : null;
+
   let body;
   if (query.isError) {
     body = (
@@ -102,30 +120,30 @@ export default function JobOpeningsPage() {
         kind="empty"
         title={search ? "No positions match" : "No job openings yet"}
         text={search ? "Try a different search." : "Add a position to start receiving applications."}
-        action={search ? undefined : { label: "New position", onClick: openCreate }}
+        action={search ? undefined : { label: "Create job opening", onClick: openCreate }}
       />
     );
   } else {
     body = (
       <>
-        <span className="px-1 text-[13px] text-muted-foreground md:text-sm">
+        <span className="px-1 text-[13px] text-muted-foreground md:hidden">
           {rows.length} position{rows.length === 1 ? "" : "s"}
         </span>
         {isDesktop
-          ? <JobsTable jobs={rows} sort={sort} onSort={toggleSort} onEdit={openEdit} onToggleStatus={(j) => void handleToggleStatus(j)} />
+          ? <JobsTable jobs={rows} sort={sort} onSort={toggleSort} onEdit={openEdit} onToggleStatus={(j) => void handleToggleStatus(j)} applicantCounts={applicantCounts} activeName={sheetOpen ? editingJob?.name ?? null : null} />
           : <JobCards jobs={rows} onEdit={openEdit} onToggleStatus={(j) => void handleToggleStatus(j)} />}
       </>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 md:gap-[18px]">
       <RecruitingHeader
         action={
           <Button onClick={openCreate} className="shrink-0">
             <Plus aria-hidden />
             <span className="md:hidden">Job</span>
-            <span className="max-md:hidden">New position</span>
+            <span className="max-md:hidden">Create job opening</span>
           </Button>
         }
       />
@@ -138,9 +156,17 @@ export default function JobOpeningsPage() {
 
       {actionError && <p role="alert" className="px-1 text-sm text-destructive">{actionError}</p>}
 
-      {body}
-
-      <JobSheet open={sheetOpen} job={editingJob} onClose={() => setSheetOpen(false)} />
+      {isDesktop ? (
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="flex min-w-0 flex-[999_1_480px] flex-col gap-4">{body}</div>
+          {sheetOpen && <JobPanel key={editingJob?.name ?? "new"} job={editingJob} status={liveJob ? statusOf(liveJob) : "Open"} onClose={() => setSheetOpen(false)} onToggleStatus={() => liveJob && void handleToggleStatus(liveJob)} />}
+        </div>
+      ) : (
+        <>
+          {body}
+          <JobSheet open={sheetOpen} job={editingJob} onClose={() => setSheetOpen(false)} />
+        </>
+      )}
     </div>
   );
 }

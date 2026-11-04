@@ -16,6 +16,8 @@ export interface ApplicantRow {
 }
 
 export const STAGES = ["Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"] as const;
+/** Stages that are finished; the default view hides them ("All active") */
+export const FINISHED_STAGES: readonly string[] = ["Hired", "Rejected"];
 export const RATINGS = ["1", "2", "3", "4", "5"] as const;
 export const SORT_KEYS = ["applicant_name", "job_title", "custom_recruiting_stage", "source", "creation", "applicant_rating"] as const;
 export type SortKey = (typeof SORT_KEYS)[number];

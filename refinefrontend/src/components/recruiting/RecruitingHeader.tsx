@@ -1,15 +1,26 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router";
+import { useList } from "@refinedev/core";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { to: "/hr/recruiting/pipeline", label: "Pipeline" },
-  { to: "/hr/recruiting/all", label: "All applicants" },
-  { to: "/hr/recruiting/jobs", label: "Job openings" },
-];
+  { to: "/hr/recruiting/pipeline", label: "Pipeline", resource: null },
+  { to: "/hr/recruiting/all", label: "All applicants", resource: "Job Applicant" },
+  { to: "/hr/recruiting/jobs", label: "Job openings", resource: "Job Opening" },
+] as const;
+
+/** Total records of a doctype for the tab labels; the data provider counts server-side. */
+function useTotal(resource: string) {
+  const { result } = useList({ resource, pagination: { currentPage: 1, pageSize: 1 }, meta: { fields: ["name"] } });
+  return result?.total;
+}
 
 /** Page title, optional action, and the three recruiting views as tabs (D-Recruiting.dc.html). */
 export function RecruitingHeader({ action }: { action?: ReactNode }) {
+  const totals: Record<string, number | undefined> = {
+    "Job Applicant": useTotal("Job Applicant"),
+    "Job Opening": useTotal("Job Opening"),
+  };
   return (
     <div className="flex flex-col gap-3">
       <header className="flex items-center gap-3">
@@ -29,6 +40,7 @@ export function RecruitingHeader({ action }: { action?: ReactNode }) {
             }
           >
             {t.label}
+            {t.resource && totals[t.resource] !== undefined && <span className="max-md:hidden">&nbsp;· {totals[t.resource]}</span>}
           </NavLink>
         ))}
       </nav>

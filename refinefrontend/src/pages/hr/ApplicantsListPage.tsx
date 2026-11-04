@@ -1,7 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useInvalidate, useList } from "@refinedev/core";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
-import { RotateCw } from "lucide-react";
+import { Link } from "react-router";
+import { Plus, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RecruitingHeader } from "@/components/recruiting/RecruitingHeader";
 import { StaffSkeleton } from "@/components/staff/StaffSkeleton";
@@ -14,7 +15,7 @@ import { ApplicantFilters, type FilterValues } from "./applicants-list/Applicant
 import { ApplicantsTable } from "./applicants-list/ApplicantsTable";
 import { SelectionBar } from "./applicants-list/SelectionBar";
 import {
-  RATINGS, SORT_KEYS, STAGES, compareRows, stageOf,
+  FINISHED_STAGES, RATINGS, SORT_KEYS, STAGES, compareRows, stageOf,
   type ApplicantRow, type Sort, type SortKey,
 } from "./applicants-list/types";
 
@@ -34,7 +35,7 @@ export default function ApplicantsListPage() {
   const [ratingParam, setRatingParam] = useQueryState("rating", parseAsStringLiteral(RATINGS));
   const [sourceParam, setSourceParam] = useQueryState("source", { defaultValue: "", clearOnDefault: true });
   const [positionParam, setPositionParam] = useQueryState("position", { defaultValue: "", clearOnDefault: true });
-  const [city, setCity] = useQueryState("city", { defaultValue: "", clearOnDefault: true });
+  const [cityParam, setCity] = useQueryState("city", { defaultValue: "", clearOnDefault: true });
   const [sortParam, setSortParam] = useQueryState("sort", parseAsStringLiteral(SORT_KEYS).withDefault("creation").withOptions(opts));
   const [dirParam, setDirParam] = useQueryState("dir", parseAsStringLiteral(["asc", "desc"] as const).withDefault("desc").withOptions(opts));
   const sort: Sort = useMemo(() => ({ key: sortParam, dir: dirParam === "desc" ? -1 : 1 }), [sortParam, dirParam]);
@@ -43,7 +44,7 @@ export default function ApplicantsListPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const sendingRef = useRef(false);
-  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [page, setPage] = useState(0);
 
   // Data fetching
   const { result, query } = useList({
@@ -76,12 +77,18 @@ export default function ApplicantsListPage() {
 
   const jobOpenings = useMemo(() => (jobOpeningsResult?.data ?? []) as { name: string; job_title: string }[], [jobOpeningsResult]);
   const sources = useMemo(() => (sourcesResult?.data ?? []) as { name: string }[], [sourcesResult]);
+  const cities = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of (result?.data ?? []) as RawApplicant[]) if (a.custom_city) set.add(a.custom_city);
+    return [...set].sort((x, y) => x.localeCompare(y)).map((c) => ({ label: c, value: c }));
+  }, [result]);
   const positions = useMemo(() => jobOpenings.map((jo) => ({ label: jo.job_title, value: jo.name })), [jobOpenings]);
   const sourceOptions = useMemo(() => sources.map((s) => ({ label: s.name, value: s.name })), [sources]);
 
   // A source/position in the URL that matches nothing loaded is ignored
   const source = sourceParam && sources.some((s) => s.name === sourceParam) ? sourceParam : "";
   const position = positionParam && jobOpenings.some((jo) => jo.name === positionParam) ? positionParam : "";
+  const city = cityParam && cities.some((c) => c.value === cityParam) ? cityParam : "";
   const stage = stageParam ?? "";
   const rating = ratingParam ?? "";
 
@@ -104,26 +111,31 @@ export default function ApplicantsListPage() {
   const deferredSearch = useDeferredValue(search);
   const filtered = useMemo(() => {
     const s = deferredSearch.trim().toLowerCase();
-    const c = city.trim().toLowerCase();
     return applicants
-      .filter((a) => !stage || stageOf(a) === stage)
+      // No stage chosen means "All active": finished stages are hidden until picked
+      .filter((a) => (stage ? stageOf(a) === stage : !FINISHED_STAGES.includes(stageOf(a))))
       .filter((a) => !rating || ratingToStars(a.applicant_rating) >= Number(rating))
       .filter((a) => !source || a.source === source)
       .filter((a) => !position || a.jobName === position)
-      .filter((a) => !c || a.custom_city.toLowerCase().includes(c))
-      .filter((a) => !s || (a.applicant_name || a.name).toLowerCase().includes(s));
+      .filter((a) => !city || a.custom_city === city)
+      .filter((a) => !s || [a.applicant_name || a.name, a.email_id, a.phone_number].some((v) => (v ?? "").toLowerCase().includes(s)));
   }, [applicants, deferredSearch, stage, rating, source, position, city]);
 
   const rows = useMemo(() => [...filtered].sort((a, b) => compareRows(a, b, sort.key) * sort.dir), [filtered, sort]);
 
   // Reset paging when the filters or sort change; a changed filter also drops the selection
-  useEffect(() => setLimit(PAGE_SIZE), [search, stage, rating, source, position, city, sort]);
+  useEffect(() => setPage(0), [search, stage, rating, source, position, city, sort]);
   useEffect(() => { setSelected(new Set()); setSendError(""); }, [search, stage, rating, source, position, city]);
 
-  const shown = useMemo(() => rows.slice(0, limit), [rows, limit]);
+  // Desktop pages through the list; phones keep growing it with "Show more"
+  const lastPage = Math.max(0, Math.ceil(rows.length / PAGE_SIZE) - 1);
+  const pageNo = Math.min(page, lastPage);
+  const shown = useMemo(
+    () => (isDesktop ? rows.slice(pageNo * PAGE_SIZE, (pageNo + 1) * PAGE_SIZE) : rows.slice(0, (pageNo + 1) * PAGE_SIZE)),
+    [rows, pageNo, isDesktop],
+  );
   // Only applicants still in the filtered list count, so a hidden row is never sent by accident
   const selectedIds = useMemo(() => rows.filter((r) => selected.has(r.name)).map((r) => r.name), [rows, selected]);
-  const isFiltered = !!(search || stage || rating || source || position || city);
 
   function toggleSort(key: SortKey) {
     if (sort.key === key) void setDirParam(sort.dir === 1 ? "desc" : "asc");
@@ -206,21 +218,21 @@ export default function ApplicantsListPage() {
     body = (
       <StatePanel
         kind="empty"
-        title={isFiltered ? "No applicants match" : "No applicants yet"}
-        text={isFiltered ? "Try a different search, stage or position." : "Applicants appear here once someone applies."}
+        title={applicants.length === 0 ? "No applicants yet" : "No applicants match"}
+        text={applicants.length === 0 ? "Applicants appear here once someone applies." : "Try a different search or stage. Hired and rejected applicants only show when you pick that stage."}
       />
     );
   } else {
     body = (
       <>
-        <span className="px-1 text-[13px] text-muted-foreground md:text-sm">
+        <span className="px-1 text-[13px] text-muted-foreground md:hidden">
           {rows.length} applicant{rows.length === 1 ? "" : "s"}
         </span>
         {isDesktop
-          ? <ApplicantsTable rows={shown} sort={sort} onSort={toggleSort} selected={selected} onToggle={toggle} onToggleAll={toggleAll} />
+          ? <ApplicantsTable rows={shown} sort={sort} onSort={toggleSort} selected={selected} onToggle={toggle} onToggleAll={toggleAll} page={pageNo} pageSize={PAGE_SIZE} total={rows.length} onPage={setPage} />
           : <ApplicantCards rows={shown} selected={selected} onToggle={toggle} />}
-        {rows.length > shown.length && (
-          <Button variant="outline" className="self-center" onClick={() => setLimit((l) => l + PAGE_SIZE)}>
+        {!isDesktop && rows.length > shown.length && (
+          <Button variant="outline" className="self-center" onClick={() => setPage(pageNo + 1)}>
             Show more ({rows.length - shown.length})
           </Button>
         )}
@@ -229,9 +241,18 @@ export default function ApplicantsListPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <RecruitingHeader />
-      <ApplicantFilters values={filterValues} onChange={changeFilter} onClear={clearFilters} sources={sourceOptions} positions={positions} />
+    <div className="flex flex-col gap-4 md:gap-[18px]">
+      <RecruitingHeader
+        action={
+          <Button asChild className="shrink-0 max-md:hidden">
+            <Link to="/hr/recruiting/jobs"><Plus aria-hidden />Job opening</Link>
+          </Button>
+        }
+      />
+      <ApplicantFilters
+        values={filterValues} onChange={changeFilter} onClear={clearFilters} sources={sourceOptions} positions={positions} cities={cities}
+        countLabel={`${rows.length} ${stage ? "" : "active "}shown`}
+      />
       {body}
       {/* Keeps the last cards and "Show more" clear of the floating bar */}
       {selectedIds.length > 0 && <div aria-hidden className="h-[140px] shrink-0" />}
