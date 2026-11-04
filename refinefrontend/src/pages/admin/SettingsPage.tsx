@@ -1,6 +1,5 @@
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { yearVN } from "@/lib/businessTime";
 import { DesignationsTab } from "./settings/DesignationsTab";
 import { HolidaysTab } from "./settings/HolidaysTab";
 import { NotificationsTab } from "./settings/NotificationsTab";
@@ -20,10 +19,10 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Settings</h1>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as (typeof TABS)[number])}>
-        <TabsList className="w-full max-w-full overflow-x-auto md:gap-4">
-          <TabsTrigger value="designations" className="max-md:min-h-12">Job titles{count(designations.length, dq.isLoading)}</TabsTrigger>
-          <TabsTrigger value="notifications" className="max-md:min-h-12">Email templates{count(notifications.length, nq.isLoading)}</TabsTrigger>
-          <TabsTrigger value="holidays" className="max-md:min-h-12">Public holidays · {yearVN()}</TabsTrigger>
+        <TabsList className="w-full max-w-full overflow-x-auto max-md:h-auto md:gap-4">
+          <TabsTrigger value="designations" className="max-md:min-h-12 data-[state=active]:shadow-[inset_0_-2px_0_hsl(var(--primary))]">Job titles{count(designations.length, dq.isLoading)}</TabsTrigger>
+          <TabsTrigger value="notifications" className="max-md:min-h-12 data-[state=active]:shadow-[inset_0_-2px_0_hsl(var(--primary))]">Email templates{count(notifications.length, nq.isLoading)}</TabsTrigger>
+          <TabsTrigger value="holidays" className="max-md:min-h-12 data-[state=active]:shadow-[inset_0_-2px_0_hsl(var(--primary))]">Public holidays</TabsTrigger>
         </TabsList>
 
         <TabsContent value="designations" className="mt-5"><DesignationsTab /></TabsContent>
