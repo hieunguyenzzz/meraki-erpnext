@@ -60,7 +60,7 @@ export function HolidaysTab() {
     }
   }, []);
 
-  useEffect(() => { fetchHolidays(year); }, [year, fetchHolidays]);
+  useEffect(() => { setFormError(null); fetchHolidays(year); }, [year, fetchHolidays]);
 
   async function handleAdd() {
     if (!addDate || !addName.trim() || inFlight.current) return;

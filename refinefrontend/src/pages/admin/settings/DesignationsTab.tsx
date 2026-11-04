@@ -12,7 +12,7 @@ import { useDesignations, useDesignationUsage, type Designation } from "./useSet
 function errorText(err: unknown, fallback: string): string {
   const msg = err instanceof Error ? err.message : "";
   // Frappe answers with a JSON blob containing HTML links; show a plain sentence instead.
-  if (msg.includes("LinkExistsError")) return "An employee still has this job title, so it cannot be deleted.";
+  if (msg.includes("LinkExistsError")) return "This title is still used elsewhere (employees, job openings or applicants), so it cannot be deleted.";
   if (msg.includes("DuplicateEntryError")) return "A job title with that name already exists.";
   return msg.startsWith("API error") ? fallback : msg || fallback;
 }
@@ -35,7 +35,10 @@ export function DesignationsTab() {
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
 
-  const refresh = () => invalidate({ resource: "Designation", invalidates: ["list"] });
+  const refresh = () => Promise.all([
+    invalidate({ resource: "Designation", invalidates: ["list"] }),
+    invalidate({ resource: "Employee", invalidates: ["list"] }),
+  ]);
 
   /** Runs one write at a time; a ref (not state) blocks double taps. */
   async function run(action: () => Promise<void>, fallback: string, done: () => void) {
@@ -66,13 +69,15 @@ export function DesignationsTab() {
     );
   };
 
+  const cancelEdit = () => { setError(null); setEditing(null); };
+
   const startEdit = (d: Designation) => { setError(null); setEditing(d.name); setEditValue(d.name); };
 
   const saveEdit = () => {
     const old = editing;
     const name = editValue.trim();
     if (!old || !name) return;
-    if (name === old) { setEditing(null); return; }
+    if (name === old) { cancelEdit(); return; }
     return run(
       async () => {
         await customMutate({
@@ -113,6 +118,12 @@ export function DesignationsTab() {
         </Button>
       </form>
 
+      {usageQuery.isError && (
+        <div role="alert" className="flex items-start gap-2 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>Could not load how many people use each title, so Delete is disabled.</span>
+        </div>
+      )}
+
       {error && editing === null && deleteTarget === null && (
         <div role="alert" className="flex items-start gap-2 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{error}</span>
@@ -143,7 +154,7 @@ export function DesignationsTab() {
             {designations.map((d) => {
               const count = usage.get(d.name) ?? 0;
               const isEditing = editing === d.name;
-              const deleteBlocked = usageQuery.isLoading || count > 0;
+              const deleteBlocked = usageQuery.isLoading || usageQuery.isError || count > 0;
               return (
                 <li
                   key={d.name}
@@ -159,7 +170,7 @@ export function DesignationsTab() {
                         onChange={(e) => setEditValue(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
-                          if (e.key === "Escape") setEditing(null);
+                          if (e.key === "Escape") cancelEdit();
                         }}
                       />
                     </label>
@@ -167,7 +178,7 @@ export function DesignationsTab() {
                     <b className="min-w-0 flex-[1_1_200px] break-words text-[15px]">{d.name}</b>
                   )}
                   <span className="text-sm text-muted-foreground md:w-[120px]">
-                    {usageQuery.isLoading ? "…" : usedBy(count)}
+                    {usageQuery.isLoading ? "…" : usageQuery.isError ? "—" : usedBy(count)}
                   </span>
                   <span className="flex gap-1.5 md:w-[170px]">
                     {isEditing ? (
@@ -175,7 +186,7 @@ export function DesignationsTab() {
                         <Button size="sm" className="bg-foreground text-background hover:bg-foreground/90" onClick={saveEdit} disabled={!editValue.trim() || busy}>
                           {busy && <Loader2 className="animate-spin" />} Save
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+                        <Button size="sm" variant="outline" onClick={cancelEdit} disabled={busy}>Cancel</Button>
                       </>
                     ) : (
                       <>
@@ -209,7 +220,7 @@ export function DesignationsTab() {
 
       <ConfirmModal
         open={deleteTarget !== null}
-        onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
+        onOpenChange={(o) => { if (!o) { setError(null); setDeleteTarget(null); } }}
         title="Delete job title"
         body={<>Delete <b className="text-foreground">{deleteTarget?.name}</b>? This cannot be undone.</>}
         confirmLabel="Delete"
