@@ -1,12 +1,15 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiTile } from "@/components/dashboard/KpiTile";
+import { MobileKpiTiles } from "@/components/dashboard/MobileKpiTiles";
+import { MobileMonthChart } from "@/components/dashboard/MobileMonthChart";
+import { MobileMonthTable } from "@/components/dashboard/MobileMonthTable";
 import { MonthlyChart } from "@/components/dashboard/MonthlyChart";
 import { MonthlyTable } from "@/components/dashboard/MonthlyTable";
 import { NetProfitChart } from "@/components/dashboard/NetProfitChart";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { yearVN } from "@/lib/businessTime";
+import { todayVN, yearVN } from "@/lib/businessTime";
 import { useFinancialOverview } from "@/components/dashboard/useFinancialOverview";
 
 const EMPTY_TOTALS = {
@@ -15,8 +18,11 @@ const EMPTY_TOTALS = {
   active_pipeline: 0, active_weddings_count: 0,
 };
 
-/** Director home: year picker, headline figures, monthly charts and table (GET /inquiry-api/financial-overview). */
-export default function DirectorSection() {
+/**
+ * Director home: year picker, headline figures, monthly charts and table (GET /inquiry-api/financial-overview).
+ * Phones get the compact layout (four tiles, one switchable bar chart, a month table); `switcher` is the Business / My day switch.
+ */
+export default function DirectorSection({ switcher }: { switcher?: ReactNode }) {
   const currentYear = yearVN();
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const { data, isLoading, isError } = useFinancialOverview(selectedYear, "DirectorSection");
@@ -27,6 +33,8 @@ export default function DirectorSection() {
   if (data) yearsRef.current = data.available_years;
   const availableYears = yearsRef.current;
   const months = data?.months ?? [];
+  // Phones list the months that have happened so far; earlier years show all twelve.
+  const shownMonths = selectedYear === currentYear ? months.filter((m) => m.month <= todayVN().slice(0, 7)) : months;
   const totals = data?.totals ?? EMPTY_TOTALS;
   const kpiLabel = selectedYear === currentYear ? "YTD" : String(selectedYear);
   const invoices = totals.outstanding_invoices_count;
@@ -35,7 +43,7 @@ export default function DirectorSection() {
   return (
     <div className="space-y-4 pb-6 md:space-y-6 md:pb-0">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-3xl font-semibold leading-tight md:text-4xl">Business overview</h1>
+        <h1 className="text-[22px] font-semibold md:font-display md:text-4xl md:leading-tight">{isDesktop ? "Business overview" : "Business"}</h1>
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           Year
           <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(parseInt(v))}>
@@ -53,13 +61,25 @@ export default function DirectorSection() {
         </label>
       </header>
 
+      {switcher}
+
       {isError && (
         <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">
           Could not load the figures for {selectedYear}. Please try again.
         </p>
       )}
 
-      {!isError && (
+      {!isError && !isDesktop && (
+        <>
+          <MobileKpiTiles totals={totals} loading={isLoading} />
+          {isLoading ? <Skeleton className="h-[290px] w-full rounded-2xl" /> : shownMonths.length > 0 && (
+            <MobileMonthChart key={selectedYear} months={shownMonths} year={selectedYear} ytd={selectedYear === currentYear} />
+          )}
+          {!isLoading && shownMonths.length > 0 && <MobileMonthTable months={shownMonths} />}
+        </>
+      )}
+
+      {!isError && isDesktop && (
         <>
           <section aria-label="Headline figures" className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4 lg:gap-4">
             <KpiTile label={`Revenue ${kpiLabel}`} amount={totals.revenue} loading={isLoading} />

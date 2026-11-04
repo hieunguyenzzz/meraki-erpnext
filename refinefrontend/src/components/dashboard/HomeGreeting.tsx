@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { hourVN } from "@/lib/businessTime";
 import { formatWeekdayIso } from "@/lib/format";
 
@@ -7,14 +8,18 @@ function greeting(hour: number): string {
   return "Good evening";
 }
 
-export function HomeGreeting({ firstName }: { firstName: string }) {
+/** Date + greeting; `action` sits on the right (desktop Home: "+ Add expense"). */
+export function HomeGreeting({ firstName, action }: { firstName: string; action?: ReactNode }) {
   const now = new Date();
   return (
-    <div className="px-1">
-      <div className="text-sm text-muted-foreground">{formatWeekdayIso(now)}</div>
-      <h1 className="mt-0.5 text-2xl font-semibold leading-[30px]">
-        {greeting(hourVN(now))}{firstName ? `, ${firstName}` : ""}
-      </h1>
-    </div>
+    <header className="flex flex-wrap items-end gap-3 px-1">
+      <div className="min-w-[200px] flex-1">
+        <div className="text-sm text-muted-foreground">{formatWeekdayIso(now)}</div>
+        <h1 className="mt-0.5 font-display text-3xl font-semibold leading-[34px] md:text-[40px] md:leading-[44px]">
+          {greeting(hourVN(now))}{firstName ? `, ${firstName}` : ""}
+        </h1>
+      </div>
+      {action}
+    </header>
   );
 }

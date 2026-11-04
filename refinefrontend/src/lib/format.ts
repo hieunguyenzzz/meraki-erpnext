@@ -48,6 +48,11 @@ export function formatMillions(amount: number): string {
   return `${GROUPED.format(Math.round(amount / 1e6) + 0)} M`; // + 0 turns -0 into 0
 }
 
+/** Millions without the unit, e.g. "1.450", for table columns whose header already says M. */
+export function formatMillionsPlain(amount: number): string {
+  return GROUPED.format(Math.round(amount / 1e6) + 0);
+}
+
 /** "Friday 2026-10-30" for the Home greeting (business timezone, ISO order). */
 export function formatWeekdayIso(date: Date): string {
   const weekday = date.toLocaleDateString("en-GB", { weekday: "long", timeZone: BUSINESS_TZ });

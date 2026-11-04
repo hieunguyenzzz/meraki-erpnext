@@ -169,20 +169,8 @@ def list_assigned_projects(client: ERPNextClient, employee: str, today: date, re
     return kept
 
 
-@router.get("/my/weddings")
-def my_weddings(request: Request, response: Response):
-    bind_correlation_id(request, response)
-    user = get_current_user(request)
-    try:
-        employee = resolve_employee(request, None)
-    except HTTPException as e:
-        if e.status_code != 403:
-            raise
-        log.info("my_weddings_no_employee", user=user)
-        return {"data": []}
-
-    client = ERPNextClient()
-    today = local_today()
+def assigned_wedding_items(client: ERPNextClient, employee: str, today: date) -> list[dict]:
+    """The caller's weddings as list rows: upcoming soonest first, then finished (most recent first), undated last."""
     projects = list_assigned_projects(client, employee, today)
     venues = venue_names(client, {p["sales_order"] for p in projects if p.get("sales_order")})
 
@@ -202,12 +190,27 @@ def my_weddings(request: Request, response: Response):
             "status": p["status"],
             "my_role": role_on_project(p, employee),
         })
-    # Upcoming (soonest first), then past (most recent first); undated last.
     items.sort(key=lambda i: (
         i["days_to_go"] is None,
         i["days_to_go"] is not None and i["days_to_go"] < 0,
         abs(i["days_to_go"] or 0),
     ))
+    return items
+
+
+@router.get("/my/weddings")
+def my_weddings(request: Request, response: Response):
+    bind_correlation_id(request, response)
+    user = get_current_user(request)
+    try:
+        employee = resolve_employee(request, None)
+    except HTTPException as e:
+        if e.status_code != 403:
+            raise
+        log.info("my_weddings_no_employee", user=user)
+        return {"data": []}
+
+    items = assigned_wedding_items(ERPNextClient(), employee, local_today())
     log.info("my_weddings_listed", user=user, employee=employee, count=len(items))
     return {"data": items}
 
