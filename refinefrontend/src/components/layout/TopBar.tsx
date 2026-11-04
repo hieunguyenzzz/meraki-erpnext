@@ -66,8 +66,9 @@ export function TopBar() {
   const { setOpen } = useSearch();
   const { data, isLoading } = usePermissions<string[]>({});
   const selfOnly = isEmployeeSelfServiceOnly(data ?? []);
-  // The staff wedding page carries its own "My Weddings / <couple>" crumb (the top bar only knows the record id).
-  const ownCrumb = useLocation().pathname.startsWith("/my-weddings/");
+  // The staff wedding page and the lead page carry their own crumb with the couple's name (the top bar only knows the record id).
+  const path = useLocation().pathname;
+  const ownCrumb = path.startsWith("/my-weddings/") || path.startsWith("/crm/leads/");
 
   return (
     <header className="z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 pl-5 pr-3 backdrop-blur md:px-4 max-md:h-[68px] max-md:border-b-0">

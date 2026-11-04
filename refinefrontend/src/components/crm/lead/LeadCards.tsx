@@ -32,19 +32,18 @@ export function ContactCard({ lead, fullName, sources, onSaved }: {
   );
 }
 
-/** Wedding facts as the couple typed them: the raw text wins over the parsed value. */
+/** Wedding facts as the couple typed them: the raw text wins over the parsed value. A missing fact shows "—". */
 export function WeddingCard({ lead }: { lead: Lead }) {
   const date = lead.custom_wedding_date_raw || lead.custom_wedding_date?.slice(0, 10);
   const guests = lead.custom_guest_count_raw || (lead.custom_guest_count ? String(lead.custom_guest_count) : "");
   const budget = leadBudgetValue(lead) ?? "";
-  if (!date && !lead.custom_wedding_venue && !guests && !budget && !lead.custom_couple_name && !lead.custom_partner_name) return null;
 
   return (
     <InfoCard title="Wedding">
-      {date && <ReadOnlyField label="Date" value={date} />}
-      {lead.custom_wedding_venue && <ReadOnlyField label="Venue" value={lead.custom_wedding_venue} />}
-      {guests && <ReadOnlyField label="Guests" value={guests} />}
-      {budget && <ReadOnlyField label="Budget" value={budget} />}
+      <ReadOnlyField label="Date" value={date || "—"} />
+      <ReadOnlyField label="Venue" value={lead.custom_wedding_venue || "—"} />
+      <ReadOnlyField label="Guests" value={guests || "—"} />
+      <ReadOnlyField label="Budget" value={budget || "—"} />
       {lead.custom_couple_name && <ReadOnlyField label="Couple" value={lead.custom_couple_name} />}
       {lead.custom_partner_name && <ReadOnlyField label="Partner" value={lead.custom_partner_name} />}
     </InfoCard>

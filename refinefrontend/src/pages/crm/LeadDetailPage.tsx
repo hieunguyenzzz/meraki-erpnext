@@ -11,6 +11,7 @@ import { useConversationItems } from "@/components/crm/useConversationItems";
 import { useActivityItems } from "@/components/crm/useActivityItems";
 import { LeadConversationTab } from "@/components/crm/lead/LeadConversationTab";
 import { LeadActivityTab } from "@/components/crm/lead/LeadActivityTab";
+import { SummaryText } from "@/components/crm/lead/SummaryText";
 import { DeleteLeadDialog } from "@/components/crm/lead/DeleteLeadDialog";
 import { LeadHeader } from "@/components/crm/lead/LeadHeader";
 import { DateConflictAlert, type ConflictLead, type ConflictOrder } from "@/components/crm/lead/DateConflictAlert";
@@ -185,7 +186,7 @@ export default function LeadDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="sm:pt-0">
-                <p className="whitespace-pre-line text-sm text-muted-foreground">{lead.custom_ai_summary}</p>
+                <SummaryText text={lead.custom_ai_summary} />
               </CardContent>
             </Card>
           )}
