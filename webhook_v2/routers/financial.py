@@ -26,6 +26,7 @@ def _year_overview(client: ERPNextClient, year: int) -> dict:
     Queries:
     - Submitted Sales Invoices (revenue + outstanding)
     - Submitted Journal Entries (expenses)
+    - Submitted Payment Entries (received payments)
     - Open Sales Orders (pipeline)
     """
     today = date.today().isoformat()
@@ -76,6 +77,13 @@ def _year_overview(client: ERPNextClient, year: int) -> dict:
         "limit_page_length": 2000,
     }).get("data", [])
 
+    # Fetch submitted Payment Entries (received)
+    payments = client._get("/api/resource/Payment Entry", params={
+        "filters": json.dumps([["docstatus", "=", 1], ["payment_type", "=", "Receive"]]),
+        "fields": json.dumps(["posting_date", "paid_amount"]),
+        "limit_page_length": 2000,
+    }).get("data", [])
+
     # Fetch open Sales Orders (pipeline)
     open_orders = client._get("/api/resource/Sales Order", params={
         "filters": json.dumps([["status", "=", "Open"]]),
@@ -97,8 +105,6 @@ def _year_overview(client: ERPNextClient, year: int) -> dict:
         month = (inv.get("posting_date") or "")[:7]
         if month in monthly_map:
             monthly_map[month]["revenue"] += inv.get("grand_total") or 0
-            # Collected = the paid part of the invoice (same rule as the wedding's payment %: grand_total - outstanding).
-            monthly_map[month]["collected"] += (inv.get("grand_total") or 0) - (inv.get("outstanding_amount") or 0)
 
     for gl in jv_gl_entries:
         if gl.get("account") not in expense_accounts:
@@ -111,6 +117,11 @@ def _year_overview(client: ERPNextClient, year: int) -> dict:
         month = (pi.get("posting_date") or "")[:7]
         if month in monthly_map:
             monthly_map[month]["expenses"] += pi.get("grand_total") or 0
+
+    for p in payments:
+        month = (p.get("posting_date") or "")[:7]
+        if month in monthly_map:
+            monthly_map[month]["collected"] += p.get("paid_amount") or 0
 
     # Wedding counts per month (by delivery_date)
     wedding_count: dict[str, int] = {m: 0 for m in months}
