@@ -15,10 +15,12 @@ interface Props {
   onClose: () => void;
   /** Inside a bottom sheet: scrolling body and bordered footer. Otherwise the inline desktop panel. */
   sheet?: boolean;
+  /** Reports whether a save is in flight, so the frame can refuse to close and lose a failed save */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 /** Fields and save logic for creating or editing a job opening; the caller supplies the frame. */
-export function JobForm({ job, onClose, sheet }: Props) {
+export function JobForm({ job, onClose, sheet, onBusyChange }: Props) {
   const invalidate = useInvalidate();
   const { mutateAsync: createJob } = useCreate();
   const { mutateAsync: updateJob } = useUpdate();
@@ -35,6 +37,11 @@ export function JobForm({ job, onClose, sheet }: Props) {
   const { result: designationsResult, query: designationsQuery } = useList({ resource: "Designation", pagination: { mode: "off" }, meta: { fields: ["name"] } });
   const branches = useMemo(() => ((locationsResult?.data ?? []) as { name: string }[]).map((b) => b.name), [locationsResult]);
   const designations = useMemo(() => ((designationsResult?.data ?? []) as { name: string }[]).map((d) => d.name), [designationsResult]);
+
+  useEffect(() => {
+    onBusyChange?.(submitting);
+    return () => onBusyChange?.(false);
+  }, [submitting, onBusyChange]);
 
   // Prefill when the form opens or switches to another opening
   useEffect(() => {

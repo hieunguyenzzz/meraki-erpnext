@@ -134,7 +134,7 @@ export default function ApplicantsListPage() {
     () => (isDesktop ? rows.slice(pageNo * PAGE_SIZE, (pageNo + 1) * PAGE_SIZE) : rows.slice(0, (pageNo + 1) * PAGE_SIZE)),
     [rows, pageNo, isDesktop],
   );
-  // Only applicants still in the filtered list count, so a hidden row is never sent by accident
+  // Only applicants still in the filtered list count; paging on desktop clears the selection, so nothing off-screen is sent
   const selectedIds = useMemo(() => rows.filter((r) => selected.has(r.name)).map((r) => r.name), [rows, selected]);
 
   function toggleSort(key: SortKey) {
@@ -229,7 +229,7 @@ export default function ApplicantsListPage() {
           {rows.length} applicant{rows.length === 1 ? "" : "s"}
         </span>
         {isDesktop
-          ? <ApplicantsTable rows={shown} sort={sort} onSort={toggleSort} selected={selected} onToggle={toggle} onToggleAll={toggleAll} page={pageNo} pageSize={PAGE_SIZE} total={rows.length} onPage={setPage} />
+          ? <ApplicantsTable rows={shown} sort={sort} onSort={toggleSort} selected={selected} onToggle={toggle} onToggleAll={toggleAll} page={pageNo} pageSize={PAGE_SIZE} total={rows.length} onPage={(p) => { setPage(p); setSelected(new Set()); setSendError(""); }} />
           : <ApplicantCards rows={shown} selected={selected} onToggle={toggle} />}
         {!isDesktop && rows.length > shown.length && (
           <Button variant="outline" className="self-center" onClick={() => setPage(pageNo + 1)}>

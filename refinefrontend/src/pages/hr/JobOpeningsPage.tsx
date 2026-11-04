@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useInvalidate, useList, useUpdate } from "@refinedev/core";
+import { useCustom, useInvalidate, useList, useUpdate } from "@refinedev/core";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { Plus, RotateCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,18 +43,24 @@ export default function JobOpeningsPage() {
   }, [query.isError, query.error]);
 
   // Applicants per opening, for the table's Applicants column
-  const { result: applicantsResult } = useList({
-    resource: "Job Applicant",
-    pagination: { mode: "off" },
-    meta: { fields: ["name", "job_title"] },
+  // One grouped count in the database (frappe.client.get_list group_by); phones don't show the column.
+  // dataProvider.custom ignores `config.query`, so the params go in the URL itself.
+  const countParams = new URLSearchParams({
+    doctype: "Job Applicant",
+    fields: JSON.stringify(["job_title", "count(name) as applicant_count"]),
+    group_by: "job_title",
+    limit_page_length: "0",
   });
-  const applicantCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const a of (applicantsResult?.data ?? []) as { job_title?: string }[]) {
-      if (a.job_title) counts.set(a.job_title, (counts.get(a.job_title) ?? 0) + 1);
-    }
-    return counts;
-  }, [applicantsResult]);
+  const { result: countsResult } = useCustom({
+    url: `/api/method/frappe.client.get_list?${countParams}`,
+    method: "get",
+    queryOptions: { enabled: isDesktop },
+  });
+  const countRows = (countsResult?.data as { message?: { job_title: string | null; applicant_count: number }[] } | undefined)?.message;
+  const applicantCounts = useMemo(
+    () => new Map((countRows ?? []).filter((r) => r.job_title).map((r) => [r.job_title as string, r.applicant_count])),
+    [countRows],
+  );
 
   const jobs = useMemo(() => (result?.data ?? []) as JobOpening[], [result]);
 
