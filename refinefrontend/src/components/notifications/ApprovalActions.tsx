@@ -32,7 +32,7 @@ export function ApprovalActions({ outcome, processing, compact, onDecide }: Prop
           <Button
             variant="success"
             size={size}
-            className="flex-1"
+            className="flex-1 md:flex-none"
             disabled={processing}
             onClick={() => onDecide("approve")}
           >
@@ -42,7 +42,7 @@ export function ApprovalActions({ outcome, processing, compact, onDecide }: Prop
           <Button
             variant="outline"
             size={size}
-            className="flex-1 border-destructive/30 text-destructive hover:bg-danger-soft hover:text-danger-soft-foreground"
+            className="flex-1 border-destructive/30 md:flex-none text-destructive hover:bg-danger-soft hover:text-danger-soft-foreground"
             disabled={processing}
             onClick={() => onDecide("reject")}
           >

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useCustom, useCustomMutation, usePermissions } from "@refinedev/core";
 import { HR_ROLES, hasModuleAccess } from "@/lib/roles";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { PwaNotification } from "@/hooks/useMyNotifications";
 import { useNotificationDetails } from "@/hooks/useNotificationDetails";
 import { useNotificationActions } from "@/hooks/useNotificationActions";
-import { DOC_ROUTES, canDecide, groupByDay, labelForType } from "@/lib/notifications";
+import { DOC_ROUTES, FILTER_TYPES, canDecide, groupByDay, labelForType } from "@/lib/notifications";
 import { NotificationFilters, type TypeCount } from "@/components/notifications/NotificationFilters";
 import { NotificationItem } from "@/components/notifications/NotificationItem";
 import { NotificationEmpty, NotificationError, NotificationSkeleton } from "@/components/notifications/NotificationStates";
@@ -41,7 +41,7 @@ export default function NotificationsPage() {
   const [markingAll, setMarkingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [docType, setDocType] = useState(loadSavedFilter); // "" = All
-  const [typeCounts, setTypeCounts] = useState<TypeCount[] | null>(null);
+  const [serverCounts, setServerCounts] = useState<TypeCount[] | null>(null);
 
   // dataProvider.custom ignores `config.query`, so the params go in the URL itself
   const params = new URLSearchParams({ page: String(page), page_size: "50" });
@@ -60,11 +60,20 @@ export default function NotificationsPage() {
   // type_counts is unfiltered, so keep the last one to avoid chip flicker while a new type loads
   useEffect(() => {
     if (message?.type_counts) {
-      setTypeCounts([...message.type_counts].sort((a: TypeCount, b: TypeCount) => b.total - a.total));
+      setServerCounts(message.type_counts);
     }
   }, [message?.type_counts]);
 
-  // Saved type no longer exists (e.g. all its notifications were deleted) -> back to All
+  // The standard categories always show (even at 0); any other type the server reports follows them
+  const typeCounts = useMemo<TypeCount[] | null>(() => {
+    if (!serverCounts) return null;
+    const byType = new Map(serverCounts.map((t) => [t.type, t]));
+    const standard = FILTER_TYPES.map((type) => byType.get(type) ?? { type, total: 0, unread: 0 });
+    const extra = serverCounts.filter((t) => !FILTER_TYPES.includes(t.type)).sort((a, b) => b.total - a.total);
+    return [...standard, ...extra];
+  }, [serverCounts]);
+
+  // Saved type is not a chip any more -> back to All
   useEffect(() => {
     if (typeCounts && docType && !typeCounts.some((t) => t.type === docType)) {
       selectType("");
@@ -142,14 +151,9 @@ export default function NotificationsPage() {
   const showError = allNotifications.length === 0 && query.isError && !query.isFetching;
 
   return (
-    <div className="mx-auto max-w-[720px]">
+    <div className="mx-auto max-w-[920px]">
       <div className="flex items-center justify-between gap-2 pb-1">
-        <div>
-          <h1 className="text-xl font-semibold">Notifications</h1>
-          <p className="hidden text-sm text-muted-foreground md:block">
-            {total} total{unread > 0 && `, ${unread} unread`}
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold md:font-display md:text-4xl md:leading-10">Notifications</h1>
         {unread > 0 && (
           <Button
             variant="ghost"
@@ -183,7 +187,7 @@ export default function NotificationsPage() {
       ) : allNotifications.length === 0 ? (
         <NotificationEmpty filtered={!!docType} />
       ) : (
-        <div className="mt-1 space-y-5">
+        <div className="mt-1 space-y-4 md:mt-2">
           {groupByDay(allNotifications).map((group) => (
             <section key={group.label}>
               <h2 className="px-1 pb-2 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
@@ -210,7 +214,7 @@ export default function NotificationsPage() {
 
           {hasMore && (
             <div className="flex justify-center">
-              <Button variant="outline" onClick={() => setPage((p) => p + 1)} disabled={query.isFetching}>
+              <Button variant="outline" className="md:h-11 md:px-[22px]" onClick={() => setPage((p) => p + 1)} disabled={query.isFetching}>
                 {query.isFetching ? "Loading..." : "Load more"}
               </Button>
             </div>

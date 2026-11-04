@@ -76,6 +76,18 @@ export function useNotificationActions({ onRead }: Options = {}) {
     }
   }
 
+  /** Mark every unread notification of the user read; the caller decides what to show on failure. */
+  async function markAllRead(): Promise<boolean> {
+    try {
+      await customMutation({ url: "/api/method/handle_notification_action", method: "post", values: { action: "read_all" } });
+      refreshNotifications();
+      return true;
+    } catch (err) {
+      console.error("notification_read_all_failed", err);
+      return false;
+    }
+  }
+
   async function decide(notif: PwaNotification, action: ApprovalAction): Promise<void> {
     const outcome: Outcome = action === "approve" ? "approved" : "rejected";
     setProcessing(notif.name, true);
@@ -119,5 +131,5 @@ export function useNotificationActions({ onRead }: Options = {}) {
     }
   }
 
-  return { processingIds, outcomes, errors, markRead, decide };
+  return { processingIds, outcomes, errors, markRead, markAllRead, decide };
 }

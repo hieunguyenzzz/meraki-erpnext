@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 export function NotificationBell({ className }: { className?: string }) {
   const navigate = useNavigate();
   const { notifications, count } = useMyNotifications();
-  const { processingIds, outcomes, errors, markRead, decide } = useNotificationActions();
+  const { processingIds, outcomes, errors, markRead, markAllRead, decide } = useNotificationActions();
   const details = useNotificationDetails(notifications);
   // Approve/reject endpoints are HR-only; other approvers still see and open the notification.
   const { data: roles } = usePermissions<string[]>({});
@@ -45,12 +45,18 @@ export function NotificationBell({ className }: { className?: string }) {
           <span className="sr-only">Notifications</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-[380px] max-w-[calc(100vw-2rem)] overflow-hidden p-0" align="end" forceMount>
-        <div className="flex items-center justify-between px-4 py-3">
-          <p className="text-sm font-semibold">Notifications{count > 0 && ` (${count})`}</p>
-          <Link to="/notifications" className="text-sm font-semibold text-primary hover:underline">
-            See all
-          </Link>
+      <DropdownMenuContent className="w-[420px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[18px] p-0" align="end" forceMount>
+        <div className="flex items-center justify-between px-4 py-3.5">
+          <p className="text-base font-semibold">Notifications</p>
+          {count > 0 && (
+            <button
+              type="button"
+              onClick={() => void markAllRead()}
+              className="h-8 rounded-md text-[13px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Mark all as read
+            </button>
+          )}
         </div>
         <DropdownMenuSeparator className="my-0" />
         {count === 0 ? (
@@ -80,6 +86,12 @@ export function NotificationBell({ className }: { className?: string }) {
             })}
           </div>
         )}
+        <Link
+          to="/notifications"
+          className="flex h-12 items-center justify-center border-t text-sm font-semibold text-primary hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          See all notifications
+        </Link>
       </DropdownMenuContent>
     </DropdownMenu>
   );
