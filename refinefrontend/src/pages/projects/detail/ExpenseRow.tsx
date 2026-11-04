@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover as ShadcnPopover, PopoverContent as ShadcnPopoverContent, PopoverTrigger as ShadcnPopoverTrigger } from "@/components/ui/popover";
+import { RejectReasonForm } from "@/components/notifications/RejectReasonForm";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import type { ExpenseCategory } from "@/components/projects/ExpenseCategorySummary";
 import { attachExpenseReceipt, deleteExpenseReceipt } from "@/lib/fileUpload";
@@ -23,7 +24,7 @@ interface Props {
   onPreview: (url: string) => void;
   runReceiptAction: (piName: string, fallbackError: string, action: () => Promise<string | undefined | void>) => Promise<void>;
   onApprove: (piName: string) => void;
-  onReject: (piName: string) => void;
+  onReject: (piName: string, reason: string) => void;
   onDelete: (piName: string) => void;
   /** Persist an edit; resolves once saved so the row can leave edit mode. */
   onSave: (piName: string, values: { date: string; description: string; amount: string; category: string; staff: string; note: string }, originalNote: string) => Promise<boolean>;
@@ -32,6 +33,7 @@ interface Props {
 /** One expense: receipt thumbnail, then either the read-only cells or the inline edit cells. */
 export function ExpenseRow({ exp, employees, weddingTeam, categories: expenseCategories, isFinance, receiptBusy, onPreview, runReceiptAction, onApprove, onReject, onDelete, onSave }: Props) {
   const [editing, setEditing] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
   const [editExpValues, setEditExpValues] = useState({ date: "", description: "", amount: "", category: "", staff: "", note: "" });
   const [editExpCatOpen, setEditExpCatOpen] = useState(false);
 
@@ -196,6 +198,9 @@ export function ExpenseRow({ exp, employees, weddingTeam, categories: expenseCat
               <td className="px-3 py-2">
                 {exp.description}
                 {exp.note && <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2" title={exp.note}>{exp.note}</div>}
+                {exp.status === "Rejected" && exp.rejected_reason && (
+                  <div className="mt-0.5 text-xs text-danger-soft-foreground break-words">Rejected: “{exp.rejected_reason}”</div>
+                )}
               </td>
               <td className="px-3 py-2 text-muted-foreground">
                 {exp.staff ? (employees.find(e => e.id === exp.staff)?.name ?? exp.staff) : "—"}
@@ -203,7 +208,7 @@ export function ExpenseRow({ exp, employees, weddingTeam, categories: expenseCat
               <td className="px-3 py-2 text-muted-foreground">{exp.category || "—"}</td>
               <td className="px-3 py-2 text-right">{formatVNDFull(exp.amount)}</td>
               <td className="px-3 py-2">
-                <Badge variant={exp.status === "Approved" ? "success" : "warning"}>{exp.status}</Badge>
+                <Badge variant={exp.status === "Approved" ? "success" : exp.status === "Rejected" ? "destructive" : "warning"}>{exp.status}</Badge>
               </td>
               <td className="px-3 py-2">
                 <div className="flex gap-1">
@@ -219,10 +224,17 @@ export function ExpenseRow({ exp, employees, weddingTeam, categories: expenseCat
                         onClick={() => onApprove(exp.name)} title="Approve">
                         <Check className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => onReject(exp.name)} title="Reject">
-                        <X className="h-4 w-4" />
-                      </Button>
+                      <ShadcnPopover open={rejectOpen} onOpenChange={setRejectOpen}>
+                        <ShadcnPopoverTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" title="Reject">
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </ShadcnPopoverTrigger>
+                        <ShadcnPopoverContent align="end" className="w-80">
+                          <RejectReasonForm compact onCancel={() => setRejectOpen(false)}
+                            onConfirm={(reason) => { setRejectOpen(false); onReject(exp.name, reason); }} />
+                        </ShadcnPopoverContent>
+                      </ShadcnPopover>
                     </>
                   )}
                   {(exp.status === "Pending" || isFinance) && (

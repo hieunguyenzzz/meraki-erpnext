@@ -90,6 +90,7 @@ export default function ExpenseDetailPage() {
               {info?.staff && <Fact label="Staff">{info.staff}</Fact>}
               {info?.description && <Fact label="Description">{info.description}</Fact>}
               {info?.note && <Fact label="Note">{info.note}</Fact>}
+              {status === "Rejected" && info?.rejected_reason && <Fact label="Rejection reason">{info.rejected_reason}</Fact>}
               {expense.docstatus === 1 && expense.outstanding_amount > 0 && <Fact label="Outstanding">{formatVNDFull(expense.outstanding_amount)}</Fact>}
             </Facts>
             {infoMap.error && <p role="alert" className="text-xs text-danger-soft-foreground">Staff and description didn't load. {infoMap.error}</p>}
@@ -124,7 +125,7 @@ export default function ExpenseDetailPage() {
             </DetailCard>
           )}
 
-          {canDecide && <DecisionCard piName={expense.name} />}
+          {canDecide && <DecisionCard piName={expense.name} staffName={info?.staff} onDecided={infoMap.reload} />}
         </div>
 
         <ReceiptsCard piName={expense.name} />

@@ -33,7 +33,7 @@ export interface MyWeddingDetail extends Omit<MyWedding, "venue_name"> {
     notes: string | null;
     staff: { name: string; role: string | null; call_time: string | null }[];
   }[];
-  my_expenses: { name: string; date: string; amount: number; description: string; status: string }[];
+  my_expenses: { name: string; date: string; amount: number; description: string; status: string; rejected_reason: string | null }[];
 }
 
 /** Within this many days of the wedding the countdown is highlighted. */

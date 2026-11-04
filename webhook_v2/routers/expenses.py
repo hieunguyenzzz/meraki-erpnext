@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, field_validator
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.classifier_client import RemoteClassifierClient
 from webhook_v2.services.receipt_image import to_browser_image
+from webhook_v2.services.expense_rejection import add_rejection_comment, reason_if_rejected
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries
 from webhook_v2.routers.my_weddings import require_assigned_unless_privileged, bind_correlation_id
@@ -690,6 +691,8 @@ def list_expenses(request: Request, project: str | None = None):
         except Exception:
             pass
 
+    reasons = reason_if_rejected(client, pis)
+
     result = []
     for pi in pis:
         docstatus = pi.get("docstatus", 0)
@@ -731,6 +734,7 @@ def list_expenses(request: Request, project: str | None = None):
             "staff": pi.get("custom_expense_staff", ""),
             "receipt_url": file_map.get(pi["name"]),
             "note": _expense_note(pi.get("remarks"), category),
+            "rejected_reason": reasons.get(pi["name"]),
         })
 
     return result
@@ -738,7 +742,7 @@ def list_expenses(request: Request, project: str | None = None):
 
 @router.get("/expense/descriptions", dependencies=[Depends(require_roles(*FINANCE))])
 def expense_descriptions():
-    """Return a {PI name: {description, staff}} map for Draft/Submitted expenses.
+    """Return a {PI name: {description, staff, note, rejected_reason}} map for Draft/Submitted expenses.
 
     Both fields need server-side resolution the frontend's parent-only list
     query can't do:
@@ -755,6 +759,8 @@ def expense_descriptions():
             "name",
             "custom_expense_staff",
             "remarks",
+            "docstatus",
+            "custom_rejected",
             "`tabPurchase Invoice Item`.idx",
             "`tabPurchase Invoice Item`.item_name",
             "`tabPurchase Invoice Item`.expense_account",
@@ -780,6 +786,8 @@ def expense_descriptions():
         if name not in first or idx < (first[name].get("idx") or 999):
             first[name] = row
 
+    reasons = reason_if_rejected(client, list(first.values()))
+
     result: dict[str, dict] = {}
     for name, row in first.items():
         description = row.get("item_name") or ""
@@ -792,6 +800,7 @@ def expense_descriptions():
             "description": description,
             "staff": emp_names.get(staff_id, staff_id) if staff_id else "",
             "note": _expense_note(row.get("remarks"), category),
+            "rejected_reason": reasons.get(name),
         }
 
     log.info("expense_descriptions", pi_count=len(result))
@@ -1006,9 +1015,22 @@ def approve_all_expenses(project: str):
     return {"approved": len(approved), "failed": len(failed), "details": failed}
 
 
+class RejectExpenseRequest(BaseModel):
+    reason: str | None = Field(None, max_length=500)  # optional for old callers; every app screen requires it
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _strip_reason(cls, v):
+        return v.strip() or None if isinstance(v, str) else v
+
+
 @router.post("/expense/{pi_name}/reject", dependencies=[Depends(require_roles(*FINANCE))])
-def reject_expense(pi_name: str):
-    """Reject a Draft Purchase Invoice (marks as rejected, keeps visible)."""
+def reject_expense(pi_name: str, req: RejectExpenseRequest | None = None):
+    """Reject a Draft Purchase Invoice (marks as rejected, keeps visible).
+
+    A reason is kept as a Comment on the invoice so the submitter can see why.
+    """
+    reason = req.reason if req else None
     client = ERPNextClient()
 
     pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
@@ -1022,7 +1044,15 @@ def reject_expense(pi_name: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to reject expense: {e}")
 
-    log.info("expense_rejected", pi=pi_name)
+    if reason:
+        try:
+            add_rejection_comment(client, pi_name, reason)
+        except Exception as e:
+            # The expense is already rejected; retrying this call is safe and adds the reason.
+            log.error("expense_rejection_comment_failed", pi=pi_name, error=str(e), exc_info=True)
+            raise HTTPException(status_code=502, detail="Expense rejected, but the reason could not be saved. Reject again to retry.")
+
+    log.info("expense_rejected", pi=pi_name, has_reason=bool(reason))
     return {"success": True}
 
 

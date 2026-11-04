@@ -74,9 +74,14 @@ export function ExpensesTab({ w, data }: Props) {
     }
   }
 
-  async function handleRejectExpense(piName: string) {
+  async function handleRejectExpense(piName: string, reason: string) {
     try {
-      const resp = await fetch(`/inquiry-api/expense/${piName}/reject`, { method: "POST", credentials: "include" });
+      const resp = await fetch(`/inquiry-api/expense/${piName}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ reason }),
+      });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.detail || "Failed to reject");

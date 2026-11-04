@@ -16,6 +16,8 @@ export interface RowInfo {
   description: string;
   staff: string;
   note: string;
+  /** Why a rejected expense was rejected; empty unless it is currently rejected. */
+  rejected_reason?: string | null;
 }
 
 export interface ExpenseCategory {

@@ -22,6 +22,12 @@ export interface RowProps {
 const href = (e: Expense) => `/finance/expenses/${encodeURIComponent(e.name)}`;
 const title = (p: RowProps) => p.info?.description || p.expense.supplier_name || p.expense.name;
 
+/** Why a rejected expense was rejected (text only), shown under the description. */
+function RejectedReason({ expense, info }: { expense: Expense; info?: RowInfo }) {
+  if (expenseStatus(expense) !== "Rejected" || !info?.rejected_reason) return null;
+  return <div className="line-clamp-2 break-words text-xs text-danger-soft-foreground" title={info.rejected_reason}>Rejected: “{info.rejected_reason}”</div>;
+}
+
 export function StatusBadge({ expense }: { expense: Expense }) {
   const s = expenseStatus(expense);
   return <Badge variant={statusVariant(s)}>{s}</Badge>;
@@ -51,6 +57,7 @@ export function ExpenseTableRow(p: RowProps) {
         <Link to={href(e)} className="block truncate font-medium text-primary hover:underline focus-visible:underline" title={title(p)}>{title(p)}</Link>
         <span className="text-xs text-muted-foreground">{e.name}</span>
         {info?.note && <div className="line-clamp-2 text-xs text-muted-foreground" title={info.note}>{info.note}</div>}
+        <RejectedReason expense={e} info={info} />
       </td>
       <td className="px-3 py-3">
         {e.project ? (
@@ -91,6 +98,7 @@ export function ExpenseCard(p: RowProps) {
         <b className="text-lg tabular-nums">{formatVNDFull(e.grand_total)}</b>
         {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
         {info?.note && <p className="line-clamp-2 text-xs text-muted-foreground">{info.note}</p>}
+        <RejectedReason expense={e} info={info} />
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span className="tabular-nums">{isoDay(e.posting_date)}</span>
           <StatusBadge expense={e} />

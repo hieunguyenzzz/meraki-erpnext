@@ -194,7 +194,7 @@ def test_assigned_detail_has_no_financial_keys_and_only_own_expenses():
     assert data["venue_name"] == "An Lam" and data["my_role"] == "assistant"
     # Only the caller's invoice, one row per invoice, description from the lowest idx item.
     assert data["my_expenses"] == [
-        {"name": "PI-1", "date": "2026-11-01", "amount": 100, "description": "taxi", "status": "Pending"}
+        {"name": "PI-1", "date": "2026-11-01", "amount": 100, "description": "taxi", "status": "Pending", "rejected_reason": None}
     ]
     # One Purchase Invoice list call, no per-invoice GETs.
     assert [u for u, _ in calls if u.startswith("/api/resource/Purchase Invoice")] == ["/api/resource/Purchase Invoice"]

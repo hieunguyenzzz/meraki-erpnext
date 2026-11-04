@@ -88,7 +88,7 @@ export function useNotificationActions({ onRead }: Options = {}) {
     }
   }
 
-  async function decide(notif: PwaNotification, action: ApprovalAction): Promise<void> {
+  async function decide(notif: PwaNotification, action: ApprovalAction, reason?: string): Promise<void> {
     const outcome: Outcome = action === "approve" ? "approved" : "rejected";
     setProcessing(notif.name, true);
     setError(notif.name, null);
@@ -96,12 +96,15 @@ export function useNotificationActions({ onRead }: Options = {}) {
     try {
       const id = encodeURIComponent(notif.reference_document_name);
       // Leave/WFH go through the webhook API so the doc is properly submitted and the
-      // Google Calendar event is added. Purchase Invoice has no webhook endpoint, so it keeps the Server Script.
+      // Google Calendar event is added. Expense approval keeps the Server Script.
       if (notif.reference_document_type === "Leave Application") {
         await post(`/inquiry-api/leave/${id}/${action}`);
         invalidate({ resource: "Leave Application", invalidates: ["list"] });
       } else if (notif.reference_document_type === "Attendance Request") {
         await post(`/inquiry-api/wfh/${id}/${action}`);
+      } else if (notif.reference_document_type === "Purchase Invoice" && action === "reject") {
+        // The webhook endpoint keeps the reason as a Comment; the Server Script only flips the flag.
+        await customMutation({ url: `/inquiry-api/expense/${id}/reject`, method: "post", values: { reason } });
       } else {
         await customMutation({
           url: "/api/method/handle_notification_action",

@@ -34,7 +34,7 @@ interface Props {
   processing: boolean;
   onOpen: (notif: PwaNotification) => void;
   onDismiss: (notif: PwaNotification) => void;
-  onDecide: (notif: PwaNotification, action: ApprovalAction) => void;
+  onDecide: (notif: PwaNotification, action: ApprovalAction, reason?: string) => void;
 }
 
 export function NotificationItem({
@@ -148,7 +148,8 @@ export function NotificationItem({
                   outcome={outcome}
                   processing={processing}
                   compact={compact}
-                  onDecide={(action) => onDecide(notif, action)}
+                  requireReason={notif.reference_document_type === "Purchase Invoice"}
+                  onDecide={(action, reason) => onDecide(notif, action, reason)}
                 />
               )}
               {error && (

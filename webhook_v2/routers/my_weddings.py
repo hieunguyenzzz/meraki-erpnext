@@ -31,6 +31,7 @@ from webhook_v2.auth import (
 from webhook_v2.core.logging import bind_context, get_logger
 from webhook_v2.routers.wedding_events import get_wedding_events
 from webhook_v2.services.erpnext import ERPNextClient
+from webhook_v2.services.expense_rejection import reason_if_rejected
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -335,6 +336,7 @@ def _my_expenses(client: ERPNextClient, project: str, employee: str) -> list[dic
     for row in rows:
         if row["name"] not in first or (row.get("idx") or 999) < (first[row["name"]].get("idx") or 999):
             first[row["name"]] = row
+    reasons = reason_if_rejected(client, list(first.values()))
     return [
         {
             "name": pi["name"],
@@ -342,6 +344,7 @@ def _my_expenses(client: ERPNextClient, project: str, employee: str) -> list[dic
             "amount": pi["grand_total"],
             "description": pi.get("item_name") or "",
             "status": "Approved" if pi["docstatus"] == 1 else "Rejected" if pi.get("custom_rejected") else "Pending",
+            "rejected_reason": reasons.get(pi["name"]),
         }
         for pi in first.values()
     ]
