@@ -102,7 +102,7 @@ export function Sidebar() {
   const active = getActiveItem(pathname, groups.flatMap((g) => g.items));
 
   return (
-    <aside className="hidden h-dvh w-[248px] shrink-0 flex-col border-r bg-sidebar px-3.5 py-5 text-sidebar-foreground md:flex">
+    <aside className="hidden h-dvh w-[248px] shrink-0 flex-col print:hidden border-r bg-sidebar px-3.5 py-5 text-sidebar-foreground md:flex">
       <Wordmark large to={isEmployeeSelfServiceOnly(roles) ? "/my-profile" : "/"} className="mb-3.5 shrink-0 px-3 pt-1" />
       <button
         type="button"

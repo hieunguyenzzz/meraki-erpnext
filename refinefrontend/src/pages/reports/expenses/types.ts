@@ -16,29 +16,28 @@ export interface ExpenseRow {
   staff_name: string;
   supplier_name: string;
   receipt_url: string | null;
+  project: string;
+  project_name: string;
 }
 
+/** total / count leave out rejected expenses, the same rule as the wedding page's Expenses card. */
 export interface ExpenseSummary {
   total: number;
   approved: number;
   pending: number;
   count: number;
+  counted: number;
 }
 
-export interface ExpenseGroup {
+export interface ExpenseCategory {
   label: string;
-  rows: ExpenseRow[];
-  subtotal: number;
+  amount: number;
 }
 
-export const GROUPS = ["all", "category", "date"] as const;
-export type GroupBy = (typeof GROUPS)[number];
-export const GROUP_LABEL: Record<GroupBy, string> = { all: "All", category: "By category", date: "By date" };
+export const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-export const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive"> = {
+export const STATUS_VARIANT: Record<string, "success" | "warning" | "destructive"> = {
   Approved: "success",
-  Pending: "secondary",
+  Pending: "warning",
   Rejected: "destructive",
 };

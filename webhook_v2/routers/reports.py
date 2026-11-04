@@ -2,13 +2,13 @@
 Report endpoints — server-side computed reports.
 
 GET /reports/leave-report                — monthly breakdown, old/new period balances, accrual
-GET /reports/wedding-expenses            — expenses for a specific wedding project
+GET /reports/wedding-expenses            — expenses for one wedding, or all weddings in a year/month
 GET /reports/wedding-expenses/projects   — lightweight project list for dropdown
 """
 
 import json
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.leave_balance import build_pools
 from webhook_v2.core.logging import get_logger
@@ -246,24 +246,65 @@ def wedding_expense_projects():
     return {"data": projects}
 
 
+def _wedding_projects_in_period(client: ERPNextClient, year: str, month: str) -> list[dict]:
+    """Non-cancelled weddings whose end date falls in the year (and month, if given)."""
+    filters: list = [["status", "!=", "Cancelled"]]
+    if year:
+        y = int(year)
+        m = int(month) if month else None
+        start = date(y, m or 1, 1)
+        end = date(y + 1, 1, 1) if not m or m == 12 else date(y, m + 1, 1)
+        filters += [["expected_end_date", ">=", start.isoformat()], ["expected_end_date", "<", end.isoformat()]]
+    return client._get("/api/resource/Project", params={
+        "filters": json.dumps(filters),
+        "fields": json.dumps(["name", "project_name"]),
+        "limit_page_length": 0,
+    }).get("data", [])
+
+
 @router.get("/reports/wedding-expenses")
-def wedding_expense_report(project: str = Query(...)):
-    """Detailed expense report for a single wedding project."""
+def wedding_expense_report(
+    project: str = "",
+    year: str = Query("", pattern=r"^(\d{4})?$"),
+    month: str = Query("", pattern=r"^([1-9]|1[0-2])?$"),
+):
+    """
+    Expense report for one wedding (project) or for every wedding ending in year[/month].
+
+    Category totals use the wedding page's Expenses card rule: rejected expenses are
+    left out and the label is the expense account without the " - MWP" suffix.
+    """
     client = ERPNextClient()
 
-    # Fetch all PIs for this project (Draft + Submitted)
+    if project:
+        pis_filter = ["project", "=", project]
+        names = {}
+    else:
+        if not year:
+            raise HTTPException(status_code=422, detail="Give a project, or a year")
+        weddings = _wedding_projects_in_period(client, year, month)
+        names = {w["name"]: w.get("project_name") or w["name"] for w in weddings}
+        if not names:
+            return {"data": [], "summary": {"total": 0.0, "approved": 0.0, "pending": 0.0, "count": 0, "counted": 0}, "categories": []}
+        pis_filter = ["project", "in", list(names)]
+
+    # Fetch all PIs (Draft + Submitted)
     pis = client._get("/api/resource/Purchase Invoice", params={
         "filters": json.dumps([
-            ["project", "=", project],
+            pis_filter,
             ["docstatus", "in", [0, 1]],
         ]),
         "fields": json.dumps([
-            "name", "supplier", "supplier_name", "posting_date",
+            "name", "supplier", "supplier_name", "posting_date", "project",
             "grand_total", "docstatus", "custom_rejected", "custom_expense_staff",
         ]),
-        "order_by": "posting_date asc",
+        "order_by": "posting_date desc, creation desc",
         "limit_page_length": 0,
     }).get("data", [])
+    if project:
+        names = {project: project}
+        proj = client._get(f"/api/resource/Project/{project}").get("data", {})
+        names[project] = proj.get("project_name") or project
 
     # Batch-fetch attached files for receipt thumbnails
     pi_names = [pi["name"] for pi in pis]
@@ -299,9 +340,10 @@ def wedding_expense_report(project: str = Query(...)):
 
     # Build result rows — must fetch each PI doc for items (child table 403)
     rows = []
-    total = 0.0
+    total = 0.0  # approved + pending; rejected expenses are left out, as on the wedding page
     approved_total = 0.0
     pending_total = 0.0
+    by_category: dict[str, float] = {}
     for pi in pis:
         docstatus = pi.get("docstatus", 0)
         rejected = pi.get("custom_rejected", 0)
@@ -321,7 +363,11 @@ def wedding_expense_report(project: str = Query(...)):
         description = first_item.get("item_name", "")
         staff_id = pi.get("custom_expense_staff", "")
 
-        total += amount
+        category_label = category.replace(" - MWP", "") if category else ""
+        if status != "Rejected":
+            total += amount
+            key = category_label or "Uncategorised"
+            by_category[key] = by_category.get(key, 0.0) + amount
         if status == "Approved":
             approved_total += amount
         elif status == "Pending":
@@ -333,7 +379,9 @@ def wedding_expense_report(project: str = Query(...)):
             "description": description,
             "amount": amount,
             "category": category,
-            "category_label": category.replace(" - MWP", "") if category else "",
+            "category_label": category_label,
+            "project": pi.get("project", ""),
+            "project_name": names.get(pi.get("project", ""), pi.get("project", "")),
             "status": status,
             "staff": staff_id,
             "staff_name": staff_names.get(staff_id, ""),
@@ -348,5 +396,7 @@ def wedding_expense_report(project: str = Query(...)):
             "approved": approved_total,
             "pending": pending_total,
             "count": len(rows),
+            "counted": sum(1 for r in rows if r["status"] != "Rejected"),
         },
+        "categories": [{"label": k, "amount": v} for k, v in sorted(by_category.items(), key=lambda kv: -kv[1])],
     }

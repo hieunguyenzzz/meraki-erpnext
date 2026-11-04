@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ExpenseRow, ExpenseSummary, Project } from "./types";
+import type { ExpenseCategory, ExpenseRow, ExpenseSummary, Project } from "./types";
 
 async function getJson(url: string) {
   const r = await fetch(url, { credentials: "include" });
@@ -7,13 +7,9 @@ async function getJson(url: string) {
   return r.json();
 }
 
-/** Wedding list for the dropdowns, plus the expenses of the selected wedding. */
-export function useExpenseReport(project: string) {
+/** Wedding list for the dropdowns. */
+export function useWeddingList() {
   const [projects, setProjects] = useState<Project[] | null>(null);
-  const [rows, setRows] = useState<ExpenseRow[]>([]);
-  const [summary, setSummary] = useState<ExpenseSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<unknown>(null);
   const [listError, setListError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -27,15 +23,30 @@ export function useExpenseReport(project: string) {
       });
   }, [attempt]);
 
+  const retryList = useCallback(() => setAttempt((n) => n + 1), []);
+  return { projects, listError, retryList };
+}
+
+/** Expenses of one wedding, or of every wedding ending in the year/month. */
+export function useExpenseReport(year: string, month: string, project: string) {
+  const [rows, setRows] = useState<ExpenseRow[]>([]);
+  const [summary, setSummary] = useState<ExpenseSummary | null>(null);
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
-    if (!project) {
+    if (!project && !year) {
       setRows([]);
       setSummary(null);
+      setCategories([]);
       return;
     }
     const ctrl = new AbortController();
     setIsLoading(true);
-    fetch(`/inquiry-api/reports/wedding-expenses?project=${encodeURIComponent(project)}`, { credentials: "include", signal: ctrl.signal })
+    const qs = new URLSearchParams(project ? { project } : { year, ...(month ? { month } : {}) });
+    fetch(`/inquiry-api/reports/wedding-expenses?${qs}`, { credentials: "include", signal: ctrl.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -43,6 +54,7 @@ export function useExpenseReport(project: string) {
       .then((d) => {
         setRows(d.data ?? []);
         setSummary(d.summary ?? null);
+        setCategories(d.categories ?? []);
         setError(null);
       })
       .catch((e) => {
@@ -50,12 +62,13 @@ export function useExpenseReport(project: string) {
         console.error("Wedding expenses failed to load", e);
         setRows([]);
         setSummary(null);
+        setCategories([]);
         setError(e);
       })
       .finally(() => { if (!ctrl.signal.aborted) setIsLoading(false); });
     return () => ctrl.abort();
-  }, [project, attempt]);
+  }, [year, month, project, attempt]);
 
-  const retry = useCallback(() => { setError(null); setListError(null); setAttempt((n) => n + 1); }, []);
-  return { projects, rows, summary, isLoading, error, listError, retry };
+  const retry = useCallback(() => { setError(null); setAttempt((n) => n + 1); }, []);
+  return { rows, summary, categories, isLoading, error, retry };
 }

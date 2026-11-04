@@ -1,17 +1,21 @@
+import type { ReactNode } from "react";
 import { NavLink } from "react-router";
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { to: "/reports/leaves", label: "Leave report" },
-  { to: "/reports/expenses", label: "Wedding expenses" },
+  { to: "/reports/expenses", label: "Wedding expense report" },
 ] as const;
 
-/** Shared Reports title and tabs (D-Reports.dc.html). Each tab is its own route. */
-export function ReportsHeader() {
+/** Shared Reports title and tabs (D-Reports.dc.html). Each tab is its own route; `actions` sit beside the title. */
+export function ReportsHeader({ actions }: { actions?: ReactNode }) {
   return (
     <header className="flex flex-col gap-3">
-      <h1 className="text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Reports</h1>
-      <nav aria-label="Reports" className="flex gap-7 border-b">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h1 className="mr-auto text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Reports</h1>
+        {actions}
+      </div>
+      <nav aria-label="Reports" className="flex gap-7 border-b print:hidden">
         {TABS.map((t) => (
           <NavLink
             key={t.to}

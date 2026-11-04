@@ -71,7 +71,7 @@ export function TopBar() {
   const ownCrumb = path.startsWith("/my-weddings/") || path.startsWith("/crm/leads/");
 
   return (
-    <header className="z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 pl-5 pr-3 backdrop-blur md:px-4 max-md:h-[68px] max-md:border-b-0">
+    <header className="z-40 print:hidden flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 pl-5 pr-3 backdrop-blur md:px-4 max-md:h-[68px] max-md:border-b-0">
       <div className="md:hidden">
         <Wordmark to="/" />
       </div>

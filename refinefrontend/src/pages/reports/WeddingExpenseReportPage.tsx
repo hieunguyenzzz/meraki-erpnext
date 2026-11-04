@@ -1,18 +1,18 @@
-import { useEffect, useMemo, useRef } from "react";
-import { createParser, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
+import { useMemo } from "react";
+import { createParser, parseAsString, useQueryStates } from "nuqs";
 import { RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatePanel } from "@/components/StatePanel";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { yearVN } from "@/lib/businessTime";
-import { formatVNDFull } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { ReportsHeader } from "./ReportsHeader";
 import { ExpenseFilters } from "./expenses/ExpenseFilters";
-import { ExpenseCard, ExpenseTable, GroupHeader } from "./expenses/ExpenseRows";
-import { GROUPS, GROUP_LABEL, type ExpenseGroup } from "./expenses/types";
-import { useExpenseReport } from "./expenses/useExpenseReport";
+import { ExpenseCard, ExpenseTable } from "./expenses/ExpenseRows";
+import { ExpenseSummary } from "./expenses/ExpenseSummary";
+import { exportExpensesCsv } from "./expenses/exportCsv";
+import { MONTH_NAMES } from "./expenses/types";
+import { useExpenseReport, useWeddingList } from "./expenses/useExpenseReport";
 
 const year4 = createParser<string>({ parse: (v) => (/^\d{4}$/.test(v) ? v : null), serialize: (v) => v });
 const month12 = createParser<string>({ parse: (v) => (/^(?:[1-9]|1[0-2])$/.test(v) ? v : null), serialize: (v) => v });
@@ -20,25 +20,15 @@ const parsers = {
   year: year4.withDefault(""),
   month: month12.withDefault(""),
   project: parseAsString.withDefault(""),
-  group: parseAsStringLiteral(GROUPS).withDefault("all"),
 };
 
 export default function WeddingExpenseReportPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   // Filters live in the URL so Back restores them; junk values fall back to the defaults.
   const [f, setF] = useQueryStates(parsers, { clearOnDefault: true });
-  const { projects, rows, summary, isLoading, error, listError, retry } = useExpenseReport(f.project);
-  const defaulted = useRef(false);
 
-  // First visit with no filters: default to the current year if any wedding ends in it.
-  useEffect(() => {
-    if (defaulted.current || !projects) return;
-    defaulted.current = true;
-    if (f.year || f.project) return;
-    const y = String(yearVN());
-    if (projects.some((p) => p.expected_end_date?.startsWith(y))) void setF({ year: y });
-  }, [projects, f.year, f.project, setF]);
-
+  // Wedding list is loaded once; the year picker and the default year come from it.
+  const { projects, listError, retryList } = useWeddingList();
   const years = useMemo(() => {
     const s = new Set<string>();
     for (const p of projects ?? []) {
@@ -48,41 +38,33 @@ export default function WeddingExpenseReportPage() {
     return Array.from(s).sort().reverse();
   }, [projects]);
 
+  // No year in the URL: this year if any wedding ends in it, otherwise the newest year.
+  const year = f.year || (years.includes(String(yearVN())) ? String(yearVN()) : years[0] ?? "");
+  const report = useExpenseReport(year, f.month, f.project);
+
   const months = useMemo(() => {
-    if (!f.year) return [];
     const s = new Set<number>();
     for (const p of projects ?? []) {
-      if (p.expected_end_date?.startsWith(f.year)) {
-        const m = parseInt(p.expected_end_date.slice(5, 7), 10);
-        if (m >= 1 && m <= 12) s.add(m);
-      }
+      if (year && p.expected_end_date?.startsWith(year)) s.add(parseInt(p.expected_end_date.slice(5, 7), 10));
     }
-    return Array.from(s).sort((a, b) => a - b);
-  }, [projects, f.year]);
+    return Array.from(s).filter((m) => m >= 1 && m <= 12).sort((a, b) => a - b);
+  }, [projects, year]);
 
   const weddings = useMemo(() => {
     const m = f.month ? f.month.padStart(2, "0") : "";
     return (projects ?? []).filter((p) => {
-      if (!p.expected_end_date) return false;
-      if (f.year && !p.expected_end_date.startsWith(f.year)) return false;
+      if (!p.expected_end_date?.startsWith(year)) return false;
       return !m || p.expected_end_date.slice(5, 7) === m;
     });
-  }, [projects, f.year, f.month]);
+  }, [projects, year, f.month]);
 
-  const groups = useMemo<ExpenseGroup[] | null>(() => {
-    if (f.group === "all") return null;
-    const map = new Map<string, ExpenseGroup>();
-    for (const row of rows) {
-      const label = f.group === "category" ? row.category_label || "Uncategorized" : row.posting_date.slice(0, 10);
-      if (!map.has(label)) map.set(label, { label, rows: [], subtotal: 0 });
-      const g = map.get(label)!;
-      g.rows.push(row);
-      g.subtotal += row.amount;
-    }
-    return Array.from(map.values());
-  }, [rows, f.group]);
-
-  const weddingName = projects?.find((p) => p.name === f.project);
+  const { rows, summary, categories, isLoading, error } = report;
+  const retry = () => { retryList(); report.retry(); };
+  const picked = projects?.find((p) => p.name === f.project);
+  const periodLabel = picked
+    ? picked.project_name || picked.name
+    : `${f.month ? `${MONTH_NAMES[Number(f.month) - 1].slice(0, 3)} ` : ""}${year}`;
+  const ready = projects !== null && year !== "";
 
   let body;
   if (error !== null) {
@@ -94,47 +76,58 @@ export default function WeddingExpenseReportPage() {
         action={{ label: "Try again", onClick: retry, icon: <RotateCw className="h-4 w-4" /> }}
       />
     );
-  } else if (!f.project) {
-    body = <StatePanel kind="empty" title="Select a wedding" text="Pick a year, month and wedding to see its expenses." />;
-  } else if (isLoading) {
+  } else if (!ready && projects !== null) {
+    body = <StatePanel kind="empty" title="No weddings found" text="There are no weddings to report on yet." />;
+  } else if (!ready || isLoading) {
     body = (
       <div className="flex flex-col gap-3" aria-busy="true">
         {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-card md:h-12" />)}
       </div>
     );
-  } else if (rows.length === 0) {
-    body = <StatePanel kind="empty" title="No expenses found" text="This wedding has no recorded expenses yet." />;
-  } else if (isDesktop) {
-    body = <ExpenseTable rows={rows} groups={groups} summary={summary} />;
-  } else if (groups) {
-    body = (
-      <div className="flex flex-col gap-3">
-        {groups.map((g) => (
-          <section key={g.label} className="flex flex-col gap-2">
-            <GroupHeader g={g} />
-            {g.rows.map((r) => <ExpenseCard key={r.name} row={r} />)}
-          </section>
-        ))}
-      </div>
-    );
+  } else if (rows.length === 0 || !summary) {
+    body = <StatePanel kind="empty" title="No expenses found" text={f.project ? "This wedding has no recorded expenses yet." : "No expenses are recorded for these weddings yet."} />;
   } else {
-    body = <div className="flex flex-col gap-3">{rows.map((r) => <ExpenseCard key={r.name} row={r} />)}</div>;
+    body = (
+      <>
+        <ExpenseSummary label={periodLabel} summary={summary} categories={categories} />
+        {isDesktop ? (
+          <ExpenseTable rows={rows} summary={summary} />
+        ) : (
+          <div className="flex flex-col gap-3">{rows.map((r) => <ExpenseCard key={r.name} row={r} />)}</div>
+        )}
+      </>
+    );
   }
 
-  const showResults = f.project !== "" && error === null && !isLoading && rows.length > 0;
+  const canExport = ready && error === null && !isLoading && rows.length > 0;
+  const actions = (
+    <div className="flex gap-2 print:hidden">
+      <Button
+        variant="outline"
+        className="rounded-full max-md:h-12 md:h-10"
+        disabled={!canExport}
+        onClick={() => exportExpensesCsv(rows, `wedding-expenses-${f.project || `${year}${f.month ? `-${f.month.padStart(2, "0")}` : ""}`}.csv`)}
+      >
+        Export CSV
+      </Button>
+      <Button variant="outline" className="rounded-full max-md:h-12 md:h-10" disabled={!canExport} onClick={() => window.print()}>
+        Print
+      </Button>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col gap-4 pb-6">
-      <ReportsHeader />
+    <div className="flex flex-col gap-4 pb-6 md:gap-[18px]">
+      <ReportsHeader actions={actions} />
 
       <ExpenseFilters
         years={years}
         months={months}
         weddings={weddings}
-        year={f.year}
+        year={year}
         month={f.month}
         project={f.project}
-        onYear={(year) => void setF({ year, month: "", project: "" })}
+        onYear={(y) => void setF({ year: y, month: "", project: "" })}
         onMonth={(month) => void setF({ month, project: "" })}
         onProject={(project) => void setF({ project })}
       />
@@ -143,42 +136,6 @@ export default function WeddingExpenseReportPage() {
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-card border bg-danger-soft p-3 text-sm text-danger-soft-foreground">
           <span className="mr-auto">Couldn't load the list of weddings, so the pickers may be incomplete.</span>
           <Button variant="outline" size="sm" className="max-md:h-12" onClick={retry}>Try again</Button>
-        </div>
-      )}
-
-      {showResults && summary && (
-        <section aria-label="Totals" className="flex flex-col gap-1 rounded-card border bg-card p-4 tabular-nums">
-          <div className="text-sm text-muted-foreground">
-            Total{weddingName ? ` · ${weddingName.project_name || weddingName.name}` : ""} · {summary.count} {summary.count === 1 ? "expense" : "expenses"}
-          </div>
-          <div className="text-[28px] font-bold leading-9">{formatVNDFull(summary.total)}</div>
-          {summary.pending > 0 && (
-            <div className="text-sm text-muted-foreground">
-              {formatVNDFull(summary.approved)} approved · {formatVNDFull(summary.pending)} pending approval
-            </div>
-          )}
-        </section>
-      )}
-
-      {showResults && (
-        <div role="group" aria-label="Group expenses" className="-mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0">
-          {GROUPS.map((g) => {
-            const on = f.group === g;
-            return (
-              <button
-                key={g}
-                type="button"
-                aria-pressed={on}
-                onClick={() => void setF({ group: g })}
-                className={cn(
-                  "inline-flex h-10 shrink-0 items-center rounded-full border px-4 text-sm font-medium max-md:h-12",
-                  on ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:bg-muted",
-                )}
-              >
-                {GROUP_LABEL[g]}
-              </button>
-            );
-          })}
         </div>
       )}
 
