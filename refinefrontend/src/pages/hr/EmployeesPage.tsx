@@ -122,7 +122,7 @@ export default function EmployeesPage() {
 
   return (
     <div className="flex flex-col gap-4 md:gap-[18px]">
-      <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
+      <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground md:hidden">
         <Link to="/hr/staff-overview" className="hover:text-foreground hover:underline">Staff</Link> / Employees
       </nav>
 
