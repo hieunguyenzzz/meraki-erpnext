@@ -16,8 +16,12 @@ const TAB_LABEL = { leave: "Leave", wfh: "Work from home" } as const;
 export default function MyLeavesPage() {
   const { employee, employeeId, isLoading } = useMyEmployee();
   const [, setStatus] = useQueryState("status");
-  const [formOpen, setFormOpen] = useState(false);
   const [tab, setTab] = useQueryState("tab", parseAsStringLiteral(TABS).withDefault("leave").withOptions({ clearOnDefault: true }));
+  // The open form belongs to the tab it was opened on, so switching tabs closes it.
+  const [formTab, setFormTab] = useState<string | null>(null);
+  if (formTab !== null && formTab !== tab) setFormTab(null);
+  const formOpen = formTab === tab;
+  const setFormOpen = (open: boolean) => setFormTab(open ? tab : null);
 
   if (isLoading) {
     return (
@@ -55,7 +59,7 @@ export default function MyLeavesPage() {
             type="button"
             role="tab"
             aria-selected={tab === t}
-            onClick={() => { setTab(t); setFormOpen(false); if (t !== "leave") setStatus(null); }}
+            onClick={() => { setTab(t); if (t !== "leave") setStatus(null); }}
             className={cn(
               "h-11 flex-1 rounded-full px-5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               tab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",

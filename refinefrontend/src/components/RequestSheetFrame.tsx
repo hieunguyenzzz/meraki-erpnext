@@ -27,7 +27,7 @@ export function RequestSheetFrame({ open, onOpenChange, title, onSubmit, isSubmi
       <aside aria-label={title} className="flex w-full flex-col gap-3.5 rounded-card border bg-card p-5 shadow-sm lg:max-w-[420px] lg:flex-[1_1_340px]">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-[26px] font-semibold leading-tight">{title}</h2>
-          <button type="button" aria-label="Close" onClick={() => onOpenChange(false)} className="flex h-10 w-10 items-center justify-center rounded-full bg-muted hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" aria-label="Close" disabled={isSubmitting} onClick={() => onOpenChange(false)} className="flex h-10 w-10 items-center justify-center rounded-full bg-muted hover:bg-secondary disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <X className="h-4 w-4" aria-hidden />
           </button>
         </div>

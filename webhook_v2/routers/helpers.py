@@ -1,7 +1,16 @@
 """Shared helpers for leave and WFH routers."""
 
+import re
 from datetime import date
 from webhook_v2.services.erpnext import ERPNextClient
+
+
+def clean_error(msg) -> str:
+    """Strip HTML and rewrite ERPNext error messages to be user-friendly."""
+    clean = re.sub(r"<[^>]+>", "", str(msg)).strip()
+    if "already has an Attendance Request" in clean and "overlaps" in clean:
+        return "You already have a WFH request that overlaps with this period"
+    return clean
 
 
 def fmt_days(d) -> str:

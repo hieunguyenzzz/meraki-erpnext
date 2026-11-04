@@ -102,6 +102,8 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess, inline }: Req
   }
 
   function handleOpenChange(open: boolean) {
+    // Closing mid-flight would reset the double-tap lock and orphan the in-progress request.
+    if (!open && isSubmitting) return;
     onOpenChange(open);
     if (!open) resetForm();
   }

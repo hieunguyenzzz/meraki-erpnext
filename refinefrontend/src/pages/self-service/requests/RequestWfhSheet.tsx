@@ -31,6 +31,8 @@ export function RequestWfhSheet({ employeeId, open, onOpenChange, onSuccess, inl
   }
 
   function handleOpenChange(next: boolean) {
+    // Closing mid-flight would reset the double-tap lock and orphan the in-progress request.
+    if (!next && isSubmitting) return;
     onOpenChange(next);
     if (!next) resetForm();
   }

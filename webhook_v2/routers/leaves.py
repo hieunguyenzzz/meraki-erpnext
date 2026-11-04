@@ -20,7 +20,7 @@ from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.leave_calendar import sync_leave_calendar
 from webhook_v2.services.leave_balance import Pool, available_on, build_pools
 from webhook_v2.core.logging import get_logger
-from webhook_v2.routers.helpers import fmt_days, format_date_range, get_employee_name, submit_doc
+from webhook_v2.routers.helpers import clean_error, fmt_days, format_date_range, get_employee_name, submit_doc
 from webhook_v2.auth import require_roles, resolve_employee, get_current_user, has_roles, HR
 
 log = get_logger(__name__)
@@ -520,7 +520,7 @@ def cancel_own_leave(leave_id: str, body: CancelSelfLeaveRequest, request: Reque
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to cancel leave: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to cancel leave: {clean_error(e)}")
 
     log.info("leave_cancelled_self", leave=leave_id, employee=session_employee)
     return {"success": True}
@@ -731,7 +731,7 @@ def apply_leave(body: LeaveApplyRequest, request: Request, background_tasks: Bac
         app = _create(body.leave_type, body.from_date, body.to_date, body.half_day)
         _enrich_apply_notification(client, body.employee, app, description)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=clean_error(e))
     return _finalize_apply(client, body, [app], False, background_tasks)
 
 
