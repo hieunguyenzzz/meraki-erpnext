@@ -1,7 +1,6 @@
 import { RotateCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatePanel } from "@/components/StatePanel";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { yearVN } from "@/lib/businessTime";
 import type { LeaveBalance } from "./types";
 
@@ -43,7 +42,7 @@ function Breakdown({ b }: { b: LeaveBalance }) {
   );
 }
 
-function BalanceCard({ b, desktop }: { b: LeaveBalance; desktop: boolean }) {
+function BalanceCard({ b }: { b: LeaveBalance }) {
   const sub = b.showOldPeriod ? `${b.oldBalance} carried over · ${b.newBalance} this year` : `${b.newBalance} this year`;
   return (
     <li className="rounded-card border bg-card p-4">
@@ -53,25 +52,19 @@ function BalanceCard({ b, desktop }: { b: LeaveBalance; desktop: boolean }) {
         <span className="text-sm text-muted-foreground">days available</span>
       </div>
       <div className="text-xs text-muted-foreground">{sub}</div>
-      {desktop ? (
-        <div className="mt-3"><Breakdown b={b} /></div>
-      ) : (
-        <details className="group mt-1">
-          <summary className="-mx-1 flex min-h-11 cursor-pointer list-none items-center px-1 text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
-            <span className="group-open:hidden">Show breakdown</span>
-            <span className="hidden group-open:inline">Hide breakdown</span>
-          </summary>
-          <Breakdown b={b} />
-        </details>
-      )}
+      <details className="group mt-1">
+        <summary className="-mx-1 flex min-h-11 cursor-pointer list-none items-center px-1 text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
+          <span className="group-open:hidden">Show breakdown</span>
+          <span className="hidden group-open:inline">Hide breakdown</span>
+        </summary>
+        <Breakdown b={b} />
+      </details>
     </li>
   );
 }
 
-/** Balance cards per leave type (M-Requests: cards on top; D-Me: left column on desktop). */
+/** Balance cards per leave type on phones (M-Requests); desktop uses LeaveBalanceTable. */
 export function LeaveBalanceCards({ balances, isLoading, isError, refetch }: Props) {
-  const desktop = useMediaQuery("(min-width: 768px)");
-
   if (isLoading) {
     return (
       <div className="flex flex-col gap-3" aria-busy="true">
@@ -94,7 +87,7 @@ export function LeaveBalanceCards({ balances, isLoading, isError, refetch }: Pro
   }
   return (
     <ul className="grid grid-cols-1 gap-3">
-      {balances.map((b) => <BalanceCard key={b.leaveType} b={b} desktop={desktop} />)}
+      {balances.map((b) => <BalanceCard key={b.leaveType} b={b} />)}
     </ul>
   );
 }

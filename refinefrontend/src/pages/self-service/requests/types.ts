@@ -50,6 +50,8 @@ export interface WfhRequest {
   reason: string;
   explanation: string;
   docstatus: number;
+  /** Set to "Rejected" when HR rejects: the request is then submitted, so docstatus alone reads as approved. */
+  custom_status?: string | null;
 }
 
 /** Leave history filter; "Open" is shown to staff as "Pending". */
@@ -66,7 +68,8 @@ export function leaveStatusVariant(status: string) {
   }
 }
 
-export function wfhStatus(docstatus: number) {
+export function wfhStatus(docstatus: number, customStatus?: string | null) {
+  if (docstatus === 1 && customStatus === "Rejected") return { label: "Rejected", variant: "destructive" as const };
   if (docstatus === 1) return { label: "Approved", variant: "success" as const };
   if (docstatus === 2) return { label: "Cancelled", variant: "destructive" as const };
   return { label: "Pending", variant: "warning" as const };

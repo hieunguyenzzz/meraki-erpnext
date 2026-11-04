@@ -9,11 +9,12 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  inline?: boolean;
 }
 
 const initialForm = { from_date: "", to_date: "", explanation: "" };
 
-export function RequestWfhSheet({ employeeId, open, onOpenChange, onSuccess }: Props) {
+export function RequestWfhSheet({ employeeId, open, onOpenChange, onSuccess, inline }: Props) {
   const [form, setForm] = useState(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,12 +90,13 @@ export function RequestWfhSheet({ employeeId, open, onOpenChange, onSuccess }: P
     <RequestSheetFrame
       open={open}
       onOpenChange={handleOpenChange}
-      title="Request work from home"
+      title={inline ? "Request WFH" : "Request work from home"}
       onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       submitLabel={isSubmitting ? "Submitting..." : "Submit request"}
       error={error}
       success={success}
+      inline={inline}
     >
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">

@@ -14,6 +14,7 @@ interface RequestLeaveSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  inline?: boolean;
 }
 
 const initialForm = {
@@ -25,7 +26,7 @@ const initialForm = {
   description: "",
 };
 
-export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeaveSheetProps) {
+export function RequestLeaveSheet({ open, onOpenChange, onSuccess, inline }: RequestLeaveSheetProps) {
   const { employeeId } = useMyEmployee();
   const invalidate = useInvalidate();
 
@@ -231,6 +232,7 @@ export function RequestLeaveSheet({ open, onOpenChange, onSuccess }: RequestLeav
       error={error}
       success={success}
       submitDisabled={partial}
+      inline={inline}
     >
       <div className="flex flex-col gap-2">
         <span id="leave-type-label" className="text-sm font-medium">Leave type *</span>

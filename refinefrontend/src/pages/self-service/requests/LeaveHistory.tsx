@@ -39,7 +39,7 @@ function CancelButton({ a, cancellingId, onCancel, className }: { a: LeaveApplic
 /** Desktop table, same style as the HR leave table. */
 function LeaveHistoryTable({ apps, cancellingId, onCancel }: Omit<Props, "desktop">) {
   return (
-    <div className="overflow-x-auto rounded-card border bg-card">
+    <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] border-collapse text-sm">
         <thead className="bg-muted text-left text-[13px] text-muted-foreground">
           <tr>

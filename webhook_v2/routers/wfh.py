@@ -201,7 +201,7 @@ def list_wfh_requests(employee: str, request: Request):
     client = ERPNextClient()
     reqs = client._get("/api/resource/Attendance Request", params={
         "filters": f'[["employee","=","{employee}"],["reason","=","Work From Home"]]',
-        "fields": '["name","employee","employee_name","from_date","to_date","reason","explanation","docstatus"]',
+        "fields": '["name","employee","employee_name","from_date","to_date","reason","explanation","docstatus","custom_status"]',
         "order_by": "creation desc",
         "limit_page_length": 100,
     }).get("data", [])
