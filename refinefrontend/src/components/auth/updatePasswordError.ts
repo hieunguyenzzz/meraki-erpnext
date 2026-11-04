@@ -1,4 +1,5 @@
 /** Turn a failed update_password response into a friendly message (ERPNext may return HTML or server-message JSON). */
+export const EXPIRED_LINK_MESSAGE = "This reset link has expired. Please request a new one from the login page.";
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
 interface ServerMessage { message?: string; title?: string }
@@ -32,7 +33,7 @@ export async function updatePasswordErrorMessage(resp: Response): Promise<string
   }
   if (lc.includes("too short") || lc.includes("at least")) return "Password is too short. Use at least 8 characters.";
   if (lc.includes("expired") || lc.includes("invalid key") || lc.includes("not found")) {
-    return "This reset link has expired. Please request a new one from the login page.";
+    return EXPIRED_LINK_MESSAGE;
   }
   return rawMsg || "Failed to update password. Please try a different password.";
 }

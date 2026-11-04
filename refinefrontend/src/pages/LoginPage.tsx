@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useLogin, useIsAuthenticated } from "@refinedev/core";
-import { Navigate } from "react-router";
+import { Navigate, useSearchParams } from "react-router";
 import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { AuthShell, CardWordmark } from "@/components/auth/AuthShell";
 import { AuthAlert } from "@/components/auth/AuthAlert";
 import { AuthIcon } from "@/components/auth/AuthIcon";
 import { PasswordField } from "@/components/auth/PasswordField";
@@ -28,7 +28,9 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
-  const [view, setView] = useState<View>("login");
+  // The expired-link screen sends people here with ?forgot=1 to ask for a fresh link.
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState<View>(searchParams.get("forgot") ? "forgot" : "login");
   const [resetEmail, setResetEmail] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetSubmitting, setResetSubmitting] = useState(false);
@@ -130,7 +132,7 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthShell>
+    <AuthShell card={view !== "login"}>
       {view === "login" && (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" aria-label="Sign in">
           <h1 className="font-display text-[34px] font-semibold leading-none max-lg:sr-only lg:mb-1.5">Sign in</h1>
@@ -186,12 +188,13 @@ export default function LoginPage() {
 
       {view === "forgot" && (
         <form onSubmit={handleForgotSubmit} className="flex flex-col gap-4" aria-label="Reset password">
-          <h1 className="text-[22px] font-semibold">Reset your password</h1>
-          <p className="text-[15px] leading-[22px] text-muted-foreground">
-            Enter your email and we'll send you a link to choose a new one.
+          <CardWordmark />
+          <h1 className="text-[22px] font-semibold lg:text-2xl">Reset your password</h1>
+          <p className="text-[15px] leading-[22px] text-muted-foreground lg:leading-[23px]">
+            Enter your work email. We'll send a link to choose a new password.
           </p>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="reset-email" className="text-sm font-semibold">Email</Label>
+            <Label htmlFor="reset-email" className="text-sm font-semibold">Work email</Label>
             <Input
               id="reset-email"
               name="email"
@@ -199,7 +202,7 @@ export default function LoginPage() {
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
-              className="h-12 text-base"
+              className="h-12 text-base lg:h-[52px]"
               value={resetEmail}
               onChange={(e) => setResetEmail(e.target.value)}
               required
@@ -210,8 +213,8 @@ export default function LoginPage() {
             />
           </div>
           {resetError && <AuthAlert id="reset-error">{resetError}</AuthAlert>}
-          <Button type="submit" className={primaryBtn} disabled={resetSubmitting || resetCooldown}>
-            {resetSubmitting ? "Sending..." : "Send reset link"}
+          <Button type="submit" className={`${primaryBtn} lg:h-[52px]`} disabled={resetSubmitting || resetCooldown}>
+            {resetSubmitting ? "Sending..." : "Send link"}
           </Button>
           <button type="button" className={linkBtn} onClick={handleBackToLogin}>
             Back to sign in
@@ -220,14 +223,24 @@ export default function LoginPage() {
       )}
 
       {view === "forgot-success" && (
-        <div role="status" className="flex flex-col items-center gap-3.5 text-center">
+        <div role="status" className="flex flex-col items-center gap-3.5 text-center lg:gap-4">
           <AuthIcon>
-            <Mail className="h-9 w-9" strokeWidth={1.75} />
+            <Mail className="h-9 w-9 lg:h-[30px] lg:w-[30px]" strokeWidth={1.75} />
           </AuthIcon>
-          <h1 className="text-[22px] font-semibold">Check your email</h1>
-          <p className="text-[15px] leading-[22px] text-muted-foreground">
-            Reset instructions have been sent to{" "}
-            <span className="font-medium text-foreground">{resetEmail}</span>. Didn't get it? Check your spam folder.
+          <h1 className="text-[22px] font-semibold lg:text-2xl">Check your email</h1>
+          <p className="text-[15px] leading-[22px] text-muted-foreground lg:leading-[23px]">
+            If <span className="font-medium text-foreground">{resetEmail}</span> has an account, a reset link is on its way.
+          </p>
+          <p className="text-sm leading-[22px] text-muted-foreground">
+            Nothing after 5 minutes? Check spam, or{" "}
+            <button
+              type="button"
+              className="rounded-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setView("forgot")}
+            >
+              send it again
+            </button>
+            .
           </p>
           <button type="button" className={linkBtn} onClick={handleBackToLogin}>
             Back to sign in

@@ -20,13 +20,13 @@ export function PasswordField({ id, label, labelAside, className, ...rest }: Pro
         {labelAside}
       </div>
       <div className="relative">
-        <Input id={id} type={shown ? "text" : "password"} className={`h-12 pr-12 text-base ${className ?? ""}`} {...rest} />
+        <Input id={id} type={shown ? "text" : "password"} className={`h-12 pr-12 text-base lg:h-[52px] ${className ?? ""}`} {...rest} />
         <button
           type="button"
           onClick={() => setShown((s) => !s)}
           aria-label={shown ? "Hide password" : "Show password"}
           aria-pressed={shown}
-          className="absolute right-0 top-0 flex h-12 w-12 items-center justify-center rounded-input text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="absolute right-0 top-0 flex h-12 w-12 lg:h-[52px] items-center justify-center rounded-input text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {shown ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
         </button>
