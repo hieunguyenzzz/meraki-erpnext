@@ -955,6 +955,10 @@ def approve_expense(pi_name: str):
         raise HTTPException(status_code=404, detail="Purchase Invoice not found")
     if pi.get("docstatus") != 0:
         raise HTTPException(status_code=400, detail="Only Draft expenses can be approved")
+    if pi.get("custom_rejected"):
+        # A stale page can still offer Approve on a draft that was rejected meanwhile.
+        log.warning("expense_approve_blocked_rejected", pi=pi_name)
+        raise HTTPException(status_code=400, detail="This expense was rejected; ask the submitter to edit and resubmit")
 
     try:
         client._post("/api/method/frappe.client.submit", {"doc": pi})
