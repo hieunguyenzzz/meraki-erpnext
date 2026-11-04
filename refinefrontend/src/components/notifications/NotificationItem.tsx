@@ -91,7 +91,14 @@ export function NotificationItem({
                 part.bold ? <b key={i} className="font-semibold">{part.text}</b> : <span key={i}>{part.text}</span>,
               )}
             </span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">{metaText}</span>
+            <span
+              className={cn(
+                "mt-0.5 block text-xs",
+                compact && context?.tone === "warning" ? "font-semibold text-warning-soft-foreground" : "text-muted-foreground",
+              )}
+            >
+              {metaText}
+            </span>
           </button>
 
           {!compact && details && factStrip(details).length > 0 && (
@@ -118,9 +125,9 @@ export function NotificationItem({
             <p
               className={cn(
                 "mt-1.5 rounded-[10px] px-2.5 py-1 text-xs md:mt-2 md:text-[13px]",
-                context.tone === "success"
-                  ? "inline-flex bg-success-soft font-semibold text-success-soft-foreground"
-                  : "bg-muted font-medium text-foreground/80",
+                context.tone === "success" && "inline-flex bg-success-soft font-semibold text-success-soft-foreground",
+                context.tone === "warning" && "inline-flex bg-warning-soft font-semibold text-warning-soft-foreground",
+                context.tone === "muted" && "bg-muted font-medium text-foreground/80",
                 context.tone === "muted" && "md:inline-flex",
               )}
             >

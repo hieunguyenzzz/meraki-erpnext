@@ -7,8 +7,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Request
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.core.logging import get_logger
-from webhook_v2.routers.leaves import _employee_pools
-from webhook_v2.services.leave_balance import available_on
+from webhook_v2.services.leave_balance import Pool, build_pools, net_balance_on
 from webhook_v2.auth import get_current_user, require_roles, DIRECTOR
 
 log = get_logger(__name__)
@@ -72,10 +71,11 @@ def _rows(client: ERPNextClient, doctype: str, names: list[str], fields: list[st
     return {r["name"]: r for r in rows}
 
 
-def _wfh_days(r: dict) -> int | None:
-    """Inclusive calendar days of an Attendance Request, same count as the WFH approve/reject notices."""
+def _wfh_days(r: dict) -> float | None:
+    """Inclusive calendar days of an Attendance Request (less half a day when it is a half day)."""
     try:
-        return (date.fromisoformat(str(r["to_date"])[:10]) - date.fromisoformat(str(r["from_date"])[:10])).days + 1
+        days = (date.fromisoformat(str(r["to_date"])[:10]) - date.fromisoformat(str(r["from_date"])[:10])).days + 1
+        return days - 0.5 if r.get("half_day") else days
     except (KeyError, TypeError, ValueError):
         return None
 
@@ -135,6 +135,8 @@ def _wfh_state(r: dict | None) -> str:
 def _expense_state(r: dict | None) -> str:
     if r is None:
         return "removed"
+    if r.get("docstatus") == 0 and r.get("custom_rejected"):
+        return "rejected"  # a rejected expense stays a draft, flagged custom_rejected
     return {0: "pending", 1: "approved"}.get(r.get("docstatus"), "cancelled")
 
 
@@ -220,29 +222,62 @@ def _owner_names(client: ERPNextClient, users: list[str]) -> dict[str, str]:
     return names
 
 
-def _days_left_after(client: ERPNextClient, leaves: dict) -> dict[str, float | None]:
-    """Days of the leave type still bookable after each pending application, using the app's own balance logic.
+def _pools_by_employee(client: ERPNextClient, employees: list[str], today: date) -> dict[str, dict[str, list[Pool]]]:
+    """Leave pools for several employees in three requests total (employees, allocations, applications).
 
-    A pending application is already charged against its pool, so the pool balance on its from_date is the
-    figure "after this request". Anything not pending, or of a type without allocations (e.g. unpaid), gets None.
+    Same inputs and the same `build_pools` as the leave balance endpoints, just fetched for everyone at once.
     """
-    pools_cache: dict[tuple[str, str], dict] = {}
-    out: dict[str, float | None] = {}
-    for name, r in leaves.items():
-        out[name] = None
-        emp, lt, start = r.get("employee"), r.get("leave_type"), str(r.get("from_date") or "")[:10]
-        if r.get("status") != "Open" or not (emp and lt and start):
-            continue
-        try:
-            key = (emp, lt)
-            if key not in pools_cache:
-                pools_cache[key] = _employee_pools(client, emp, date.today(), lt)
-            group = pools_cache[key].get(lt, [])
-            if group:
-                out[name] = available_on(group, date.fromisoformat(start))
-        except Exception as e:
-            # A missing balance only removes one line from the card; the request itself is unaffected
-            log.warning("notification_days_left_failed", leave=name, error=str(e))
+    emps = _rows(client, "Employee", employees, ["date_of_joining", "relieving_date"])
+    emp_filter = ["employee", "in", employees]
+    allocs = client._get("/api/resource/Leave Allocation", params={
+        "filters": json.dumps([emp_filter, ["docstatus", "=", 1]]),
+        "fields": json.dumps(["name", "employee", "leave_type", "from_date", "to_date",
+                              "new_leaves_allocated", "total_leaves_allocated"]),
+        "limit_page_length": 0,
+    }).get("data", [])
+    apps = client._get("/api/resource/Leave Application", params={
+        "filters": json.dumps([emp_filter, ["docstatus", "!=", 2], ["status", "!=", "Rejected"]]),
+        "fields": json.dumps(["name", "employee", "leave_type", "from_date", "to_date",
+                              "total_leave_days", "status", "docstatus"]),
+        "limit_page_length": 0,
+    }).get("data", [])
+
+    out = {}
+    for emp in employees:
+        info = emps.get(emp) or {}
+        joined, left = str(info.get("date_of_joining") or "")[:10], str(info.get("relieving_date") or "")[:10]
+        out[emp] = build_pools(
+            [a for a in allocs if a.get("employee") == emp],
+            [a for a in apps if a.get("employee") == emp],
+            today=today,
+            date_of_joining=date.fromisoformat(joined) if joined else None,
+            relieving_date=date.fromisoformat(left) if left else None,
+        )
+    return out
+
+
+def _days_left_after(client: ERPNextClient, leaves: dict, today: date | None = None) -> dict[str, float | None]:
+    """Days of the leave type left on each pending application's start date, after that application.
+
+    A pending application is already charged against its pool, so the unclamped pool balance on its from_date is
+    the figure "after this request"; negative means the request overdraws (or uses days not yet accrued).
+    Anything not pending, or of a type without allocations (e.g. unpaid), gets None.
+    """
+    pending = {n: r for n, r in leaves.items()
+               if r.get("status") == "Open" and r.get("employee") and r.get("leave_type") and r.get("from_date")}
+    out: dict[str, float | None] = {n: None for n in leaves}
+    if not pending:
+        return out
+    try:
+        pools = _pools_by_employee(client, sorted({r["employee"] for r in pending.values()}), today or date.today())
+    except Exception as e:
+        # A missing balance only removes one line from the cards; the requests themselves are unaffected
+        log.warning("notification_days_left_failed", error=str(e))
+        return out
+    for name, r in pending.items():
+        group = pools.get(r["employee"], {}).get(r["leave_type"], [])
+        if group:
+            out[name] = net_balance_on(group, date.fromisoformat(str(r["from_date"])[:10]))
     return out
 
 
@@ -272,7 +307,7 @@ def notification_details(body: DetailsRequest, request: Request):
         wfh = _rows(client, "Attendance Request", refs("Attendance Request"),
                     ["employee_name", "from_date", "to_date", "half_day", "explanation", "docstatus", "custom_status"])
         invoices = _rows(client, "Purchase Invoice", refs("Purchase Invoice"),
-                         ["custom_expense_staff", "grand_total", "project", "docstatus", "owner"])
+                         ["custom_expense_staff", "grand_total", "project", "docstatus", "custom_rejected", "owner"])
         staff_ids = sorted({i["custom_expense_staff"] for i in invoices.values() if i.get("custom_expense_staff")})
         employees = _rows(client, "Employee", staff_ids, ["employee_name"])
         owner_names = _owner_names(client, sorted({

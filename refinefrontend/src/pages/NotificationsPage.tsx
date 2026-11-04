@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { PwaNotification } from "@/hooks/useMyNotifications";
 import { useNotificationDetails } from "@/hooks/useNotificationDetails";
 import { useNotificationActions } from "@/hooks/useNotificationActions";
-import { DOC_ROUTES, FILTER_TYPES, canDecide, groupByDay, labelForType } from "@/lib/notifications";
+import { DOC_ROUTES, FILTER_TYPES, canDecide, needsDetails, groupByDay, labelForType } from "@/lib/notifications";
 import { NotificationFilters, type TypeCount } from "@/components/notifications/NotificationFilters";
 import { NotificationItem } from "@/components/notifications/NotificationItem";
 import { NotificationEmpty, NotificationError, NotificationSkeleton } from "@/components/notifications/NotificationStates";
@@ -145,7 +145,7 @@ export default function NotificationsPage() {
     navigate(routeFn(notif.reference_document_name));
   }
 
-  const details = useNotificationDetails(allNotifications);
+  const { details, settled } = useNotificationDetails(allNotifications);
 
   const showSkeleton = allNotifications.length === 0 && query.isFetching;
   const showError = allNotifications.length === 0 && query.isError && !query.isFetching;
@@ -198,7 +198,8 @@ export default function NotificationsPage() {
                   <NotificationItem
                     key={notif.name}
                     notif={notif}
-                    actionable={canDecide(notif, canApprove)}
+                    // Hold the buttons back until we know the request is still waiting (it may already be handled or deleted)
+                    actionable={canDecide(notif, canApprove) && (!needsDetails(notif.reference_document_type) || settled(notif.name))}
                     outcome={outcomes[notif.name]}
                     error={errors[notif.name]}
                     details={details[notif.name]}

@@ -47,6 +47,10 @@ export const FILTER_TYPES = [
 
 export const labelForType = (type: string) => metaForType(type).label;
 
+/** Leave, WFH and expense approvals get titles, facts and a current state from the backend. */
+export const needsDetails = (type: string) =>
+  type === "Leave Application" || type === "Attendance Request" || type === "Purchase Invoice";
+
 export type ApprovalAction = "approve" | "reject";
 
 /** Leave/WFH approve/reject endpoints are HR-only; expense (Purchase Invoice) approvals are open to any recipient. */
@@ -190,12 +194,15 @@ export function detailFacts(d: NotificationDetails): string[] {
 
 export interface ContextLine {
   text: string;
-  /** "success" = the green balance pill; "muted" = the grey reason box. */
-  tone: "success" | "muted";
+  /** "success" = the green balance pill; "warning" = overdrawn; "muted" = the grey reason box. */
+  tone: "success" | "warning" | "muted";
 }
 
-/** The one line that helps decide: leave balance after the request, or the WFH reason. */
+/** The one line that helps decide: leave balance after the request (or by how much it is overdrawn), or the WFH reason. */
 export function contextLine(d: NotificationDetails | undefined, short = false): ContextLine | null {
+  if (d?.kind === "leave" && d.days_left_after != null && d.days_left_after < 0) {
+    return { text: `Over balance by ${plural(-d.days_left_after, "day")}`, tone: "warning" };
+  }
   if (d?.kind === "leave" && d.days_left_after != null) {
     return { text: `${plural(d.days_left_after, "day")} left after ${short ? "this" : "this request"}`, tone: "success" };
   }

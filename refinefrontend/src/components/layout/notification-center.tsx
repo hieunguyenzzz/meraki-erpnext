@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { usePermissions } from "@refinedev/core";
 import { HR_ROLES, hasModuleAccess } from "@/lib/roles";
@@ -20,10 +21,21 @@ export function NotificationBell({ className }: { className?: string }) {
   const navigate = useNavigate();
   const { notifications, count } = useMyNotifications();
   const { processingIds, outcomes, errors, markRead, markAllRead, decide } = useNotificationActions();
-  const details = useNotificationDetails(notifications);
+  const { details, settled } = useNotificationDetails(notifications);
+  const [markingAll, setMarkingAll] = useState(false);
   // Approve/reject endpoints are HR-only; other approvers still see and open the notification.
   const { data: roles } = usePermissions<string[]>({});
   const isHr = hasModuleAccess(roles ?? [], HR_ROLES);
+
+  async function handleMarkAll() {
+    if (markingAll) return; // a second click while the first is in flight
+    setMarkingAll(true);
+    try {
+      await markAllRead();
+    } finally {
+      setMarkingAll(false);
+    }
+  }
 
   function handleOpen(notif: PwaNotification) {
     const routeFn = DOC_ROUTES[notif.reference_document_type];
@@ -51,10 +63,11 @@ export function NotificationBell({ className }: { className?: string }) {
           {count > 0 && (
             <button
               type="button"
-              onClick={() => void markAllRead()}
-              className="h-8 rounded-md text-[13px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={handleMarkAll}
+              disabled={markingAll}
+              className="h-8 rounded-md text-[13px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:no-underline"
             >
-              Mark all as read
+              {markingAll ? "Marking..." : "Mark all as read"}
             </button>
           )}
         </div>
@@ -67,7 +80,7 @@ export function NotificationBell({ className }: { className?: string }) {
               const type = notif.reference_document_type;
               // Bell approvals stay limited to still-pending leave / WFH requests (never outcome notices).
               const actionable =
-                (type === "Leave Application" || type === "Attendance Request") && canDecide(notif, isHr);
+                (type === "Leave Application" || type === "Attendance Request") && canDecide(notif, isHr) && settled(notif.name);
               return (
                 <NotificationItem
                   key={notif.name}
