@@ -4,32 +4,42 @@ from webhook_v2.routers import notifications as n
 from webhook_v2.routers.notifications import DetailsRequest, build_details
 
 
-def test_build_details_covers_leave_wfh_expense_and_skips_unknown():
+def _n(i, kind, ref, msg="x for approval: y"):
+    return {"name": i, "reference_document_type": kind, "reference_document_name": ref, "message": msg}
+
+
+def test_build_details_builds_titles_facts_and_state():
     notifs = [
-        {"name": 1, "reference_document_type": "Leave Application", "reference_document_name": "L1"},
-        {"name": 2, "reference_document_type": "Attendance Request", "reference_document_name": "A1"},
-        {"name": 3, "reference_document_type": "Purchase Invoice", "reference_document_name": "P1"},
-        {"name": "4", "reference_document_type": "Purchase Invoice", "reference_document_name": "P2"},
-        {"name": "5", "reference_document_type": "Lead", "reference_document_name": "X"},
+        _n(1, "Leave Application", "L1"),
+        _n(2, "Attendance Request", "A1"),
+        _n(3, "Purchase Invoice", "P1", "New expense pending approval: x"),
+        _n("4", "Purchase Invoice", "P2", "New expense pending approval: x"),
+        _n("5", "Lead", "X"),
+        _n(6, "Leave Application", "L1", "Your leave L1 was Approved"),
+        _n(7, "Purchase Invoice", "GONE", "New expense pending approval: x"),
     ]
     leaves = {"L1": {"employee_name": "Thu", "leave_type": "Annual Leave", "from_date": "2026-12-21",
-                     "to_date": "2026-12-22", "total_leave_days": 1.5, "half_day": 1}}
+                     "to_date": "2026-12-22", "total_leave_days": 1.5, "half_day": 1, "status": "Open"}}
     wfh = {"A1": {"employee_name": "An", "from_date": "2026-12-22", "to_date": "2026-12-24", "half_day": 0,
-                  "explanation": " Waiting for a contractor "}}
-    invoices = {"P1": {"custom_expense_staff": "E1", "grand_total": 3400000, "project": "PROJ-1"},
-                "P2": {"custom_expense_staff": None, "grand_total": 10, "project": None}}
+                  "explanation": " Waiting for a contractor ", "docstatus": 1, "custom_status": "Rejected"}}
+    invoices = {"P1": {"custom_expense_staff": "E1", "grand_total": 3400000, "project": "PROJ-1", "docstatus": 0},
+                "P2": {"custom_expense_staff": None, "owner": "o@x.com", "grand_total": 10, "docstatus": 1}}
     out = build_details(notifs, leaves, wfh, invoices, {"E1": {"employee_name": "Bao"}},
-                        {"PROJ-1": {"project_name": "Lan & Minh"}}, {"P1"}, {"L1": 6.5})
+                        {"PROJ-1": {"project_name": "Lan & Minh"}}, {"P1"}, {"L1": 6.5}, {"o@x.com": "Owner Name"})
 
-    assert out["1"] == {"kind": "leave", "employee_name": "Thu", "leave_type": "Annual Leave",
-                        "from_date": "2026-12-21", "to_date": "2026-12-22", "days": 1.5, "half_day": True,
-                        "days_left_after": 6.5}
-    assert out["2"] == {"kind": "wfh", "employee_name": "An", "from_date": "2026-12-22",
-                        "to_date": "2026-12-24", "half_day": False, "days": 3, "reason": "Waiting for a contractor"}
-    assert out["3"] == {"kind": "expense", "submitter": "Bao", "amount": 3400000, "wedding": "Lan & Minh",
-                        "has_bill": True}
-    assert out["4"] == {"kind": "expense", "submitter": None, "amount": 10, "wedding": None, "has_bill": False}
-    assert set(out) == {"1", "2", "3", "4"}
+    assert out["1"]["state"] == "pending" and out["1"]["days_left_after"] == 6.5
+    assert out["1"]["title"] == [{"text": "Thu", "bold": True}, {"text": " asked for leave", "bold": False}]
+    assert out["1"]["compact"][1]["text"] == " · annual leave, 2026-12-21 → 2026-12-22 (half day)"
+    assert out["2"]["state"] == "rejected" and out["2"]["days"] == 3 and out["2"]["reason"] == "Waiting for a contractor"
+    assert out["2"]["title"][1]["text"] == " wants to work from home"
+    assert out["2"]["compact"][1]["text"] == " · WFH on 2026-12-22 → 2026-12-24"
+    assert out["3"]["submitter"] == "Bao" and out["3"]["has_bill"] is True and out["3"]["state"] == "pending"
+    assert out["3"]["compact"][1]["text"] == " added VND 3.400.000 to Lan & Minh"
+    assert out["3"]["title"][1]["text"] == " submitted an expense"
+    # no custom_expense_staff -> falls back to the invoice owner's name
+    assert out["4"]["submitter"] == "Owner Name" and out["4"]["state"] == "approved"
+    assert out["7"] == {"kind": "expense", "state": "removed"}
+    assert set(out) == {"1", "2", "3", "4", "7"}  # lead and outcome notice are left alone
 
 
 def test_days_left_after_uses_the_shared_pool_balance_for_pending_requests_only():

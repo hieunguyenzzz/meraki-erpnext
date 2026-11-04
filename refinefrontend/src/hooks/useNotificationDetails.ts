@@ -7,10 +7,12 @@ interface DetailsResponse {
   details?: Record<string, NotificationDetails>;
 }
 
-/** Leave / WFH / expense facts for the pending notifications, fetched in ONE call for the whole list. */
+const DETAILED_TYPES = new Set(["Leave Application", "Attendance Request", "Purchase Invoice"]);
+
+/** Titles, facts and current state for the leave / WFH / expense approval notifications, fetched in ONE call for the whole list. */
 export function useNotificationDetails(notifications: PwaNotification[]) {
   const names = notifications
-    .filter((n) => n.is_pending)
+    .filter((n) => DETAILED_TYPES.has(n.reference_document_type))
     .slice(0, 100)
     .map((n) => n.name)
     .sort();

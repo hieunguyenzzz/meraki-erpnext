@@ -15,7 +15,8 @@ import {
   type NotificationDetails,
   isoDay,
   metaForType,
-  parseMessage,
+  stateNote,
+  titleParts,
   type ApprovalAction,
 } from "@/lib/notifications";
 import { todayVN } from "@/lib/businessTime";
@@ -54,7 +55,9 @@ export function NotificationItem({
   const openable = !!DOC_ROUTES[notif.reference_document_type];
   const time = clockTime(notif.creation);
   const when = compact && isoDay(notif.creation) !== todayVN() ? `${isoDay(notif.creation)} ${time}` : time;
-  const showActions = actionable || !!outcome;
+  // A request someone already handled (or deleted) must not look like an unanswered one
+  const note = outcome ? null : stateNote(details);
+  const showActions = (actionable && !note) || !!outcome;
   const context = contextLine(details, compact);
   // The bell shows the decisive line in its meta row; the page shows it as a pill under the facts
   const metaText = compact && context ? `${when} · ${context.text}` : `${meta.label} · ${when}`;
@@ -84,14 +87,14 @@ export function NotificationItem({
             )}
           >
             <span className={cn("block break-words", compact ? "text-sm leading-5" : "text-[15px] leading-[21px] md:leading-[22px]", !unread && "text-foreground/80")}>
-              {(compact ? compactMessage(notif, details) : parseMessage(notif.message)).map((part, i) =>
+              {(compact ? compactMessage(notif, details) : titleParts(notif, details)).map((part, i) =>
                 part.bold ? <b key={i} className="font-semibold">{part.text}</b> : <span key={i}>{part.text}</span>,
               )}
             </span>
             <span className="mt-0.5 block text-xs text-muted-foreground">{metaText}</span>
           </button>
 
-          {!compact && details && (
+          {!compact && details && factStrip(details).length > 0 && (
             <>
               <dl className="mt-2.5 hidden grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2.5 rounded-xl bg-muted px-3 py-2.5 text-[13px] md:grid">
                 {factStrip(details).map((f) => (
@@ -111,7 +114,7 @@ export function NotificationItem({
             </>
           )}
 
-          {!compact && context && (
+          {!compact && !note && context && (
             <p
               className={cn(
                 "mt-1.5 rounded-[10px] px-2.5 py-1 text-xs md:mt-2 md:text-[13px]",
@@ -123,6 +126,12 @@ export function NotificationItem({
             >
               {context.text}
             </p>
+          )}
+
+          {note && (
+            <Badge variant={note.variant} className={compact ? "mt-2" : "mt-3"}>
+              {note.label}
+            </Badge>
           )}
 
           {(showActions || error) && (

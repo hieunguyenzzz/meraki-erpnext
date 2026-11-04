@@ -111,7 +111,18 @@ export function groupByDay(items: PwaNotification[]): { label: string; items: Pw
   return [...map].map(([label, list]) => ({ label, items: list }));
 }
 
-export type NotificationDetails =
+/** Where the underlying request stands now; "removed" = the record no longer exists. */
+export type RequestState = "pending" | "approved" | "rejected" | "cancelled" | "removed";
+
+interface DetailsBase {
+  state?: RequestState;
+  /** Short human title and the bell's one-line summary, built by the backend. */
+  title?: MessagePart[] | null;
+  compact?: MessagePart[] | null;
+}
+
+export type NotificationDetails = DetailsBase &
+  (
   | {
       kind: "leave"; employee_name?: string; leave_type?: string; from_date?: string; to_date?: string;
       days?: number | null; half_day?: boolean; days_left_after?: number | null;
@@ -120,7 +131,8 @@ export type NotificationDetails =
       kind: "wfh"; employee_name?: string; from_date?: string; to_date?: string; half_day?: boolean;
       days?: number | null; reason?: string | null;
     }
-  | { kind: "expense"; submitter?: string | null; amount?: number | null; wedding?: string | null; has_bill?: boolean };
+  | { kind: "expense"; submitter?: string | null; amount?: number | null; wedding?: string | null; has_bill?: boolean }
+  );
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -136,6 +148,7 @@ export interface Fact {
 
 /** Labelled facts for the approval card's fact strip (desktop). */
 export function factStrip(d: NotificationDetails): Fact[] {
+  if (d.state === "removed") return [];
   const facts: (Fact | null)[] = [];
   if (d.kind === "leave") {
     facts.push(
@@ -164,6 +177,7 @@ export function factStrip(d: NotificationDetails): Fact[] {
 
 /** Short facts for the phone card, e.g. ["Annual Leave", "2026-12-21 → 2026-12-22", "2 days"]. */
 export function detailFacts(d: NotificationDetails): string[] {
+  if (d.state === "removed") return [];
   if (d.kind === "expense") return factStrip(d).filter((f) => f.label !== "Submitted by").map((f) => (f.label === "Bill" ? `Bill ${f.value.toLowerCase()}` : f.value));
   const facts: string[] = [];
   if (d.kind === "leave" && d.leave_type) facts.push(d.leave_type);
@@ -189,29 +203,31 @@ export function contextLine(d: NotificationDetails | undefined, short = false): 
   return null;
 }
 
-const REF_ID = /\s*:?\s*HR-[A-Z]+-[\d-]+/g;
+const REF_ID = /\s*:?\s*(HR-[A-Z]+-[\d-]+|ACC-[A-Z]+-[\d-]+)/g;
 
-/** Short actor + summary for the bell: built from details when known, else the message minus reference IDs. */
-export function compactMessage(notif: PwaNotification, details?: NotificationDetails): MessagePart[] {
-  if (details?.kind === "leave" && details.employee_name) {
-    const what = [details.leave_type?.toLowerCase(), dateRange(details)].filter(Boolean).join(", ");
-    return [
-      { text: details.employee_name, bold: true },
-      { text: ` · ${what || "leave"}${details.half_day ? " (half day)" : ""}`, bold: false },
-    ];
-  }
-  if (details?.kind === "wfh" && details.employee_name) {
-    const on = details.from_date && (!details.to_date || details.to_date === details.from_date)
-      ? formatIsoWeekday(details.from_date)
-      : dateRange(details);
-    return [{ text: details.employee_name, bold: true }, { text: ` · WFH${on ? ` on ${on}` : ""}`, bold: false }];
-  }
-  if (details?.kind === "expense" && details.submitter) {
-    const to = details.wedding ? ` to ${details.wedding}` : "";
-    return [
-      { text: details.submitter, bold: true },
-      { text: details.amount != null ? ` added ${formatVNDFull(details.amount)}${to}` : " submitted an expense", bold: false },
-    ];
-  }
+/** The original subject as text parts, minus raw record IDs. */
+function subjectParts(notif: PwaNotification): MessagePart[] {
   return parseMessage(notif.message).map((p) => ({ ...p, text: p.text.replace(REF_ID, "") }));
+}
+
+/** Page title: the backend's short title when it built one, else the original subject. */
+export function titleParts(notif: PwaNotification, details?: NotificationDetails): MessagePart[] {
+  return details?.title ?? subjectParts(notif);
+}
+
+/** Bell line: the backend's compact summary when it built one, else the original subject. */
+export function compactMessage(notif: PwaNotification, details?: NotificationDetails): MessagePart[] {
+  return details?.compact ?? subjectParts(notif);
+}
+
+const STATE_NOTE: Record<Exclude<RequestState, "pending">, { label: string; variant: "success" | "destructive" | "secondary" }> = {
+  approved: { label: "Approved", variant: "success" },
+  rejected: { label: "Rejected", variant: "destructive" },
+  cancelled: { label: "Already handled", variant: "secondary" },
+  removed: { label: "Already handled", variant: "secondary" },
+};
+
+/** Small badge for a request that is no longer waiting on anyone; null while it is pending or unknown. */
+export function stateNote(details?: NotificationDetails) {
+  return details?.state && details.state !== "pending" ? STATE_NOTE[details.state] : null;
 }
