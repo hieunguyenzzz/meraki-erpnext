@@ -31,7 +31,7 @@ router = APIRouter()
 TASKS_SHOWN = 5
 UPCOMING_SHOWN = 5
 CLOSED_TASK_STATUSES = ["Completed", "Cancelled"]
-TASK_FIELDS = ["name", "subject", "project", "exp_end_date", "_assign", "custom_shared_with", "owner"]
+TASK_FIELDS = ["name", "status", "subject", "project", "exp_end_date", "_assign", "custom_shared_with", "owner"]
 NON_LEAD_STATUSES = ["Converted", "Do Not Contact"]
 
 
@@ -91,14 +91,10 @@ def _my_open_tasks(client: ERPNextClient, user: str, employee: str | None, today
 
 def _checklist(client: ERPNextClient, project: str) -> dict | None:
     """Done vs total tasks on the wedding (cancelled ones don't count); null when it has none."""
-    rows = client._get("/api/resource/Task", params={
-        "filters": json.dumps([["project", "=", project], ["status", "!=", "Cancelled"]]),
-        "fields": json.dumps(["status"]),
-        "limit_page_length": 0,
-    }).get("data", [])
-    if not rows:
+    total = _count(client, "Task", [["project", "=", project], ["status", "!=", "Cancelled"]])
+    if not total:
         return None
-    return {"done": sum(1 for r in rows if r["status"] == "Completed"), "total": len(rows)}
+    return {"done": _count(client, "Task", [["project", "=", project], ["status", "=", "Completed"]]), "total": total}
 
 
 def _guest_count(project: str) -> int | None:
@@ -120,10 +116,10 @@ def _latest_payslip(client: ERPNextClient, employee: str) -> dict | None:
     return {"name": rows[0]["name"], "start_date": rows[0]["start_date"], "net_pay": rows[0]["net_pay"]} if rows else None
 
 
-def _leave_rows(request: Request, employee: str) -> tuple[list[dict] | None, bool]:
+def _leave_rows(request: Request, employee: str, today: date) -> tuple[list[dict] | None, bool]:
     """(balance rows, failed). A failed lookup shows "Unavailable" on the tile; the rest of Home still loads."""
     try:
-        return get_leave_balance(employee=employee, request=request)["data"], False
+        return get_leave_balance(employee=employee, request=request, as_of=today)["data"], False
     except Exception as e:
         log.error("home_leave_balance_failed", employee=employee, error=str(e))
         return None, True
@@ -153,7 +149,7 @@ def planner_home(request: Request, response: Response):
 
     has_weddings = employee is not None and has_roles(request, PLANNER)
     next_wedding, upcoming = _weddings_section(client, employee, today) if has_weddings else (None, [])
-    leave, leave_failed = _leave_rows(request, employee) if has_weddings else (None, False)
+    leave, leave_failed = _leave_rows(request, employee, today) if has_weddings else (None, False)
     out = {
         "has_weddings": has_weddings,
         "next_wedding": next_wedding,
@@ -173,6 +169,21 @@ class TaskDoneRequest(BaseModel):
     done: bool
 
 
+def _next_status(current: str | None, done: bool, exp_end_date: str | None, today: date) -> str:
+    """Status after ticking (done) or unticking. Cancelled tasks never change; only open work can be
+    completed and only Completed can be reopened. Unticking can't know the status the task had before
+    (Working, Pending Review...), so it returns Overdue when the due date has passed, otherwise Open."""
+    if current == "Cancelled":
+        raise HTTPException(status_code=400, detail="Cancelled tasks can't be changed")
+    if done:
+        if current == "Completed":
+            raise HTTPException(status_code=400, detail="This task is already completed")
+        return "Completed"
+    if current != "Completed":
+        raise HTTPException(status_code=400, detail="This task isn't completed")
+    return "Overdue" if exp_end_date and exp_end_date < today.isoformat() else "Open"
+
+
 @router.post("/home/tasks/{task}/done")
 def set_task_done(task: str, body: TaskDoneRequest, request: Request, response: Response):
     bind_correlation_id(request, response)
@@ -189,11 +200,11 @@ def set_task_done(task: str, body: TaskDoneRequest, request: Request, response: 
     if not mine:
         log.warning("home_task_forbidden", user=user, task=task)
         raise HTTPException(status_code=403, detail="This task is not yours")
-    status = "Completed" if body.done else "Open"
+    status = _next_status(mine[0].get("status"), body.done, mine[0].get("exp_end_date"), local_today())
     try:
         client._put(f"/api/resource/Task/{quote(task, safe='')}", {"status": status})
     except Exception as e:
         log.error("home_task_update_failed", user=user, task=task, status=status, error=str(e))
-        raise HTTPException(status_code=400, detail=f"Could not update the task: {e}")
+        raise HTTPException(status_code=400, detail="Could not update the task. Please try again.")
     log.info("home_task_updated", user=user, task=task, status=status)
     return {"name": task, "status": status}
