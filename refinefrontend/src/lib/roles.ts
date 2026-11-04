@@ -10,6 +10,8 @@ export interface ModuleChild {
   label: string;
   path: string;
   icon?: LucideIcon;
+  /** Label of a sibling this page sits under in the breadcrumb (e.g. Recruiting > All applicants) */
+  group?: string;
 }
 
 export interface ModuleConfig {
@@ -68,7 +70,8 @@ export const MODULES: ModuleConfig[] = [
     children: [
       { label: "Staff Overview", path: "/hr/staff-overview", icon: LayoutDashboard },
       { label: "Recruiting", path: "/hr/recruiting/pipeline", icon: Users },
-      { label: "Jobs", path: "/hr/recruiting/jobs", icon: Briefcase },
+      { label: "All applicants", path: "/hr/recruiting/all", icon: Users, group: "Recruiting" },
+      { label: "Job openings", path: "/hr/recruiting/jobs", icon: Briefcase, group: "Recruiting" },
       { label: "Leaves", path: "/hr/leaves", icon: ClipboardCheck },
       { label: "WFH", path: "/hr/wfh", icon: Home },
       { label: "Payroll", path: "/hr/payroll", icon: Banknote },

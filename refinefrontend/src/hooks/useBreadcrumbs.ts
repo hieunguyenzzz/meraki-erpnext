@@ -33,6 +33,8 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
       for (const child of mod.children) {
         if (pathname === child.path) {
           // A single page named like its module (Settings) would repeat the label.
+          const group = child.group ? mod.children.find((c) => c.label === child.group) : undefined;
+          if (group) crumbs.push({ label: group.label, href: group.path });
           if (child.label !== mod.label) crumbs.push({ label: child.label });
           return crumbs;
         }
