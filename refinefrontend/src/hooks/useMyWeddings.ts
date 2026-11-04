@@ -3,8 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 export interface MyWedding {
   id: string;
   project_name: string;
+  /** project_name without a trailing " Wedding", for tight spaces. */
+  couple_label: string;
   wedding_date: string | null;
   days_to_go: number | null;
+  /** Completed, or its date has passed (decided by the backend). */
+  finished: boolean;
   venue_name: string | null;
   stage: string;
   status: string;
@@ -31,6 +35,9 @@ export interface MyWeddingDetail extends Omit<MyWedding, "venue_name"> {
   }[];
   my_expenses: { name: string; date: string; amount: number; description: string; status: string }[];
 }
+
+/** Within this many days of the wedding the countdown is highlighted. */
+export const SOON_DAYS = 14;
 
 const NONE: MyWedding[] = [];
 

@@ -5,7 +5,6 @@ import { StatePanel } from "@/components/StatePanel";
 import { useMyWeddings } from "@/hooks/useMyWeddings";
 import { WeddingRow } from "@/components/dashboard/WeddingRow";
 import { MyWeddingsTable } from "./my-weddings/MyWeddingsTable";
-import { isFinished } from "./my-weddings/RoleBadge";
 
 const SECTION_HEADING = "px-1 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground";
 
@@ -24,8 +23,8 @@ function Section({ title, weddings }: { title: string; weddings: ReturnType<type
 export default function MyWeddingsPage() {
   const navigate = useNavigate();
   const { weddings, isLoading, isError } = useMyWeddings();
-  const upcoming = weddings.filter((w) => !isFinished(w));
-  const finished = weddings.filter(isFinished);
+  const upcoming = weddings.filter((w) => !w.finished);
+  const finished = weddings.filter((w) => w.finished);
 
   return (
     <div className="flex flex-col gap-4">

@@ -98,7 +98,7 @@ export default function MyWeddingDetailPage() {
       <div className="sticky bottom-2 z-10 -mx-4 bg-background/95 px-4 py-2 backdrop-blur md:hidden">
         <Link to={addExpense} className="flex h-14 items-center justify-center gap-2 rounded-full bg-primary-fill px-5 text-[17px] font-semibold text-primary-fill-foreground">
           <Plus className="h-[22px] w-[22px] shrink-0" aria-hidden />
-          <span className="min-w-0 truncate">Add expense to {w.project_name.replace(/\s+Wedding$/i, "")}</span>
+          <span className="min-w-0 truncate">Add expense to {w.couple_label}</span>
         </Link>
       </div>
     </div>

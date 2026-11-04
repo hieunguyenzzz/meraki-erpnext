@@ -103,9 +103,9 @@ def test_expense_endpoint_allows_assigned_employee():
 
 
 def test_my_weddings_list_filter():
-    from datetime import date, timedelta
+    from datetime import timedelta
 
-    today = date.today()
+    today = mw.local_today()
     d = lambda n: (today + timedelta(days=n)).isoformat()
     rows = [
         {"name": "OPEN-FUTURE", "status": "Open", "expected_end_date": d(20), "custom_lead_planner": "HR-EMP-1"},
@@ -134,8 +134,8 @@ def test_my_weddings_list_filter():
          patch.object(mw, "resolve_employee", return_value="HR-EMP-1"):
         ids = [i["id"] for i in mw.my_weddings(request, Response())["data"]]
 
-    # Open always kept; Completed only within 30 days; unassigned and other statuses excluded.
-    assert ids == ["OPEN-FUTURE", "DONE-RECENT", "OPEN-OLD"]
+    # Upcoming kept; finished (Completed or past-dated) only within 30 days; unassigned and other statuses excluded.
+    assert ids == ["OPEN-FUTURE", "DONE-RECENT"]
 
 
 def _route_aware_client(purchase_invoices, calls):

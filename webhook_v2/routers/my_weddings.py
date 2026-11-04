@@ -9,14 +9,16 @@ user's DocPerms never apply here — scoping is done in this module:
     the session, never a client-supplied id) is in an assignment field;
   * the detail view is read-only and omits commission, price and payment data.
 
-GET /my/weddings            — assigned weddings: Open, plus Completed within the last 30 days
+GET /my/weddings            — assigned weddings: upcoming, plus finished (Completed or past-dated) within the last 30 days
 GET /my/weddings/{project}  — read-only detail for one assigned wedding (403 otherwise)
 GET /wedding/{project}/team-contacts — teammates' mobile numbers, for whoever can see the wedding
 """
 
 import json
+import re
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from urllib.parse import quote
 
@@ -45,6 +47,7 @@ ASSIGNMENT_ROLES = {
 # Roles that already see every wedding elsewhere in the app (frontend: seesAllWeddings + planners).
 ALL_WEDDINGS_ROLES = tuple(set(PLANNER) | set(FINANCE) | set(WEDDING_EXPENSE))
 RECENT_DAYS = 30
+BUSINESS_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 PROJECT_LIST_FIELDS = [
     "name", "project_name", "status", "custom_project_stage", "customer",
@@ -126,13 +129,29 @@ def venue_names(client: ERPNextClient, sales_order_ids: set[str]) -> dict[str, s
     return {so["name"]: suppliers.get(so.get("custom_venue"), so.get("custom_venue")) for so in sos if so.get("custom_venue")}
 
 
+def local_today() -> date:
+    """Today's date in the business timezone (the server clock is UTC)."""
+    return datetime.now(BUSINESS_TZ).date()
+
+
 def _days_to_go(wedding_date: str | None, today: date) -> int | None:
     return (date.fromisoformat(wedding_date) - today).days if wedding_date else None
 
 
+def is_finished(status: str | None, days_to_go: int | None) -> bool:
+    """A wedding is finished once it is Completed or its date has passed."""
+    return status == "Completed" or (days_to_go is not None and days_to_go < 0)
+
+
+def couple_label(project_name: str) -> str:
+    """Display name for the couple: the project name without a trailing ' Wedding'."""
+    return re.sub(r"\s+Wedding$", "", project_name, flags=re.IGNORECASE)
+
+
 def list_assigned_projects(client: ERPNextClient, employee: str, today: date, recent_completed: bool = True) -> list[dict]:
-    """Projects `employee` is assigned to (filtered by ERPNext): Open, plus Completed within
-    the last RECENT_DAYS days when `recent_completed`."""
+    """Projects `employee` is assigned to (filtered by ERPNext). With `recent_completed`: upcoming
+    weddings plus finished ones (see is_finished) from the last RECENT_DAYS days; without it:
+    every Open wedding."""
     statuses = ["Open", "Completed"] if recent_completed else ["Open"]
     projects = client._get("/api/resource/Project", params={
         "or_filters": json.dumps([[f, "=", employee] for f in ASSIGNMENT_ROLES]),
@@ -140,8 +159,14 @@ def list_assigned_projects(client: ERPNextClient, employee: str, today: date, re
         "fields": json.dumps(PROJECT_LIST_FIELDS),
         "limit_page_length": 0,
     }).get("data", [])
-    cutoff = (today - timedelta(days=RECENT_DAYS)).isoformat()
-    return [p for p in projects if p["status"] == "Open" or (p.get("expected_end_date") or "") >= cutoff]
+    if not recent_completed:
+        return projects
+    kept = []
+    for p in projects:
+        days = _days_to_go(p.get("expected_end_date"), today)
+        if not is_finished(p["status"], days) or (days is not None and days >= -RECENT_DAYS):
+            kept.append(p)
+    return kept
 
 
 @router.get("/my/weddings")
@@ -157,17 +182,21 @@ def my_weddings(request: Request, response: Response):
         return {"data": []}
 
     client = ERPNextClient()
-    today = date.today()
+    today = local_today()
     projects = list_assigned_projects(client, employee, today)
     venues = venue_names(client, {p["sales_order"] for p in projects if p.get("sales_order")})
 
     items = []
     for p in projects:
+        days_to_go = _days_to_go(p.get("expected_end_date"), today)
+        name = p.get("project_name") or p["name"]
         items.append({
             "id": p["name"],
-            "project_name": p.get("project_name") or p["name"],
+            "project_name": name,
+            "couple_label": couple_label(name),
             "wedding_date": p.get("expected_end_date"),
-            "days_to_go": _days_to_go(p.get("expected_end_date"), today),
+            "days_to_go": days_to_go,
+            "finished": is_finished(p["status"], days_to_go),
             "venue_name": venues.get(p.get("sales_order") or ""),
             "stage": p.get("custom_project_stage") or "Planning",
             "status": p["status"],
@@ -222,13 +251,16 @@ def my_wedding_detail(project: str, request: Request, response: Response):
     ]
     guests = max((ev["guest_count"] or 0 for ev in events), default=0) or None
 
-    today = date.today()
+    today = local_today()
+    days_to_go = _days_to_go(doc.get("expected_end_date"), today)
     result = {
         "id": doc["name"],
         "project_name": doc.get("project_name") or doc["name"],
+        "couple_label": couple_label(doc.get("project_name") or doc["name"]),
         "customer_name": customer_name,
         "wedding_date": doc.get("expected_end_date"),
-        "days_to_go": _days_to_go(doc.get("expected_end_date"), today),
+        "days_to_go": days_to_go,
+        "finished": is_finished(doc.get("status"), days_to_go),
         "venue_name": venue,
         "guest_count": guests,
         "package": doc.get("custom_service_type") or None,

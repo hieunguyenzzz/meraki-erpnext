@@ -7,8 +7,3 @@ const ROLE_VARIANT = { lead: "default", support: "info", assistant: "secondary" 
 export function RoleBadge({ role }: { role: MyWedding["my_role"] }) {
   return <Badge variant={ROLE_VARIANT[role]}>{ROLE_LABEL[role]}</Badge>;
 }
-
-/** Finished = completed, or its date has passed. */
-export function isFinished(w: Pick<MyWedding, "status" | "days_to_go">): boolean {
-  return w.status === "Completed" || (w.days_to_go != null && w.days_to_go < 0);
-}

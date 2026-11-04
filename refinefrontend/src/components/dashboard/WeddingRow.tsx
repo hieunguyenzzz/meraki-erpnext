@@ -2,16 +2,13 @@ import { Link } from "react-router";
 import { Check } from "lucide-react";
 import { formatIsoWeekday } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { MyWedding } from "@/hooks/useMyWeddings";
+import { SOON_DAYS, type MyWedding } from "@/hooks/useMyWeddings";
 import { StageBadge } from "@/pages/projects/weddings-list/WeddingBadges";
-import { RoleBadge, isFinished } from "@/pages/self-service/my-weddings/RoleBadge";
-
-/** Within this many days the countdown block turns rose. */
-const SOON_DAYS = 14;
+import { RoleBadge } from "@/pages/self-service/my-weddings/RoleBadge";
 
 function DaysBlock({ wedding: w }: { wedding: MyWedding }) {
   const base = "flex h-[62px] w-[58px] shrink-0 flex-col items-center justify-center rounded-xl";
-  if (isFinished(w)) {
+  if (w.finished) {
     return (
       <div className={cn(base, "bg-secondary text-muted-foreground")}>
         <Check className="h-[22px] w-[22px]" strokeWidth={2.2} aria-hidden />
@@ -30,7 +27,7 @@ function DaysBlock({ wedding: w }: { wedding: MyWedding }) {
 
 /** One assigned wedding as a tappable card (phones). */
 export function WeddingRow({ wedding: w }: { wedding: MyWedding }) {
-  const finished = isFinished(w);
+  const finished = w.finished;
   return (
     <Link
       to={`/my-weddings/${w.id}`}
@@ -48,7 +45,7 @@ export function WeddingRow({ wedding: w }: { wedding: MyWedding }) {
         </span>
         <div className="flex flex-wrap gap-1.5">
           <RoleBadge role={w.my_role} />
-          <StageBadge stage={finished ? "Completed" : w.stage} />
+          <StageBadge stage={w.stage} />
         </div>
       </div>
     </Link>
