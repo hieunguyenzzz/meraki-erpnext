@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { MeTabs } from "@/components/MeTabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatePanel } from "@/components/StatePanel";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -40,11 +41,13 @@ export default function MyPayrollPage() {
   const retry = () => load(() => false);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 pb-28 lg:pb-8">
-      <div>
+    <div className="flex max-w-5xl flex-col gap-5 pb-28 max-md:mx-auto lg:pb-8">
+      <div className="md:hidden">
         <h1 className="font-display text-3xl font-semibold tracking-tight">My Payroll</h1>
         <p className="text-muted-foreground">Your submitted payslips</p>
       </div>
+      <h1 className="font-display text-4xl font-semibold leading-10 max-md:hidden">Me</h1>
+      <MeTabs active="payslips" />
 
       {isLoading && (
         <div className="space-y-3" aria-busy="true">

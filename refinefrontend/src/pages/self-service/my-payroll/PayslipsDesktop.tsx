@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { formatVNDFull } from "@/lib/format";
+import { ChevronDown } from "lucide-react";
+import { formatVNDPlain } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PayslipBreakdownView } from "./PayslipBreakdownView";
-import { monthIso } from "./payslipBreakdown";
+import { buildBreakdown, monthIso } from "./payslipBreakdown";
 import type { MySlip } from "./types";
 
 interface Props {
@@ -10,45 +11,51 @@ interface Props {
   commissionComponents: string[];
 }
 
-/** Desktop layout: month list on the left, selected payslip's breakdown on the right. */
+const GRID = "grid grid-cols-[1.4fr_1fr_1fr_1fr_40px] items-center gap-2 tabular-nums";
+
+/** Desktop layout (D-MePayslips): one table row per month, the selected row opens its earnings and deductions underneath. */
 export function PayslipsDesktop({ slips, commissionComponents }: Props) {
-  const [selectedName, setSelectedName] = useState(slips[0]?.name);
-  const selected = slips.find((s) => s.name === selectedName) ?? slips[0];
+  const [openName, setOpenName] = useState<string | null>(slips[0]?.name ?? null);
   return (
-    <div className="grid grid-cols-[320px_minmax(0,1fr)] items-start gap-6">
-      <ul className="space-y-2" aria-label="Payslips">
+    <section className="overflow-x-auto rounded-card border bg-card" aria-label="Payslips">
+      <div className="min-w-[600px]">
+        <div className={cn(GRID, "bg-muted px-[18px] py-3 text-[13px] font-semibold text-muted-foreground")}>
+          <span>Month</span>
+          <span className="text-right">Gross (VND)</span>
+          <span className="text-right">Deductions (VND)</span>
+          <span className="text-right">Net pay (VND)</span>
+          <span />
+        </div>
         {slips.map((slip) => {
-          const active = slip.name === selected.name;
+          const open = openName === slip.name;
+          const deductions = buildBreakdown(slip, commissionComponents).totalDeductions;
           return (
-            <li key={slip.name}>
+            <div key={slip.name} className="border-t">
               <button
                 type="button"
-                aria-current={active}
-                onClick={() => setSelectedName(slip.name)}
-                className={cn(
-                  "flex min-h-[64px] w-full items-center gap-3 rounded-card border bg-card px-4 text-left transition-colors hover:bg-secondary",
-                  active && "border-primary bg-accent hover:bg-accent"
-                )}
+                aria-expanded={open}
+                aria-controls={`payslip-${slip.name}`}
+                onClick={() => setOpenName(open ? null : slip.name)}
+                className={cn(GRID, "min-h-[60px] w-full px-[18px] text-left text-[15px] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", open && "bg-background")}
               >
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <b className="text-base tabular-nums">{monthIso(slip)}</b>
-                  <span className="text-xs text-muted-foreground">Posted {slip.posting_date}</span>
+                <span>
+                  <b>{monthIso(slip)}</b>
+                  <span className="block text-xs text-muted-foreground">Posted {slip.posting_date}</span>
                 </span>
-                <span className="font-bold tabular-nums">{formatVNDFull(slip.net_pay)}</span>
+                <span className="text-right">{formatVNDPlain(slip.gross_pay)}</span>
+                <span className="text-right text-muted-foreground">{deductions > 0 ? "−" : ""}{formatVNDPlain(deductions)}</span>
+                <b className="text-right">{formatVNDPlain(slip.net_pay)}</b>
+                <ChevronDown className={cn("h-5 w-5 justify-self-end text-muted-foreground transition-transform", open && "rotate-180")} aria-hidden />
               </button>
-            </li>
+              {open && (
+                <div id={`payslip-${slip.name}`} role="region" aria-label={`Payslip ${monthIso(slip)}`} className="bg-background px-[18px] pb-[18px] pt-2">
+                  <PayslipBreakdownView slip={slip} commissionComponents={commissionComponents} layout="columns" />
+                </div>
+              )}
+            </div>
           );
         })}
-      </ul>
-      <section className="rounded-card border bg-card p-6" aria-label={`Payslip ${monthIso(selected)}`}>
-        <header className="mb-5">
-          <h2 className="text-2xl font-semibold tabular-nums">{monthIso(selected)}</h2>
-          <p className="text-sm text-muted-foreground">
-            {selected.start_date} – {selected.end_date} · Posted {selected.posting_date}
-          </p>
-        </header>
-        <PayslipBreakdownView slip={selected} commissionComponents={commissionComponents} />
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
