@@ -1,14 +1,13 @@
 import { useRef, useState } from "react";
 import { useCreate, useCustomMutation, useDelete, useInvalidate } from "@refinedev/core";
-import { AlertCircle, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatePanel } from "@/components/StatePanel";
+import { cn } from "@/lib/utils";
 import { ConfirmModal } from "./ConfirmModal";
-import { FormModal } from "./FormModal";
-import { useDesignations, type Designation } from "./useSettingsData";
+import { useDesignations, useDesignationUsage, type Designation } from "./useSettingsData";
 
 function errorText(err: unknown, fallback: string): string {
   const msg = err instanceof Error ? err.message : "";
@@ -18,60 +17,19 @@ function errorText(err: unknown, fallback: string): string {
   return msg.startsWith("API error") ? fallback : msg || fallback;
 }
 
-/** One-field form used for both "add" and "rename". */
-function NameForm({
-  initial, submitLabel, busy, error, onSubmit, onCancel,
-}: {
-  initial: string;
-  submitLabel: string;
-  busy: boolean;
-  error: string | null;
-  onSubmit: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const [value, setValue] = useState(initial);
-  const name = value.trim();
-  return (
-    <form
-      className="space-y-4"
-      onSubmit={(e) => { e.preventDefault(); if (name) onSubmit(name); }}
-    >
-      <div className="space-y-1.5">
-        <Label htmlFor="designation-name">Job title</Label>
-        <Input
-          id="designation-name"
-          placeholder="e.g. Director"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          autoFocus
-        />
-      </div>
-      {error && (
-        <div role="alert" className="flex items-start gap-2 text-sm text-destructive">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>Cancel</Button>
-        <Button type="submit" disabled={!name || busy}>
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          {submitLabel}
-        </Button>
-      </div>
-    </form>
-  );
-}
+const usedBy = (n: number) => (n === 0 ? "Not used" : n === 1 ? "1 person" : `${n} people`);
 
 export function DesignationsTab() {
   const invalidate = useInvalidate();
   const { designations, query } = useDesignations();
+  const { usage, query: usageQuery } = useDesignationUsage();
   const { mutateAsync: createDoc } = useCreate();
   const { mutateAsync: customMutate } = useCustomMutation();
   const { mutateAsync: deleteDoc } = useDelete();
 
-  const [addOpen, setAddOpen] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<Designation | null>(null);
+  const [newName, setNewName] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Designation | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,17 +56,23 @@ export function DesignationsTab() {
     }
   }
 
-  const add = (name: string) =>
-    run(
+  const add = () => {
+    const name = newName.trim();
+    if (!name) return;
+    return run(
       async () => { await createDoc({ resource: "Designation", values: { designation_name: name } }); },
       "Failed to create designation",
-      () => setAddOpen(false),
+      () => setNewName(""),
     );
+  };
 
-  const rename = (name: string) => {
-    if (!renameTarget) return;
-    if (name === renameTarget.name) { setRenameTarget(null); return; }
-    const old = renameTarget.name;
+  const startEdit = (d: Designation) => { setError(null); setEditing(d.name); setEditValue(d.name); };
+
+  const saveEdit = () => {
+    const old = editing;
+    const name = editValue.trim();
+    if (!old || !name) return;
+    if (name === old) { setEditing(null); return; }
     return run(
       async () => {
         await customMutate({
@@ -118,7 +82,7 @@ export function DesignationsTab() {
         });
       },
       "Failed to rename designation",
-      () => setRenameTarget(null),
+      () => setEditing(null),
     );
   };
 
@@ -132,16 +96,28 @@ export function DesignationsTab() {
     );
   };
 
-  const openAdd = () => { setError(null); setAddOpen(true); };
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Job titles you can give to employees.</p>
-        <Button onClick={openAdd}>
-          <Plus /> Add job title
+      <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); add(); }}>
+        <label className="flex min-w-0 flex-[1_1_260px]">
+          <span className="sr-only">New job title</span>
+          <Input
+            placeholder="New job title, e.g. Junior Planner"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+        </label>
+        <Button type="submit" disabled={!newName.trim() || busy}>
+          {busy && editing === null && <Loader2 className="animate-spin" />}
+          + Add title
         </Button>
-      </div>
+      </form>
+
+      {error && editing === null && deleteTarget === null && (
+        <div role="alert" className="flex items-start gap-2 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{error}</span>
+        </div>
+      )}
 
       {query.isLoading ? (
         <div className="space-y-2" aria-busy="true">
@@ -155,68 +131,87 @@ export function DesignationsTab() {
           action={{ label: "Try again", onClick: () => query.refetch() }}
         />
       ) : designations.length === 0 ? (
-        <StatePanel
-          kind="empty"
-          title="No job titles yet"
-          text="Add the first one to start assigning titles."
-          action={{ label: "Add job title", onClick: openAdd, icon: <Plus /> }}
-        />
+        <StatePanel kind="empty" title="No job titles yet" text="Add the first one above to start assigning titles." />
       ) : (
-        <ul className="divide-y overflow-hidden rounded-2xl border bg-card">
-          {designations.map((d) => (
-            <li key={d.name} className="flex items-center justify-between gap-2 py-1 pl-4 pr-2">
-              <span className="min-w-0 truncate text-sm font-semibold">{d.name}</span>
-              <div className="flex shrink-0 items-center">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Rename ${d.name}`}
-                  onClick={() => { setError(null); setRenameTarget(d); }}
+        <section className="overflow-hidden rounded-2xl border bg-card">
+          <div className="hidden items-center gap-3 bg-muted px-[18px] py-3 text-xs font-semibold text-muted-foreground md:flex">
+            <span className="flex-1">Title</span>
+            <span className="w-[120px]">Used by</span>
+            <span className="w-[170px]" />
+          </div>
+          <ul className="divide-y md:border-t">
+            {designations.map((d) => {
+              const count = usage.get(d.name) ?? 0;
+              const isEditing = editing === d.name;
+              const deleteBlocked = usageQuery.isLoading || count > 0;
+              return (
+                <li
+                  key={d.name}
+                  className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 px-[18px] py-3 md:min-h-14", isEditing && "bg-accent")}
                 >
-                  <Pencil />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Delete ${d.name}`}
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => { setError(null); setDeleteTarget(d); }}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+                  {isEditing ? (
+                    <label className="flex min-w-0 flex-[1_1_200px]">
+                      <span className="sr-only">Rename {d.name}</span>
+                      <Input
+                        value={editValue}
+                        autoFocus
+                        className="border-primary"
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
+                          if (e.key === "Escape") setEditing(null);
+                        }}
+                      />
+                    </label>
+                  ) : (
+                    <b className="min-w-0 flex-[1_1_200px] break-words text-[15px]">{d.name}</b>
+                  )}
+                  <span className="text-sm text-muted-foreground md:w-[120px]">
+                    {usageQuery.isLoading ? "…" : usedBy(count)}
+                  </span>
+                  <span className="flex gap-1.5 md:w-[170px]">
+                    {isEditing ? (
+                      <>
+                        <Button size="sm" className="bg-foreground text-background hover:bg-foreground/90" onClick={saveEdit} disabled={!editValue.trim() || busy}>
+                          {busy && <Loader2 className="animate-spin" />} Save
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => startEdit(d)} aria-label={`Rename ${d.name}`}>Rename</Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={deleteBlocked}
+                          title={count > 0 ? "In use. Move those people to another title first." : undefined}
+                          className="text-destructive hover:text-destructive"
+                          aria-label={`Delete ${d.name}`}
+                          onClick={() => { setError(null); setDeleteTarget(d); }}
+                        >
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </span>
+                  {isEditing && error && (
+                    <div role="alert" className="flex w-full items-start gap-2 text-sm text-destructive">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{error}</span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
-
-      <FormModal open={addOpen} onOpenChange={(o) => { if (!busy) setAddOpen(o); }} title="Add job title">
-        <NameForm initial="" submitLabel="Add" busy={busy} error={error} onSubmit={add} onCancel={() => setAddOpen(false)} />
-      </FormModal>
-
-      <FormModal
-        open={renameTarget !== null}
-        onOpenChange={(o) => { if (!busy && !o) setRenameTarget(null); }}
-        title="Rename job title"
-      >
-        {renameTarget && (
-          <NameForm
-            key={renameTarget.name}
-            initial={renameTarget.name}
-            submitLabel="Save"
-            busy={busy}
-            error={error}
-            onSubmit={rename}
-            onCancel={() => setRenameTarget(null)}
-          />
-        )}
-      </FormModal>
+      <p className="text-[13px] text-muted-foreground">A title in use can't be deleted. Move those people to another title first.</p>
 
       <ConfirmModal
         open={deleteTarget !== null}
         onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
         title="Delete job title"
-        body={<>Delete <b className="text-foreground">{deleteTarget?.name}</b>? This cannot be undone, and fails if an employee still has this title.</>}
+        body={<>Delete <b className="text-foreground">{deleteTarget?.name}</b>? This cannot be undone.</>}
         confirmLabel="Delete"
         destructive
         busy={busy}

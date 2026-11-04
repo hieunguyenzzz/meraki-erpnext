@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createParser, useQueryState } from "nuqs";
-import { AlertCircle, ChevronLeft, ChevronRight, Info, Loader2, Plus, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,18 +8,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatePanel } from "@/components/StatePanel";
 import { yearVN } from "@/lib/businessTime";
 import { ConfirmModal } from "./ConfirmModal";
-import { FormModal } from "./FormModal";
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 interface Holiday {
   date: string;
   description: string;
   weekday: string;
-  month: number;
 }
 
 const yearParser = createParser<number>({
@@ -38,7 +30,6 @@ export function HolidaysTab() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
   const [addDate, setAddDate] = useState("");
   const [addName, setAddName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -71,12 +62,6 @@ export function HolidaysTab() {
 
   useEffect(() => { fetchHolidays(year); }, [year, fetchHolidays]);
 
-  const byMonth = useMemo(() => {
-    const map = new Map<number, Holiday[]>();
-    for (const h of holidays) map.set(h.month, [...(map.get(h.month) ?? []), h]);
-    return [...map.entries()].sort((a, b) => a[0] - b[0]);
-  }, [holidays]);
-
   async function handleAdd() {
     if (!addDate || !addName.trim() || inFlight.current) return;
     inFlight.current = true;
@@ -97,7 +82,6 @@ export function HolidaysTab() {
       }
       // Show the year the holiday was added to so it is visible straight away.
       const addedYear = Number(addDate.slice(0, 4));
-      setAddOpen(false);
       setAddDate("");
       setAddName("");
       if (addedYear && addedYear !== year) setYear(addedYear);
@@ -131,31 +115,51 @@ export function HolidaysTab() {
     }
   }
 
-  const openAdd = () => { setFormError(null); setAddOpen(true); };
+  const yearOptions = useMemo(() => {
+    const base = yearVN();
+    return [...new Set([base - 1, base, base + 1, year])].sort((x, y) => x - y);
+  }, [year]);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1" role="group" aria-label="Year">
-          <Button variant="ghost" size="icon" aria-label="Previous year" onClick={() => setYear(year - 1)}>
-            <ChevronLeft />
-          </Button>
-          <span className="w-14 text-center text-base font-semibold" aria-live="polite">{year}</span>
-          <Button variant="ghost" size="icon" aria-label="Next year" onClick={() => setYear(year + 1)}>
-            <ChevronRight />
-          </Button>
-        </div>
-        {listExists && (
-          <Button onClick={openAdd}>
-            <Plus /> Add holiday
-          </Button>
+      <div className="flex flex-wrap items-end gap-x-2.5 gap-y-3">
+        <label className="flex flex-col gap-1.5 text-[13px] font-semibold">
+          Year
+          <select
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="h-10 rounded-input border border-input bg-card px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:h-12 max-md:text-base"
+          >
+            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </label>
+        <span className="flex-1" />
+        {listExists && !loadError && (
+          <form
+            className="flex w-full flex-wrap items-end gap-2 rounded-[14px] border bg-card px-3 py-2.5 md:w-auto"
+            onSubmit={(e) => { e.preventDefault(); handleAdd(); }}
+          >
+            <div className="flex flex-col gap-1.5 text-[13px] font-semibold max-md:w-full">
+              <Label htmlFor="holiday-date">Date</Label>
+              <Input id="holiday-date" type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5 text-[13px] font-semibold max-md:w-full">
+              <Label htmlFor="holiday-name">Name</Label>
+              <Input id="holiday-name" placeholder="e.g. Company day off" value={addName} onChange={(e) => setAddName(e.target.value)} />
+            </div>
+            <Button type="submit" disabled={!addDate || !addName.trim() || saving} className="max-md:w-full">
+              {saving && <Loader2 className="animate-spin" />}
+              + Add holiday
+            </Button>
+          </form>
         )}
       </div>
 
-      <div className="flex items-start gap-2.5 rounded-2xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
-        <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>Saturdays and Sundays are left out of leave calculations automatically. Only public holidays are listed here.</span>
-      </div>
+      {formError && (
+        <div role="alert" className="flex items-start gap-2 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{formError}</span>
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-2" aria-busy="true">
@@ -174,70 +178,41 @@ export function HolidaysTab() {
           title={`No holiday list for ${year} yet`}
           text={`Create "Vietnam ${year}" in ERPNext first, then holidays can be added here.`}
         />
-      ) : byMonth.length === 0 ? (
+      ) : holidays.length === 0 ? (
         <StatePanel
           kind="empty"
           title={`No public holidays in ${year}`}
-          text="Add one and it will count in leave calculations."
-          action={{ label: "Add holiday", onClick: openAdd, icon: <Plus /> }}
+          text="Add one above and it will count in leave calculations."
         />
       ) : (
-        <div className="space-y-4">
-          {byMonth.map(([month, items]) => (
-            <section key={month} className="overflow-hidden rounded-2xl border bg-card" aria-label={MONTH_NAMES[month - 1]}>
-              <div className="flex items-center gap-2 bg-muted/50 px-4 py-2.5">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{MONTH_NAMES[month - 1]}</h3>
-                <Badge variant="secondary">{items.length}</Badge>
-              </div>
-              <ul className="divide-y">
-                {items.map((h) => (
-                  <li key={h.date} className="flex items-center gap-3 py-1 pl-4 pr-2">
-                    <div className="w-36 shrink-0 text-sm whitespace-nowrap">
-                      <span className="font-semibold tabular-nums">{h.date}</span>
-                      <span className="ml-1.5 text-xs text-muted-foreground">{h.weekday.slice(0, 3)}</span>
-                    </div>
-                    <span className="min-w-0 flex-1 text-sm">{h.description}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Delete ${h.description} on ${h.date}`}
-                      className="text-muted-foreground hover:text-destructive"
-                      onClick={() => { setDeleteError(null); setDeleteTarget(h); }}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
+        <section className="overflow-hidden rounded-2xl border bg-card">
+          <div className="hidden items-center gap-3 bg-muted px-[18px] py-3 text-xs font-semibold text-muted-foreground md:flex">
+            <span className="w-[220px]">Date</span>
+            <span className="flex-1">Name</span>
+            <span className="w-[90px]" />
+          </div>
+          <ul className="divide-y md:border-t">
+            {holidays.map((h) => (
+              <li key={h.date} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-[18px] py-3 tabular-nums md:min-h-14">
+                <span className="text-sm max-md:w-full max-md:text-xs max-md:text-muted-foreground md:w-[220px] md:text-[15px]">{h.weekday.slice(0, 3)} {h.date}</span>
+                <b className="min-w-0 flex-[1_1_160px] break-words text-[15px]">{h.description}</b>
+                <span className="md:w-[90px]">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label={`Delete ${h.description} on ${h.date}`}
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => { setDeleteError(null); setDeleteTarget(h); }}
+                  >
+                    Delete
+                  </Button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
-
-      <FormModal open={addOpen} onOpenChange={(o) => { if (!saving) setAddOpen(o); }} title="Add public holiday">
-        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleAdd(); }}>
-          <div className="space-y-1.5">
-            <Label htmlFor="holiday-date">Date</Label>
-            <Input id="holiday-date" type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="holiday-name">Holiday name</Label>
-            <Input id="holiday-name" placeholder="e.g. Company anniversary" value={addName} onChange={(e) => setAddName(e.target.value)} />
-          </div>
-          {formError && (
-            <div role="alert" className="flex items-start gap-2 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{formError}</span>
-            </div>
-          )}
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => setAddOpen(false)} disabled={saving}>Cancel</Button>
-            <Button type="submit" disabled={!addDate || !addName.trim() || saving}>
-              {saving && <Loader2 className="animate-spin" />}
-              Add holiday
-            </Button>
-          </div>
-        </form>
-      </FormModal>
+      <p className="text-[13px] text-muted-foreground">Holidays are skipped when counting leave days and payroll working days.</p>
 
       <ConfirmModal
         open={deleteTarget !== null}
