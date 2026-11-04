@@ -12,7 +12,7 @@ export interface Receipt {
 }
 
 /** Fetch a JSON endpoint once, keeping failures visible (error string + console). */
-function useJson<T>(url: string, empty: T, label: string) {
+export function useJson<T>(url: string, empty: T, label: string) {
   const [data, setData] = useState<T>(empty);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(() => {
