@@ -100,21 +100,17 @@ export default function LoginPage() {
       if (res.ok) {
         setView("forgot-success");
       } else if (res.status === 404) {
-        setResetError("No account found with that email address.");
+        // Unknown email: show the same screen as a known one so the form can't be used to probe for accounts.
+        console.error("[reset-password] no such user (404), showing neutral success");
+        setView("forgot-success");
       } else if (res.status === 429) {
         console.error("[reset-password] rate limited (429)");
         setResetError("Too many attempts, try again in a few minutes.");
         setResetCooldown(true);
         cooldownTimer.current = setTimeout(() => setResetCooldown(false), 60000);
       } else {
-        const data = await res.json().catch((err) => {
-          console.error("[reset-password] unreadable error body", res.status, err);
-          return null;
-        });
         console.error("[reset-password] failed", res.status);
-        setResetError(
-          data?.message || "Failed to send reset email. Please try again."
-        );
+        setResetError("Couldn't send the link, try again.");
       }
     } catch (err) {
       console.error("[reset-password] request failed", err);
