@@ -69,6 +69,7 @@ export default function InvoiceDetailPage() {
 
       <section aria-label="Amounts" className="grid gap-4 sm:grid-cols-3">
         <Stat label="Total" value={formatVNDFull(invoice.grand_total)} />
+        {/* Paid is derived (grand_total - outstanding): Sales Invoice has no paid field. It can differ from the Linked payments sum when credit notes or journal entries settle part of the invoice. */}
         <Stat label="Paid" value={formatVNDFull(invoice.grand_total - invoice.outstanding_amount)} tone="paid" />
         <Stat label="Outstanding" value={formatVNDFull(invoice.outstanding_amount)} tone={late !== null ? "due" : undefined} />
       </section>
