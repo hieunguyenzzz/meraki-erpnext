@@ -64,3 +64,15 @@ export function toPayload(editValues: EditValues): EditValues {
   }
   return values;
 }
+
+
+/** Only the fields the user changed (compared after toPayload normalisation), so a stale form can't overwrite untouched fields. */
+export function changedPayload(initial: EditValues, current: EditValues): EditValues {
+  const before = toPayload(initial);
+  const after = toPayload(current);
+  const diff: EditValues = {};
+  for (const key of Object.keys(after)) {
+    if (after[key] !== before[key]) diff[key] = after[key];
+  }
+  return diff;
+}

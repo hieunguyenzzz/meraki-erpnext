@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import type { Employee } from "@/lib/types";
 import { StaffSheet } from "../staff-overview/StaffSheet";
-import { initialEditValues, toPayload, type EditValues } from "./editValues";
+import { changedPayload, initialEditValues, type EditValues } from "./editValues";
 import type { EditSection, UserOption } from "./types";
 
 type BadgeVariant = React.ComponentProps<typeof Badge>["variant"];
@@ -94,14 +94,18 @@ export function EditSectionSheet({ employee, section, users, designations, canMa
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/inquiry-api/employee/${encodeURIComponent(employee.name)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: toPayload(values) }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `API error ${res.status}`);
+      // Send only what the user changed; a stale snapshot must not overwrite fields they never touched.
+      const changes = changedPayload(initial, values);
+      if (Object.keys(changes).length > 0) {
+        const res = await fetch(`/inquiry-api/employee/${encodeURIComponent(employee.name)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ values: changes }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || `API error ${res.status}`);
+        }
       }
       // Roles are saved on the linked ERPNext user, only by System Manager / Administrator.
       if (section === "employment" && employee.user_id && canManageRoles && rolesLoaded) {
