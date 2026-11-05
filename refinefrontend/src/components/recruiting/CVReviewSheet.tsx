@@ -9,6 +9,7 @@ import { MentionsInput, Mention } from "react-mentions";
 import {
   Sheet,
   SheetContent,
+  SheetTitle,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -279,7 +280,8 @@ export function CVReviewSheet({
 
   return (
     <Sheet open={!!applicantId} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="sm:max-w-2xl flex flex-col p-0">
+      <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col p-0">
+        <SheetTitle className="sr-only">CV review: {applicant?.applicant_name ?? "applicant"}</SheetTitle>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-3">
@@ -289,7 +291,7 @@ export function CVReviewSheet({
                 size="icon"
                 onClick={goToPrev}
                 disabled={currentIdx <= 0}
-                className="h-7 w-7"
+                className="h-7 w-7 max-md:h-12 max-md:w-12"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -301,7 +303,7 @@ export function CVReviewSheet({
                 size="icon"
                 onClick={goToNext}
                 disabled={currentIdx >= screeningItems.length - 1}
-                className="h-7 w-7"
+                className="h-7 w-7 max-md:h-12 max-md:w-12"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>

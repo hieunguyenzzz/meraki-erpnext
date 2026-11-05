@@ -1,0 +1,15 @@
+export const CITY_TABS = [
+  { key: "all", label: "All cities" },
+  { key: "hcm", label: "HCM", city: "HCM" },
+  { key: "phu-quoc", label: "Phú Quốc", city: "Phú Quốc" },
+  { key: "da-nang", label: "Đà Nẵng", city: "Đà Nẵng" },
+  { key: "hoi-an", label: "Hội An", city: "Hội An" },
+  { key: "da-lat", label: "Đà Lạt", city: "Đà Lạt" },
+  { key: "vung-tau", label: "Vũng Tàu", city: "Vũng Tàu" },
+  { key: "nha-trang", label: "Nha Trang", city: "Nha Trang" },
+  { key: "hue", label: "Huế", city: "Huế" },
+  { key: "ha-noi", label: "Hà Nội", city: "Hà Nội" },
+  { key: "ha-long", label: "Hạ Long", city: "Hạ Long" },
+  { key: "ninh-binh", label: "Ninh Bình", city: "Ninh Bình" },
+  { key: "sapa", label: "Sapa", city: "Sapa" },
+] as const;

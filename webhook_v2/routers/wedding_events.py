@@ -13,6 +13,7 @@ DELETE /wedding-events/{name}      — delete an event
 
 import json
 import re
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -24,6 +25,20 @@ log = get_logger(__name__)
 router = APIRouter(dependencies=[Depends(require_roles(*PLANNER))])
 
 _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _require_iso_date(value: str | None, field: str) -> None:
+    """400 unless `value` is blank or a real YYYY-MM-DD calendar date."""
+    if not value:
+        return
+    try:
+        if not _DATE_RE.match(value):
+            raise ValueError(value)
+        date.fromisoformat(value)
+    except ValueError:
+        log.warning("wedding_events_bad_date", field=field, value=value)
+        raise HTTPException(status_code=400, detail=f"{field} must be a valid YYYY-MM-DD date")
 
 
 def _normalise_time(value: str | None, field: str) -> str | None:
@@ -126,6 +141,9 @@ def get_wedding_events(
         employee=employee,
         project=project,
     )
+
+    _require_iso_date(from_date, "from")
+    _require_iso_date(to_date, "to")
 
     client = ERPNextClient()
 

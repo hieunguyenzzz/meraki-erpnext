@@ -1,14 +1,14 @@
 import { Refine, Authenticated, usePermissions } from "@refinedev/core";
 import routerProvider from "@refinedev/react-router";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router";
 import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { dataProvider } from "@/providers/dataProvider";
 import { authProvider } from "@/providers/authProvider";
 import { accessControlProvider } from "@/providers/accessControlProvider";
-import { Layout } from "@/components/Layout";
-import { SelfServiceLayout } from "@/components/SelfServiceLayout";
+import { AppShell } from "@/components/layout/AppShell";
+import { MoreMenu } from "@/components/layout/MoreMenu";
 import { ThemeProvider } from "@/context/theme-context";
 import { isEmployeeSelfServiceOnly } from "@/lib/roles";
 import { isProfileIncomplete } from "@/lib/profile";
@@ -59,6 +59,9 @@ import VendorsPage from "@/pages/vendors/VendorsPage";
 import VendorDetailPage from "@/pages/vendors/VendorDetailPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import AddExpensePage from "@/pages/finance/AddExpensePage";
+import MyWeddingsPage from "@/pages/self-service/MyWeddingsPage";
+import MyWeddingDetailPage from "@/pages/self-service/MyWeddingDetailPage";
+import StaffHome from "@/components/dashboard/StaffHome";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,6 +86,7 @@ function RoleRedirect() {
     if (!employee || isProfileIncomplete(employee)) {
       return <Navigate to="/my-profile" replace />;
     }
+    return <StaffHome />;
   }
   return <DashboardPage />;
 }
@@ -95,6 +99,16 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   }
   if (isEmployeeSelfServiceOnly(roles)) {
     return <Navigate to="/my-profile" replace />;
+  }
+  return <>{children}</>;
+}
+
+/** Screens open to every signed-in user, Employee-only staff included (data is scoped by webhook_v2). */
+function StaffGuard({ children }: { children: React.ReactNode }) {
+  const { data: roles, isLoading, isError } = usePermissions<string[]>({});
+  if (isLoading) return null;
+  if (isError || !roles || roles.length === 0) {
+    return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 }
@@ -140,17 +154,24 @@ export default function App() {
             <Route path="/inquiry" element={<InquiryPage />} />
             <Route path="/apply" element={<JobApplyPage />} />
 
-            {/* Admin: full app with sidebar */}
+            {/* One adaptive shell for every signed-in screen, so it stays mounted across sections */}
             <Route
               element={
                 <Authenticated key="main" fallback={<Navigate to="/login" />}>
-                  <AdminGuard>
-                    <Layout />
-                  </AdminGuard>
+                  <AppShell />
                 </Authenticated>
               }
             >
+            {/* Staff routes first, then admin routes: employee-only users are redirected to /my-profile */}
+            <Route element={<StaffGuard><Outlet /></StaffGuard>}>
               <Route index element={<RoleRedirect />} />
+              <Route path="/my-weddings" element={<MyWeddingsPage />} />
+              <Route path="/my-weddings/:name" element={<MyWeddingDetailPage />} />
+              <Route path="/finance/expenses/new" element={<AddExpensePage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+            </Route>
+
+            <Route element={<AdminGuard><Outlet /></AdminGuard>}>
 
               {/* CRM */}
               <Route path="/crm" element={<KanbanPage />} />
@@ -193,32 +214,22 @@ export default function App() {
               <Route path="/finance/invoices" element={<InvoicesPage />} />
               <Route path="/finance/invoices/:name" element={<InvoiceDetailPage />} />
               <Route path="/finance/expenses" element={<ExpensesPage />} />
-              <Route path="/finance/expenses/new" element={<AddExpensePage />} />
               <Route path="/finance/expenses/:name" element={<ExpenseDetailPage />} />
               <Route path="/finance/payments" element={<PaymentsPage />} />
               <Route path="/finance/payments/:name" element={<PaymentDetailPage />} />
               <Route path="/finance/journals" element={<JournalsPage />} />
               <Route path="/finance/overview" element={<OverviewPage />} />
 
-              {/* Notifications */}
-              <Route path="/notifications" element={<NotificationsPage />} />
-
               {/* Admin / Settings */}
               <Route path="/admin/settings" element={<SettingsPage />} />
             </Route>
 
-            {/* Self-service routes (no sidebar) - for all authenticated users */}
-            <Route
-              element={
-                <Authenticated key="self-service" fallback={<Navigate to="/login" />}>
-                  <SelfServiceLayout />
-                </Authenticated>
-              }
-            >
+            {/* Self-service routes - open to all authenticated users */}
               <Route path="/my-profile" element={<MyProfilePage />} />
               <Route path="/my-leaves" element={<MyLeavesPage />} />
               <Route path="/my-attendance" element={<MyAttendancePage />} />
               <Route path="/my-payroll" element={<MyPayrollPage />} />
+              <Route path="/more" element={<MoreMenu />} />
             </Route>
 
             {/* Catch-all: redirect unknown routes */}

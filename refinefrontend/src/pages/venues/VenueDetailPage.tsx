@@ -1,53 +1,26 @@
-import { useState } from "react";
-import { useParams, useNavigate, Link } from "react-router";
-import { useOne, useList, useDelete, useInvalidate } from "@refinedev/core";
-import { Badge } from "@/components/ui/badge";
+import { useMemo, useState } from "react";
+import { useParams, useNavigate } from "react-router";
+import { useOne, useList, useDelete } from "@refinedev/core";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { InternalNotesSection } from "@/components/crm/ActivitySection";
+import { VenueDetailHeader } from "@/components/venues/VenueDetailHeader";
 import { VenueDetailHero } from "@/components/venues/VenueDetailHero";
+import { VenueKeyFacts } from "@/components/venues/VenueKeyFacts";
 import { VenueOverviewTab } from "@/components/venues/VenueOverviewTab";
 import { VenueAreasTab } from "@/components/venues/VenueAreasTab";
 import { VenueAmenitiesTab } from "@/components/venues/VenueAmenitiesTab";
 import { VenueContactTab } from "@/components/venues/VenueContactTab";
 import type { ContactView } from "@/components/venues/VenueContactTab";
 import { VenueGalleryTab } from "@/components/venues/VenueGalleryTab";
+import { VenueWeddingsTab, type VenueWedding } from "@/components/venues/VenueWeddingsTab";
 import { VenueForm } from "@/components/venues/VenueForm";
-import { formatDate } from "@/lib/format";
 import type { VenueSupplier, VenueWeddingArea } from "@/lib/types";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-type BadgeVariant = "info" | "success" | "warning" | "destructive" | "outline" | "secondary";
-
-const PRICE_BADGE_VARIANTS: Record<string, BadgeVariant> = {
-  LOW: "info",
-  MID: "success",
-  HIGH: "warning",
-  LUXURY: "destructive",
-  UNKNOWN: "outline",
-};
-
-function priceBadgeVariant(value: string): BadgeVariant {
-  return PRICE_BADGE_VARIANTS[value.toUpperCase()] ?? "outline";
-}
-
-function soStatusVariant(s: string): "success" | "destructive" | "warning" | "secondary" {
-  if (s === "Completed") return "success";
-  if (s === "Cancelled") return "destructive";
-  if (s === "To Deliver and Bill") return "warning";
-  return "secondary";
-}
-
-function formatVND(amount: number): string {
-  return new Intl.NumberFormat("vi-VN").format(amount) + " đ";
-}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -56,8 +29,9 @@ function formatVND(amount: number): string {
 export default function VenueDetailPage() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const invalidate = useInvalidate();
+  const queryClient = useQueryClient();
 
+  const [tab, setTab] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -101,51 +75,42 @@ export default function VenueDetailPage() {
   });
   const coverPhotoUrl = (coverFile as { file_url?: string } | undefined)?.file_url ?? null;
 
-  // ── Fetch linked Contact ─────────────────────────────────────────────────
-  const { result: contactResult } = useList({
-    resource: "Contact",
+  // ── Fetch venue photos (same query as the Gallery tab, so it is shared) ──
+  const { result: photosResult } = useList({
+    resource: "File",
     pagination: { mode: "off" },
     filters: [
-      { field: "link_doctype", operator: "eq", value: "Supplier" },
-      { field: "link_name", operator: "eq", value: name! },
+      { field: "attached_to_doctype", operator: "eq", value: "Supplier" },
+      { field: "attached_to_name", operator: "eq", value: name! },
     ],
-    meta: {
-      fields: [
-        "name",
-        "first_name",
-        "last_name",
-        "designation",
-        "email_id",
-        "phone",
-        "mobile_no",
-      ],
-    },
+    meta: { fields: ["name", "file_url", "file_name", "creation", "custom_caption", "custom_venue_area"] },
     queryOptions: { enabled: !!name },
   });
-  interface ContactDoc {
-    first_name?: string;
-    last_name?: string;
-    designation?: string;
-    email_id?: string;
-    phone?: string;
-    mobile_no?: string;
-  }
-  const contactDoc: ContactDoc | null = (contactResult?.data?.[0] as ContactDoc) ?? null;
+  const photoUrls = useMemo(
+    () =>
+      ((photosResult?.data ?? []) as { file_url?: string }[])
+        .map((f) => f.file_url ?? "")
+        .filter((u) => /\.(jpg|jpeg|png|webp)$/i.test(u)),
+    [photosResult?.data]
+  );
 
-  const contact: ContactView | null = contactDoc
+  // ── Fetch linked Contact (backend merges the Contact and its phone rows) ──
+  const { data: contactData } = useQuery({
+    queryKey: ["venue-contact", name],
+    enabled: !!name,
+    queryFn: async () => {
+      const res = await fetch(`/inquiry-api/venues/${encodeURIComponent(name!)}/contact`, { credentials: "include" });
+      if (!res.ok) throw new Error(`Venue contact failed: ${res.status}`);
+      return res.json() as Promise<{ contact: Record<"name" | "title" | "email" | "phone" | "alt_phone", string> | null }>;
+    },
+  });
+  const contact: ContactView | null = contactData?.contact
     ? {
-        name: [contactDoc.first_name, contactDoc.last_name]
-          .filter(Boolean)
-          .join(" ") || undefined,
-        title: contactDoc.designation || undefined,
-        email: contactDoc.email_id || undefined,
-        phone: contactDoc.phone || contactDoc.mobile_no || undefined,
-        alt_phone:
-          contactDoc.phone &&
-          contactDoc.mobile_no &&
-          contactDoc.phone !== contactDoc.mobile_no
-            ? contactDoc.mobile_no
-            : undefined,
+        name: contactData.contact.name || undefined,
+        title: contactData.contact.title || undefined,
+        email: contactData.contact.email || undefined,
+        phone: contactData.contact.phone || undefined,
+        alt_phone: contactData.contact.alt_phone || undefined,
       }
     : null;
 
@@ -160,15 +125,7 @@ export default function VenueDetailPage() {
     },
     queryOptions: { enabled: !!name },
   });
-  interface WeddingRow {
-    name: string;
-    customer_name?: string;
-    delivery_date?: string;
-    status?: string;
-    grand_total?: number;
-    project?: string;
-  }
-  const weddings: WeddingRow[] = (weddingsResult?.data as WeddingRow[]) ?? [];
+  const weddings: VenueWedding[] = (weddingsResult?.data as VenueWedding[]) ?? [];
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const { mutate: deleteVenue } = useDelete();
@@ -195,12 +152,19 @@ export default function VenueDetailPage() {
 
   // ── Loading / error states ───────────────────────────────────────────────
   if (venueQuery.isLoading) {
-    return <div className="p-6 text-muted-foreground text-sm">Loading venue...</div>;
+    return (
+      <div className="space-y-4" aria-busy="true" aria-label="Loading venue">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-12 w-80 max-w-full" />
+        <Skeleton className="h-[200px] w-full rounded-2xl md:h-[310px]" />
+        <Skeleton className="h-24 w-full rounded-2xl" />
+      </div>
+    );
   }
 
   if (venueQuery.isError || !venue) {
     return (
-      <div className="p-6">
+      <div>
         <div className="bg-destructive/10 border border-destructive/20 text-destructive rounded p-3 flex gap-2">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
           <span className="text-sm">Venue not found.</span>
@@ -214,76 +178,38 @@ export default function VenueDetailPage() {
   const driveLinkUrl = areas.find((a) => a.photos_url)?.photos_url ?? null;
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header bar */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1 text-muted-foreground hover:text-foreground -ml-2"
-            onClick={() => navigate("/venues")}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Venues
-          </Button>
-          <h1 className="text-2xl font-bold tracking-tight">{v.supplier_name}</h1>
-          {v.custom_venue_city && (
-            <Badge variant="secondary">{v.custom_venue_city}</Badge>
-          )}
-          {v.custom_venue_location_subarea && (
-            <span className="text-sm text-muted-foreground">
-              · {v.custom_venue_location_subarea}
-            </span>
-          )}
-          {v.custom_venue_type && (
-            <Badge variant="secondary">{v.custom_venue_type}</Badge>
-          )}
-          {v.custom_venue_price_range && (v.custom_venue_price_range as string) !== "" && (
-            <Badge variant={priceBadgeVariant(v.custom_venue_price_range)}>
-              {v.custom_venue_price_range}
-            </Badge>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-            <Pencil className="h-4 w-4 mr-1.5" />
-            Edit
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
-            onClick={() => {
-              setDeleteError(null);
-              setDeleteOpen(true);
-            }}
-          >
-            <Trash2 className="h-4 w-4 mr-1.5" />
-            Delete
-          </Button>
-        </div>
-      </div>
-
-      {/* Hero */}
-      <VenueDetailHero
+    <div className="space-y-5">
+      <VenueDetailHeader
         venue={v}
-        areas={areas}
-        coverPhotoUrl={coverPhotoUrl}
-        weddingsCount={weddings.length}
-        driveLinkUrl={driveLinkUrl}
+        onEdit={() => setEditOpen(true)}
+        onDelete={() => {
+          setDeleteError(null);
+          setDeleteOpen(true);
+        }}
       />
 
+      <VenueDetailHero
+        venue={v}
+        coverPhotoUrl={coverPhotoUrl}
+        photoUrls={photoUrls}
+        driveLinkUrl={driveLinkUrl}
+        onSeeAll={() => setTab("gallery")}
+      />
+
+      <VenueKeyFacts venue={v} areas={areas} weddingsCount={weddings.length} />
+
       {/* Tabs */}
-      <Tabs defaultValue="overview">
-        <TabsList>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="scrollbar-hide flex w-full max-w-full justify-start gap-2 overflow-x-auto md:gap-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="areas">
             Areas {areas.length > 0 && `(${areas.length})`}
           </TabsTrigger>
           <TabsTrigger value="amenities">Amenities</TabsTrigger>
           <TabsTrigger value="contact">Contact</TabsTrigger>
-          <TabsTrigger value="gallery">Gallery</TabsTrigger>
+          <TabsTrigger value="gallery">
+            Gallery {photoUrls.length > 0 && `(${photoUrls.length})`}
+          </TabsTrigger>
           <TabsTrigger value="weddings">
             Weddings {weddings.length > 0 && `(${weddings.length})`}
           </TabsTrigger>
@@ -315,51 +241,7 @@ export default function VenueDetailPage() {
         </TabsContent>
 
         <TabsContent value="weddings" className="mt-4">
-          {weddings.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              No weddings at this venue yet.
-            </p>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Couple</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {weddings.map((w) => (
-                    <TableRow key={w.name}>
-                      <TableCell className="font-medium">
-                        {w.project ? (
-                          <Link
-                            to={`/projects/${w.project}`}
-                            className="text-primary hover:underline"
-                          >
-                            {w.customer_name}
-                          </Link>
-                        ) : (
-                          w.customer_name
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {w.delivery_date ? formatDate(w.delivery_date) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={soStatusVariant(w.status ?? "")}>{w.status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {w.grand_total ? formatVND(w.grand_total) : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+          <VenueWeddingsTab weddings={weddings} />
         </TabsContent>
 
         <TabsContent value="notes" className="mt-4">
@@ -380,7 +262,7 @@ export default function VenueDetailPage() {
             onSaved={() => {
               setEditOpen(false);
               void venueQuery.refetch();
-              invalidate({ resource: "Contact", invalidates: ["list"] });
+              void queryClient.invalidateQueries({ queryKey: ["venue-contact", name] });
             }}
             onCancel={() => setEditOpen(false)}
           />

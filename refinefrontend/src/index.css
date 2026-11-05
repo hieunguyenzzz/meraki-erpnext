@@ -7,71 +7,113 @@
 
 @layer base {
   :root {
-    /* Shadcn-admin inspired: clean, muted, professional */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* Meraki redesign foundations (MWP-95): porcelain ground, rose action, sage done, gold waiting */
+    --background: 30 43% 97%;            /* Porcelain #FBF8F5 */
+    --foreground: 334 9% 15%;            /* Ink #2A2326 */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 334 9% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
-    --radius: 0.5rem;
-    --chart-revenue: 142 76% 36%;
-    --chart-expenses: 0 84% 60%;
+    --popover-foreground: 334 9% 15%;
+    --primary: 345 42% 46%;              /* Rose 600 #A8455E */
+    --primary-foreground: 0 0% 100%;
+    --primary-fill: 345 42% 46%;         /* solid button fill; same in light, stays #A8455E in dark */
+    --primary-fill-foreground: 0 0% 100%;
+    --secondary: 24 31% 94%;             /* #F4EEEA */
+    --secondary-foreground: 334 9% 15%;
+    --muted: 24 31% 94%;
+    --muted-foreground: 338 5% 40%;      /* #6B6064 */
+    --accent: 346 52% 94%;               /* Rose 100 #F7E6EA */
+    --accent-foreground: 344 45% 34%;    /* #7E3045 */
+    --destructive: 3 71% 41%;            /* #B3261E */
+    --destructive-foreground: 0 0% 100%;
+    --border: 16 26% 89%;                /* Line #EADFDB */
+    --input: 17 19% 82%;                 /* #D9CCC7, input outline per Components spec */
+    --ring: 345 42% 46%;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 240 5.9% 90%;
-    --sidebar-ring: 240 5.9% 10%;
+    /* Status tones: DEFAULT = strong, soft = 100 tint, soft-foreground = badge text */
+    --success: 133 15% 36%;              /* Sage 600 #4F6B55 */
+    --success-foreground: 0 0% 100%;
+    --success-soft: 113 19% 91%;         /* #E4ECE3 */
+    --success-soft-foreground: 134 17% 29%; /* #3D5643 */
+    --warning: 41 62% 32%;               /* Gold 600 #85641F */
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 42 63% 91%;          /* #F6EDD8 */
+    --warning-soft-foreground: 40 64% 26%; /* #6E5218 */
+    --info: 207 41% 35%;                 /* #345C7C */
+    --info-foreground: 0 0% 100%;
+    --info-soft: 208 41% 92%;            /* #E2EBF3 */
+    --info-soft-foreground: 207 43% 29%; /* #2A4D69 */
+    --danger-soft: 5 76% 94%;            /* #FBE4E2 */
+    --danger-soft-foreground: 3 73% 35%; /* #9A1F18 */
+    --gilt: 40 50% 57%;                  /* #C9A45C, decorative only */
+
+    --radius: 0.5rem;                    /* 8px inputs/selects */
+    --radius-card: 0.875rem;             /* 14px cards */
+    --radius-sheet: 1.375rem;            /* 22px sheets, dialogs, pills */
+
+    --chart-revenue: 133 15% 36%;        /* sage */
+    --chart-expenses: 345 42% 46%;       /* rose */
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 334 9% 15%;
+    --sidebar-primary: 345 42% 46%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 346 52% 94%;
+    --sidebar-accent-foreground: 344 45% 34%;
+    --sidebar-border: 16 26% 89%;
+    --sidebar-ring: 345 42% 46%;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-    --chart-revenue: 142 76% 36%;
-    --chart-expenses: 0 84% 60%;
+    --background: 336 12% 8%;            /* Night #171214 */
+    --foreground: 343 24% 94%;           /* Ink #F4EDEF */
+    --card: 334 11% 12%;                 /* Surface #221B1E */
+    --card-foreground: 343 24% 94%;
+    --popover: 334 11% 12%;
+    --popover-foreground: 343 24% 94%;
+    --primary: 345 62% 75%;              /* Rose #E79AAD (text/accents) */
+    --primary-foreground: 336 12% 8%;
+    --primary-fill: 345 42% 46%;         /* buttons stay #A8455E */
+    --primary-fill-foreground: 0 0% 100%;
+    --secondary: 337 10% 16%;            /* Raised #2C2427 */
+    --secondary-foreground: 343 24% 94%;
+    --muted: 337 10% 16%;
+    --muted-foreground: 337 8% 68%;      /* #B5A8AD */
+    --accent: 345 28% 21%;
+    --accent-foreground: 345 62% 75%;
+    --destructive: 6 77% 78%;            /* Danger #F2A39B */
+    --destructive-foreground: 336 12% 8%;
+    --border: 336 9% 21%;                /* Line #3A3034 */
+    --input: 336 9% 26%;
+    --ring: 345 62% 75%;
 
-    --sidebar-background: 240 10% 5.9%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 0 0% 98%;
-    --sidebar-primary-foreground: 240 5.9% 10%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 240 4.9% 83.9%;
+    --success: 127 19% 72%;              /* Sage #A9C4AC */
+    --success-foreground: 336 12% 8%;
+    --success-soft: 133 14% 18%;
+    --success-soft-foreground: 127 19% 72%;
+    --warning: 41 59% 68%;               /* Gold #DDBE7C */
+    --warning-foreground: 336 12% 8%;
+    --warning-soft: 41 30% 17%;
+    --warning-soft-foreground: 41 59% 68%;
+    --info: 208 45% 74%;                 /* #9DBEDA */
+    --info-foreground: 336 12% 8%;
+    --info-soft: 208 30% 19%;
+    --info-soft-foreground: 208 45% 74%;
+    --danger-soft: 4 35% 20%;
+    --danger-soft-foreground: 6 77% 78%;
+    --gilt: 40 50% 57%;
+
+    --chart-revenue: 127 19% 72%;
+    --chart-expenses: 345 62% 75%;
+
+    --sidebar-background: 334 11% 12%;
+    --sidebar-foreground: 343 24% 94%;
+    --sidebar-primary: 345 42% 46%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 345 28% 21%;
+    --sidebar-accent-foreground: 345 62% 75%;
+    --sidebar-border: 336 9% 21%;
+    --sidebar-ring: 345 62% 75%;
   }
 }
 
@@ -80,16 +122,8 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
   }
-}
-
-/* Sidebar visibility helpers - controlled by sidebar collapsed state */
-[data-sidebar-collapsed="true"] .sidebar-expanded-only {
-  display: none;
-}
-[data-sidebar-collapsed="false"] .sidebar-collapsed-only {
-  display: none;
 }
 
 /* Hide scrollbar utility */

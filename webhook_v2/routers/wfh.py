@@ -6,28 +6,21 @@ POST /wfh/{req_id}/reject   — set custom_status=Rejected + submit
 POST /wfh/apply             — create WFH request + notify approver
 GET  /wfh/list              — list WFH for one employee
 GET  /wfh/list-all          — list all WFH (admin)
+GET  /wfh/pending-count     — number of pending WFH requests (HR)
 """
 
-import re
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, BackgroundTasks
 from pydantic import BaseModel
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.google_calendar import add_wfh_event
 from webhook_v2.core.logging import get_logger
-from webhook_v2.routers.helpers import calendar_name, fmt_days, format_date_range, get_employee_name, submit_doc
+from webhook_v2.routers.my_weddings import bind_correlation_id
+from webhook_v2.routers.helpers import calendar_name, clean_error, fmt_days, format_date_range, get_employee_name, submit_doc
 from webhook_v2.auth import require_roles, resolve_employee, HR
 
 log = get_logger(__name__)
 router = APIRouter()
-
-
-def _clean_error(msg: str) -> str:
-    """Strip HTML and rewrite ERPNext error messages to be user-friendly."""
-    clean = re.sub(r"<[^>]+>", "", str(msg)).strip()
-    if "already has an Attendance Request" in clean and "overlaps" in clean:
-        return "You already have a WFH request that overlaps with this period"
-    return clean
 
 
 def _create_wfh_notification(client: ERPNextClient, to_user: str, message: str, ref_name: str) -> None:
@@ -171,11 +164,25 @@ def list_all_wfh_requests():
     client = ERPNextClient()
     reqs = client._get("/api/resource/Attendance Request", params={
         "filters": '[["reason","=","Work From Home"]]',
-        "fields": '["name","employee","employee_name","from_date","to_date","reason","explanation","docstatus"]',
+        "fields": '["name","employee","employee_name","from_date","to_date","reason","explanation","docstatus","custom_status"]',
         "order_by": "creation desc",
         "limit_page_length": 200,
     }).get("data", [])
     return {"data": _resolve_employee_names(client, reqs)}
+
+
+@router.get("/wfh/pending-count", dependencies=[Depends(require_roles(*HR))])
+def wfh_pending_count(request: Request, response: Response):
+    """Number of WFH requests still waiting for a decision (sidebar badge)."""
+    bind_correlation_id(request, response)
+    client = ERPNextClient()
+    rows = client._get("/api/resource/Attendance Request", params={
+        "filters": '[["reason","=","Work From Home"],["docstatus","=",0]]',
+        "fields": '["count(name) as count"]',
+    }).get("data", [])
+    count = int(rows[0]["count"]) if rows else 0
+    log.info("wfh_pending_count", count=count)
+    return {"count": count}
 
 
 @router.get("/wfh/list")
@@ -185,7 +192,7 @@ def list_wfh_requests(employee: str, request: Request):
     client = ERPNextClient()
     reqs = client._get("/api/resource/Attendance Request", params={
         "filters": f'[["employee","=","{employee}"],["reason","=","Work From Home"]]',
-        "fields": '["name","employee","employee_name","from_date","to_date","reason","explanation","docstatus"]',
+        "fields": '["name","employee","employee_name","from_date","to_date","reason","explanation","docstatus","custom_status"]',
         "order_by": "creation desc",
         "limit_page_length": 100,
     }).get("data", [])
@@ -236,4 +243,4 @@ def apply_wfh_request(body: WfhApplyRequest, request: Request):
 
         return {"data": ar_data}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=_clean_error(e))
+        raise HTTPException(status_code=400, detail=clean_error(e))

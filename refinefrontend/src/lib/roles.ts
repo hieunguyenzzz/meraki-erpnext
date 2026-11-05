@@ -10,6 +10,8 @@ export interface ModuleChild {
   label: string;
   path: string;
   icon?: LucideIcon;
+  /** Label of a sibling this page sits under in the breadcrumb (e.g. Recruiting > All applicants) */
+  group?: string;
 }
 
 export interface ModuleConfig {
@@ -27,6 +29,7 @@ export const WEDDING_MANAGER_ROLES = ["System Manager", "Sales Manager"];
 export const WEDDING_EXPENSE_ROLES = ["Wedding Expense Manager"];
 export const REPORT_ROLES = ["System Manager", "HR Manager", "HR User"];
 export const DIRECTOR_ROLES = ["System Manager"];
+export const SETTINGS_ROLES = ["System Manager", "Administrator"];
 
 export type DashboardOption = "personal" | "director";
 
@@ -67,7 +70,8 @@ export const MODULES: ModuleConfig[] = [
     children: [
       { label: "Staff Overview", path: "/hr/staff-overview", icon: LayoutDashboard },
       { label: "Recruiting", path: "/hr/recruiting/pipeline", icon: Users },
-      { label: "Jobs", path: "/hr/recruiting/jobs", icon: Briefcase },
+      { label: "All applicants", path: "/hr/recruiting/all", icon: Users, group: "Recruiting" },
+      { label: "Job openings", path: "/hr/recruiting/jobs", icon: Briefcase, group: "Recruiting" },
       { label: "Leaves", path: "/hr/leaves", icon: ClipboardCheck },
       { label: "WFH", path: "/hr/wfh", icon: Home },
       { label: "Payroll", path: "/hr/payroll", icon: Banknote },
@@ -97,7 +101,7 @@ export const MODULES: ModuleConfig[] = [
   {
     label: "Settings",
     path: "/admin",
-    roles: ["System Manager", "Administrator"],
+    roles: SETTINGS_ROLES,
     children: [
       { label: "Settings", path: "/admin/settings", icon: Settings },
     ],

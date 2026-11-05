@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { formatVND } from "@/lib/format";
+import { formatVNDFull } from "@/lib/format";
 
 export interface ExpenseCategory { name: string; account_name: string; }
 
@@ -56,18 +56,18 @@ export function ExpenseCategorySummary({ expenses, categories }: Props) {
             {rows.map(r => (
               <tr key={r.key} className="border-b last:border-0">
                 <td className="px-3 py-2">{r.label}</td>
-                <td className="px-3 py-2 text-right">{formatVND(r.approved)}</td>
-                <td className="px-3 py-2 text-right">{formatVND(r.pending)}</td>
-                <td className="px-3 py-2 text-right">{formatVND(r.total)}</td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">{formatVNDFull(r.approved)}</td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">{formatVNDFull(r.pending)}</td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">{formatVNDFull(r.total)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t bg-muted/50 font-medium">
               <td className="px-3 py-2">Total</td>
-              <td className="px-3 py-2 text-right">{formatVND(totals.approved)}</td>
-              <td className="px-3 py-2 text-right">{formatVND(totals.pending)}</td>
-              <td className="px-3 py-2 text-right">{formatVND(totals.total)}</td>
+              <td className="px-3 py-2 text-right whitespace-nowrap">{formatVNDFull(totals.approved)}</td>
+              <td className="px-3 py-2 text-right whitespace-nowrap">{formatVNDFull(totals.pending)}</td>
+              <td className="px-3 py-2 text-right whitespace-nowrap">{formatVNDFull(totals.total)}</td>
             </tr>
           </tfoot>
         </table>

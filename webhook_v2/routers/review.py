@@ -213,8 +213,16 @@ async def schedule_review(employee_name: str, request: ScheduleReviewRequest):
 # Review outcome endpoints (plural /reviews prefix)
 # ---------------------------------------------------------------------------
 
-def _validate_ratings(ratings: list[RatingItem], client: ERPNextClient) -> None:
-    """Validate all rating items. Raises HTTPException on any violation."""
+def _validate_ratings(
+    ratings: list[RatingItem],
+    client: ERPNextClient,
+    existing_criteria: frozenset[str] = frozenset(),
+) -> None:
+    """Validate all rating items. Raises HTTPException on any violation.
+
+    Criteria already on the review being edited stay allowed even if since retired;
+    only new ratings must use an active criterion.
+    """
     if not ratings:
         return
 
@@ -247,7 +255,7 @@ def _validate_ratings(ratings: list[RatingItem], client: ERPNextClient) -> None:
         raise HTTPException(status_code=500, detail=f"Could not fetch criteria list: {e}")
 
     for item in ratings:
-        if item.criterion not in active_names:
+        if item.criterion not in active_names and item.criterion not in existing_criteria:
             raise HTTPException(
                 status_code=400,
                 detail=f"Criterion '{item.criterion}' does not exist or is not active.",
@@ -338,25 +346,28 @@ def update_review(name: str, request: UpdateReviewRequest):
     if request.overall_score is not None and not (1.0 <= request.overall_score <= 10.0):
         raise HTTPException(status_code=400, detail="overall_score must be between 1.0 and 10.0.")
 
-    if request.ratings is not None:
-        _validate_ratings(request.ratings, client)
-
-    # Fetch current doc to merge non-updated fields
+    # Fetch current doc: needed to know which criteria are already on this review
     try:
         current = client._get(f"/api/resource/Meraki Review/{quote(name)}").get("data", {})
     except Exception as e:
         log.error("fetch_review_error", name=name, error=str(e))
         raise HTTPException(status_code=404, detail=f"Review not found: {name}")
 
+    if request.ratings is not None:
+        existing = frozenset(r.get("criterion") for r in current.get("ratings", []) if r.get("criterion"))
+        _validate_ratings(request.ratings, client, existing)
+
+    # Omitted fields stay untouched; an explicit null clears period / overall override.
+    sent = request.model_fields_set
     payload: dict = {}
     if request.review_date is not None:
         payload["review_date"] = request.review_date
-    if request.period is not None:
-        payload["period"] = request.period
+    if "period" in sent:
+        payload["period"] = request.period or ""
     if request.notes is not None:
         payload["notes"] = request.notes
-    if request.overall_score is not None:
-        payload["overall_score"] = request.overall_score
+    if "overall_score" in sent:
+        payload["overall_score"] = request.overall_score if request.overall_score is not None else 0
 
     if request.ratings is not None:
         payload["ratings"] = [{"criterion": r.criterion, "score": r.score} for r in request.ratings]

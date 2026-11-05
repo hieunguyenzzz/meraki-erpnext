@@ -6,6 +6,15 @@ export interface BreadcrumbItem {
   href?: string;
 }
 
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch (err) {
+    console.error("Breadcrumb segment is not valid URI encoding", segment, err);
+    return segment;
+  }
+}
+
 export function useBreadcrumbs(): BreadcrumbItem[] {
   const location = useLocation();
   const pathname = location.pathname;
@@ -23,14 +32,17 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
 
       for (const child of mod.children) {
         if (pathname === child.path) {
-          crumbs.push({ label: child.label });
+          // A single page named like its module (Settings) would repeat the label.
+          const group = child.group ? mod.children.find((c) => c.label === child.group) : undefined;
+          if (group) crumbs.push({ label: group.label, href: group.path });
+          if (child.label !== mod.label) crumbs.push({ label: child.label });
           return crumbs;
         }
         // Only use startsWith match if the child path differs from the module path
         // (e.g. /crm has a child at /crm which should only exact-match)
         if (child.path !== mod.path && pathname.startsWith(child.path + "/")) {
           crumbs.push({ label: child.label, href: child.path });
-          const rest = decodeURIComponent(pathname.slice(child.path.length + 1));
+          const rest = safeDecode(pathname.slice(child.path.length + 1));
           if (rest) {
             crumbs.push({ label: rest });
           }
@@ -44,7 +56,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
         // First segment is a sub-section (e.g. "leads"), rest is an ID
         crumbs.push({ label: segments[0].charAt(0).toUpperCase() + segments[0].slice(1) });
         if (segments.length > 1) {
-          crumbs.push({ label: segments.slice(1).join("/") });
+          crumbs.push({ label: safeDecode(segments.slice(1).join("/")) });
         }
         return crumbs;
       }
@@ -58,9 +70,12 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     }
   }
 
+  if (pathname === "/my-weddings") return [...crumbs, { label: "My Weddings" }];
+
   // Fallback: split path segments
   const segments = pathname.split("/").filter(Boolean);
-  segments.forEach((seg, i) => {
+  segments.forEach((rawSeg, i) => {
+    const seg = safeDecode(rawSeg);
     const href = "/" + segments.slice(0, i + 1).join("/");
     if (i === segments.length - 1) {
       crumbs.push({ label: seg.charAt(0).toUpperCase() + seg.slice(1) });

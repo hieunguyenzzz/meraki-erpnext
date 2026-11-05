@@ -31,6 +31,7 @@ REPORT = HR
 FINANCE = ("System Manager", "Accounts Manager", "Accounts User")
 WEDDING_MANAGER = ("System Manager", "Sales Manager")
 DIRECTOR = ("System Manager",)
+WEDDING_EXPENSE = ("Wedding Expense Manager",)
 
 # (method, path) pairs reachable without an ERPNext session.
 # Path matches request.url.path as FastAPI sees it (after nginx strips the
