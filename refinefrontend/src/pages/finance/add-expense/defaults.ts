@@ -12,12 +12,18 @@ export interface ExpenseWedding {
   venue?: string | null;
 }
 
-/** The assigned wedding happening today, else the next upcoming one; null when none is current. */
+/** The assigned wedding closest to today, past or future (today wins; on a tie the upcoming one); null when none is dated. */
 export function pickDefaultWedding(assigned: ExpenseWedding[], today: string): string | null {
-  const upcoming = assigned
-    .filter((w) => w.date && w.date >= today)
-    .sort((a, b) => (a.date as string).localeCompare(b.date as string));
-  return upcoming[0]?.id ?? null;
+  const dayNo = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86_400_000;
+  const t = dayNo(today);
+  let best: { id: string; gap: number; past: boolean } | null = null;
+  for (const w of assigned) {
+    if (!w.date) continue;
+    const d = dayNo(w.date) - t;
+    const cand = { id: w.id, gap: Math.abs(d), past: d < 0 };
+    if (!best || cand.gap < best.gap || (cand.gap === best.gap && best.past && !cand.past)) best = cand;
+  }
+  return best?.id ?? null;
 }
 
 export function loadRecents(): string[] {

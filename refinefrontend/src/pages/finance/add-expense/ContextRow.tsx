@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CalendarDays, ChevronDown, Heart } from "lucide-react";
+import { CalendarDays, ChevronDown, Heart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ExpenseWedding } from "./defaults";
 import { WeddingSheet } from "./WeddingSheet";
@@ -27,12 +27,25 @@ export function ContextRow({ weddings, assignedIds, project, onProject, date, to
 
   return (
     <div className="flex items-center gap-2">
-      <button type="button" className={cn(pill, "min-w-0 flex-1")} onClick={() => setOpen(true)} aria-label={`Wedding: ${label}. Change`}>
-        <Heart className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-        <span className="truncate">{label}</span>
-        {sub && <span className="shrink-0 font-normal text-muted-foreground">· {sub}</span>}
-        <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-      </button>
+      {/* The wedding is optional: × clears it to an office expense in one tap (sibling button, not nested). */}
+      <div className="relative min-w-0 flex-1">
+        <button type="button" className={cn(pill, "w-full", selected && "pr-12")} onClick={() => setOpen(true)} aria-label={`Wedding: ${label}. Change`}>
+          <Heart className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+          <span className="truncate">{label}</span>
+          {sub && <span className="shrink-0 font-normal text-muted-foreground">· {sub}</span>}
+          {!selected && <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />}
+        </button>
+        {selected && (
+          <button
+            type="button"
+            onClick={() => onProject("")}
+            aria-label="Remove wedding (office expense)"
+            className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        )}
+      </div>
 
       {/* A real date input sits transparently over the pill, so the tap works everywhere; showPicker is an enhancement. */}
       <div className={cn(pill, "relative shrink-0 focus-within:ring-2 focus-within:ring-ring")}>
