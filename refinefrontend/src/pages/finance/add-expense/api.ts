@@ -24,6 +24,18 @@ export async function fetchCategories(withWedding: boolean, signal: AbortSignal)
   return res.json();
 }
 
+/** Planners and Finance may add a category; it lands under the wedding or office group. */
+export async function createCategory(name: string, scope: "wedding" | "office"): Promise<ExpenseCategory> {
+  const res = await fetch("/inquiry-api/expense/categories", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, scope }),
+  });
+  if (!res.ok) throw await failure(res, "Could not add the category");
+  return res.json();
+}
+
 export async function scanBill(file: File): Promise<ScanResult> {
   const fd = new FormData();
   fd.append("file", file);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import { usePermissions } from "@refinedev/core";
 import { Loader2, NotebookPen, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,8 @@ import { CategoryChips } from "./add-expense/CategoryChips";
 import { ContextRow } from "./add-expense/ContextRow";
 import { ReceiptPicker } from "./add-expense/ReceiptPicker";
 import { SavedState, type SavedSummary } from "./add-expense/SavedState";
-import { fetchCategories, scanBill, submitExpense, type ExpenseCategory } from "./add-expense/api";
+import { createCategory, fetchCategories, scanBill, submitExpense, type ExpenseCategory } from "./add-expense/api";
+import { FINANCE_ROLES, PLANNER_ROLES, hasModuleAccess } from "@/lib/roles";
 import { loadRecents, pickDefaultWedding, rememberCategory, sanitiseAmount } from "./add-expense/defaults";
 import { todayVN } from "@/lib/businessTime";
 import { useExpenseWeddings } from "./add-expense/useExpenseWeddings";
@@ -23,6 +25,9 @@ export default function AddExpensePage() {
   const { weddings, assigned, loading, employeeId, error: weddingsError } = useExpenseWeddings();
   const assignedIds = useMemo(() => new Set(assigned.map((w) => w.id)), [assigned]);
   const today = todayVN();
+  const { data: roles } = usePermissions<string[]>({});
+  // Same roles the backend allows to add a category (PLANNER_OR_FINANCE).
+  const canAddCategory = hasModuleAccess(roles ?? [], [...PLANNER_ROLES, ...FINANCE_ROLES]);
 
   const [project, setProject] = useState("");
   const [date, setDate] = useState(today);
@@ -170,6 +175,11 @@ export default function AddExpensePage() {
             value={category}
             error={errors.category}
             onChange={(c) => { setCategory(c); setErrors((p) => ({ ...p, category: undefined })); }}
+            onCreate={canAddCategory ? async (name) => {
+              const created = await createCategory(name, project ? "wedding" : "office");
+              setCategories((prev) => (prev.some((c) => c.name === created.name) ? prev : [...prev, created]));
+              return created.name;
+            } : undefined}
           />
 
           <ReceiptPicker file={receipt} onChange={(f) => { setReceipt(f); setErrors((p) => ({ ...p, proof: undefined })); }} onScan={handleScan} scanning={scanning} />
