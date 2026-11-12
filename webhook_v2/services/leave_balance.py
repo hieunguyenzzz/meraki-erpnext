@@ -215,3 +215,11 @@ def available_on(pools: list[Pool], day: date) -> float:
     correctly forfeited — while the leave it funded stays charged to it.
     """
     return sum(pool.balance for pool in pools if pool.covers(day))
+
+
+def net_balance_on(pools: list[Pool], day: date) -> float:
+    """Like `available_on` but unclamped: negative when what is booked exceeds what is usable on `day`.
+
+    `available_on` floors each pool at 0, which hides an overdraw (or days not yet accrued); an approver needs to see it.
+    """
+    return sum(pool.usable - pool.consumed for pool in pools if pool.covers(day))

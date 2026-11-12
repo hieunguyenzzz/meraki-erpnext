@@ -1,47 +1,63 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router";
+import { CheckCircle2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ThemeSwitch } from "@/components/theme-switch";
-import { CheckCircle2 } from "lucide-react";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { AuthShell, CardWordmark } from "@/components/auth/AuthShell";
+import { AuthAlert } from "@/components/auth/AuthAlert";
+import { AuthIcon } from "@/components/auth/AuthIcon";
+import { PasswordField } from "@/components/auth/PasswordField";
+import { PasswordStrength, MIN_PASSWORD_LENGTH } from "@/components/auth/PasswordStrength";
+import { updatePasswordErrorMessage, EXPIRED_LINK_MESSAGE } from "@/components/auth/updatePasswordError";
+
+const primaryBtn = "h-12 w-full text-base md:h-[54px] lg:h-[52px]";
+const linkBtn =
+  "inline-flex h-11 max-md:h-12 items-center justify-center rounded-md text-[15px] font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export default function UpdatePasswordPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const key = searchParams.get("key") ?? "";
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [expired, setExpired] = useState(false);
 
-  if (!key) {
+  if (!key || expired) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle>Invalid Link</CardTitle>
-            <CardDescription>This password reset link is invalid or has expired.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button className="w-full" onClick={() => navigate("/login")}>
-              Back to Login
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <AuthShell card>
+        <div role="alert" className="flex flex-col items-center gap-3.5 text-center lg:gap-4">
+          <AuthIcon tone="warning">
+            <Clock className="h-9 w-9 lg:h-[30px] lg:w-[30px]" strokeWidth={1.75} />
+          </AuthIcon>
+          <h1 className="text-[22px] font-semibold lg:text-2xl">This link has expired</h1>
+          <p className="text-[15px] leading-[22px] text-muted-foreground lg:leading-[23px]">
+            Reset links work only once and for a limited time. Ask for a fresh one and use it straight away.
+          </p>
+          <Button className={`${primaryBtn} lg:w-auto lg:px-7`} onClick={() => navigate("/login?forgot=1")}>
+            Send a new link
+          </Button>
+          <button type="button" className={linkBtn} onClick={() => navigate("/login")}>
+            Back to sign in
+          </button>
+        </div>
+      </AuthShell>
     );
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!newPassword) { setError("Please enter a new password"); return; }
     if (newPassword !== confirmPassword) { setError("Passwords do not match"); return; }
-    if (newPassword.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (newPassword.length < MIN_PASSWORD_LENGTH) { setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`); return; }
 
+    submittingRef.current = true;
     setSubmitting(true);
     setError("");
 
@@ -56,112 +72,79 @@ export default function UpdatePasswordPage() {
       });
 
       if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-
-        // ERPNext may return HTML in error messages — strip tags and map to friendly messages
-        const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-
-        let rawMsg = "";
-        if (data?._server_messages) {
-          try {
-            const msgs = JSON.parse(data._server_messages) as any[];
-            const first = typeof msgs[0] === "string" ? JSON.parse(msgs[0]) : msgs[0];
-            rawMsg = stripHtml(first?.message || first?.title || "");
-          } catch {
-            rawMsg = stripHtml(data._server_messages);
-          }
-        } else if (data?.exception) {
-          rawMsg = stripHtml(data.exception.split("ValidationError:").pop() ?? "");
-        } else if (data?.message) {
-          rawMsg = stripHtml(data.message);
-        }
-
-        // Map technical ERPNext messages to friendly, specific guidance
-        const lc = rawMsg.toLowerCase();
-        let msg: string;
-        if (lc.includes("commonly used") || lc.includes("capitalization") || lc.includes("similar to")) {
-          msg = "This password is too common. Choose something more unique — mix uppercase, lowercase, numbers and symbols. Example: Meraki2026! or Blue#Cloud9";
-        } else if (lc.includes("too short") || lc.includes("at least")) {
-          msg = "Password is too short. Use at least 8 characters.";
-        } else if (lc.includes("expired") || lc.includes("invalid key") || lc.includes("not found")) {
-          msg = "This reset link has expired. Please request a new one from the login page.";
-        } else {
-          msg = rawMsg || "Failed to update password. Please try a different password.";
-        }
-
-        throw new Error(msg);
+        console.error("[update-password] failed", resp.status);
+        const message = await updatePasswordErrorMessage(resp);
+        if (message === EXPIRED_LINK_MESSAGE) setExpired(true);
+        else setError(message);
+        return;
       }
 
       setSuccess(true);
-    } catch (err: any) {
-      setError(err?.message || "Failed to update password. The link may have expired.");
+    } catch (err) {
+      console.error("[update-password] request failed", err);
+      setError("Failed to update password. The link may have expired.");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="absolute top-4 right-4">
-        <ThemeSwitch />
-      </div>
+  if (success) {
+    return (
+      <AuthShell card>
+        <div role="status" className="flex flex-col items-center gap-3.5 text-center lg:gap-4">
+          <AuthIcon>
+            <CheckCircle2 className="h-9 w-9 lg:h-[30px] lg:w-[30px]" strokeWidth={1.75} />
+          </AuthIcon>
+          <h1 className="text-[22px] font-semibold lg:text-2xl">Password updated</h1>
+          <p className="text-[15px] leading-[22px] text-muted-foreground lg:leading-[23px]">Your password has been updated. Sign in with the new one.</p>
+          <Button className={primaryBtn} onClick={() => navigate("/login")}>
+            Go to sign in
+          </Button>
+        </div>
+      </AuthShell>
+    );
+  }
 
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Set New Password</CardTitle>
-          <CardDescription>
-            {success ? "Your password has been updated." : "Enter your new password below."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {success ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                <CheckCircle2 className="h-5 w-5 shrink-0" />
-                Password updated successfully.
-              </div>
-              <Button className="w-full" onClick={() => navigate("/login")}>
-                Go to Login
-              </Button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-password">New Password</Label>
-                <Input
-                  id="new-password"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  autoFocus
-                />
-                <p className="text-xs text-muted-foreground">Use a unique password — avoid common words or names.</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm Password</Label>
-                <Input
-                  id="confirm-password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? "Updating..." : "Update Password"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full text-sm"
-                onClick={() => navigate("/login")}
-              >
-                ← Back to Login
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+  const describedBy = error ? "update-error" : undefined;
+  return (
+    <AuthShell card>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4" aria-label="Set a new password">
+        <CardWordmark />
+        <h1 className="text-[22px] font-semibold lg:text-2xl">Set a new password</h1>
+        <p className="-mt-2 text-[15px] leading-[22px] text-muted-foreground lg:hidden">
+          Use a unique password — avoid common words or names.
+        </p>
+        <PasswordField
+          id="new-password"
+          name="new_password"
+          label="New password"
+          autoComplete="new-password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          autoFocus={isDesktop}
+          aria-invalid={!!error}
+          aria-describedby={describedBy}
+        />
+        <PasswordStrength password={newPassword} />
+        <PasswordField
+          id="confirm-password"
+          name="confirm_password"
+          label="Confirm password"
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          aria-invalid={!!error}
+          aria-describedby={describedBy}
+        />
+        {error && <AuthAlert id="update-error">{error}</AuthAlert>}
+        <Button type="submit" className={primaryBtn} disabled={submitting}>
+          {submitting ? "Updating..." : "Update password"}
+        </Button>
+        <button type="button" className={linkBtn} onClick={() => navigate("/login")}>
+          Back to sign in
+        </button>
+      </form>
+    </AuthShell>
   );
 }

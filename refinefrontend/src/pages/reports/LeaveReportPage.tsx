@@ -1,212 +1,105 @@
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useCallback, useEffect, useState } from "react";
+import { parseAsBoolean, parseAsStringLiteral, useQueryState } from "nuqs";
+import { Eye, EyeOff, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Eye, EyeOff } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatePanel } from "@/components/StatePanel";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { yearVN } from "@/lib/businessTime";
+import { ReportsHeader } from "./ReportsHeader";
+import { LeaveCard } from "./leave/LeaveCard";
+import { LeaveTable } from "./leave/LeaveTable";
+import { STATUSES, type LeaveReportData } from "./leave/types";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-interface LeaveReportRow {
-  employee: string;
-  employee_name: string;
-  date_of_joining: string;
-  seniority_years: number;
-  monthly_leave: number[];
-  old_allocation_days: number;
-  old_taken: number;
-  old_balance: number;
-  new_allocation_days: number;
-  new_taken: number;
-  new_balance: number;
-  new_accrued: number;
-  new_usable: number;
-  total_balance: number;
-}
-
-interface LeaveReportData {
-  data: LeaveReportRow[];
-  current_year: number;
-  months: string[];
-  employee_count: number;
-}
+const opts = { clearOnDefault: true } as const;
 
 export default function LeaveReportPage() {
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  // Filters live in the URL so Back restores them; junk values fall back to the defaults.
+  const [status, setStatus] = useQueryState("status", parseAsStringLiteral(STATUSES).withDefault("Active").withOptions(opts));
+  const [showAllocation, setShowAllocation] = useQueryState("allocation", parseAsBoolean.withDefault(false).withOptions(opts));
+
   const [report, setReport] = useState<LeaveReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showAllocation, setShowAllocation] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("Active");
+  const [error, setError] = useState<unknown>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    const ctrl = new AbortController();
     setIsLoading(true);
-    fetch(`/inquiry-api/reports/leave-report?status=${statusFilter}`, { credentials: "include" })
-      .then((r) => r.json())
+    setError(null);
+    fetch(`/inquiry-api/reports/leave-report?status=${status}`, { credentials: "include", signal: ctrl.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((data) => setReport(data))
-      .catch(() => setReport(null))
-      .finally(() => setIsLoading(false));
-  }, [statusFilter]);
+      .catch((e) => {
+        if (ctrl.signal.aborted) return;
+        console.error("Leave report failed to load", e);
+        setError(e);
+      })
+      .finally(() => { if (!ctrl.signal.aborted) setIsLoading(false); });
+    return () => ctrl.abort();
+  }, [status]);
+  useEffect(load, [load]);
 
   const rows = report?.data ?? [];
-  const currentYear = report?.current_year ?? new Date().getFullYear();
+  const year = report?.current_year ?? yearVN();
+
+  let body;
+  if (error !== null) {
+    body = (
+      <StatePanel
+        kind="error"
+        title="Couldn't load the leave report"
+        text="The server didn't answer. Your data is safe."
+        action={{ label: "Try again", onClick: () => load(), icon: <RotateCw className="h-4 w-4" /> }}
+      />
+    );
+  } else if (isLoading) {
+    body = (
+      <div className="flex flex-col gap-3" aria-busy="true">
+        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-card md:h-12" />)}
+      </div>
+    );
+  } else if (rows.length === 0) {
+    body = <StatePanel kind="empty" title="No employees found" text={`No ${status === "All" ? "" : status.toLowerCase() + " "}employees have leave records.`} />;
+  } else if (isDesktop) {
+    body = <LeaveTable rows={rows} year={year} showAllocation={showAllocation} />;
+  } else {
+    body = <div className="flex flex-col gap-3">{rows.map((r) => <LeaveCard key={r.employee} r={r} year={year} showAllocation={showAllocation} />)}</div>;
+  }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Leave Report</h1>
-        <p className="text-muted-foreground">
-          Team leave calendar {currentYear} &middot; Leave year resets August 1
+    <div className="flex flex-col gap-4 pb-6">
+      <ReportsHeader />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="mr-auto text-sm text-muted-foreground">
+          Team leave calendar {year} &middot; leave year resets 1 Aug
+          {!isLoading && error === null && <> &middot; <b className="text-foreground">{rows.length}</b> employees</>}
         </p>
+        <Select value={status} onValueChange={(v) => void setStatus(v as (typeof STATUSES)[number])}>
+          <SelectTrigger aria-label="Staff status" className="w-[130px] md:h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button variant="outline" className="max-md:h-12 md:h-9" onClick={() => void setShowAllocation(!showAllocation)}>
+          {showAllocation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {showAllocation ? "Hide" : "Show"} {year} allocation
+        </Button>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">
-            {rows.length} Employees
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 w-[120px] text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Left">Left</SelectItem>
-                <SelectItem value="All">All</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowAllocation((v) => !v)}
-            >
-              {showAllocation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              {showAllocation ? "Hide" : "Show"} {currentYear} Allocation
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              Loading leave data...
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="sticky left-0 z-10 bg-muted/50 min-w-[180px]">Employee</TableHead>
-                    {MONTHS.map((m) => (
-                      <TableHead key={m} className="text-center min-w-[50px]">{m}</TableHead>
-                    ))}
-                    <TableHead className="text-center min-w-[90px] bg-blue-50 dark:bg-blue-950/30">
-                      <div className="text-xs leading-tight">{currentYear - 1}<br />Left over</div>
-                    </TableHead>
-                    <TableHead className="text-center min-w-[80px] bg-blue-50 dark:bg-blue-950/30">
-                      <div className="text-xs leading-tight">{currentYear - 1}<br />Taken</div>
-                    </TableHead>
-                    <TableHead className="text-center min-w-[80px] bg-blue-50 dark:bg-blue-950/30">
-                      <div className="text-xs leading-tight">{currentYear - 1}<br />Balance</div>
-                    </TableHead>
-                    <TableHead className="text-center min-w-[90px] bg-orange-50 dark:bg-orange-950/30">
-                      <div className="text-xs leading-tight font-semibold">{currentYear}<br />Usable</div>
-                    </TableHead>
-                    <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
-                      <div className="text-xs leading-tight">{currentYear}<br />Taken</div>
-                    </TableHead>
-                    <TableHead className="text-center min-w-[80px] bg-green-50 dark:bg-green-950/30">
-                      <div className="text-xs leading-tight">{currentYear}<br />Balance</div>
-                    </TableHead>
-                    <TableHead className="text-center min-w-[80px] bg-purple-50 dark:bg-purple-950/30">
-                      <div className="text-xs leading-tight font-semibold">Total<br />Balance</div>
-                    </TableHead>
-                    {showAllocation && (
-                      <TableHead className="text-center min-w-[90px] bg-teal-50 dark:bg-teal-950/30">
-                        <div className="text-xs leading-tight">{currentYear}<br />Allocation</div>
-                      </TableHead>
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow key={row.employee}>
-                      <TableCell className="sticky left-0 z-10 bg-background font-medium">
-                        {row.employee_name}
-                      </TableCell>
-                      {row.monthly_leave.map((days, i) => (
-                        <TableCell key={i} className="text-center text-sm">
-                          {days > 0 ? (
-                            <span className="inline-flex items-center justify-center w-7 h-7 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium text-xs">
-                              {days % 1 === 0 ? days : days.toFixed(1)}
-                            </span>
-                          ) : null}
-                        </TableCell>
-                      ))}
-                      {/* 2025 period */}
-                      <TableCell className="text-center text-sm bg-blue-50/50 dark:bg-blue-950/20">
-                        {row.old_allocation_days}
-                      </TableCell>
-                      <TableCell className="text-center text-sm bg-blue-50/50 dark:bg-blue-950/20">
-                        {row.old_taken > 0 ? row.old_taken : "-"}
-                      </TableCell>
-                      <TableCell className="text-center text-sm bg-blue-50/50 dark:bg-blue-950/20">
-                        <Badge variant={row.old_balance < 0 ? "destructive" : row.old_balance > 0 ? "success" : "secondary"} className="text-xs">
-                          {row.old_balance}
-                        </Badge>
-                      </TableCell>
-                      {/* 2026 Usable */}
-                      <TableCell className="text-center text-sm bg-orange-50/50 dark:bg-orange-950/20">
-                        <Badge variant={row.new_usable > 0 ? "success" : "secondary"} className="text-xs font-semibold">
-                          {row.new_usable}
-                        </Badge>
-                      </TableCell>
-                      {/* 2026 period */}
-                      <TableCell className="text-center text-sm bg-green-50/50 dark:bg-green-950/20">
-                        {row.new_taken > 0 ? row.new_taken : "-"}
-                      </TableCell>
-                      <TableCell className="text-center text-sm bg-green-50/50 dark:bg-green-950/20">
-                        <Badge variant={row.new_balance < 0 ? "destructive" : row.new_balance > 0 ? "success" : "secondary"} className="text-xs">
-                          {row.new_balance}
-                        </Badge>
-                      </TableCell>
-                      {/* Total balance */}
-                      <TableCell className="text-center text-sm bg-purple-50/50 dark:bg-purple-950/20">
-                        <Badge variant={row.total_balance < 0 ? "destructive" : row.total_balance > 0 ? "success" : "secondary"} className="text-xs font-semibold">
-                          {row.total_balance}
-                        </Badge>
-                      </TableCell>
-                      {showAllocation && (
-                        <TableCell className="text-center text-sm bg-teal-50/50 dark:bg-teal-950/20">
-                          {row.new_allocation_days}
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
-                  {rows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={19 + MONTHS.length} className="text-center text-muted-foreground py-8">
-                        No active employees found
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {body}
 
       <p className="text-xs text-muted-foreground">
-        {currentYear - 1} Left over / Taken = leave carried over from the {currentYear - 1} allocation, usable from 1 Jan {currentYear} to 31 Jul {currentYear}.
-        {" "}{currentYear} Allocation / Taken = new annual leave from 1 Aug {currentYear} to 31 Jul {currentYear + 1}.
-        {" "}{currentYear} Usable = accrued so far this year (not the full annual amount).
+        {year - 1} Left over / Taken = leave carried over from the {year - 1} allocation, usable from {year}-01-01 to {year}-07-31.
+        {" "}{year} Allocation / Taken = new annual leave from {year}-08-01 to {year + 1}-07-31.
+        {" "}{year} Usable = accrued so far this year (not the full annual amount).
       </p>
     </div>
   );

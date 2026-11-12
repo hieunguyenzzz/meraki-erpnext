@@ -18,13 +18,15 @@ import json
 from typing import Literal
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, File, Form
 from pydantic import BaseModel, Field, field_validator
 from webhook_v2.services.erpnext import ERPNextClient
 from webhook_v2.services.classifier_client import RemoteClassifierClient
 from webhook_v2.services.receipt_image import to_browser_image
+from webhook_v2.services.expense_rejection import add_rejection_comment, reason_if_rejected
 from webhook_v2.core.logging import get_logger
 from webhook_v2.routers.wedding import _cancel, _delete_gl_entries, _delete_payment_ledger_entries
+from webhook_v2.routers.my_weddings import require_assigned_unless_privileged, bind_correlation_id
 from webhook_v2.auth import require_roles, has_roles, resolve_employee, PLANNER, FINANCE, WEDDING_MANAGER, DIRECTOR
 
 log = get_logger(__name__)
@@ -565,43 +567,79 @@ def list_payments():
         "fields": json.dumps([
             "name", "payment_type", "party", "party_name",
             "posting_date", "paid_amount", "docstatus",
+            "base_paid_amount", "paid_from_account_currency", "paid_to_account_currency",
         ]),
         "order_by": "posting_date desc",
         "limit_page_length": 0,
     }).get("data", [])
 
-    result = []
-    for pe in pes:
-        description = ""
-        category = ""
-        linked_invoice = ""
+    expense_pes = [pe["name"] for pe in pes
+                   if pe.get("payment_type") == "Pay" and pe.get("party") == "Company Expense"]
+    details = _payment_expense_details(client, expense_pes)
 
-        if pe.get("payment_type") == "Pay" and pe.get("party") == "Company Expense":
-            try:
-                pe_doc = client._get(f"/api/resource/Payment Entry/{pe['name']}").get("data", {})
-                pi_name = next(
-                    (ref["reference_name"] for ref in pe_doc.get("references", [])
-                     if ref.get("reference_doctype") == "Purchase Invoice"),
-                    None,
-                )
-                if pi_name:
-                    pi_doc = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
-                    first_item = (pi_doc.get("items") or [{}])[0]
-                    description = first_item.get("item_name", "")
-                    raw_account = first_item.get("expense_account", "")
-                    category = raw_account.replace(" - MWP", "")
-                    linked_invoice = pi_name
-            except Exception as e:
-                log.warning("payments_enrich_failed", pe=pe["name"], error=str(e))
-
-        result.append({
+    return [
+        {
             **pe,
-            "description": description,
-            "category": category,
-            "linked_invoice": linked_invoice,
-        })
+            "description": details.get(pe["name"], {}).get("description", ""),
+            "category": details.get(pe["name"], {}).get("category", ""),
+            "linked_invoice": details.get(pe["name"], {}).get("linked_invoice", ""),
+        }
+        for pe in pes
+    ]
 
-    return result
+
+_LOOKUP_BATCH = 100
+
+
+def _get_children(client, child_doctype: str, parent_doctype: str, filters: list, fields: list[str]) -> list[dict]:
+    return client._get(f"/api/resource/{child_doctype}", params={
+        "parent": parent_doctype,
+        "filters": json.dumps(filters),
+        "fields": json.dumps(fields),
+        "limit_page_length": 0,
+    }).get("data", [])
+
+
+def _payment_expense_details(client, pe_names: list[str]) -> dict[str, dict]:
+    """pe name -> {description, category, linked_invoice} from the linked Purchase Invoice.
+
+    Two batched child-table queries per _LOOKUP_BATCH payments (instead of two GETs per payment).
+    A failing batch is logged and leaves its payments blank; the rest of the list still loads.
+    """
+    out: dict[str, dict] = {}
+    for i in range(0, len(pe_names), _LOOKUP_BATCH):
+        batch = pe_names[i:i + _LOOKUP_BATCH]
+        try:
+            refs = _get_children(
+                client, "Payment Entry Reference", "Payment Entry",
+                [["parent", "in", batch], ["reference_doctype", "=", "Purchase Invoice"]],
+                ["parent", "reference_name", "idx"],
+            )
+            pi_by_pe: dict[str, str] = {}
+            for ref in sorted(refs, key=lambda r: r.get("idx") or 0):
+                pi_by_pe.setdefault(ref["parent"], ref["reference_name"])
+            if not pi_by_pe:
+                continue
+
+            items = _get_children(
+                client, "Purchase Invoice Item", "Purchase Invoice",
+                [["parent", "in", sorted(set(pi_by_pe.values()))]],
+                ["parent", "item_name", "expense_account", "idx"],
+            )
+            first_item: dict[str, dict] = {}
+            for item in sorted(items, key=lambda r: r.get("idx") or 0):
+                first_item.setdefault(item["parent"], item)
+
+            for pe_name, pi_name in pi_by_pe.items():
+                item = first_item.get(pi_name, {})
+                out[pe_name] = {
+                    "description": item.get("item_name", ""),
+                    "category": (item.get("expense_account") or "").replace(" - MWP", ""),
+                    "linked_invoice": pi_name,
+                }
+        except Exception as e:
+            log.warning("payments_enrich_failed", payments=len(batch), first=batch[0], error=str(e))
+    return out
 
 
 @router.get("/expenses")
@@ -653,6 +691,8 @@ def list_expenses(request: Request, project: str | None = None):
         except Exception:
             pass
 
+    reasons = reason_if_rejected(client, pis)
+
     result = []
     for pi in pis:
         docstatus = pi.get("docstatus", 0)
@@ -694,6 +734,7 @@ def list_expenses(request: Request, project: str | None = None):
             "staff": pi.get("custom_expense_staff", ""),
             "receipt_url": file_map.get(pi["name"]),
             "note": _expense_note(pi.get("remarks"), category),
+            "rejected_reason": reasons.get(pi["name"]),
         })
 
     return result
@@ -701,7 +742,7 @@ def list_expenses(request: Request, project: str | None = None):
 
 @router.get("/expense/descriptions", dependencies=[Depends(require_roles(*FINANCE))])
 def expense_descriptions():
-    """Return a {PI name: {description, staff}} map for Draft/Submitted expenses.
+    """Return a {PI name: {description, staff, note, rejected_reason}} map for Draft/Submitted expenses.
 
     Both fields need server-side resolution the frontend's parent-only list
     query can't do:
@@ -718,6 +759,8 @@ def expense_descriptions():
             "name",
             "custom_expense_staff",
             "remarks",
+            "docstatus",
+            "custom_rejected",
             "`tabPurchase Invoice Item`.idx",
             "`tabPurchase Invoice Item`.item_name",
             "`tabPurchase Invoice Item`.expense_account",
@@ -743,6 +786,8 @@ def expense_descriptions():
         if name not in first or idx < (first[name].get("idx") or 999):
             first[name] = row
 
+    reasons = reason_if_rejected(client, list(first.values()))
+
     result: dict[str, dict] = {}
     for name, row in first.items():
         description = row.get("item_name") or ""
@@ -755,6 +800,7 @@ def expense_descriptions():
             "description": description,
             "staff": emp_names.get(staff_id, staff_id) if staff_id else "",
             "note": _expense_note(row.get("remarks"), category),
+            "rejected_reason": reasons.get(name),
         }
 
     log.info("expense_descriptions", pi_count=len(result))
@@ -772,6 +818,7 @@ RECEIPT_STAFF_OVERRIDE_ROLES = FINANCE + WEDDING_MANAGER
 @router.post("/expense/wedding-with-receipt")
 async def create_wedding_expense_with_receipt(
     request: Request,
+    response: Response,
     project: str = Form(""),
     date: str = Form(...),
     description: str = Form(...),
@@ -793,6 +840,7 @@ async def create_wedding_expense_with_receipt(
     """
     from fastapi import Form as _  # noqa — already imported above
 
+    bind_correlation_id(request, response)
     if len(note.strip()) > 1000:
         raise HTTPException(status_code=400, detail="Note must be 1000 characters or fewer")
     req = WeddingExpenseRequest(
@@ -801,11 +849,20 @@ async def create_wedding_expense_with_receipt(
         staff=staff or None, note=note,
     )
     req.staff = resolve_employee(request, req.staff, override_roles=RECEIPT_STAFF_OVERRIDE_ROLES)
+    if req.project:
+        # Staff without a planner/finance/expense-manager role may only log against their own weddings.
+        require_assigned_unless_privileged(request, req.project, employee=req.staff)
     # Reuse existing logic (shared core — not the gated route handler)
-    result = _create_wedding_expense_core(req)
+    result = _create_wedding_expense_core(req, auto_approve=has_roles(request, DIRECTOR))
 
-    # Attach receipt if provided
-    if receipt and receipt.size and result.get("name"):
+    # Attach receipt if provided. The expense is already saved, so an upload failure
+    # must not fail the request; it is reported as receipt_attached=false instead.
+    if receipt and not receipt.size:
+        # An empty upload (e.g. a failed camera capture) is not a receipt
+        result["receipt_attached"] = False
+        log.warning("receipt_attach_failed", pi=result.get("name"), error="empty file")
+    elif receipt and result.get("name"):
+        result["receipt_attached"] = True
         try:
             file_data = await receipt.read()
             client = ERPNextClient()
@@ -822,7 +879,8 @@ async def create_wedding_expense_with_receipt(
             )
             log.info("receipt_attached", pi=result["name"])
         except Exception as e:
-            log.warning("receipt_attach_failed", pi=result["name"], error=str(e))
+            result["receipt_attached"] = False
+            log.warning("receipt_attach_failed", pi=result["name"], error=str(e), exc_info=True)
 
     return result
 
@@ -837,12 +895,16 @@ def create_wedding_expense(req: WeddingExpenseRequest, request: Request):
     """
     if req.staff:
         req.staff = resolve_employee(request, req.staff, override_roles=PLANNER_OR_FINANCE)
-    return _create_wedding_expense_core(req)
+    return _create_wedding_expense_core(req, auto_approve=has_roles(request, DIRECTOR))
 
 
-def _create_wedding_expense_core(req: WeddingExpenseRequest) -> dict:
+def _create_wedding_expense_core(req: WeddingExpenseRequest, auto_approve: bool = False) -> dict:
     """Shared by /expense/wedding and /expense/wedding-with-receipt — no auth here,
-    callers are already gated."""
+    callers are already gated.
+
+    `auto_approve` (the caller is the Director) skips Pending: the draft is submitted
+    and marked paid straight away, exactly as the Approve button would.
+    """
     client = ERPNextClient()
 
     if req.amount <= 0:
@@ -890,10 +952,24 @@ def _create_wedding_expense_core(req: WeddingExpenseRequest) -> dict:
 
     log.info("wedding_expense_created", pi=pi_name, project=req.project, amount=amount, has_note=bool(req.note))
 
-    # Notify Finance Managers (fire-and-forget)
-    _notify_finance_managers(client, pi_name, amount, req.project, req.description or req.category)
+    status = "Pending"
+    if auto_approve:
+        try:
+            full_pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+            client._post("/api/method/frappe.client.submit", {"doc": full_pi})
+            status = "Approved"
+            _mark_pi_paid(client, pi_name)
+            log.info("expense_auto_approved", pi=pi_name)
+        except Exception as e:
+            # The expense is saved either way; a failed submit leaves it Pending for Finance.
+            detail = e.detail if isinstance(e, HTTPException) else str(e)
+            log.error("expense_auto_approve_failed", pi=pi_name, status=status, error=detail, exc_info=True)
 
-    return {"name": pi_name, "status": "Pending"}
+    if status == "Pending":
+        # Notify Finance Managers (fire-and-forget)
+        _notify_finance_managers(client, pi_name, amount, req.project, req.description or req.category)
+
+    return {"name": pi_name, "status": status}
 
 
 @router.post("/expense/{pi_name}/approve", dependencies=[Depends(require_roles(*FINANCE))])
@@ -906,6 +982,10 @@ def approve_expense(pi_name: str):
         raise HTTPException(status_code=404, detail="Purchase Invoice not found")
     if pi.get("docstatus") != 0:
         raise HTTPException(status_code=400, detail="Only Draft expenses can be approved")
+    if pi.get("custom_rejected"):
+        # A stale page can still offer Approve on a draft that was rejected meanwhile.
+        log.warning("expense_approve_blocked_rejected", pi=pi_name)
+        raise HTTPException(status_code=400, detail="This expense was rejected; ask the submitter to edit and resubmit")
 
     try:
         client._post("/api/method/frappe.client.submit", {"doc": pi})
@@ -953,9 +1033,25 @@ def approve_all_expenses(project: str):
     return {"approved": len(approved), "failed": len(failed), "details": failed}
 
 
+class RejectExpenseRequest(BaseModel):
+    reason: str | None = Field(None, max_length=500)  # required by the endpoint (400 when blank)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _strip_reason(cls, v):
+        return v.strip() or None if isinstance(v, str) else v
+
+
 @router.post("/expense/{pi_name}/reject", dependencies=[Depends(require_roles(*FINANCE))])
-def reject_expense(pi_name: str):
-    """Reject a Draft Purchase Invoice (marks as rejected, keeps visible)."""
+def reject_expense(pi_name: str, req: RejectExpenseRequest | None = None):
+    """Reject a Draft Purchase Invoice (marks as rejected, keeps visible).
+
+    A reason is required; it is kept as a Comment on the invoice so the submitter can see why.
+    Rejecting an already rejected expense is a no-op, so a retry or double click adds no second Comment.
+    """
+    reason = req.reason if req else None
+    if not reason:
+        raise HTTPException(status_code=400, detail="A reason is required to reject an expense")
     client = ERPNextClient()
 
     pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
@@ -963,11 +1059,21 @@ def reject_expense(pi_name: str):
         raise HTTPException(status_code=404, detail="Purchase Invoice not found")
     if pi.get("docstatus") != 0:
         raise HTTPException(status_code=400, detail="Only Draft expenses can be rejected")
+    if pi.get("custom_rejected"):
+        log.info("expense_reject_already_rejected", pi=pi_name)
+        return {"success": True}
 
     try:
         client._put(f"/api/resource/Purchase Invoice/{pi_name}", {"custom_rejected": 1})
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to reject expense: {e}")
+
+    try:
+        add_rejection_comment(client, pi_name, reason)
+    except Exception as e:
+        # The expense is already rejected, so the flag stays; a retry would now be a no-op.
+        log.error("expense_rejection_comment_failed", pi=pi_name, error=str(e), exc_info=True)
+        raise HTTPException(status_code=502, detail="Expense rejected, but the reason could not be saved.")
 
     log.info("expense_rejected", pi=pi_name)
     return {"success": True}
@@ -989,11 +1095,7 @@ class EditExpenseRequest(BaseModel):
 
 @router.put("/expense/{pi_name}", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])
 def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
-    """Edit an expense. Draft PIs are updated in-place; submitted PIs are deleted and recreated.
-
-    Non-FINANCE callers (plain PLANNER) may only edit Draft (pending) expenses —
-    an already-approved/submitted expense requires FINANCE.
-    """
+    """Edit a Draft (pending or rejected) expense in place; a rejected one goes back to Pending. Submitted/paid are refused with 409."""
     client = ERPNextClient()
 
     if req.amount <= 0:
@@ -1007,107 +1109,46 @@ def edit_expense(pi_name: str, req: EditExpenseRequest, request: Request):
     first_item = old_items[0] if old_items else {}
     docstatus = pi.get("docstatus", 0)
 
-    if docstatus != 0 and not has_roles(request, FINANCE):
-        raise HTTPException(status_code=403, detail="Only Finance can edit an approved expense")
+    if docstatus != 0:
+        # Editing used to delete and re-create an approved PI, losing its receipts and paid state.
+        log.warning("expense_edit_blocked", pi=pi_name, docstatus=docstatus)
+        raise HTTPException(
+            status_code=409,
+            detail=f"{'Paid' if pi.get('status') == 'Paid' else 'Approved'} expenses can't be edited — reject or cancel it and add a new one",
+        )
 
     posting_date = req.date or pi.get("posting_date")
     description = req.description if req.description is not None else (first_item.get("item_name") or "Expense")
     expense_account = req.account or first_item.get("expense_account", DEFAULT_EXPENSE_ACCOUNT)
     amount = round(req.amount)
     staff = req.staff if req.staff is not None else pi.get("custom_expense_staff", "")
-    # None = keep the raw remarks untouched (it may be a migration audit link or legacy text)
-    remarks = req.note if req.note is not None else pi.get("remarks")
 
-    # Draft: update in-place (preserves creation date and document name)
-    if docstatus == 0:
-        update_values: dict = {
-            "posting_date": posting_date,
-            "set_posting_time": 1,
-            "custom_expense_staff": staff,
-            **({"remarks": req.note} if req.note is not None else {}),
-            "items": [{
-                "name": first_item.get("name"),
-                "item_code": "EXPENSE-ITEM",
-                "item_name": description,
-                "description": description,
-                "expense_account": expense_account,
-                "qty": 1,
-                "rate": amount,
-                "project": pi.get("project", ""),
-            }],
-        }
-        try:
-            client._put(f"/api/resource/Purchase Invoice/{pi_name}", update_values)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to update expense: {e}")
-        log.info("expense_edited_inplace", pi=pi_name, amount=amount, note_changed=req.note is not None)
-        return {"success": True, "name": pi_name}
-
-    # Submitted: delete and recreate (existing logic for approved expenses)
-    supplier = pi.get("supplier", "Company Expense")
-    project = pi.get("project", "")
-
-    pe_data = client._get("/api/resource/Payment Entry", params={
-        "filters": json.dumps([["Payment Entry Reference", "reference_name", "=", pi_name]]),
-        "fields": json.dumps(["name", "docstatus"]),
-        "limit_page_length": 100,
-    }).get("data", [])
-    for pe in pe_data:
-        if pe["docstatus"] == 1:
-            _cancel(client, "Payment Entry", pe["name"])
-        _delete_gl_entries(client, pe["name"])
-        _delete_payment_ledger_entries(client, pe["name"])
-        try:
-            client._delete(f"/api/resource/Payment Entry/{pe['name']}")
-        except Exception:
-            pass
-
-    _cancel(client, "Purchase Invoice", pi_name)
-    _delete_gl_entries(client, pi_name)
-    _delete_payment_ledger_entries(client, pi_name)
-    try:
-        client._delete(f"/api/resource/Purchase Invoice/{pi_name}")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to delete old expense: {e}")
-
-    pi_values = {
-        "supplier": supplier,
+    # Update in place (preserves creation date and document name). A None note keeps the raw
+    # remarks untouched (it may be a migration audit link or legacy text).
+    update_values: dict = {
         "posting_date": posting_date,
         "set_posting_time": 1,
-        "company": COMPANY,
-        "remarks": remarks,
+        "custom_expense_staff": staff,
+        # Editing a rejected expense puts it back in Finance's queue; the old reason stays in history only.
+        **({"custom_rejected": 0} if pi.get("custom_rejected") else {}),
+        **({"remarks": req.note} if req.note is not None else {}),
         "items": [{
+            "name": first_item.get("name"),
             "item_code": "EXPENSE-ITEM",
             "item_name": description,
             "description": description,
             "expense_account": expense_account,
             "qty": 1,
             "rate": amount,
+            "project": pi.get("project", ""),
         }],
     }
-    if project:
-        pi_values["project"] = project
-        pi_values["items"][0]["project"] = project
-    if staff:
-        pi_values["custom_expense_staff"] = staff
-
     try:
-        new_pi = client._post("/api/resource/Purchase Invoice", pi_values)
+        client._put(f"/api/resource/Purchase Invoice/{pi_name}", update_values)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to create expense: {e}")
-
-    new_name = new_pi.get("data", {}).get("name")
-    if not new_name:
-        raise HTTPException(status_code=500, detail="PI created but name not returned")
-
-    try:
-        full_pi = client._get(f"/api/resource/Purchase Invoice/{new_name}").get("data", {})
-        client._post("/api/method/frappe.client.submit", {"doc": full_pi})
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to submit expense: {e}")
-
-    log.info("expense_edited", old=pi_name, new=new_name, amount=amount, note_changed=req.note is not None)
-    return {"success": True, "name": new_name}
+        raise HTTPException(status_code=400, detail=f"Failed to update expense: {e}")
+    log.info("expense_edited_inplace", pi=pi_name, amount=amount, note_changed=req.note is not None, reopened=bool(pi.get("custom_rejected")))
+    return {"success": True, "name": pi_name}
 
 
 @router.delete("/expense/{pi_name}", dependencies=[Depends(require_roles(*PLANNER_OR_FINANCE))])

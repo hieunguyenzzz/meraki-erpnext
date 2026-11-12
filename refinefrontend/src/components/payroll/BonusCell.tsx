@@ -6,15 +6,21 @@ import { formatVND } from "@/lib/format";
 interface BonusCellProps {
   amount: number;
   editable: boolean;
-  onSave: (amount: number) => Promise<void>;
+  /** Phone layout: 48px tap target. */
+  touch?: boolean;
+  onSave: (amount: number) => Promise<boolean | void>;
 }
 
 /** Bonus amount; for draft slips click to edit (Enter/blur saves, Escape cancels). */
-export function BonusCell({ amount, editable, onSave }: BonusCellProps) {
+export function BonusCell({ amount, editable, touch, onSave }: BonusCellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  // After a save, keep showing the new value until the amount prop catches up (no flicker back to the old one).
+  const [pending, setPending] = useState<{ value: number; base: number } | null>(null);
   const finished = useRef(false);
+
+  const shown = pending && pending.base === amount ? pending.value : amount;
 
   if (!editable) return <div className="text-right">{formatVND(amount)}</div>;
 
@@ -31,16 +37,16 @@ export function BonusCell({ amount, editable, onSave }: BonusCellProps) {
     return (
       <button
         type="button"
-        className="ml-auto block rounded px-1 text-right hover:bg-muted"
+        className={`ml-auto block rounded px-1 text-right hover:bg-muted ${touch ? "min-h-12 min-w-12" : ""}`}
         title="Click to set bonus"
         onClick={(e) => {
           e.stopPropagation(); // don't toggle the row's detail expansion
           finished.current = false;
-          setDraft(amount > 0 ? String(Math.round(amount)) : "");
+          setDraft(shown > 0 ? String(Math.round(shown)) : "");
           setEditing(true);
         }}
       >
-        {formatVND(amount)}
+        {formatVND(shown)}
       </button>
     );
   }
@@ -50,10 +56,11 @@ export function BonusCell({ amount, editable, onSave }: BonusCellProps) {
     finished.current = true;
     setEditing(false);
     const next = Number(draft || 0);
-    if (next === amount) return;
+    if (next === shown) return;
     setSaving(true);
     try {
-      await onSave(next);
+      const ok = await onSave(next);
+      setPending(ok === false ? null : { value: next, base: amount });
     } finally {
       setSaving(false);
     }
@@ -67,7 +74,7 @@ export function BonusCell({ amount, editable, onSave }: BonusCellProps) {
   return (
     <MoneyInput
       autoFocus
-      className="ml-auto h-8 w-32 text-right"
+      className={`ml-auto w-32 text-right ${touch ? "h-12" : "h-8"}`}
       placeholder="0"
       value={draft}
       onChange={setDraft}

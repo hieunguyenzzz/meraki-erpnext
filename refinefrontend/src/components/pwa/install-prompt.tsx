@@ -49,7 +49,7 @@ export function InstallPrompt() {
           initial={{ opacity: 0, y: 100 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 100 }}
-          className="fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-96 z-50"
+          className="fixed bottom-[calc(112px+env(safe-area-inset-bottom,0px))] left-4 right-4 md:bottom-4 md:left-auto md:right-4 md:w-96 z-50"
           style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         >
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">

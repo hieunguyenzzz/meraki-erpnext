@@ -959,6 +959,7 @@ def _to_staff_view(slip: dict) -> None:
     - Employee BHXH/BHYT/BHTN deductions collapse into one "Social Insurance (10.5%)"
       line at the position of the first of them (omitted when the sum is 0).
     - An "Income Tax" deduction line is always present (amount 0 when the slip has none).
+    - total_deduction is rebuilt from the lines kept, excluding "Salary Proration Adj".
     """
     slip["earnings"] = [e for e in slip["earnings"] if "Employer" not in (e["salary_component"] or "")]
     deductions = [d for d in slip["deductions"] if "Employer" not in (d["salary_component"] or "")]
@@ -972,6 +973,9 @@ def _to_staff_view(slip: dict) -> None:
     if not any(d["salary_component"] == "Income Tax" for d in collapsed):
         collapsed.append({"salary_component": "Income Tax", "amount": 0})
     slip["deductions"] = collapsed
+    # gross_pay is already net of "Salary Proration Adj" (ERPNext books it as a deduction), so the
+    # staff total leaves it out: gross_pay - total_deduction == net_pay.
+    slip["total_deduction"] = sum(d["amount"] for d in collapsed if d["salary_component"] != "Salary Proration Adj")
     slip.pop("employer_bhxh", None)
 
 

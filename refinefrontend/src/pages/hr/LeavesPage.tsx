@@ -1,580 +1,107 @@
-import { useState, useMemo } from "react";
-import { useList, useInvalidate } from "@refinedev/core";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { useMemo, useState } from "react";
+import { useList } from "@refinedev/core";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { Checkbox } from "@/components/ui/checkbox";
 import { HrAddLeaveSheet } from "@/components/HrAddLeaveSheet";
-import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { ApplicationsTab } from "./leaves/ApplicationsTab";
+import { BalancesTab } from "./leaves/BalancesTab";
+import { TABS, type LeaveApp } from "./leaves/types";
+import { useLeaveActions } from "./leaves/useLeaveActions";
+import { displayName, useLeaveBalances } from "./leaves/useLeaveBalances";
 
-function statusVariant(status: string) {
-  switch (status) {
-    case "Approved": return "success" as const;
-    case "Rejected": return "destructive" as const;
-    default: return "secondary" as const;
-  }
-}
-
-interface LeaveApp {
-  name: string;
-  employee: string;
-  employee_name: string;
-  leave_type: string;
-  from_date: string;
-  to_date: string;
-  total_leave_days: number;
-  status: string;
-  docstatus: number;
-  description: string;
-}
-
-interface AllocEdit {
-  allocated?: number;
-  remaining?: number;
-  editedField?: "allocated" | "remaining";
-}
+const TAB_LABEL = { applications: "Applications", balances: "Balances" } as const;
 
 export default function LeavesPage() {
-  const [processingId, setProcessingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [edits, setEdits] = useState<Record<string, AllocEdit>>({});
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [tab, setTab] = useQueryState("tab", parseAsStringLiteral(TABS).withDefault("applications").withOptions({ clearOnDefault: true }));
   const [addLeaveOpen, setAddLeaveOpen] = useState(false);
-  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const invalidate = useInvalidate();
+  const actions = useLeaveActions();
+  const balances = useLeaveBalances();
 
-  // --- Applications tab data ---
-  const { result: appsResult, query: appsQuery } = useList({
+  const { result, query } = useList({
     resource: "Leave Application",
     pagination: { mode: "off" },
     filters: [{ field: "docstatus", operator: "ne", value: 2 }],
     sorters: [{ field: "creation", order: "desc" }],
-    meta: { fields: ["name", "employee", "employee_name", "leave_type", "from_date", "to_date", "total_leave_days", "status", "docstatus", "description"] },
+    meta: { fields: ["name", "employee", "employee_name", "leave_type", "from_date", "to_date", "total_leave_days", "half_day", "status", "docstatus", "description"] },
   });
+  const rawApps = useMemo(() => (result?.data ?? []) as LeaveApp[], [result]);
 
-  // --- Balances tab data ---
-  const { result: allocsResult } = useList({
-    resource: "Leave Allocation",
-    pagination: { mode: "off" },
-    sorters: [{ field: "employee_name", order: "asc" }],
-    filters: [
-      { field: "docstatus", operator: "eq", value: 1 },
-      { field: "leave_type", operator: "ne", value: "Sick Leave" },
-    ],
-    meta: { fields: ["name", "employee", "employee_name", "leave_type", "new_leaves_allocated", "total_leaves_allocated", "from_date", "to_date"] },
-  });
-
-  const { result: employeesResult } = useList({
-    resource: "Employee",
-    pagination: { mode: "off" },
-    filters: [{ field: "status", operator: "eq", value: "Active" }],
-    meta: { fields: ["name", "employee_name", "first_name", "last_name"] },
-  });
-
-  const { result: approvedAppsResult } = useList({
-    resource: "Leave Application",
-    pagination: { mode: "off" },
-    filters: [
-      { field: "status", operator: "eq", value: "Approved" },
-      { field: "docstatus", operator: "eq", value: 1 },
-    ],
-    meta: { fields: ["name", "employee", "leave_type", "total_leave_days"] },
-  });
-
-  const leaveAppsRaw = (appsResult?.data ?? []) as LeaveApp[];
-  const leaveAllocs = (allocsResult?.data ?? []) as any[];
-  const employees = (employeesResult?.data ?? []) as any[];
-  const approvedApps = (approvedAppsResult?.data ?? []) as any[];
-
-  // Build employee name lookup from Employee records (first_name + last_name)
-  const empNameMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const e of employees) {
-      const name = [e.first_name, e.last_name].filter(Boolean).join(" ");
-      if (name) m.set(e.name, name);
+  // ERPNext sometimes returns HR-EMP-* codes as the name; resolve from the Employee record
+  const apps = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const e of balances.employees) {
+      const n = [e.first_name, e.last_name].filter(Boolean).join(" ");
+      if (n) names.set(e.name, n);
     }
-    return m;
-  }, [employees]);
+    return rawApps.map((a) => {
+      const resolved = names.get(a.employee);
+      return resolved && (!a.employee_name || a.employee_name === a.employee || a.employee_name.startsWith("HR-EMP-"))
+        ? { ...a, employee_name: resolved }
+        : a;
+    });
+  }, [rawApps, balances.employees]);
 
-  // Resolve employee_name from Employee records when ERPNext returns HR-EMP-* codes
-  const leaveApps = useMemo(() =>
-    leaveAppsRaw.map((app) => {
-      const resolved = empNameMap.get(app.employee);
-      if (resolved && (!app.employee_name || app.employee_name === app.employee || app.employee_name.startsWith("HR-EMP-"))) {
-        return { ...app, employee_name: resolved };
-      }
-      return app;
-    }),
-  [leaveAppsRaw, empNameMap]);
+  const employeeOptions = useMemo(
+    () => balances.employees
+      .map((e) => ({ name: e.name, displayName: displayName(e) }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    [balances.employees],
+  );
 
-  // Build lookup: employee -> leave_type -> taken days
-  const takenMap = useMemo(() => {
-    const m = new Map<string, Map<string, number>>();
-    for (const app of approvedApps) {
-      if (!m.has(app.employee)) m.set(app.employee, new Map());
-      const byType = m.get(app.employee)!;
-      byType.set(app.leave_type, (byType.get(app.leave_type) ?? 0) + (app.total_leave_days ?? 0));
-    }
-    return m;
-  }, [approvedApps]);
-
-  // Employee options for the HR "Add Leave" sheet (sorted by display name)
-  const employeeOptions = useMemo(() => {
-    return employees
-      .map((e: any) => ({
-        name: e.name as string,
-        displayName: [e.first_name, e.last_name].filter(Boolean).join(" ") || e.employee_name || e.name,
-      }))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
-  }, [employees]);
-
-  const allocsByEmployee = useMemo(() => {
-    const m = new Map<string, any[]>();
-    for (const alloc of leaveAllocs) {
-      if (!m.has(alloc.employee)) m.set(alloc.employee, []);
-      m.get(alloc.employee)!.push(alloc);
-    }
-    return m;
-  }, [leaveAllocs]);
-
-  const balanceRows = useMemo(() => {
-    const rows: Array<{
-      employeeId: string;
-      employeeName: string;
-      allocName: string | null;
-      leaveType: string | null;
-      allocated: number;
-      taken: number;
-      remaining: number;
-      fromDate: string | null;
-      toDate: string | null;
-    }> = [];
-
-    const getName = (e: any) => [e.first_name, e.last_name].filter(Boolean).join(" ") || e.employee_name || e.name;
-    const sortedEmployees = [...employees].sort((a, b) =>
-      getName(a).localeCompare(getName(b))
-    );
-
-    for (const emp of sortedEmployees) {
-      const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(" ") || emp.employee_name || emp.name;
-      const allocs = allocsByEmployee.get(emp.name);
-      if (allocs && allocs.length > 0) {
-        for (const alloc of allocs) {
-          const allocated = alloc.total_leaves_allocated ?? alloc.new_leaves_allocated ?? 0;
-          const taken = takenMap.get(emp.name)?.get(alloc.leave_type) ?? 0;
-          rows.push({
-            employeeId: emp.name, employeeName: displayName,
-            allocName: alloc.name, leaveType: alloc.leave_type,
-            allocated, taken, remaining: allocated - taken,
-            fromDate: alloc.from_date ?? null, toDate: alloc.to_date ?? null,
-          });
-        }
-      } else {
-        rows.push({
-          employeeId: emp.name, employeeName: displayName,
-          allocName: null, leaveType: null, allocated: 0, taken: 0, remaining: 0,
-          fromDate: null, toDate: null,
-        });
-      }
-    }
-    return rows;
-  }, [employees, allocsByEmployee, takenMap]);
-
-  // --- Period helpers ---
-  function formatPeriod(fromDate: string | null, toDate: string | null): string {
-    if (!fromDate || !toDate) return "\u2014";
-    const fmt = (d: string) => {
-      const date = new Date(d + "T00:00:00");
-      return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-    };
-    return `${fmt(fromDate)} \u2013 ${fmt(toDate)}`;
-  }
-
-  function isCarryOver(fromDate: string | null, toDate: string | null): boolean | null {
-    if (!fromDate || !toDate) return null;
-    const fromYear = new Date(fromDate + "T00:00:00").getFullYear();
-    const toYear = new Date(toDate + "T00:00:00").getFullYear();
-    // If from and to are in the same year, it's likely a carry-over (partial year)
-    // Annual allocations typically span across years (e.g., Aug 2026 - Jul 2027)
-    return fromYear === toYear;
-  }
-
-  // --- Edit helpers ---
-  function getDisplayValues(row: typeof balanceRows[0]) {
-    if (!row.allocName) return { allocated: null, remaining: null };
-    const edit = edits[row.allocName];
-    if (!edit) return { allocated: row.allocated, remaining: row.remaining };
-    if (edit.editedField === "allocated") {
-      const alloc = edit.allocated ?? row.allocated;
-      return { allocated: alloc, remaining: alloc - row.taken };
-    }
-    if (edit.editedField === "remaining") {
-      const rem = edit.remaining ?? row.remaining;
-      return { allocated: rem + row.taken, remaining: rem };
-    }
-    return { allocated: row.allocated, remaining: row.remaining };
-  }
-
-  function handleAllocatedChange(allocName: string, value: string) {
-    const num = value === "" ? 0 : parseFloat(value);
-    if (isNaN(num)) return;
-    setEdits((prev) => ({ ...prev, [allocName]: { allocated: num, editedField: "allocated" } }));
-  }
-
-  function handleRemainingChange(allocName: string, value: string) {
-    const num = value === "" ? 0 : parseFloat(value);
-    if (isNaN(num)) return;
-    setEdits((prev) => ({ ...prev, [allocName]: { remaining: num, editedField: "remaining" } }));
-  }
-
-  function isEdited(allocName: string) {
-    return allocName in edits;
-  }
-
-  async function handleSaveAllocation(allocName: string, taken: number) {
-    const edit = edits[allocName];
-    if (!edit) return;
-    let newAllocated: number;
-    if (edit.editedField === "allocated") {
-      newAllocated = edit.allocated ?? 0;
-    } else {
-      newAllocated = (edit.remaining ?? 0) + taken;
-    }
-    setSavingId(allocName);
-    setError(null);
-    try {
-      const res = await fetch(`/inquiry-api/leave/allocation/${encodeURIComponent(allocName)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ new_leaves_allocated: newAllocated }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      setEdits((prev) => { const next = { ...prev }; delete next[allocName]; return next; });
-      invalidate({ resource: "Leave Allocation", invalidates: ["list"] });
-    } catch (err: any) {
-      setError(`Failed to update ${allocName}. ${err?.message ?? "Please try again."}`);
-    } finally {
-      setSavingId(null);
-    }
-  }
-
-  async function handleApprove(appName: string) {
-    setProcessingId(appName);
-    setError(null);
-    try {
-      const res = await fetch(`/inquiry-api/leave/${encodeURIComponent(appName)}/approve`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-      invalidate({ resource: "Leave Application", invalidates: ["list"] });
-    } catch { setError(`Failed to approve ${appName}. Please try again.`); } finally { setProcessingId(null); }
-  }
-
-  async function handleReject(appName: string) {
-    setProcessingId(appName);
-    setError(null);
-    try {
-      const res = await fetch(`/inquiry-api/leave/${encodeURIComponent(appName)}/reject`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-      invalidate({ resource: "Leave Application", invalidates: ["list"] });
-    } catch { setError(`Failed to reject ${appName}. Please try again.`); } finally { setProcessingId(null); }
-  }
-
-  async function handleReApprove(appName: string) {
-    setProcessingId(appName);
-    setError(null);
-    try {
-      const res = await fetch(`/inquiry-api/leave/${encodeURIComponent(appName)}/re-approve`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-      invalidate({ resource: "Leave Application", invalidates: ["list"] });
-    } catch { setError(`Failed to re-approve ${appName}. Please try again.`); } finally { setProcessingId(null); }
-  }
-
-  const selectedApps = useMemo(() =>
-    leaveApps.filter((a) => rowSelection[a.name]),
-  [leaveApps, rowSelection]);
-
-  const approvedInSelection = selectedApps.filter((a) => a.docstatus === 1);
-
-  async function handleDeleteSelected() {
-    setIsDeleting(true);
-    setError(null);
-    try {
-      for (const app of selectedApps) {
-        const res = await fetch(`/inquiry-api/leave/${encodeURIComponent(app.name)}`, {
-          method: "DELETE",
-        });
-        if (!res.ok) throw new Error(`Failed to delete ${app.name}`);
-      }
-      setRowSelection({});
-      setDeleteDialogOpen(false);
-      invalidate({ resource: "Leave Application", invalidates: ["list"] });
-    } catch (err: any) {
-      setError(err.message ?? "Delete failed. Please try again.");
-      setDeleteDialogOpen(false);
-    } finally {
-      setIsDeleting(false);
-    }
-  }
-
-  // --- DataTable columns for Applications tab ---
-  const appColumns: ColumnDef<LeaveApp, unknown>[] = [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          checked={table.getIsAllPageRowsSelected()}
-          onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
-          aria-label="Select all"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(v) => row.toggleSelected(!!v)}
-          aria-label="Select row"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "employee_name",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
-      cell: ({ row }) => <span className="font-medium">{row.original.employee_name}</span>,
-      filterFn: "includesString",
-    },
-    {
-      accessorKey: "leave_type",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Leave Type" />,
-      filterFn: "arrIncludesSome",
-    },
-    {
-      accessorKey: "from_date",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="From" />,
-      cell: ({ row }) => formatDate(row.original.from_date),
-    },
-    {
-      accessorKey: "to_date",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="To" />,
-      cell: ({ row }) => formatDate(row.original.to_date),
-    },
-    {
-      accessorKey: "total_leave_days",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Days" className="text-right" />,
-      cell: ({ row }) => <div className="text-right">{row.original.total_leave_days}</div>,
-    },
-    {
-      accessorKey: "description",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Note" />,
-      cell: ({ row }) => (
-        <span className="text-muted-foreground text-sm max-w-[200px] truncate block" title={row.original.description || ""}>
-          {row.original.description || "\u2014"}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "status",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-      cell: ({ row }) => <Badge variant={statusVariant(row.original.status)}>{row.original.status}</Badge>,
-      filterFn: "arrIncludesSome",
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      cell: ({ row }) => {
-        const app = row.original;
-        if (app.docstatus === 0 && app.status === "Open") {
-          return (
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => handleApprove(app.name)} disabled={processingId === app.name}>Approve</Button>
-              <Button size="sm" variant="destructive" onClick={() => handleReject(app.name)} disabled={processingId === app.name}>Reject</Button>
-            </div>
-          );
-        }
-        if (app.status === "Rejected") {
-          return (
-            <Button size="sm" variant="outline" onClick={() => handleReApprove(app.name)} disabled={processingId === app.name}>
-              {processingId === app.name ? "Processing..." : "Approve"}
-            </Button>
-          );
-        }
-        return null;
-      },
-      enableSorting: false,
-    },
-  ];
-
+  const error = actions.error;
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Leave Management</h1>
-        <p className="text-muted-foreground">Applications and balance tracking</p>
+    <div className="flex flex-col gap-4 pb-24 md:pb-0">
+      <header className="flex items-center gap-3">
+        <h1 className="flex-1 text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Leaves</h1>
+        <Button onClick={() => setAddLeaveOpen(true)}>
+          <Plus aria-hidden />
+          <span className="max-md:hidden">Add leave for someone</span>
+          <span className="md:hidden">Add leave</span>
+        </Button>
+      </header>
+
+      <div role="group" aria-label="Leave views" className="-mx-4 flex gap-7 border-b px-4 md:mx-0 md:px-0">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            aria-pressed={tab === t}
+            onClick={() => setTab(t)}
+            className={cn(
+              "-mb-px h-12 border-b-2 text-[15px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-11",
+              tab === t ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {TAB_LABEL[t]}
+          </button>
+        ))}
       </div>
 
       {error && (
-        <div className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+        <div role="alert" className="flex items-center justify-between rounded-xl border border-destructive/30 bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-4 font-medium hover:text-red-900">&times;</button>
+          <button type="button" onClick={() => actions.setError(null)} aria-label="Dismiss" className="ml-4 font-medium">&times;</button>
         </div>
       )}
 
-      <Tabs defaultValue="applications">
-        <TabsList>
-          <TabsTrigger value="applications">Applications</TabsTrigger>
-          <TabsTrigger value="balances">Balances</TabsTrigger>
-        </TabsList>
+      {tab === "applications" ? (
+        <ApplicationsTab
+          apps={apps}
+          isLoading={query.isLoading}
+          isError={query.isError}
+          refetch={() => query.refetch()}
+          processingId={actions.processingId}
+          isDeleting={actions.isDeleting}
+          onDecide={actions.decide}
+          onDelete={actions.deleteMany}
+        />
+      ) : (
+        <BalancesTab b={balances} />
+      )}
 
-        <TabsContent value="applications" className="space-y-2">
-          {selectedApps.length > 0 && (
-            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-2">
-              <span className="text-sm text-red-700 dark:text-red-400 flex-1">
-                {selectedApps.length} record{selectedApps.length > 1 ? "s" : ""} selected
-                {approvedInSelection.length > 0 && (
-                  <span className="font-medium"> &middot; {approvedInSelection.length} approved (will reverse leave balance)</span>
-                )}
-              </span>
-              <Button size="sm" variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
-                Delete {selectedApps.length} selected
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setRowSelection({})}>Clear</Button>
-            </div>
-          )}
-          <DataTable
-            columns={appColumns}
-            data={leaveApps}
-            isLoading={appsQuery.isLoading}
-            searchKey="employee_name"
-            searchPlaceholder="Search by employee..."
-            filterableColumns={[
-              {
-                id: "status",
-                title: "Status",
-                options: [
-                  { label: "Open", value: "Open" },
-                  { label: "Approved", value: "Approved" },
-                  { label: "Rejected", value: "Rejected" },
-                ],
-              },
-              {
-                id: "leave_type",
-                title: "Leave Type",
-                options: [
-                  { label: "Annual Leave", value: "Annual Leave" },
-                  { label: "Sick Leave", value: "Sick Leave" },
-                ],
-              },
-            ]}
-            enableRowSelection
-            rowSelection={rowSelection}
-            onRowSelectionChange={setRowSelection}
-            getRowId={(row) => row.name}
-          />
-        </TabsContent>
-
-        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete {selectedApps.length} leave record{selectedApps.length > 1 ? "s" : ""}?</DialogTitle>
-              <DialogDescription>
-                This action cannot be undone.
-                {approvedInSelection.length > 0 && (
-                  <span className="block mt-2 text-orange-600 dark:text-orange-400 font-medium">
-                    {approvedInSelection.length} approved leave{approvedInSelection.length > 1 ? "s" : ""} will be cancelled and deleted — the balance will be restored.
-                  </span>
-                )}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>Cancel</Button>
-              <Button variant="destructive" onClick={handleDeleteSelected} disabled={isDeleting}>
-                {isDeleting ? "Deleting..." : "Delete"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <TabsContent value="balances">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle>Leave Balances ({employees.length} employees)</CardTitle>
-              <Button size="sm" onClick={() => setAddLeaveOpen(true)}>+ Add Leave</Button>
-            </CardHeader>
-            <CardContent>
-              {employees.length === 0 ? (
-                <p className="text-muted-foreground">No active employees found</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Leave Type</TableHead>
-                      <TableHead>Period</TableHead>
-                      <TableHead className="text-right">Allocated</TableHead>
-                      <TableHead className="text-right">Taken</TableHead>
-                      <TableHead className="text-right">Remaining</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {balanceRows.map((row) => {
-                      const key = row.allocName ?? row.employeeId;
-                      const hasAlloc = !!row.allocName;
-                      const display = getDisplayValues(row);
-                      const edited = hasAlloc && isEdited(row.allocName!);
-                      const saving = savingId === row.allocName;
-
-                      return (
-                        <TableRow key={key} className={!hasAlloc ? "text-muted-foreground" : undefined}>
-                          <TableCell className="font-medium">{row.employeeName}</TableCell>
-                          <TableCell>{row.leaveType ?? "\u2014"}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">{formatPeriod(row.fromDate, row.toDate)}</span>
-                              {isCarryOver(row.fromDate, row.toDate) === true && (
-                                <Badge variant="outline" className="text-xs">Carry-over</Badge>
-                              )}
-                              {isCarryOver(row.fromDate, row.toDate) === false && (
-                                <Badge variant="secondary" className="text-xs">Annual</Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {hasAlloc ? (
-                              <Input type="number" min={0} step={0.5} className="w-20 text-right ml-auto" value={display.allocated ?? 0} onChange={(e) => handleAllocatedChange(row.allocName!, e.target.value)} disabled={saving} />
-                            ) : "\u2014"}
-                          </TableCell>
-                          <TableCell className="text-right">{hasAlloc ? row.taken : "\u2014"}</TableCell>
-                          <TableCell className="text-right">{hasAlloc ? display.remaining : "\u2014"}</TableCell>
-                          <TableCell>
-                            {hasAlloc && edited && (
-                              <Button size="sm" onClick={() => handleSaveAllocation(row.allocName!, row.taken)} disabled={saving}>
-                                {saving ? "Saving..." : "Save"}
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      <HrAddLeaveSheet
-        open={addLeaveOpen}
-        onOpenChange={setAddLeaveOpen}
-        employees={employeeOptions}
-      />
+      <HrAddLeaveSheet open={addLeaveOpen} onOpenChange={setAddLeaveOpen} employees={employeeOptions} />
     </div>
   );
 }

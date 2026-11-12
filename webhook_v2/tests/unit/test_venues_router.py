@@ -208,7 +208,9 @@ def test_update_venue_url_encodes_existing_contact_name():
     )
     fake_client = MagicMock()
     fake_client._put.return_value = {"data": {}}
-    fake_client._get.return_value = {"data": [{"name": "Nguyễn Văn A-An Lâm"}]}
+    fake_client._get.side_effect = lambda url, params=None: (
+        {"data": [{"name": "Nguyễn Văn A-An Lâm"}]} if url == "/api/resource/Contact" else {"data": {}}
+    )
 
     update_venue("An Lâm Retreat", payload, _client=fake_client)
 
@@ -250,3 +252,143 @@ def test_create_venue_with_contact_upserts_contact():
     assert contact_data["first_name"] == "Jane"
     assert any(link["link_doctype"] == "Supplier" and link["link_name"] == "Test Venue"
                for link in contact_data["links"])
+
+
+def _contact_client(doc):
+    c = MagicMock()
+
+    def _get(url, params=None):
+        if url == "/api/resource/Contact":
+            return {"data": [{"name": doc["name"]}]}
+        return {"data": doc}
+
+    c._get.side_effect = _get
+    return c
+
+
+def _existing_contact():
+    return {
+        "name": "Quan Test-Venue",
+        "first_name": "Quan",
+        "last_name": "Test",
+        "email_ids": [{"name": "e1", "email_id": "q@x.com", "is_primary": 1}],
+        "phone_nos": [
+            {"name": "p1", "phone": "111", "is_primary_phone": 1, "is_primary_mobile_no": 1},
+            {"name": "p2", "phone": "222"},
+        ],
+    }
+
+
+def test_get_contact_returns_primary_and_alt_phone():
+    from webhook_v2.routers.venues import get_venue_contact
+
+    view = get_venue_contact("Venue", _client=_contact_client(_existing_contact()))["contact"]
+    assert view["name"] == "Quan Test"
+    assert view["phone"] == "111" and view["alt_phone"] == "222"
+    assert view["email"] == "q@x.com"
+
+
+def test_upsert_keeps_alt_phone_when_form_sends_none_and_does_not_double_last_name():
+    from webhook_v2.routers.venues import ContactPayload, _upsert_contact
+
+    client = _contact_client(_existing_contact())
+    _upsert_contact(client, "Venue", ContactPayload(name="Quan Test", phone="111", email="q@x.com"))
+    body = client._put.call_args[0][1]
+    assert "first_name" not in body and "last_name" not in body
+    assert [p["phone"] for p in body["phone_nos"]] == ["111", "222"]
+
+
+def test_upsert_changed_name_clears_last_name_and_updates_phones_in_place():
+    from webhook_v2.routers.venues import ContactPayload, _upsert_contact
+
+    client = _contact_client(_existing_contact())
+    _upsert_contact(client, "Venue", ContactPayload(name="Mai Lan", phone="333", alt_phone="444"))
+    body = client._put.call_args[0][1]
+    assert body["first_name"] == "Mai Lan" and body["last_name"] == ""
+    assert [(p["name"], p["phone"]) for p in body["phone_nos"]] == [("p1", "333"), ("p2", "444")]
+
+
+def test_listing_returns_cover_url_from_one_file_lookup():
+    from webhook_v2.routers.venues import list_venues
+
+    calls = []
+
+    def _fake_get(url, params=None):
+        calls.append(url)
+        if url == "/api/resource/Supplier":
+            return {"data": [
+                {"name": "A", "custom_cover_photo": "f1"},
+                {"name": "B", "custom_cover_photo": None},
+            ]}
+        if url == "/api/resource/File":
+            return {"data": [{"name": "f1", "file_url": "/files/a.jpg"}]}
+        return {"data": {"custom_venue_wedding_areas": []}}
+
+    client = MagicMock()
+    client._get.side_effect = _fake_get
+    venues = {v["name"]: v for v in list_venues(_client=client)["venues"]}
+    assert venues["A"]["cover_url"] == "/files/a.jpg"
+    assert venues["B"]["cover_url"] is None
+    assert calls.count("/api/resource/File") == 1  # one batch for <= 100 covers
+
+
+def test_upsert_keeps_other_links_and_adds_supplier_link():
+    from webhook_v2.routers.venues import ContactPayload, _upsert_contact
+
+    doc = _existing_contact()
+    doc["links"] = [{"name": "l1", "link_doctype": "Customer", "link_name": "C1"}]
+    client = _contact_client(doc)
+    _upsert_contact(client, "Venue", ContactPayload(name="Quan Test", phone="111"))
+    links = client._put.call_args[0][1]["links"]
+    assert {(l["link_doctype"], l["link_name"]) for l in links} == {("Customer", "C1"), ("Supplier", "Venue")}
+
+
+def test_upsert_empty_alt_phone_removes_only_the_alt_row():
+    from webhook_v2.routers.venues import ContactPayload, _upsert_contact
+
+    client = _contact_client(_existing_contact())
+    _upsert_contact(client, "Venue", ContactPayload(name="Quan Test", phone="111", alt_phone=""))
+    assert [p["phone"] for p in client._put.call_args[0][1]["phone_nos"]] == ["111"]
+
+
+def test_listing_survives_cover_lookup_failure_and_batches():
+    from webhook_v2.routers.venues import list_venues
+
+    def _fake_get(url, params=None):
+        if url == "/api/resource/Supplier":
+            return {"data": [{"name": f"V{i}", "custom_cover_photo": f"f{i}"} for i in range(120)]}
+        if url == "/api/resource/File":
+            raise RuntimeError("boom")
+        return {"data": {"custom_venue_wedding_areas": []}}
+
+    client = MagicMock()
+    client._get.side_effect = _fake_get
+    venues = list_venues(_client=client)["venues"]
+    assert len(venues) == 120 and venues[0]["cover_url"] is None
+
+
+def test_listing_batches_cover_lookup_under_request_size_limit():
+    from urllib.parse import urlencode
+    from webhook_v2.routers.venues import list_venues
+
+    file_calls = []
+
+    def run(id_len):
+        file_calls.clear()
+
+        def _fake_get(url, params=None):
+            if url == "/api/resource/Supplier":
+                return {"data": [{"name": f"V{i}", "custom_cover_photo": f"{i:0{id_len}d}"} for i in range(120)]}
+            if url == "/api/resource/File":
+                file_calls.append(urlencode(params))
+                return {"data": []}
+            return {"data": {"custom_venue_wedding_areas": []}}
+
+        client = MagicMock()
+        client._get.side_effect = _fake_get
+        list_venues(_client=client)
+        return max(len(q.encode()) for q in file_calls)
+
+    assert run(10) < 3500   # real File names are 10-char hashes
+    assert len(file_calls) == 3  # 40 + 40 + 40
+    assert run(80) < 4096   # worst case: 80-char ids

@@ -258,7 +258,8 @@ export function VenueForm({
                 title: contactTitle,
                 email: contactEmail,
                 phone: contactPhone,
-                alt_phone: contactAltPhone,
+                // "" asks the backend to remove the second phone; omitted leaves it alone
+                alt_phone: contactAltPhone || (contactInitialValue?.alt_phone ? "" : undefined),
               }
             : null,
       };

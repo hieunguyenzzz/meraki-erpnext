@@ -17,6 +17,9 @@ interface SegmentedRatingProps {
   max?: number;
   readOnly?: boolean;
   size?: "sm" | "md";
+  hideValue?: boolean;
+  ariaLabel?: string;
+  labelledBy?: string;
   className?: string;
 }
 
@@ -26,6 +29,9 @@ export function SegmentedRating({
   max = 10,
   readOnly = false,
   size = "md",
+  hideValue = false,
+  ariaLabel = "Rating",
+  labelledBy,
   className,
 }: SegmentedRatingProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -55,12 +61,17 @@ export function SegmentedRating({
   return (
     <div className={cn("flex items-center gap-2 min-w-0", className)}>
       <div
-        role="slider"
-        aria-valuenow={value ?? 0}
-        aria-valuemin={1}
-        aria-valuemax={max}
-        aria-label="Rating"
-        tabIndex={readOnly ? -1 : 0}
+        {...(readOnly
+          ? { role: "img", "aria-label": `${ariaLabel}: ${value ?? "not rated"}${value != null ? ` out of ${max}` : ""}` }
+          : {
+              role: "slider",
+              "aria-valuenow": value ?? 0,
+              "aria-valuemin": 1,
+              "aria-valuemax": max,
+              "aria-label": labelledBy ? undefined : ariaLabel,
+              "aria-labelledby": labelledBy,
+              tabIndex: 0,
+            })}
         className={cn(
           "flex-1 flex gap-px rounded-md overflow-hidden border border-border bg-border",
           "motion-reduce:transition-none",
@@ -107,9 +118,9 @@ export function SegmentedRating({
           );
         })}
       </div>
-      <span className={cn("tabular-nums text-right shrink-0", size === "sm" ? "w-4 text-xs text-muted-foreground" : "w-6 text-sm")}>
+      {!hideValue && <span className={cn("tabular-nums text-right shrink-0", size === "sm" ? "w-4 text-xs text-muted-foreground" : "w-6 text-sm")}>
         {value ?? "–"}
-      </span>
+      </span>}
     </div>
   );
 }

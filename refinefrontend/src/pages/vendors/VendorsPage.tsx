@@ -1,61 +1,26 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useList, useCreate } from "@refinedev/core";
+import { useQueryState } from "nuqs";
+import { Plus, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { AlertCircle, Plus, Phone } from "lucide-react";
-
-const VENDOR_CATEGORIES = [
-  "Decoration / Floral",
-  "Photography",
-  "Videography",
-  "Makeup & Hair",
-  "MC / Emcee",
-  "Music / DJ / Band",
-  "Catering",
-  "Wedding Cake",
-  "Invitation / Stationery",
-  "Bridal Attire",
-  "Transportation",
-  "Lighting / Effects",
-];
-
-function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-}
+import { StatePanel } from "@/components/StatePanel";
+import { VendorFormSheet } from "@/components/vendors/VendorFormSheet";
+import { EMPTY_VENDOR_FORM, type VendorFormValue, type VendorRow } from "@/lib/vendor";
+import { VendorCard, VendorCardsSkeleton } from "./vendors-list/VendorCard";
+import { VendorsFilterBar } from "./vendors-list/VendorsFilterBar";
+import { useVendorCovers } from "./vendors-list/useVendorCovers";
 
 export default function VendorsPage() {
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("__all__");
+  const [search, setSearch] = useQueryState("q", { defaultValue: "" });
+  const [categoryFilter, setCategoryFilter] = useQueryState("category", { defaultValue: "" });
 
-  // Add vendor form state
-  const [formName, setFormName] = useState("");
-  const [formCategory, setFormCategory] = useState("");
-  const [formContact, setFormContact] = useState("");
-  const [formPhone, setFormPhone] = useState("");
-  const [formEmail, setFormEmail] = useState("");
-  const [formWebsite, setFormWebsite] = useState("");
-  const [formNotes, setFormNotes] = useState("");
+  const [form, setForm] = useState<VendorFormValue>(EMPTY_VENDOR_FORM);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  // Fetch all vendors
   const { result: vendorsResult, query: vendorsQuery } = useList({
     resource: "Supplier",
     pagination: { mode: "off" },
@@ -68,100 +33,82 @@ export default function VendorsPage() {
         "custom_contact_phone",
         "custom_contact_email",
         "custom_contact_person",
+        "website",
       ],
     },
   });
-  const vendors = vendorsResult?.data ?? [];
+  const vendors = useMemo(() => (vendorsResult?.data ?? []) as VendorRow[], [vendorsResult]);
 
-  // Batch fetch cover images
-  const vendorNames = useMemo(() => vendors.map((v: any) => v.name), [vendors]);
+  const vendorNames = useMemo(() => vendors.map((v) => v.name), [vendors]);
+  const coverImages = useVendorCovers(vendorNames);
 
-  const { result: filesResult } = useList({
-    resource: "File",
-    pagination: { mode: "off" },
-    filters: [
-      { field: "attached_to_doctype", operator: "eq", value: "Supplier" },
-      { field: "attached_to_name", operator: "in", value: vendorNames },
-    ],
-    meta: { fields: ["name", "file_url", "attached_to_name"] },
-    queryOptions: { enabled: vendorNames.length > 0 },
-  });
-
-  const coverImages = useMemo(() => {
-    const files = filesResult?.data ?? [];
-    const map: Record<string, string> = {};
-    for (const f of files) {
-      if (!map[f.attached_to_name] && /\.(jpg|jpeg|png|webp)$/i.test(f.file_url)) {
-        map[f.attached_to_name] = f.file_url;
-      }
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const v of vendors) {
+      if (v.custom_vendor_category) counts.set(v.custom_vendor_category, (counts.get(v.custom_vendor_category) ?? 0) + 1);
     }
-    return map;
-  }, [filesResult]);
+    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, count]) => ({ name, count }));
+  }, [vendors]);
 
-  // Client-side filtering
-  const categories = useMemo(
-    () =>
-      [...new Set(vendors.map((v: any) => v.custom_vendor_category).filter(Boolean))].sort() as string[],
-    [vendors]
-  );
+  // A ?category that isn't one of the loaded categories (junk, or an old link) means "All".
+  const activeCategory = categories.some((c) => c.name === categoryFilter) ? categoryFilter : "";
 
-  const filtered = useMemo(
-    () =>
-      vendors.filter((v: any) => {
-        const nameMatch = v.supplier_name.toLowerCase().includes(search.toLowerCase());
-        const catMatch = categoryFilter === "__all__" || v.custom_vendor_category === categoryFilter;
-        return nameMatch && catMatch;
-      }),
-    [vendors, search, categoryFilter]
-  );
+  const filtered = useMemo(() => {
+    const s = search.toLowerCase();
+    return vendors.filter(
+      (v) =>
+        v.supplier_name.toLowerCase().includes(s) &&
+        (!activeCategory || v.custom_vendor_category === activeCategory)
+    );
+  }, [vendors, search, activeCategory]);
 
   const { mutate: createVendor } = useCreate();
-  const [creating, setCreating] = useState(false);
+  const submitting = useRef(false);
 
-  function resetForm() {
-    setFormName("");
-    setFormCategory("");
-    setFormContact("");
-    setFormPhone("");
-    setFormEmail("");
-    setFormWebsite("");
-    setFormNotes("");
+  function openAdd() {
+    setForm(EMPTY_VENDOR_FORM);
     setCreateError(null);
+    setSheetOpen(true);
   }
 
   function handleSubmit() {
-    if (!formName.trim()) {
+    if (!form.name.trim()) {
       setCreateError("Vendor name is required.");
       return;
     }
+    if (submitting.current) return;
+    submitting.current = true;
     setCreateError(null);
     setCreating(true);
     createVendor(
       {
         resource: "Supplier",
         values: {
-          supplier_name: formName.trim(),
+          supplier_name: form.name.trim(),
           supplier_group: "Wedding Vendors",
           supplier_type: "Company",
           country: "Vietnam",
-          custom_vendor_category: formCategory || undefined,
-          custom_contact_person: formContact || undefined,
-          custom_contact_phone: formPhone || undefined,
-          custom_contact_email: formEmail || undefined,
-          website: formWebsite || undefined,
-          custom_notes: formNotes || undefined,
+          custom_vendor_category: form.category || undefined,
+          custom_contact_person: form.contact || undefined,
+          custom_contact_phone: form.phone || undefined,
+          custom_contact_email: form.email || undefined,
+          website: form.website || undefined,
+          custom_notes: form.notes || undefined,
         },
         successNotification: false,
         errorNotification: false,
       },
       {
         onSuccess: (data) => {
+          submitting.current = false;
           setCreating(false);
           setSheetOpen(false);
-          resetForm();
+          setForm(EMPTY_VENDOR_FORM);
           navigate(`/vendors/${data.data.name}`);
         },
-        onError: (err: any) => {
+        onError: (err: { message?: string }) => {
+          console.error("Create vendor failed", err);
+          submitting.current = false;
           setCreating(false);
           setCreateError(err?.message ?? "Failed to create vendor.");
         },
@@ -169,211 +116,81 @@ export default function VendorsPage() {
     );
   }
 
-  const isLoading = vendorsQuery.isLoading;
+  if (vendorsQuery.isError) console.error("Vendors list failed", vendorsQuery.error);
+  const isFiltered = !!search || !!activeCategory;
+
+  let body;
+  if (vendorsQuery.isError) {
+    body = (
+      <StatePanel
+        kind="error"
+        title="Couldn't load vendors"
+        text="The server didn't answer. Your data is safe."
+        action={{ label: "Try again", onClick: () => void vendorsQuery.refetch(), icon: <RotateCw className="h-4 w-4" /> }}
+      />
+    );
+  } else if (vendorsQuery.isLoading) {
+    body = <VendorCardsSkeleton />;
+  } else if (filtered.length === 0) {
+    body = (
+      <StatePanel
+        kind="empty"
+        title={isFiltered ? "No vendors match" : "No vendors yet"}
+        text={isFiltered ? "Try a different category or search." : "Add the first vendor to start building the list."}
+        action={isFiltered ? undefined : { label: "Add vendor", onClick: openAdd }}
+      />
+    );
+  } else {
+    body = (
+      <>
+        <span className="px-1 text-[13px] text-muted-foreground md:text-sm">
+          {filtered.length} vendor{filtered.length === 1 ? "" : "s"}
+        </span>
+        <div className="grid gap-2.5 md:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] md:gap-4">
+          {filtered.map((v) => (
+            <VendorCard key={v.name} vendor={v} coverUrl={coverImages[v.name]} />
+          ))}
+        </div>
+      </>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Vendors</h1>
-        <Button onClick={() => { resetForm(); setSheetOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Vendor
+    <div className="flex flex-col gap-4">
+      <header className="flex items-center gap-3">
+        <h1 className="flex-1 text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Vendors</h1>
+        <Button onClick={openAdd} className="shrink-0" aria-label="Add vendor">
+          <Plus className="h-4 w-4" />
+          <span className="md:hidden">Vendor</span>
+          <span className="max-md:hidden">Add vendor</span>
         </Button>
-      </div>
+      </header>
 
-      {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
-        <Input
-          placeholder="Search vendors..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-xs"
-        />
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="All Categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All Categories</SelectItem>
-            {categories.map((cat) => (
-              <SelectItem key={cat} value={cat}>
-                {cat}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <VendorsFilterBar
+        search={search}
+        onSearch={setSearch}
+        category={activeCategory}
+        onCategory={setCategoryFilter}
+        categories={categories}
+        total={vendors.length}
+      />
 
-      {/* Loading */}
-      {isLoading && (
-        <div className="text-muted-foreground text-sm">Loading vendors...</div>
-      )}
+      {body}
 
-      {/* Grid */}
-      {!isLoading && (
-        <>
-          {filtered.length === 0 ? (
-            <div className="text-muted-foreground text-sm py-12 text-center">
-              No vendors found.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map((v: any) => {
-                const coverUrl = coverImages[v.name];
-                const initials = getInitials(v.supplier_name);
-                return (
-                  <div
-                    key={v.name}
-                    className="rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => navigate(`/vendors/${v.name}`)}
-                  >
-                    {/* Photo or placeholder */}
-                    {coverUrl ? (
-                      <img
-                        src={coverUrl}
-                        alt={v.supplier_name}
-                        className="w-full h-40 object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-40 bg-gradient-to-br from-[#C9A9A6]/30 to-[#C4A962]/20 flex items-center justify-center">
-                        <span className="text-4xl font-bold text-[#C9A9A6]/70 select-none">
-                          {initials}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Card body */}
-                    <div className="p-4 space-y-1.5">
-                      <p className="font-semibold text-base leading-tight">{v.supplier_name}</p>
-                      {v.custom_vendor_category && (
-                        <Badge variant="secondary" className="text-xs">
-                          {v.custom_vendor_category}
-                        </Badge>
-                      )}
-                      {v.custom_contact_phone && (
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <Phone className="h-3.5 w-3.5 shrink-0" />
-                          {v.custom_contact_phone}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Add Vendor Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="sm:max-w-lg flex flex-col p-0">
-          <SheetHeader className="px-6 pt-6 pb-4 border-b">
-            <SheetTitle>Add Vendor</SheetTitle>
-          </SheetHeader>
-
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            {createError && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive rounded p-3 flex gap-2">
-                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span className="text-sm">{createError}</span>
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <Label htmlFor="add-name">
-                Vendor Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="add-name"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="e.g. Studio ABC Photography"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="add-category">Category</Label>
-              <Select
-                value={formCategory || "__none__"}
-                onValueChange={(v) => setFormCategory(v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger id="add-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">-- None --</SelectItem>
-                  {VENDOR_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="add-contact">Contact Person</Label>
-              <Input
-                id="add-contact"
-                value={formContact}
-                onChange={(e) => setFormContact(e.target.value)}
-                placeholder="e.g. Nguyen Van A"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="add-phone">Phone</Label>
-              <Input
-                id="add-phone"
-                value={formPhone}
-                onChange={(e) => setFormPhone(e.target.value)}
-                placeholder="e.g. 0912 345 678"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="add-email">Email</Label>
-              <Input
-                id="add-email"
-                type="email"
-                value={formEmail}
-                onChange={(e) => setFormEmail(e.target.value)}
-                placeholder="e.g. info@studio.com"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="add-website">Website</Label>
-              <Input
-                id="add-website"
-                value={formWebsite}
-                onChange={(e) => setFormWebsite(e.target.value)}
-                placeholder="e.g. https://studio.com"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="add-notes">Notes</Label>
-              <Textarea
-                id="add-notes"
-                value={formNotes}
-                onChange={(e) => setFormNotes(e.target.value)}
-                placeholder="Additional notes about this vendor..."
-                rows={3}
-              />
-            </div>
-          </div>
-
-          <SheetFooter className="px-6 py-4 border-t">
-            <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={creating}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={creating}>
-              {creating ? "Creating..." : "Create Vendor"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      <VendorFormSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        title="Add Vendor"
+        idPrefix="add"
+        value={form}
+        initial={EMPTY_VENDOR_FORM}
+        onChange={setForm}
+        error={createError}
+        busy={creating}
+        submitLabel="Create Vendor"
+        busyLabel="Creating..."
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }

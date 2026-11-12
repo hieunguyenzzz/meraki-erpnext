@@ -1,638 +1,242 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useList, useInvalidate } from "@refinedev/core";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Plus, AlertCircle, CheckCircle2, ChevronsUpDown, Check, X, ChevronDown } from "lucide-react";
-import { formatVND, formatDate } from "@/lib/format";
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
+import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
+import { ChevronDown, Plus, RotateCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { DataTable, DataTableColumnHeader } from "@/components/data-table";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from "@/components/ui/command";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { StatePanel } from "@/components/StatePanel";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { cn } from "@/lib/utils";
+import { InvoiceCard, InvoiceTable, type Sort, type SortKey } from "./invoices/InvoiceRows";
+import { ReferralSheet, type WeddingOption } from "./invoices/ReferralSheet";
+import { useInvoiceActions } from "./invoices/useInvoiceActions";
+import { STATUS_FILTERS, TYPE_FILTERS, type Invoice } from "./invoices/types";
 
-interface Invoice {
-  name: string;
-  customer: string;
-  customer_name: string;
-  posting_date: string;
-  grand_total: number;
-  outstanding_amount: number;
-  status: string;
-  custom_invoice_category: string;
-}
-
-interface Partner {
-  name: string;
-  customer_name: string;
-}
-
-const columns: ColumnDef<Invoice, unknown>[] = [
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    accessorKey: "name",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Invoice" />,
-    cell: ({ row }) => (
-      <Link to={`/finance/invoices/${row.original.name}`} className="font-medium text-primary hover:underline">
-        {row.original.name}
-      </Link>
-    ),
-  },
-  {
-    accessorKey: "customer_name",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Customer" />,
-    cell: ({ row }) => row.original.customer_name,
-    filterFn: "includesString",
-  },
-  {
-    accessorKey: "custom_invoice_category",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
-    cell: ({ row }) => {
-      const cat = row.original.custom_invoice_category;
-      if (!cat) return <span className="text-muted-foreground">—</span>;
-      return (
-        <Badge variant={cat === "Wedding Payment" ? "default" : "outline"}>
-          {cat}
-        </Badge>
-      );
-    },
-    filterFn: "arrIncludesSome",
-  },
-  {
-    accessorKey: "posting_date",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
-    cell: ({ row }) => formatDate(row.original.posting_date),
-  },
-  {
-    accessorKey: "grand_total",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(row.original.grand_total)}</div>,
-  },
-  {
-    accessorKey: "outstanding_amount",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Outstanding" className="text-right" />,
-    cell: ({ row }) => <div className="text-right">{formatVND(row.original.outstanding_amount)}</div>,
-  },
-  {
-    accessorKey: "status",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-    cell: ({ row }) => (
-      <Badge variant={row.original.status === "Paid" ? "success" : row.original.status === "Overdue" ? "destructive" : "warning"}>
-        {row.original.status}
-      </Badge>
-    ),
-    filterFn: "arrIncludesSome",
-  },
-];
-
-const initialReferralForm = {
-  partner: "",
-  amount: "",
-  date: new Date().toISOString().slice(0, 10),
-  project: "",
-  note: "",
-};
+const PAGE = 50;
+const ALL = "all";
 
 export default function InvoicesPage() {
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const invalidate = useInvalidate();
 
-  // Row selection state
-  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const [deleting, setDeleting] = useState(false);
-  const [assigning, setAssigning] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Filters live in the URL so Back restores them; junk values fall back to the defaults.
+  const [status, setStatus] = useQueryState("status", parseAsStringLiteral(STATUS_FILTERS).withDefault(ALL).withOptions({ clearOnDefault: true }));
+  const [type, setType] = useQueryState("type", parseAsStringLiteral(TYPE_FILTERS).withDefault(ALL).withOptions({ clearOnDefault: true }));
+  const [search, setSearch] = useQueryState("q", parseAsString.withDefault("").withOptions({ clearOnDefault: true }));
 
-  // Referral sheet state
+  const [sort, setSort] = useState<Sort>({ key: "posting_date", dir: "desc" });
+  const [shown, setShown] = useState(PAGE);
+  const [rowSelection, setRowSelection] = useState<Set<string>>(new Set());
   const [referralOpen, setReferralOpen] = useState(false);
-  const [referralForm, setReferralForm] = useState(initialReferralForm);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [referralError, setReferralError] = useState<string | null>(null);
-  const [referralSuccess, setReferralSuccess] = useState<string | null>(null);
 
-  // Partner combobox state
-  const [partnerOpen, setPartnerOpen] = useState(false);
-  const [partnerSearch, setPartnerSearch] = useState("");
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [creatingPartner, setCreatingPartner] = useState(false);
-
-  // Wedding combobox state
-  const [weddingOpen, setWeddingOpen] = useState(false);
-  const [weddingSearch, setWeddingSearch] = useState("");
-
-  const { result, query } = useList({
+  const { result, query } = useList<Invoice>({
     resource: "Sales Invoice",
     pagination: { mode: "off" },
     sorters: [{ field: "posting_date", order: "desc" }],
-    meta: { fields: ["name", "customer", "customer_name", "posting_date", "grand_total", "outstanding_amount", "status", "custom_invoice_category"] },
+    meta: { fields: ["name", "customer", "customer_name", "posting_date", "due_date", "grand_total", "outstanding_amount", "status", "custom_invoice_category", "project"] },
   });
 
-  // Fetch projects for wedding dropdown
+  // Weddings: feed the referral sheet's picker and give each invoice its wedding name.
   const { result: projectsResult } = useList({
     resource: "Project",
     pagination: { mode: "off" },
     meta: { fields: ["name", "project_name", "customer", "expected_end_date"] },
   });
 
-  const invoices = (result?.data ?? []) as Invoice[];
-  const projects = (projectsResult?.data ?? []) as { name: string; project_name: string; customer: string; expected_end_date: string }[];
-  const isLoading = query.isLoading;
+  const invoices = useMemo(() => (result?.data ?? []) as Invoice[], [result]);
+  const projects = useMemo(() => (projectsResult?.data ?? []) as WeddingOption[], [projectsResult]);
+  const weddingName = useMemo(() => new Map(projects.map((p) => [p.name, p.project_name])), [projects]);
 
-  const filteredProjects = weddingSearch
-    ? projects.filter(p => p.project_name.toLowerCase().includes(weddingSearch.toLowerCase()))
-    : projects;
+  // Search + type narrow the set; the status chips count within it.
+  const deferredSearch = useDeferredValue(search);
+  const scoped = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    return invoices.filter((i) => {
+      if (type !== ALL && i.custom_invoice_category !== type) return false;
+      if (!q) return true;
+      const wedding = (i.project && weddingName.get(i.project)) || "";
+      return [i.name, i.customer_name, wedding].some((v) => v.toLowerCase().includes(q));
+    });
+  }, [invoices, deferredSearch, type, weddingName]);
 
-  // Fetch partners when sheet opens
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { [ALL]: scoped.length };
+    for (const i of scoped) c[i.status] = (c[i.status] ?? 0) + 1;
+    return c;
+  }, [scoped]);
+
+  const rows = useMemo(() => {
+    const list = scoped.filter((i) => status === ALL || i.status === status);
+    const dir = sort.dir === "asc" ? 1 : -1;
+    return [...list].sort((a, b) => {
+      const av = sort.key === "posting_date" ? a.posting_date : a[sort.key];
+      const bv = sort.key === "posting_date" ? b.posting_date : b[sort.key];
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }, [scoped, status, sort]);
+
+  const visible = rows.slice(0, shown);
+  // Only invoices on screen can be acted on, so a filter change never leaves hidden rows selected for delete.
+  const selectedNames = visible.filter((i) => rowSelection.has(i.name)).map((i) => i.name);
+  // The backend reports failures as "name: error"; keep just the names selected.
+  const actions = useInvoiceActions(selectedNames, (failed) => setRowSelection(new Set(failed.map((f) => f.split(": ")[0]))));
+
+  function resetShown<T>(setter: (v: T) => unknown) {
+    return (v: T) => { setShown(PAGE); void setter(v); };
+  }
+  const onSort = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
+  const toggle = (name: string) =>
+    setRowSelection((prev) => { const n = new Set(prev); if (n.has(name)) n.delete(name); else n.add(name); return n; });
+  const toggleAll = (on: boolean) =>
+    setRowSelection((prev) => { const n = new Set(prev); visible.forEach((i) => (on ? n.add(i.name) : n.delete(i.name))); return n; });
+
   useEffect(() => {
-    if (referralOpen) {
-      fetch("/inquiry-api/referral/partners")
-        .then(r => r.json())
-        .then(data => setPartners(data))
-        .catch(() => {});
-    }
-  }, [referralOpen]);
+    if (query.isError) console.error("Invoices list failed to load", query.error);
+  }, [query.isError, query.error]);
+  const loadError = query.isError && invoices.length === 0;
+  const filtered = search.trim() !== "" || type !== ALL || status !== ALL;
+  const busy = actions.assigning || actions.deleting;
 
-  function resetReferralForm() {
-    setReferralForm({ ...initialReferralForm, date: new Date().toISOString().slice(0, 10) });
-    setPartnerSearch("");
-    setWeddingSearch("");
-    setReferralError(null);
-    setReferralSuccess(null);
-  }
+  const toRow = (i: Invoice) => ({ invoice: i, wedding: (i.project && weddingName.get(i.project)) || null });
 
-  function handleReferralOpenChange(open: boolean) {
-    setReferralOpen(open);
-    if (!open) resetReferralForm();
-  }
-
-  async function handleCreatePartner() {
-    if (!partnerSearch.trim()) return;
-    setCreatingPartner(true);
-    try {
-      const resp = await fetch("/inquiry-api/referral/partners", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_name: partnerSearch.trim() }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to create partner");
-      }
-      const newPartner = await resp.json();
-      setPartners(prev => [...prev, newPartner]);
-      setReferralForm({ ...referralForm, partner: newPartner.name });
-      setPartnerOpen(false);
-    } catch (error) {
-      setReferralError(error instanceof Error ? error.message : "Failed to create partner");
-    } finally {
-      setCreatingPartner(false);
-    }
-  }
-
-  async function handleReferralSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const amount = parseFloat(referralForm.amount);
-    if (!referralForm.partner || !referralForm.amount) return;
-    if (amount <= 0) {
-      setReferralError("Amount must be greater than 0");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setReferralError(null);
-    setReferralSuccess(null);
-
-    try {
-      const resp = await fetch("/inquiry-api/referral/record", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          partner: referralForm.partner,
-          amount,
-          date: referralForm.date,
-          project: referralForm.project || null,
-          note: referralForm.note || null,
-        }),
-      });
-
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Failed to record referral");
-      }
-
-      const result = await resp.json();
-      setReferralSuccess(`Invoice ${result.invoice} created and paid`);
-      invalidate({ resource: "Sales Invoice", invalidates: ["list"] });
-
-      setTimeout(() => {
-        setReferralOpen(false);
-        resetReferralForm();
-      }, 1500);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to record referral";
-      setReferralError(message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  const selectedNames = Object.keys(rowSelection).filter((k) => rowSelection[k]);
-  const selectedCount = selectedNames.length;
-
-  async function handleDeleteSelected() {
-    if (selectedCount === 0) return;
-    if (!confirm(`Delete ${selectedCount} invoice${selectedCount === 1 ? "" : "s"}? Submitted invoices will be cancelled first.`)) return;
-
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const res = await fetch("/inquiry-api/sales-invoices/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ names: selectedNames }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Delete failed: ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.failed?.length) {
-        setDeleteError(`Some invoices failed: ${data.failed.join(", ")}`);
-      }
-      setRowSelection({});
-      invalidate({ resource: "Sales Invoice", invalidates: ["list"] });
-    } catch (err: any) {
-      setDeleteError(err.message || "Failed to delete invoices");
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  async function handleAssignCategory(category: "Wedding Payment" | "Referral Commission") {
-    if (selectedCount === 0) return;
-
-    setAssigning(true);
-    setDeleteError(null);
-    try {
-      const res = await fetch("/inquiry-api/sales-invoices/assign-category", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ names: selectedNames, category }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Assign failed: ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.failed?.length) {
-        setDeleteError(`Some invoices failed: ${data.failed.join(", ")}`);
-      }
-      setRowSelection({});
-      invalidate({ resource: "Sales Invoice", invalidates: ["list"] });
-    } catch (err: any) {
-      setDeleteError(err.message || "Failed to assign category");
-    } finally {
-      setAssigning(false);
-    }
+  let body;
+  if (loadError) {
+    body = (
+      <StatePanel
+        kind="error"
+        title="Couldn't load invoices"
+        text="The server didn't answer. Your data is safe."
+        action={{ label: "Try again", onClick: () => void query.refetch(), icon: <RotateCw className="h-4 w-4" /> }}
+      />
+    );
+  } else if (query.isLoading) {
+    body = (
+      <div className="flex flex-col gap-3" aria-busy="true">
+        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-card md:h-12" />)}
+      </div>
+    );
+  } else if (rows.length === 0) {
+    body = (
+      <StatePanel
+        kind="empty"
+        title={filtered ? "No invoices match" : "No invoices yet"}
+        text={filtered ? "Try a different search, status or type." : "Invoices appear here once a wedding is billed."}
+      />
+    );
+  } else {
+    body = (
+      <>
+        {isDesktop ? (
+          <InvoiceTable rows={visible.map(toRow)} selected={rowSelection} onToggle={toggle} onToggleAll={toggleAll} sort={sort} onSort={onSort} />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {visible.map((i) => <InvoiceCard key={i.name} {...toRow(i)} selected={rowSelection.has(i.name)} onToggle={toggle} />)}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+          <span>Showing {visible.length} of {rows.length}</span>
+          {rows.length > visible.length && (
+            <Button variant="outline" className="max-md:h-12" onClick={() => setShown((n) => n + PAGE)}>Show more</Button>
+          )}
+        </div>
+      </>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Sales Invoices</h1>
-          <p className="text-muted-foreground">Track revenue and customer billing</p>
-        </div>
+    <div className="flex flex-col gap-4 pb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold leading-tight md:font-display md:text-4xl md:leading-10">Invoices</h1>
         <div className="flex items-center gap-2">
-          {selectedCount > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{selectedCount} selected</span>
+          {selectedNames.length > 0 && (
+            <>
+              <span className="text-sm text-muted-foreground">{selectedNames.length} selected</span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={assigning || deleting}>
-                    {assigning ? "Assigning..." : deleting ? "Deleting..." : "Actions"}
+                  <Button variant="outline" disabled={busy} className="max-md:h-12">
+                    {actions.assigning ? "Assigning..." : actions.deleting ? "Deleting..." : "Actions"}
                     <ChevronDown className="ml-1.5 h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => handleAssignCategory("Wedding Payment")}>
-                    Assign as Wedding Payment
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => handleAssignCategory("Referral Commission")}>
-                    Assign as Commission
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void actions.assignCategory("Wedding Payment")}>Assign as Wedding Payment</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void actions.assignCategory("Referral Commission")}>Assign as Commission</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={handleDeleteSelected} className="text-destructive">
-                    Delete selected
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void actions.deleteSelected()} className="text-destructive">Delete selected</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
+            </>
           )}
-          <Button onClick={() => setReferralOpen(true)}>
-            <Plus className="h-4 w-4 mr-1.5" />
-            Record Referral
+          <Button onClick={() => setReferralOpen(true)} className="max-md:h-12">
+            <Plus className="mr-1 h-4 w-4" /> Record referral
           </Button>
         </div>
       </div>
 
-      {/* Record Referral Sheet */}
-      <Sheet open={referralOpen} onOpenChange={handleReferralOpenChange}>
-        <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
-          <SheetHeader className="px-6 py-4 border-b shrink-0">
-            <SheetTitle>Record Referral Commission</SheetTitle>
-          </SheetHeader>
-          <form onSubmit={handleReferralSubmit} className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {referralError && (
-                <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  {referralError}
-                </div>
-              )}
-              {referralSuccess && (
-                <div className="flex items-center gap-2 p-3 text-sm text-green-600 bg-green-50 rounded-md">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  {referralSuccess}
-                </div>
-              )}
+      <ReferralSheet
+        open={referralOpen}
+        onOpenChange={setReferralOpen}
+        projects={projects}
+        onRecorded={() => invalidate({ resource: "Sales Invoice", invalidates: ["list"] })}
+      />
 
-              {/* Partner */}
-              <div className="space-y-2">
-                <Label>Partner *</Label>
-                <Popover open={partnerOpen} onOpenChange={setPartnerOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className={referralForm.partner ? "" : "text-muted-foreground"}>
-                        {referralForm.partner
-                          ? (partners.find(p => p.name === referralForm.partner)?.customer_name ?? referralForm.partner)
-                          : "Search partners..."}
-                      </span>
-                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder="Search partners..."
-                        value={partnerSearch}
-                        onValueChange={setPartnerSearch}
-                      />
-                      <CommandList>
-                        <CommandEmpty>
-                          <div className="py-2 text-center">
-                            <p className="text-sm text-muted-foreground mb-2">No partners found</p>
-                            {partnerSearch.trim() && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={handleCreatePartner}
-                                disabled={creatingPartner}
-                              >
-                                <Plus className="h-3 w-3 mr-1" />
-                                {creatingPartner ? "Creating..." : `Create "${partnerSearch.trim()}"`}
-                              </Button>
-                            )}
-                          </div>
-                        </CommandEmpty>
-                        <CommandGroup>
-                          {referralForm.partner && (
-                            <CommandItem
-                              value="__clear__"
-                              onSelect={() => {
-                                setReferralForm({ ...referralForm, partner: "" });
-                                setPartnerOpen(false);
-                              }}
-                            >
-                              <X className="mr-2 h-4 w-4" />
-                              Clear
-                            </CommandItem>
-                          )}
-                          {partners
-                            .filter(p => !partnerSearch || p.customer_name.toLowerCase().includes(partnerSearch.toLowerCase()))
-                            .map(p => (
-                              <CommandItem
-                                key={p.name}
-                                value={p.customer_name}
-                                onSelect={() => {
-                                  setReferralForm({ ...referralForm, partner: p.name });
-                                  setPartnerOpen(false);
-                                }}
-                              >
-                                <Check className={cn("mr-2 h-4 w-4", referralForm.partner === p.name ? "opacity-100" : "opacity-0")} />
-                                {p.customer_name}
-                              </CommandItem>
-                            ))}
-                        </CommandGroup>
-                        {partnerSearch.trim() && partners.some(p => p.customer_name.toLowerCase().includes(partnerSearch.toLowerCase())) && (
-                          <CommandGroup heading="Create new">
-                            <CommandItem
-                              value={`__create_${partnerSearch}`}
-                              onSelect={handleCreatePartner}
-                            >
-                              <Plus className="mr-2 h-4 w-4" />
-                              Create "{partnerSearch.trim()}"
-                            </CommandItem>
-                          </CommandGroup>
-                        )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {/* Amount */}
-              <div className="space-y-2">
-                <Label htmlFor="referral-amount">Amount (VND) *</Label>
-                <Input
-                  id="referral-amount"
-                  type="number"
-                  min="1"
-                  step="1"
-                  placeholder="5000000"
-                  value={referralForm.amount}
-                  onChange={(e) => setReferralForm({ ...referralForm, amount: e.target.value })}
-                  required
-                />
-              </div>
-
-              {/* Date */}
-              <div className="space-y-2">
-                <Label htmlFor="referral-date">Date</Label>
-                <Input
-                  id="referral-date"
-                  type="date"
-                  value={referralForm.date}
-                  onChange={(e) => setReferralForm({ ...referralForm, date: e.target.value })}
-                  required
-                />
-              </div>
-
-              {/* Wedding */}
-              <div className="space-y-2">
-                <Label>Wedding (optional)</Label>
-                <Popover open={weddingOpen} onOpenChange={setWeddingOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className={referralForm.project ? "" : "text-muted-foreground"}>
-                        {referralForm.project
-                          ? (projects.find(p => p.name === referralForm.project)?.project_name ?? referralForm.project)
-                          : "Link to a wedding..."}
-                      </span>
-                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder="Search weddings..."
-                        value={weddingSearch}
-                        onValueChange={setWeddingSearch}
-                      />
-                      <CommandList>
-                        <CommandEmpty>No weddings found.</CommandEmpty>
-                        <CommandGroup>
-                          {referralForm.project && (
-                            <CommandItem
-                              value="__clear__"
-                              onSelect={() => {
-                                setReferralForm({ ...referralForm, project: "" });
-                                setWeddingOpen(false);
-                              }}
-                            >
-                              <X className="mr-2 h-4 w-4" />
-                              Clear
-                            </CommandItem>
-                          )}
-                          {filteredProjects.map(p => (
-                            <CommandItem
-                              key={p.name}
-                              value={p.project_name}
-                              onSelect={() => {
-                                setReferralForm({ ...referralForm, project: p.name });
-                                setWeddingOpen(false);
-                              }}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", referralForm.project === p.name ? "opacity-100" : "opacity-0")} />
-                              <div>
-                                <p>{p.project_name}</p>
-                                {p.expected_end_date && (
-                                  <p className="text-xs text-muted-foreground">{formatDate(p.expected_end_date)}</p>
-                                )}
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {/* Note */}
-              <div className="space-y-2">
-                <Label htmlFor="referral-note">Note (optional)</Label>
-                <Textarea
-                  id="referral-note"
-                  placeholder="e.g. Decor referral for Nguyen-Tran wedding"
-                  value={referralForm.note}
-                  onChange={(e) => setReferralForm({ ...referralForm, note: e.target.value })}
-                  rows={2}
-                />
-              </div>
-            </div>
-            <SheetFooter className="px-6 py-4 border-t shrink-0">
-              <Button type="button" variant="outline" onClick={() => setReferralOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting || !referralForm.partner || !referralForm.amount || !!referralSuccess}
-              >
-                {isSubmitting ? "Recording..." : "Record"}
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
-
-      {deleteError && (
-        <div className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-          <span>{deleteError}</span>
-          <button onClick={() => setDeleteError(null)} className="ml-4 font-medium hover:text-red-900">&times;</button>
+      {actions.error && (
+        <div role="alert" className="flex items-center justify-between rounded-md border border-destructive/30 bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
+          <span>{actions.error}</span>
+          <button type="button" onClick={actions.clearError} aria-label="Dismiss" className="ml-4 flex h-8 w-8 items-center justify-center font-medium max-md:h-12 max-md:w-12">&times;</button>
         </div>
       )}
 
-      <DataTable
-        columns={columns}
-        data={invoices}
-        isLoading={isLoading}
-        searchKey="customer_name"
-        searchPlaceholder="Search by customer..."
-        enableRowSelection
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
-        getRowId={(row) => row.name}
-        filterableColumns={[
-          {
-            id: "custom_invoice_category",
-            title: "Type",
-            options: [
-              { label: "Wedding Payment", value: "Wedding Payment" },
-              { label: "Referral Commission", value: "Referral Commission" },
-            ],
-          },
-          {
-            id: "status",
-            title: "Status",
-            options: [
-              { label: "Paid", value: "Paid" },
-              { label: "Unpaid", value: "Unpaid" },
-              { label: "Overdue", value: "Overdue" },
-              { label: "Cancelled", value: "Cancelled" },
-              { label: "Return", value: "Return" },
-            ],
-          },
-        ]}
-      />
+      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <div className="relative md:w-80">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            type="search"
+            aria-label="Search invoices"
+            placeholder="Search invoices"
+            value={search}
+            onChange={(e) => resetShown(setSearch)(e.target.value)}
+            className="rounded-full pl-10 max-md:h-12 max-md:pl-10"
+          />
+        </div>
+        <Select value={type} onValueChange={(v) => resetShown(setType)(v as (typeof TYPE_FILTERS)[number])}>
+          <SelectTrigger aria-label="Filter by type" className="rounded-full max-md:h-12 md:w-56"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All types</SelectItem>
+            <SelectItem value="Wedding Payment">Wedding Payment</SelectItem>
+            <SelectItem value="Referral Commission">Referral Commission</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div role="group" aria-label="Filter by status" className="-mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0">
+        {STATUS_FILTERS.map((s) => {
+          const on = status === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={on}
+              onClick={() => resetShown(setStatus)(s)}
+              className={cn(
+                "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-4 text-sm font-medium max-md:h-12",
+                on ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:bg-muted",
+              )}
+            >
+              {s === ALL ? "All" : s}
+              <span className={cn("tabular-nums", on ? "opacity-90" : "text-muted-foreground")}>{counts[s] ?? 0}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {body}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
-import { LayoutDashboard } from "lucide-react";
+import { usePermissions } from "@refinedev/core";
 import { useSearch } from "@/context/search-context";
-import { MODULES } from "@/lib/roles";
+import { getPaletteGroups } from "@/lib/navigation";
 import {
   CommandDialog,
   CommandInput,
@@ -15,6 +15,7 @@ import {
 export function CommandMenu() {
   const { open, setOpen } = useSearch();
   const navigate = useNavigate();
+  const { data: roles } = usePermissions<string[]>({});
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -34,23 +35,23 @@ export function CommandMenu() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a command or search..." />
+      <CommandInput placeholder="Jump to…" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
-        <CommandGroup heading="Navigation">
-          <CommandItem onSelect={() => runCommand("/")}>
-            <LayoutDashboard className="mr-2 h-4 w-4" />
-            Dashboard
-          </CommandItem>
-          {MODULES.map((mod) =>
-            mod.children.map((child) => (
-              <CommandItem key={child.path} onSelect={() => runCommand(child.path)}>
-                {child.icon && <child.icon className="mr-2 h-4 w-4" />}
-                {mod.label} &rsaquo; {child.label}
+        {getPaletteGroups(roles ?? []).map((g) => (
+          <CommandGroup key={g.heading} heading={g.heading}>
+            {g.items.map((item) => (
+              <CommandItem
+                key={item.path}
+                value={`${g.heading} ${item.label}`}
+                onSelect={() => runCommand(item.path)}
+              >
+                <item.icon className="mr-2 h-4 w-4" />
+                {item.label}
               </CommandItem>
-            ))
-          )}
-        </CommandGroup>
+            ))}
+          </CommandGroup>
+        ))}
       </CommandList>
     </CommandDialog>
   );

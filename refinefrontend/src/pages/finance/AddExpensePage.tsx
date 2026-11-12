@@ -1,386 +1,221 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router";
-import { useList, usePermissions } from "@refinedev/core";
-import { useMyEmployee } from "@/hooks/useMyEmployee";
-import { hasModuleAccess, FINANCE_ROLES, WEDDING_EXPENSE_ROLES } from "@/lib/roles";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { usePermissions } from "@refinedev/core";
+import { Loader2, NotebookPen, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ArrowLeft, Camera, Loader2, X } from "lucide-react";
+import { AmountField } from "./add-expense/AmountField";
+import { CategoryChips } from "./add-expense/CategoryChips";
+import { ContextRow } from "./add-expense/ContextRow";
+import { ReceiptPicker } from "./add-expense/ReceiptPicker";
+import { SavedState, type SavedSummary } from "./add-expense/SavedState";
+import { createCategory, fetchCategories, scanBill, submitExpense, type ExpenseCategory } from "./add-expense/api";
+import { FINANCE_ROLES, PLANNER_ROLES, hasModuleAccess } from "@/lib/roles";
+import { loadRecents, pickDefaultWedding, rememberCategory, sanitiseAmount } from "./add-expense/defaults";
+import { todayVN } from "@/lib/businessTime";
+import { useExpenseWeddings } from "./add-expense/useExpenseWeddings";
 
-interface ExpenseCategory {
-  name: string;
-  account_name: string;
-}
-
-const ASSIGNMENT_FIELDS = [
-  "custom_lead_planner", "custom_support_planner",
-  "custom_assistant_1", "custom_assistant_2", "custom_assistant_3",
-  "custom_assistant_4", "custom_assistant_5",
-] as const;
-
-const today = () => new Date().toISOString().split("T")[0];
+type Errors = Partial<Record<"amount" | "category" | "proof", string>>;
 
 export default function AddExpensePage() {
   const navigate = useNavigate();
-  const { employeeId } = useMyEmployee();
+  const [searchParams] = useSearchParams();
+  const requestedWedding = searchParams.get("project");
+  const { weddings, assigned, loading, employeeId, error: weddingsError } = useExpenseWeddings();
+  const assignedIds = useMemo(() => new Set(assigned.map((w) => w.id)), [assigned]);
+  const today = todayVN();
   const { data: roles } = usePermissions<string[]>({});
-  const isFinance = hasModuleAccess(roles ?? [], FINANCE_ROLES);
-  const seesAllWeddings = isFinance || hasModuleAccess(roles ?? [], WEDDING_EXPENSE_ROLES);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Same roles the backend allows to add a category (PLANNER_OR_FINANCE).
+  const canAddCategory = hasModuleAccess(roles ?? [], [...PLANNER_ROLES, ...FINANCE_ROLES]);
 
-  const [form, setForm] = useState({
-    project: "",
-    date: today(),
-    category: "",
-    amount: "",
-    description: "",
-    note: "",
-  });
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  // Fetch open projects with assignment fields
-  const { result: projectsResult } = useList<Record<string, string>>({
-    resource: "Project",
-    filters: [{ field: "status", operator: "eq", value: "Open" }],
-    pagination: { mode: "off" },
-    meta: {
-      fields: ["name", "project_name", "status", ...ASSIGNMENT_FIELDS],
-    },
-  });
-  const allProjects = (projectsResult?.data ?? []) as Record<string, string>[];
-
-  // Finance and Wedding Expense Managers see all projects; staff sees only their assigned weddings
-  const projects = useMemo(() => {
-    if (seesAllWeddings) return allProjects;
-    if (!employeeId) return [];
-    return allProjects.filter((p) =>
-      ASSIGNMENT_FIELDS.some((f) => p[f] === employeeId)
-    );
-  }, [allProjects, employeeId, seesAllWeddings]);
-
-  // Fetch expense categories
+  const [project, setProject] = useState("");
+  const [date, setDate] = useState(today);
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [note, setNote] = useState("");
+  const [showNote, setShowNote] = useState(false);
+  const [receipt, setReceipt] = useState<File | null>(null);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
-  // A wedding expense only offers wedding categories; a company expense offers all of them
+  const [recents, setRecents] = useState<string[]>(loadRecents);
+  const [errors, setErrors] = useState<Errors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [saved, setSaved] = useState<SavedSummary | null>(null);
+
+  const amountRef = useRef<HTMLInputElement>(null);
+  const weddingTouched = useRef(false);
+
+  // Default wedding: the one named in ?project= (from a wedding page) if the user may log against it,
+  // else assigned and happening today, else the next upcoming one (until the user picks).
+  useEffect(() => {
+    if (loading || weddingTouched.current) return;
+    const requested = requestedWedding && weddings.some((w) => w.id === requestedWedding) ? requestedWedding : null;
+    setProject(requested ?? pickDefaultWedding(assigned, today) ?? "");
+  }, [loading, assigned, weddings, today, requestedWedding]);
+
+  // A wedding expense only offers wedding categories; an office expense offers all of them.
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/inquiry-api/expense/categories${form.project ? "?scope=wedding" : ""}`, { signal: controller.signal })
-      .then((r) => r.json())
-      .then((data: ExpenseCategory[]) => {
+    fetchCategories(!!project, controller.signal)
+      .then((data) => {
         setCategories(data);
-        setForm((prev) => (data.some((c) => c.name === prev.category) ? prev : { ...prev, category: "" }));
+        setCategoriesError(null);
+        setCategory((prev) => (data.some((c) => c.name === prev) ? prev : ""));
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) setCategoriesError(err instanceof Error ? err.message : "Could not load categories");
+      });
     return () => controller.abort();
-  }, [form.project]);
+  }, [project]);
 
-  function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPhoto(file);
-    setPhotoPreview(URL.createObjectURL(file));
-  }
+  useEffect(() => { if (!saved) amountRef.current?.focus(); }, [saved]);
 
-  function removePhoto() {
-    setPhoto(null);
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    setPhotoPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
+  const categoryLabel = (name: string) => categories.find((c) => c.name === name)?.account_name ?? name;
+  const weddingLabel = weddings.find((w) => w.id === project)?.name ?? "Office expense";
 
-  async function handleScanBill() {
-    if (!photo) return;
-    setIsScanning(true);
-    setError(null);
-
+  async function handleScan() {
+    if (!receipt) return;
+    setScanning(true);
+    setFormError(null);
     try {
-      const fd = new FormData();
-      fd.append("file", photo);
-      const res = await fetch("/inquiry-api/expense/scan-bill", {
-        method: "POST",
-        body: fd,
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail ?? "Failed to scan bill");
-      }
-      const result = await res.json();
-      setForm((prev) => ({
-        ...prev,
-        amount: result.amount != null ? String(Math.round(result.amount)) : prev.amount,
-        description: result.description ?? prev.description,
-        date: result.date ?? prev.date,
-        category: result.category ?? prev.category,
-      }));
+      const r = await scanBill(receipt);
+      if (r.amount != null) setAmount(sanitiseAmount(String(Math.round(Math.abs(r.amount)))));
+      if (r.description) setDescription(r.description);
+      if (r.date && r.date <= today) setDate(r.date);
+      if (r.category && categories.some((c) => c.name === r.category)) setCategory(r.category);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to scan bill");
+      setFormError(err instanceof Error ? err.message : "Could not read the bill");
     } finally {
-      setIsScanning(false);
+      setScanning(false);
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.date || !form.category || !form.amount || !form.description) {
-      setError("Please fill in all required fields");
+    const found: Errors = {};
+    if (!amount || Number(amount) <= 0) found.amount = "Enter the amount";
+    if (!category) found.category = "Pick a category";
+    if (!receipt && !description.trim()) found.proof = "Add a bill photo or say what it was for";
+    setErrors(found);
+    if (Object.keys(found).length) {
+      // Bring the first invalid field into view (the save bar covers the page bottom)
+      const target = found.amount ? amountRef.current
+        : found.category ? document.querySelector<HTMLElement>("#expense-category button")
+        : document.getElementById("expense-description");
+      target?.scrollIntoView({ block: "center" });
+      target?.focus({ preventScroll: true });
       return;
     }
-    const amount = parseFloat(form.amount);
-    if (isNaN(amount) || amount <= 0) {
-      setError("Amount must be greater than 0");
-      return;
-    }
 
-    // Build single FormData with all fields + optional receipt
-    const formData = new FormData();
-    formData.append("project", form.project);
-    formData.append("date", form.date);
-    formData.append("description", form.description);
-    formData.append("amount", String(amount));
-    formData.append("category", form.category);
-    formData.append("staff", employeeId || "");
-    formData.append("note", form.note.trim());
-    if (photo) {
-      formData.append("receipt", photo);
-    }
-
-    setIsSubmitting(true);
-    setError(null);
-
+    setSaving(true);
+    setFormError(null);
     try {
-      const res = await fetch("/inquiry-api/expense/wedding-with-receipt", {
-        method: "POST",
-        body: formData,
+      const res = await submitExpense({
+        project, date, category, note, receipt,
+        amount: Number(amount),
+        // Backend requires a description: fall back to the category name when only a photo was given.
+        description: description.trim() || categoryLabel(category),
+        staff: employeeId || "",
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail ?? "Failed to create expense");
-      }
-
-      setSuccess("Expense submitted for approval");
-      setTimeout(() => navigate(-1), 1500);
+      rememberCategory(category);
+      setRecents(loadRecents());
+      setSaved({ amount, category: categoryLabel(category), wedding: weddingLabel, date, hasReceipt: !!receipt, receiptFailed: res.receipt_attached === false, approved: res.status === "Approved", reference: res.name });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create expense");
+      // Keep everything the user entered so they can retry
+      setFormError(err instanceof Error ? err.message : "Could not save the expense");
     } finally {
-      setIsSubmitting(false);
+      setSaving(false);
     }
+  }
+
+  function addAnother() {
+    setSaved(null);
+    setAmount(""); setCategory(""); setDescription(""); setNote(""); setShowNote(false);
+    setReceipt(null); setErrors({}); setFormError(null);
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-lg font-semibold">Add Expense</h1>
-      </div>
+    <div className="mx-auto w-full max-w-md max-md:pb-28 md:mt-4 md:rounded-card md:border md:bg-card md:p-6 md:shadow-sm">
+      {saved ? (
+        <SavedState saved={saved} onAddAnother={addAnother} onDone={() => navigate("/")} />
+      ) : (
+        <form onSubmit={handleSave} noValidate className="flex flex-col gap-4">
+          <header className="flex items-center justify-between">
+            <button type="button" aria-label="Close" onClick={() => navigate(-1)} className="-ml-2 flex h-12 w-12 items-center justify-center rounded-full hover:bg-muted">
+              <X className="h-5 w-5" aria-hidden />
+            </button>
+            <h1 className="text-[17px] font-semibold">New expense</h1>
+            <div className="w-10" />
+          </header>
 
-      <form onSubmit={handleSubmit} className="p-4 space-y-4 max-w-lg mx-auto">
-        {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="rounded-md border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 text-sm text-green-700 dark:text-green-400">
-            {success}
-          </div>
-        )}
-
-        {/* Wedding */}
-        <div>
-          <Label>Wedding <span className="text-muted-foreground font-normal">(optional)</span></Label>
-          <Select
-            value={form.project}
-            onValueChange={(v) => setForm((prev) => ({ ...prev, project: v }))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select wedding" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((p) => (
-                <SelectItem key={p.name} value={p.name}>
-                  {p.project_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground mt-1">
-            Leave blank for company expenses (not tied to a wedding).
-          </p>
-        </div>
-
-        {/* Bill Photo */}
-        <div>
-          <Label>Bill Photo <span className="text-muted-foreground font-normal">(optional)</span></Label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handlePhotoCapture}
-            className="hidden"
+          <ContextRow
+            weddings={weddings}
+            assignedIds={assignedIds}
+            project={project}
+            onProject={(id) => { weddingTouched.current = true; setProject(id); }}
+            date={date}
+            today={today}
+            onDate={setDate}
           />
-          {photoPreview ? (
-            <div className="mt-2 relative">
-              <img
-                src={photoPreview}
-                alt="Bill preview"
-                className="w-full max-h-48 object-contain rounded-md border"
-              />
-              <button
-                type="button"
-                onClick={removePhoto}
-                className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-black/80"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full mt-2"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Camera className="mr-2 h-4 w-4" />
-              Take or Choose Photo
-            </Button>
-          )}
-          {photo && (
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full mt-2"
-              onClick={handleScanBill}
-              disabled={isScanning}
-            >
-              {isScanning ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Reading bill...
-                </>
-              ) : (
-                "Scan Bill"
-              )}
-            </Button>
-          )}
-        </div>
 
-        {/* Date */}
-        <div>
-          <Label htmlFor="expense_date">Date *</Label>
-          <Input
-            id="expense_date"
-            type="date"
-            value={form.date}
-            onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
+          <AmountField
+            ref={amountRef}
+            digits={amount}
+            error={errors.amount}
+            onChange={(d) => { setAmount(d); if (errors.amount) setErrors((p) => ({ ...p, amount: undefined })); }}
           />
-        </div>
 
-        {/* Category */}
-        <div>
-          <Label>Category *</Label>
-          <Select
-            value={form.category}
-            onValueChange={(v) => setForm((prev) => ({ ...prev, category: v }))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((c) => (
-                <SelectItem key={c.name} value={c.name}>
-                  {c.account_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          <CategoryChips
+            categories={categories}
+            recents={recents}
+            value={category}
+            error={errors.category}
+            onChange={(c) => { setCategory(c); setErrors((p) => ({ ...p, category: undefined })); }}
+            onCreate={canAddCategory ? async (name) => {
+              const created = await createCategory(name, project ? "wedding" : "office");
+              setCategories((prev) => (prev.some((c) => c.name === created.name) ? prev : [...prev, created]));
+              return created.name;
+            } : undefined}
+          />
 
-        {/* Amount */}
-        <div>
-          <Label htmlFor="expense_amount">Amount (VND) *</Label>
-          <div className="flex gap-2">
+          <ReceiptPicker file={receipt} onChange={(f) => { setReceipt(f); setErrors((p) => ({ ...p, proof: undefined })); }} onScan={handleScan} scanning={scanning} />
+
+          <div>
             <Input
-              id="expense_amount"
-              type="number"
-              inputMode="numeric"
-              value={form.amount}
-              onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-              placeholder="0"
-              className="flex-1"
+              id="expense-description"
+              aria-label="What was it for"
+              aria-invalid={!!errors.proof}
+              value={description}
+              maxLength={140}
+              placeholder={receipt ? "What was it for? (optional)" : "What was it for?"}
+              onChange={(e) => { setDescription(e.target.value); setErrors((p) => ({ ...p, proof: undefined })); }}
             />
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0 font-mono text-sm px-3"
-              onClick={() =>
-                setForm((prev) => ({
-                  ...prev,
-                  amount: (prev.amount || "0") + "000",
-                }))
-              }
-            >
-              000
+            {errors.proof && <p role="alert" className="mt-2 text-sm text-destructive">{errors.proof}</p>}
+          </div>
+
+          {showNote ? (
+            <Textarea aria-label="Note" rows={2} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note for Finance (optional)" />
+          ) : (
+            <button type="button" onClick={() => setShowNote(true)} className="flex h-11 items-center gap-2 self-start text-sm font-semibold text-primary">
+              <NotebookPen className="h-4 w-4" aria-hidden />Add a note
+            </button>
+          )}
+
+          {/* Thumb-reach save: pinned above the bottom bar on phones, inline on desktop */}
+          <div className="sticky bottom-[calc(84px+env(safe-area-inset-bottom,0px))] z-10 -mx-4 bg-background/95 px-4 pb-2 pt-3 backdrop-blur md:static md:mx-0 md:bg-transparent md:p-0">
+            {(formError ?? categoriesError ?? weddingsError?.message) && (
+              <div role="alert" className="mb-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{formError ?? categoriesError ?? weddingsError?.message}</div>
+            )}
+            <Button type="submit" size="lg" className="h-14 w-full text-base" disabled={saving}>
+              {saving ? <><Loader2 className="h-5 w-5 animate-spin" />Saving...</> : "Save expense"}
             </Button>
           </div>
-          {form.amount && !isNaN(Number(form.amount)) && Number(form.amount) >= 1000 && (
-            <p className="text-xs text-muted-foreground mt-1">
-              {Number(form.amount).toLocaleString("vi-VN")} VND
-            </p>
-          )}
-        </div>
-
-        {/* Description */}
-        <div>
-          <Label htmlFor="expense_description">Description *</Label>
-          <Input
-            id="expense_description"
-            value={form.description}
-            onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-            placeholder="What was this expense for?"
-          />
-        </div>
-
-        {/* Note */}
-        <div>
-          <Label htmlFor="expense_note">Note</Label>
-          <Textarea
-            id="expense_note"
-            rows={2}
-            maxLength={1000}
-            value={form.note}
-            onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
-            placeholder="Optional"
-          />
-        </div>
-
-        {/* Submit */}
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Submitting...
-            </>
-          ) : (
-            "Submit Expense"
-          )}
-        </Button>
-      </form>
+        </form>
+      )}
     </div>
   );
 }

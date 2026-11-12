@@ -1,32 +1,58 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLogin, useIsAuthenticated } from "@refinedev/core";
-import { Navigate } from "react-router";
+import { Navigate, useSearchParams } from "react-router";
+import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ThemeSwitch } from "@/components/theme-switch";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AuthShell, CardWordmark } from "@/components/auth/AuthShell";
+import { AuthAlert } from "@/components/auth/AuthAlert";
+import { AuthIcon } from "@/components/auth/AuthIcon";
+import { PasswordField } from "@/components/auth/PasswordField";
 
 type View = "login" | "forgot" | "forgot-success";
+
+const linkBtn =
+  "inline-flex h-11 max-md:h-12 items-center justify-center text-[15px] font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md";
+const primaryBtn = "h-12 w-full text-base md:h-[54px]";
+
+/** Frappe's reset_password answers an unknown user with 404 and the JSON body {"message":"not found"}. */
+async function isUnknownUser(res: Response): Promise<boolean> {
+  const data = await res.json().catch((err) => {
+    console.error("[reset-password] unreadable 404 body", err);
+    return null;
+  });
+  return data?.message === "not found";
+}
 
 export default function LoginPage() {
   const { data: authData, isLoading } = useIsAuthenticated();
   const { mutate: login } = useLogin();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
-  const [view, setView] = useState<View>("login");
+  // The expired-link screen sends people here with ?forgot=1 to ask for a fresh link.
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState<View>(searchParams.get("forgot") ? "forgot" : "login");
   const [resetEmail, setResetEmail] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [resetCooldown, setResetCooldown] = useState(false);
+  const resetRef = useRef(false);
+  const cooldownTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(cooldownTimer.current), []);
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+      <div className="flex min-h-[100dvh] items-center justify-center bg-background px-6" role="status" aria-label="Loading">
+        <Skeleton className="h-64 w-full max-w-[400px]" />
       </div>
     );
   }
@@ -35,8 +61,10 @@ export default function LoginPage() {
     return <Navigate to="/" replace />;
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError("");
     setSubmitting(true);
     login(
@@ -46,10 +74,13 @@ export default function LoginPage() {
           if (!data.success) {
             setError(data.error?.message || "Invalid username or password");
           }
+          submittingRef.current = false;
           setSubmitting(false);
         },
-        onError: () => {
+        onError: (err) => {
+          console.error("[login] request failed", err);
           setError("Something went wrong. Please try again.");
+          submittingRef.current = false;
           setSubmitting(false);
         },
       }
@@ -58,6 +89,8 @@ export default function LoginPage() {
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (resetRef.current || resetCooldown) return;
+    resetRef.current = true;
     setResetError("");
     setResetSubmitting(true);
     try {
@@ -75,23 +108,23 @@ export default function LoginPage() {
       );
       if (res.ok) {
         setView("forgot-success");
-      } else if (res.status === 404) {
-        setResetError("No account found with that email address.");
+      } else if (res.status === 404 && (await isUnknownUser(res))) {
+        // Unknown email: same screen as a known one (UX only; this does not stop account probing).
+        setView("forgot-success");
       } else if (res.status === 429) {
-        setResetError(
-          "Too many reset attempts from your network. Please wait a minute and try again, or contact your administrator."
-        );
+        console.error("[reset-password] rate limited (429)");
+        setResetError("Too many attempts, try again in a few minutes.");
         setResetCooldown(true);
-        setTimeout(() => setResetCooldown(false), 60000);
+        cooldownTimer.current = setTimeout(() => setResetCooldown(false), 60000);
       } else {
-        const data = await res.json().catch(() => null);
-        setResetError(
-          data?.message || "Failed to send reset email. Please try again."
-        );
+        console.error("[reset-password] failed", res.status);
+        setResetError("Couldn't send the link, try again.");
       }
-    } catch {
+    } catch (err) {
+      console.error("[reset-password] request failed", err);
       setResetError("Something went wrong. Please try again.");
     } finally {
+      resetRef.current = false;
       setResetSubmitting(false);
     }
   };
@@ -103,125 +136,121 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex h-screen items-center justify-center bg-muted/40">
-      <div className="absolute top-4 right-4">
-        <ThemeSwitch />
-      </div>
-      <Card className="w-full max-w-sm">
-        {view === "login" && (
-          <>
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Meraki Wedding Planner</CardTitle>
-              <CardDescription>Sign in to your account</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="username">Email or Username</Label>
-                  <Input
-                    id="username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-                      onClick={() => {
-                        setView("forgot");
-                        setResetEmail(username.includes("@") ? username : "");
-                      }}
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button type="submit" className="w-full" disabled={submitting}>
-                  {submitting ? "Signing in..." : "Sign in"}
-                </Button>
-              </form>
-            </CardContent>
-          </>
-        )}
-
-        {view === "forgot" && (
-          <>
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Reset Password</CardTitle>
-              <CardDescription>
-                Enter your email and we'll send you reset instructions.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleForgotSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="reset-email">Email</Label>
-                  <Input
-                    id="reset-email"
-                    type="email"
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                    required
-                    autoFocus
-                    placeholder="you@example.com"
-                  />
-                </div>
-                {resetError && (
-                  <p className="text-sm text-destructive">{resetError}</p>
-                )}
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={resetSubmitting || resetCooldown}
-                >
-                  {resetSubmitting ? "Sending..." : "Send Reset Email"}
-                </Button>
-                <button
-                  type="button"
-                  className="w-full text-center text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-                  onClick={handleBackToLogin}
-                >
-                  &larr; Back to login
-                </button>
-              </form>
-            </CardContent>
-          </>
-        )}
-
-        {view === "forgot-success" && (
-          <>
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Check Your Email</CardTitle>
-              <CardDescription>
-                Password reset instructions have been sent to{" "}
-                <span className="font-medium text-foreground">{resetEmail}</span>.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+    <AuthShell card={view !== "login"}>
+      {view === "login" && (
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" aria-label="Sign in">
+          <h1 className="font-display text-[34px] font-semibold leading-none max-lg:sr-only lg:mb-1.5">Sign in</h1>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="username" className="text-sm font-semibold">Email or username</Label>
+            <Input
+              id="username"
+              name="username"
+              type="text"
+              inputMode="email"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="h-12 text-base"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              autoFocus={isDesktop}
+              aria-invalid={!!error}
+              aria-describedby={error ? "login-error" : undefined}
+            />
+          </div>
+          <PasswordField
+            id="password"
+            name="password"
+            label="Password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            aria-invalid={!!error}
+            aria-describedby={error ? "login-error" : undefined}
+            labelAside={
               <button
                 type="button"
-                className="w-full text-center text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-                onClick={handleBackToLogin}
+                className="-my-2 inline-flex h-11 items-center max-md:h-12 text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                onClick={() => {
+                  setView("forgot");
+                  setResetEmail(username.includes("@") ? username : "");
+                }}
               >
-                &larr; Back to login
+                Forgot password?
               </button>
-            </CardContent>
-          </>
-        )}
-      </Card>
-    </div>
+            }
+          />
+          {error && <AuthAlert id="login-error">{error}</AuthAlert>}
+          <Button type="submit" className={primaryBtn} disabled={submitting}>
+            {submitting ? "Signing in..." : "Sign in"}
+          </Button>
+        </form>
+      )}
+
+      {view === "forgot" && (
+        <form onSubmit={handleForgotSubmit} className="flex flex-col gap-4" aria-label="Reset password">
+          <CardWordmark />
+          <h1 className="text-[22px] font-semibold lg:text-2xl">Reset your password</h1>
+          <p className="text-[15px] leading-[22px] text-muted-foreground lg:leading-[23px]">
+            Enter your work email. We'll send a link to choose a new password.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="reset-email" className="text-sm font-semibold">Work email</Label>
+            <Input
+              id="reset-email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="h-12 text-base lg:h-[52px]"
+              value={resetEmail}
+              onChange={(e) => setResetEmail(e.target.value)}
+              required
+              autoFocus={isDesktop}
+              placeholder="you@example.com"
+              aria-invalid={!!resetError}
+              aria-describedby={resetError ? "reset-error" : undefined}
+            />
+          </div>
+          {resetError && <AuthAlert id="reset-error">{resetError}</AuthAlert>}
+          <Button type="submit" className={`${primaryBtn} lg:h-[52px]`} disabled={resetSubmitting || resetCooldown}>
+            {resetSubmitting ? "Sending..." : "Send link"}
+          </Button>
+          <button type="button" className={linkBtn} onClick={handleBackToLogin}>
+            Back to sign in
+          </button>
+        </form>
+      )}
+
+      {view === "forgot-success" && (
+        <div role="status" className="flex flex-col items-center gap-3.5 text-center lg:gap-4">
+          <AuthIcon>
+            <Mail className="h-9 w-9 lg:h-[30px] lg:w-[30px]" strokeWidth={1.75} />
+          </AuthIcon>
+          <h1 className="text-[22px] font-semibold lg:text-2xl">Check your email</h1>
+          <p className="text-[15px] leading-[22px] text-muted-foreground lg:leading-[23px]">
+            If <span className="font-medium text-foreground">{resetEmail}</span> has an account, a reset link is on its way.
+          </p>
+          <p className="text-sm leading-[22px] text-muted-foreground">
+            Nothing after 5 minutes? Check spam, or{" "}
+            <button
+              type="button"
+              className="rounded-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setView("forgot")}
+            >
+              send it again
+            </button>
+            .
+          </p>
+          <button type="button" className={linkBtn} onClick={handleBackToLogin}>
+            Back to sign in
+          </button>
+        </div>
+      )}
+    </AuthShell>
   );
 }

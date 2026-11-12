@@ -1,7 +1,7 @@
 """
 Financial overview endpoint.
 
-GET /financial-overview?year={year} — monthly P&L + KPI totals for a given year
+GET /financial-overview?year={year|all} — monthly P&L + KPI totals for a year, or per-year rows for all years
 """
 
 import json
@@ -19,10 +19,9 @@ log = get_logger(__name__)
 router = APIRouter(dependencies=[Depends(require_roles(*FINANCE))])
 
 
-@router.get("/financial-overview")
-def get_financial_overview(year: int = Query(default=None, description="Year (defaults to current year)")):
+def _year_overview(client: ERPNextClient, year: int) -> dict:
     """
-    Return monthly P&L data and KPI totals for the given year.
+    Monthly P&L data and KPI totals for one year.
 
     Queries:
     - Submitted Sales Invoices (revenue + outstanding)
@@ -30,13 +29,8 @@ def get_financial_overview(year: int = Query(default=None, description="Year (de
     - Submitted Payment Entries (received payments)
     - Open Sales Orders (pipeline)
     """
-    client = ERPNextClient()
-
-    if year is None:
-        year = date.today().year
-
-    year_str = str(year)
     today = date.today().isoformat()
+    year_str = str(year)
 
     # Generate all 12 month keys
     months = [f"{year}-{str(m).zfill(2)}" for m in range(1, 13)]
@@ -191,6 +185,52 @@ def get_financial_overview(year: int = Query(default=None, description="Year (de
             "outstanding_invoices_count": outstanding_invoices_count,
             "active_pipeline": active_pipeline,
             "active_weddings_count": active_weddings_count,
+        },
+    }
+
+
+@router.get("/financial-overview")
+def get_financial_overview(year: str = Query(default=None, description="Year, or 'all' for one row per year (defaults to current year)")):
+    """Monthly P&L for a year, or year=all for one row per year plus all-time totals."""
+    client = ERPNextClient()
+    if year is None:
+        year = str(date.today().year)
+    if year == "all":
+        return _all_years_overview(client)
+    if not year.isdigit():
+        raise HTTPException(status_code=422, detail="year must be a number or 'all'")
+    return _year_overview(client, int(year))
+
+
+def _all_years_overview(client: ERPNextClient) -> dict:
+    """One row per available year (label '2025'), totals summed from the per-year totals."""
+    available_years = _year_overview(client, date.today().year)["available_years"]
+    per_year = [_year_overview(client, y) for y in sorted(available_years)]
+    rows = [
+        {
+            "month": str(y["year"]),
+            "revenue": y["totals"]["revenue"],
+            "expenses": y["totals"]["expenses"],
+            "net": y["totals"]["net"],
+            "collected": y["totals"]["collected"],
+            "weddings": sum(m["weddings"] for m in y["months"]),
+        }
+        for y in per_year
+    ]
+    latest = per_year[-1]["totals"]  # outstanding and pipeline are all-time already
+    revenue = sum(r["revenue"] for r in rows)
+    expenses = sum(r["expenses"] for r in rows)
+    log.info("financial_overview_all_years_served", years=len(rows))
+    return {
+        "year": "all",
+        "available_years": available_years,
+        "months": rows,
+        "totals": {
+            **latest,
+            "revenue": revenue,
+            "expenses": expenses,
+            "net": revenue - expenses,
+            "collected": sum(r["collected"] for r in rows),
         },
     }
 
