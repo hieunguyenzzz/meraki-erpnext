@@ -853,7 +853,7 @@ async def create_wedding_expense_with_receipt(
         # Staff without a planner/finance/expense-manager role may only log against their own weddings.
         require_assigned_unless_privileged(request, req.project, employee=req.staff)
     # Reuse existing logic (shared core — not the gated route handler)
-    result = _create_wedding_expense_core(req)
+    result = _create_wedding_expense_core(req, auto_approve=has_roles(request, DIRECTOR))
 
     # Attach receipt if provided. The expense is already saved, so an upload failure
     # must not fail the request; it is reported as receipt_attached=false instead.
@@ -895,12 +895,16 @@ def create_wedding_expense(req: WeddingExpenseRequest, request: Request):
     """
     if req.staff:
         req.staff = resolve_employee(request, req.staff, override_roles=PLANNER_OR_FINANCE)
-    return _create_wedding_expense_core(req)
+    return _create_wedding_expense_core(req, auto_approve=has_roles(request, DIRECTOR))
 
 
-def _create_wedding_expense_core(req: WeddingExpenseRequest) -> dict:
+def _create_wedding_expense_core(req: WeddingExpenseRequest, auto_approve: bool = False) -> dict:
     """Shared by /expense/wedding and /expense/wedding-with-receipt — no auth here,
-    callers are already gated."""
+    callers are already gated.
+
+    `auto_approve` (the caller is the Director) skips Pending: the draft is submitted
+    and marked paid straight away, exactly as the Approve button would.
+    """
     client = ERPNextClient()
 
     if req.amount <= 0:
@@ -948,10 +952,24 @@ def _create_wedding_expense_core(req: WeddingExpenseRequest) -> dict:
 
     log.info("wedding_expense_created", pi=pi_name, project=req.project, amount=amount, has_note=bool(req.note))
 
-    # Notify Finance Managers (fire-and-forget)
-    _notify_finance_managers(client, pi_name, amount, req.project, req.description or req.category)
+    status = "Pending"
+    if auto_approve:
+        try:
+            full_pi = client._get(f"/api/resource/Purchase Invoice/{pi_name}").get("data", {})
+            client._post("/api/method/frappe.client.submit", {"doc": full_pi})
+            status = "Approved"
+            _mark_pi_paid(client, pi_name)
+            log.info("expense_auto_approved", pi=pi_name)
+        except Exception as e:
+            # The expense is saved either way; a failed submit leaves it Pending for Finance.
+            detail = e.detail if isinstance(e, HTTPException) else str(e)
+            log.error("expense_auto_approve_failed", pi=pi_name, status=status, error=detail, exc_info=True)
 
-    return {"name": pi_name, "status": "Pending"}
+    if status == "Pending":
+        # Notify Finance Managers (fire-and-forget)
+        _notify_finance_managers(client, pi_name, amount, req.project, req.description or req.category)
+
+    return {"name": pi_name, "status": status}
 
 
 @router.post("/expense/{pi_name}/approve", dependencies=[Depends(require_roles(*FINANCE))])

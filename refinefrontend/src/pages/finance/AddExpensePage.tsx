@@ -123,7 +123,7 @@ export default function AddExpensePage() {
       });
       rememberCategory(category);
       setRecents(loadRecents());
-      setSaved({ amount, category: categoryLabel(category), wedding: weddingLabel, date, hasReceipt: !!receipt, receiptFailed: res.receipt_attached === false, reference: res.name });
+      setSaved({ amount, category: categoryLabel(category), wedding: weddingLabel, date, hasReceipt: !!receipt, receiptFailed: res.receipt_attached === false, approved: res.status === "Approved", reference: res.name });
     } catch (err: unknown) {
       // Keep everything the user entered so they can retry
       setFormError(err instanceof Error ? err.message : "Could not save the expense");
