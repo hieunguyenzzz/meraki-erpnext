@@ -106,8 +106,8 @@ export function useNotificationActions({ onRead }: Options = {}) {
     setOutcomes((prev) => ({ ...prev, [notif.name]: outcome }));
     try {
       const id = encodeURIComponent(notif.reference_document_name);
-      // Leave/WFH go through the webhook API so the doc is properly submitted and the
-      // Google Calendar event is added. Expense approval keeps the Server Script.
+      // Everything goes through the webhook API: leave/WFH so the doc is properly submitted and the
+      // Google Calendar event is added, expenses so approving also records the payment.
       if (notif.reference_document_type === "Leave Application") {
         await post(`/inquiry-api/leave/${id}/${action}`);
         invalidate({ resource: "Leave Application", invalidates: ["list"] });
@@ -116,6 +116,9 @@ export function useNotificationActions({ onRead }: Options = {}) {
       } else if (notif.reference_document_type === "Purchase Invoice" && action === "reject") {
         // The webhook endpoint keeps the reason as a Comment; the Server Script only flips the flag.
         await customMutation({ url: `/inquiry-api/expense/${id}/reject`, method: "post", values: { reason } });
+      } else if (notif.reference_document_type === "Purchase Invoice") {
+        // Same endpoint as the Approve button: submits and marks paid. The Server Script only submitted.
+        await post(`/inquiry-api/expense/${id}/approve`);
       } else {
         await customMutation({
           url: "/api/method/handle_notification_action",
