@@ -53,7 +53,7 @@ export const needsDetails = (type: string) =>
 
 export type ApprovalAction = "approve" | "reject";
 
-/** Leave/WFH approve/reject endpoints are HR-only; expense (Purchase Invoice) approvals are open to any recipient. */
+/** Leave/WFH approve/reject endpoints are HR-only; expense (Purchase Invoice) ones are Finance-only, and only Finance receives those notifications. */
 export function canDecide(notif: PwaNotification, isHr: boolean): boolean {
   if (!notif.is_pending) return false;
   const type = notif.reference_document_type;
