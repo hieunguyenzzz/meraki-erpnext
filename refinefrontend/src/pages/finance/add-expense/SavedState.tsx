@@ -10,6 +10,7 @@ export interface SavedSummary {
   date: string;
   hasReceipt: boolean;
   receiptFailed: boolean;
+  approved: boolean;
   reference: string;
 }
 
@@ -37,7 +38,7 @@ export function SavedState({ saved, onAddAnother, onDone }: Props) {
       {!saved.receiptFailed && (
         <p className="-mt-2 text-[15px] text-muted-foreground">{saved.hasReceipt ? "Bill photo attached" : "No bill photo"}</p>
       )}
-      <p className="-mt-2 text-[15px] text-muted-foreground">Waiting for approval</p>
+      <p className="-mt-2 text-[15px] text-muted-foreground">{saved.approved ? "Approved" : "Waiting for approval"}</p>
       {saved.receiptFailed && (
         <p role="alert" className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
           Saved — the bill photo didn't upload. Open the expense to add it.
